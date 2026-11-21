@@ -622,6 +622,16 @@ impl Environment {
         any.then(|| f.finish32())
     }
 
+    /// Bind compiler metadata to a declaration's actual logical identity.
+    /// Reducibility attributes are deliberately excluded: changing an inline
+    /// policy must not turn another declaration's value into this one's body.
+    /// This is metadata identity, not a proof or declaration admission check.
+    #[must_use]
+    pub fn compiler_declaration_digest(&self, name: &Name) -> Option<[u8; 32]> {
+        self.get_const(name)
+            .map(super::ConstantInfo::compiler_identity_digest)
+    }
+
     /// Every other name the kernel records under `name` mention: the
     /// constants in its type and value and the structures their projections
     /// name, an inductive's family and constructors, a constructor's inductive,
@@ -1016,6 +1026,12 @@ impl Environment {
                 .map(|(n, info)| (n, (&info.name, &info.priority))),
         ));
         sections.push(debug_section("export_aliases", self.export_aliases.iter()));
+        if !self.export_alias_others.is_empty() {
+            sections.push(debug_section(
+                "export_alias_others",
+                self.export_alias_others.iter(),
+            ));
+        }
         sections.push(debug_section(
             "extern_bindings",
             self.extern_bindings.iter(),
@@ -1158,3 +1174,19 @@ impl Environment {
 #[cfg(test)]
 #[path = "content_digest_tests.rs"]
 mod tests;
+
+impl super::ConstantInfo {
+    /// A compiler identity fingerprint, not evidence that this declaration is
+    /// well typed or executable. Mutable reducibility attributes are excluded.
+    #[must_use]
+    pub fn compiler_identity_digest(&self) -> [u8; 32] {
+        let mut ed = ExprDigester::default();
+        let mut f = Fields::new("clean.compiler-declaration.v1");
+        f.name(&self.name);
+        f.names(&self.level_params);
+        f.debug(&self.kind);
+        ed.opt(&mut f, Some(&self.type_));
+        ed.opt(&mut f, self.value.as_ref());
+        f.finish32()
+    }
+}

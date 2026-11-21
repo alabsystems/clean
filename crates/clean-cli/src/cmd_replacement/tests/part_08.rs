@@ -466,6 +466,40 @@ fn kernel_soundness_launch_evidence_rejects_missing_module_tree_sha() {
     assert!(err.contains("missing"), "unexpected error: {err}");
 }
 
+#[test]
+fn kernel_soundness_launch_evidence_requires_current_shared_digest_sources() {
+    let (baseline, expression_count, expressions_sha256) = current_kernel_soundness_inputs();
+    for path in [DIGEST_MODULE_SOURCE, DIGEST_SOURCE] {
+        let mut artifact = valid_kernel_soundness_launch_artifact(
+            &baseline,
+            expression_count,
+            &expressions_sha256,
+        );
+        assert!(artifact.source_sha256.remove(path).is_some());
+
+        let err = validate_kernel_soundness_launch_evidence(
+            &artifact,
+            &baseline,
+            expression_count,
+            &expressions_sha256,
+        )
+        .expect_err("missing shared digest source pin must fail closed");
+        assert_eq!(err, format!("source_sha256 is missing {path}"));
+
+        artifact
+            .source_sha256
+            .insert(path.to_string(), "stale".to_string());
+        let err = validate_kernel_soundness_launch_evidence(
+            &artifact,
+            &baseline,
+            expression_count,
+            &expressions_sha256,
+        )
+        .expect_err("stale shared digest source pin must fail closed");
+        assert!(err.starts_with(&format!("source_sha256[{path}] stale != current ")));
+    }
+}
+
 /// Every lane except the in-process preflight must be executable. A lane with
 /// no command could only ever be self-declared.
 #[test]

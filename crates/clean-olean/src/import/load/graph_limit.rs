@@ -6,7 +6,9 @@
 //! closure from `.olean` headers alone and refuse it past `max_modules`
 //! before anything is converted.
 
-use crate::import::path::{legacy_module_name, module_visit_key, resolve_typed_module_path};
+use crate::import::path::{
+    legacy_module_name, module_visit_key, resolve_typed_module_path_in_world,
+};
 use crate::import::typed_imports::parse_typed_imports;
 use crate::import::ImportError;
 use clean_kernel::env::Environment;
@@ -92,7 +94,11 @@ pub(super) fn enforce_typed_module_graph_limit_with_loaded(
             });
         }
 
-        let path = resolve_typed_module_path(&current, search_paths)?;
+        let path = resolve_typed_module_path_in_world(
+            &current,
+            search_paths,
+            crate::environment_world(env),
+        )?;
         let bytes = std::fs::read(&path).map_err(|source| ImportError::FileUnreadable {
             path: path.clone(),
             source,

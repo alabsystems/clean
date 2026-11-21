@@ -52,10 +52,11 @@ pub use runtime::{
     clean_ctor_set_uint16, clean_ctor_set_uint32, clean_ctor_set_uint64, clean_ctor_set_uint8,
     clean_ctor_set_usize, clean_dec, clean_ensure_exclusive_array, clean_inc, clean_inc_n,
     clean_is_exclusive, clean_is_scalar, clean_is_unique, clean_mk_array, clean_mk_empty_array,
-    clean_mk_empty_array_with_capacity, clean_mk_string, clean_mk_string_from_bytes, clean_obj_tag,
-    clean_panic, clean_reset, clean_reuse, clean_reuse_slot, clean_runtime_finalize,
-    clean_runtime_init, clean_string_data, clean_string_len, clean_unbox, clean_unbox_float,
-    clean_unbox_uint32, clean_unbox_uint64, CleanExternalClass, CleanObj, LeanObjPtr,
+    clean_mk_empty_array_with_capacity, clean_mk_string, clean_mk_string_from_bytes, clean_nat_big,
+    clean_nat_from_limbs, clean_nat_limb_step, clean_nat_to_limbs, clean_obj_tag, clean_panic,
+    clean_reset, clean_reuse, clean_reuse_slot, clean_runtime_finalize, clean_runtime_init,
+    clean_string_data, clean_string_len, clean_unbox, clean_unbox_float, clean_unbox_uint32,
+    clean_unbox_uint64, CleanExternalClass, CleanObj, LeanObjPtr,
 };
 
 use std::fs;

@@ -379,14 +379,29 @@ fn test_expected_type_is_not_propagated_into_a_local_instance_out_param_result()
     // is an `outParam` of its own `[GetE C E]`, so the instance fixes
     // `E := Nat` and the result is coerced to `Int` afterwards; propagating
     // `Int` first would search `GetE (List Nat) Int`.
-    propagate_accepts(
-        "class GetE (C : Type) (E : outParam Type) where\n\
+    let decl = "class GetE (C : Type) (E : outParam Type) where\n\
          \x20 get : C → E\n\
          instance instGetEListNat : GetE (List Nat) Nat := ⟨fun _ => 0⟩\n\
          def myget {C : Type} {E : Type} [GetE C E] (c : C) : E := GetE.get c\n\
-         def op_row (xs : List Nat) : Int := myget xs\n",
+         def op_row (xs : List Nat) : Int := myget xs\n";
+    propagate_accepts(
+        &format!("{decl}theorem op_zero (xs : List Nat) : op_row xs = 0 := rfl\n"),
         "`myget`'s `outParam` result comes from the instance, not the expected type",
     );
+    let mut env = Environment::with_prelude();
+    let error = elab(
+        &mut env,
+        &format!("{PROPAGATE_HEADER}{decl}def op_wrong (xs : List Nat) : Unit := myget xs\n"),
+    )
+    .expect("the inferred Nat result cannot coerce to Unit");
+    assert!(error.contains("TypeMismatch"), "{error}");
+    assert!(
+        !error.contains("FailedToSynthesizeInstance"),
+        "the instance fixes Nat before the invalid result is refused: {error}"
+    );
+    assert!(env
+        .get_const(&clean_kernel::Name::from_string("op_wrong"))
+        .is_none());
 }
 
 #[test]
@@ -539,7 +554,9 @@ fn test_stuck_implicit_argument_is_unified_after_the_explicit_ones() {
          \x20 (@eqRec_heq_iff_heq' α a (fun b _ => C b) x b e β y).mpr h\n"
     );
     if let Some(e) = elab(&mut env, &src) {
-        panic!("the motive comes from the `Eq.rec` pair, not from `HEq`'s type argument (Lean accepts it): {e}");
+        panic!(
+            "the motive comes from the `Eq.rec` pair, not from `HEq`'s type argument (Lean accepts it): {e}"
+        );
     }
 }
 
@@ -880,4 +897,214 @@ fn test_named_args_on_a_local_without_recorded_value_names_stay_refused() {
     imported_inj(&mut env, false);
     let err = elab(&mut env, IMPORTED_USE).expect("no recorded names: the call must be refused");
     assert!(err.contains("binder names"), "got: {err}");
+}
+
+// Source regression from the complete proof-indexed rewrite fixtures. Pinned
+// Lean v4.30.0-rc2 accepts the positive source shapes; the unmodified current
+// Clean module batch refuses the ordinary implicit-width field application.
+// These cases use the strict publication boundary, not a permissive registration.
+const IMPLICIT_WIDTH_FIELD_HEADER: &str = r#"
+def ImplicitWidthBV (w : Nat) : Type := Fin (2 ^ w)
+def implicitWidthEq {w : Nat} (a b : ImplicitWidthBV w) : Prop := a = b
+theorem implicitWidthRefl {w : Nat} (a : ImplicitWidthBV w) : implicitWidthEq a a := rfl
+structure ImplicitWidthStep (w : Nat) where
+  lhs : ImplicitWidthBV w
+  rhs : ImplicitWidthBV w
+  sound : implicitWidthEq lhs rhs
+"#;
+
+fn implicit_width_batch(source: &str) -> (Environment, crate::module_batch::ModuleOutcome) {
+    let mut env = Environment::with_prelude();
+    let mut context = crate::FileContext::new();
+    let patterns = crate::tactic::builtins::builtin_tactic_patterns();
+    let decls = clean_parser::parse_file_with_tactics(source, &patterns).expect("source parses");
+    let outcome = crate::module_batch::elaborate_module(
+        &mut env,
+        &mut context,
+        &[crate::module_batch::SourceUnit {
+            id: crate::module_batch::UnitId(0),
+            decls: &decls,
+        }],
+        crate::module_batch::BatchOptions::islands(),
+    );
+    (env, outcome)
+}
+
+#[test]
+fn test_expected_field_keeps_the_ordinary_implicit_width() {
+    let source = format!(
+        "{IMPLICIT_WIDTH_FIELD_HEADER}\n{}",
+        "def implicitWidthId {w : Nat} (a : ImplicitWidthBV w) : ImplicitWidthStep w :=\n\
+         { lhs := a, rhs := a, sound := implicitWidthRefl a }\n"
+    );
+    let (env, outcome) = implicit_width_batch(&source);
+    assert!(
+        outcome.is_clean() && outcome.committed,
+        "{}",
+        outcome.render_rejections()
+    );
+    assert!(env
+        .get_const(&clean_kernel::Name::from_string("implicitWidthId"))
+        .is_some());
+}
+
+#[test]
+fn test_expected_field_still_honors_an_authored_explicit_width() {
+    let source = format!(
+        "{IMPLICIT_WIDTH_FIELD_HEADER}\n{}",
+        "def implicitWidthExplicit {w : Nat} (a : ImplicitWidthBV w) : ImplicitWidthStep w :=\n\
+         { lhs := a, rhs := a, sound := @implicitWidthRefl w a }\n"
+    );
+    let (_, outcome) = implicit_width_batch(&source);
+    assert!(
+        outcome.is_clean() && outcome.committed,
+        "{}",
+        outcome.render_rejections()
+    );
+}
+
+#[test]
+fn test_expected_field_refuses_a_changed_endpoint_without_publishing() {
+    let source = format!(
+        "{IMPLICIT_WIDTH_FIELD_HEADER}\n{}",
+        "def implicitWidthWrong {w : Nat} (a b : ImplicitWidthBV w) : ImplicitWidthStep w :=\n\
+         { lhs := a, rhs := b, sound := implicitWidthRefl a }\n"
+    );
+    let (env, outcome) = implicit_width_batch(&source);
+    assert!(!outcome.is_clean() && !outcome.committed);
+    for name in [
+        "ImplicitWidthStep",
+        "implicitWidthRefl",
+        "implicitWidthWrong",
+    ] {
+        assert!(env
+            .get_const(&clean_kernel::Name::from_string(name))
+            .is_none());
+    }
+}
+
+#[test]
+fn test_actual_recursor_keeps_its_explicitly_supplied_implicit_motive() {
+    let (_, outcome) = implicit_width_batch(
+        "theorem emptyToFalse (h : PEmpty.{1}) : False := PEmpty.rec (fun _ => False) h\n",
+    );
+    assert!(
+        outcome.is_clean() && outcome.committed,
+        "{}",
+        outcome.render_rejections()
+    );
+}
+
+const TRANSPORT_JOIN_HEADER: &str = r#"
+def transportRel (a b : Nat) : Prop := a = b
+theorem transportTrans {a b c : Nat} (h : transportRel a b) (k : transportRel b c) : transportRel a c := h.trans k
+"#;
+
+#[test]
+fn test_nested_transport_waits_for_the_later_argument_endpoint() {
+    let source = format!("{TRANSPORT_JOIN_HEADER}\n{}",
+        "theorem joinedTransport {a b c x y : Nat} (hx : x = a) (hy : y = b) (h : transportRel x y) (k : transportRel b c) : transportRel a c := transportTrans (hx ▸ hy ▸ h) k\n");
+    let (_, outcome) = implicit_width_batch(&source);
+    assert!(
+        outcome.is_clean() && outcome.committed,
+        "{}",
+        outcome.render_rejections()
+    );
+}
+
+#[test]
+fn test_nested_transport_keeps_explicit_and_ascribed_endpoints() {
+    for term in [
+        "@transportTrans a b c (hx ▸ hy ▸ h) k",
+        "transportTrans ((hx ▸ hy ▸ h) : transportRel a b) k",
+    ] {
+        let source = format!("{TRANSPORT_JOIN_HEADER}\ntheorem joinedTransport {{a b c x y : Nat}} (hx : x = a) (hy : y = b) (h : transportRel x y) (k : transportRel b c) : transportRel a c := {term}\n");
+        let (_, outcome) = implicit_width_batch(&source);
+        assert!(
+            outcome.is_clean() && outcome.committed,
+            "{}",
+            outcome.render_rejections()
+        );
+    }
+}
+
+#[test]
+fn test_postponed_transport_rejects_the_wrong_result_and_rolls_back() {
+    let source = format!("{TRANSPORT_JOIN_HEADER}\n{}",
+        "theorem badTransport {a b c x y : Nat} (hx : x = a) (hy : y = b) (h : transportRel x y) (k : transportRel b c) : transportRel a (c + 1) := transportTrans (hx ▸ hy ▸ h) k\n");
+    let (env, outcome) = implicit_width_batch(&source);
+    assert!(!outcome.is_clean() && !outcome.committed);
+    for name in ["transportRel", "transportTrans", "badTransport"] {
+        assert!(env
+            .get_const(&clean_kernel::Name::from_string(name))
+            .is_none());
+    }
+}
+
+#[test]
+fn test_postponed_transport_preserves_rhs_first_computational_values() {
+    let (_, outcome) = implicit_width_batch(
+        r#"namespace Demo
+inductive W : Nat → Type where
+  | mk : (k : Nat) → (n : Nat) → W n
+def payload {n : Nat} (v : W n) (_pin : W n) : Nat :=
+  match v with
+  | .mk k _ => k
+def bothDeferred (a b : Nat) (h : a = b) (v : W (a + a)) : Nat :=
+  payload (h ▸ v) (W.mk 0 (a + b))
+def reverseDeferred (a b : Nat) (h : b = a) (v : W (b + b)) : Nat :=
+  payload (h ▸ v) (W.mk 0 (a + b))
+def two : Nat := 2
+theorem htwo : two = 2 := rfl
+theorem deferred_value : bothDeferred two 2 htwo (W.mk 7 (two + two)) = 7 := rfl
+theorem deferred_reverse_value : reverseDeferred two 2 htwo.symm (W.mk 11 (2 + 2)) = 11 := rfl
+end Demo
+"#,
+    );
+    assert!(
+        outcome.is_clean() && outcome.committed,
+        "{}",
+        outcome.render_rejections()
+    );
+}
+
+#[test]
+fn test_batch_uses_existing_fin_instances_through_session_bridges() {
+    let (env, outcome) = implicit_width_batch(
+        r#"
+def batchFinAdd (a b : Fin 4) : Fin 4 := a + b
+def batchFinMul (a b : Fin 4) : Fin 4 := a * b
+theorem batchFinAddWrap : batchFinAdd 3 1 = 0 := rfl
+theorem batchFinMulWrap : batchFinMul 3 3 = 1 := rfl
+"#,
+    );
+    assert!(
+        outcome.is_clean() && outcome.committed,
+        "{}",
+        outcome.render_rejections()
+    );
+    for name in ["instHAdd", "instHMul", "Fin.instAdd", "Fin.instMul"] {
+        let name = clean_kernel::Name::from_string(name);
+        assert!(env.is_instance(&name));
+        assert!(env.axiom_deps(&name).expect("real declaration").is_empty());
+    }
+}
+
+#[test]
+fn test_batch_rejected_fin_claim_does_not_publish_session_support() {
+    let (env, outcome) = implicit_width_batch(
+        r#"
+def batchFinAdd (a b : Fin 4) : Fin 4 := a + b
+theorem batchFinWrong : batchFinAdd 3 1 = 1 := rfl
+"#,
+    );
+    assert!(!outcome.is_clean() && !outcome.committed);
+    for name in ["instHAdd", "instHMul"] {
+        assert!(!env.is_instance(&clean_kernel::Name::from_string(name)));
+    }
+    for name in ["batchFinAdd", "batchFinWrong"] {
+        assert!(env
+            .get_const(&clean_kernel::Name::from_string(name))
+            .is_none());
+    }
 }

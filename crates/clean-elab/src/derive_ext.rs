@@ -437,46 +437,6 @@ pub(crate) fn register_ext_handlers(registry: &mut DeriveExtHandlers) {
 }
 
 pub(crate) fn register_all_handlers(registry: &mut crate::derive::DeriveRegistry) {
-    crate::derive_handlers::register_builtin_handlers(registry);
+    crate::derive_handlers::register_standalone_handlers(registry);
     registry.register_handler("Ord", Box::new(DeriveOrd));
-    // Previously implemented but unregistered canonical handlers. Nonempty is
-    // exact for a closed nullary witness; SizeOf is registered so unsupported
-    // requests fail with a typed error instead of silently disappearing.
-    registry.register_handler("Nonempty", Box::new(crate::derive_handlers::DeriveNonempty));
-    registry.register_handler("SizeOf", Box::new(crate::derive_handlers::DeriveSizeOf));
-
-    // `ToExpr` and `OfScientific` are pure *data* classes (no proof obligation).
-    // Their batch-2 handlers synthesize genuine, kernel-checkable, sorry-free
-    // instances for the shapes they accept (nullary enums / resolvable single-ctor
-    // structs for `ToExpr`; `Nat`-field wrappers for `OfScientific`) and return a
-    // typed `Unsupported` error for every other shape. They are wired through
-    // `ExtDeriveHandler2Adapter`, which applies the central admission gate before
-    // canonical registration.
-    //
-    // `Fintype` now has a GENUINE construction path for the dominant
-    // nullary-enum shape: its batch-2 handler emits a real `Fintype.mk` carrying
-    // an explicit `Finset.cons` carrier (with `noConfusion`-backed distinctness
-    // `¬mem` witnesses) and a `.rec`-dispatched completeness proof — fully
-    // kernel-checkable and sorry-free (see `fintype_nullary_enum_value`). For any
-    // other shape (fields / recursion / parameters / `Empty`) the handler errors
-    // up front. `Countable` remains unwired outside its genuine monomorphic Nat
-    // wrapper construction; broader injection-to-`Nat` support is still needed.
-    registry.register_handler(
-        "Fintype",
-        Box::new(crate::derive_handlers_ext::ExtDeriveHandler2Adapter::new(
-            Box::new(crate::derive_handlers_ext::DeriveFintype),
-        )),
-    );
-    registry.register_handler(
-        "ToExpr",
-        Box::new(crate::derive_handlers_ext::ExtDeriveHandler2Adapter::new(
-            Box::new(crate::derive_handlers_ext::DeriveToExpr),
-        )),
-    );
-    registry.register_handler(
-        "OfScientific",
-        Box::new(crate::derive_handlers_ext::ExtDeriveHandler2Adapter::new(
-            Box::new(crate::derive_handlers_ext::DeriveOfScientific),
-        )),
-    );
 }

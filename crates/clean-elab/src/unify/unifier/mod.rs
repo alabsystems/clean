@@ -761,7 +761,12 @@ impl<'a> Unifier<'a> {
     /// we discard the result. The work is gated on `has_level_param_quick()` so it
     /// is a no-op for the overwhelmingly common param-free meta types.
     pub(super) fn propagate_meta_type_levels(&mut self, meta_ty: &Expr, value: &Expr) {
-        if !meta_ty.has_level_param_quick() {
+        // A hole's declared type may itself be an already-assigned type
+        // metavariable. Inspect that assignment before the quick level test.
+        let meta_ty_inst = self
+            .metas
+            .instantiate_levels(&self.metas.instantiate(meta_ty));
+        if !meta_ty_inst.has_level_param_quick() {
             return;
         }
         let actual_ty = {
@@ -774,11 +779,6 @@ impl<'a> Unifier<'a> {
                 Err(_) => return,
             }
         };
-        // Instantiate levels in the meta type to resolve any already-solved
-        // params before unification.
-        let meta_ty_inst = self
-            .metas
-            .instantiate_levels(&self.metas.instantiate(meta_ty));
         let actual_ty_inst = self
             .metas
             .instantiate_levels(&self.metas.instantiate(&actual_ty));

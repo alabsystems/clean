@@ -27,6 +27,7 @@ fn mock_module(constants: Vec<ParsedConstant>) -> ParsedModule {
 fn mock_constant(name: &str, kind: ConstantKind, has_val: bool) -> ParsedConstant {
     ParsedConstant {
         definition_safety: None,
+        mutual_declarations: None,
         quot_kind: None,
         name: name.to_string(),
         kind,
@@ -227,6 +228,7 @@ fn test_skip_sorry_config() {
     let constants = vec![
         ParsedConstant {
             definition_safety: None,
+            mutual_declarations: None,
             quot_kind: None,
             name: "bad_thm".to_string(),
             kind: ConstantKind::Theorem,

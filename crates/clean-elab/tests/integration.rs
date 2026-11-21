@@ -83,48 +83,70 @@ mod smt_api_surface {
     use std::process::{Command, Output};
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    fn clean_elab_metadata_artifact() -> PathBuf {
-        let deps_dir = std::env::current_exe()
-            .expect("integration test should know its executable path")
-            .parent()
-            .expect("integration test executable should live under target deps")
-            .to_path_buf();
-        let mut rlibs = Vec::new();
-        let mut rmetas = Vec::new();
-
-        for path in fs::read_dir(&deps_dir)
-            .expect("deps directory should be readable")
-            .filter_map(Result::ok)
-            .map(|entry| entry.path())
-        {
-            let Some(file_name) = path.file_name().and_then(|name| name.to_str()) else {
-                continue;
-            };
-            if !file_name.starts_with("libclean_elab-") {
-                continue;
-            }
-
-            match path.extension().and_then(|ext| ext.to_str()) {
-                Some("rlib") => rlibs.push(path),
-                Some("rmeta") => rmetas.push(path),
-                _ => {}
+    fn clean_elab_metadata_artifact() -> (PathBuf, Vec<PathBuf>) {
+        let executable =
+            std::env::current_exe().expect("integration test should know its executable path");
+        let directory = executable.parent().expect("test executable has a parent");
+        let mut directories = Vec::new();
+        if directory.file_name().is_some_and(|name| name == "deps") {
+            directories.push(directory.to_path_buf());
+        } else {
+            // Native Targo: <profile>/build/<package>/<unit>/out/<test>.
+            // Do not search unrelated profiles, caches or worktrees.
+            assert_eq!(directory.file_name().and_then(|n| n.to_str()), Some("out"));
+            let package = directory
+                .parent()
+                .and_then(|p| p.parent())
+                .expect("native test output has a package directory");
+            assert_eq!(
+                package.file_name().and_then(|n| n.to_str()),
+                Some("clean-elab")
+            );
+            let build = package
+                .parent()
+                .expect("native package has a build directory");
+            assert_eq!(build.file_name().and_then(|n| n.to_str()), Some("build"));
+            for package in fs::read_dir(build).expect("native build directory is readable") {
+                let package = package.expect("native package entry is readable").path();
+                if !package.is_dir() {
+                    continue;
+                }
+                for unit in fs::read_dir(package).expect("native package directory is readable") {
+                    let output = unit
+                        .expect("native unit entry is readable")
+                        .path()
+                        .join("out");
+                    if output.is_dir() {
+                        directories.push(output);
+                    }
+                }
             }
         }
-
-        let sort_by_mtime = |artifacts: &mut Vec<PathBuf>| {
-            artifacts.sort_by_key(|path| {
-                fs::metadata(path)
-                    .and_then(|metadata| metadata.modified())
-                    .unwrap_or(UNIX_EPOCH)
-            });
-        };
-        sort_by_mtime(&mut rlibs);
-        sort_by_mtime(&mut rmetas);
-
-        rlibs
-            .pop()
-            .or_else(|| rmetas.pop())
-            .expect("clean_elab metadata artifact should exist in deps dir")
+        directories.sort();
+        let mut libraries = Vec::new();
+        for directory in &directories {
+            for entry in fs::read_dir(directory).expect("dependency directory is readable") {
+                let path = entry.expect("dependency entry is readable").path();
+                if path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .is_some_and(|n| n.starts_with("libclean_elab-"))
+                    && path
+                        .extension()
+                        .is_some_and(|extension| extension == "rlib")
+                {
+                    libraries.push(path);
+                }
+            }
+        }
+        // An arbitrary newest artifact could test a different feature set or
+        // source. Refuse ambiguity rather than silently testing another API.
+        assert_eq!(
+            libraries.len(),
+            1,
+            "expected exactly one built clean_elab rlib: {libraries:?}"
+        );
+        (libraries.remove(0), directories)
     }
 
     fn temp_compile_dir(test_name: &str) -> PathBuf {
@@ -140,10 +162,7 @@ mod smt_api_surface {
     }
 
     fn compile_external_snippet(test_name: &str, source: &str) -> Output {
-        let artifact = clean_elab_metadata_artifact();
-        let deps_dir = artifact
-            .parent()
-            .expect("clean_elab artifact should live in deps directory");
+        let (artifact, dependency_directories) = clean_elab_metadata_artifact();
         let compile_dir = temp_compile_dir(test_name);
         fs::create_dir_all(&compile_dir).expect("compile directory should be creatable");
 
@@ -162,7 +181,13 @@ mod smt_api_surface {
                 .filter(|trustc| trustc.is_file())
                 .map_or_else(|| "trustc".into(), PathBuf::into_os_string)
         });
-        let output = Command::new(rustc)
+        let mut compiler = Command::new(rustc);
+        for directory in dependency_directories {
+            compiler
+                .arg("-L")
+                .arg(format!("dependency={}", directory.display()));
+        }
+        let output = compiler
             .arg("-Ztrust-verify=off")
             .arg("--crate-type")
             .arg("lib")
@@ -170,18 +195,46 @@ mod smt_api_surface {
             .arg("2021")
             .arg("--emit")
             .arg("metadata")
+            .arg("--error-format=json")
             .arg("--out-dir")
             .arg(&compile_dir)
             .arg(&source_path)
             .arg("--extern")
             .arg(format!("clean_elab={}", artifact.display()))
-            .arg("-L")
-            .arg(format!("dependency={}", deps_dir.display()))
             .output()
             .expect("Targo's trustc should be runnable from integration tests");
 
         let _ = fs::remove_dir_all(&compile_dir);
         output
+    }
+
+    fn assert_external_error(output: &Output, expected: &[&str]) {
+        assert_eq!(
+            output.status.code(),
+            Some(1),
+            "compiler must report a normal error exit"
+        );
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let mut observed = Vec::new();
+        for line in stderr.lines() {
+            let Ok(diagnostic) = serde_json::from_str::<serde_json::Value>(line) else {
+                continue;
+            };
+            if diagnostic["level"] != "error" {
+                continue;
+            }
+            if let Some(code) = diagnostic["code"]["code"].as_str() {
+                assert!(
+                    expected.contains(&code),
+                    "unrelated compiler error {code}: {stderr}"
+                );
+                observed.push(code.to_owned());
+            }
+        }
+        assert!(
+            !observed.is_empty(),
+            "missing expected API error {expected:?}: {stderr}"
+        );
     }
 
     fn assert_external_compile_succeeds(test_name: &str, source: &str) {
@@ -204,6 +257,7 @@ mod smt_api_surface {
 use clean_elab::tactic::smt::{SmtProveOutcome, SmtSolver};
 "#,
         );
+        assert_external_error(&output, &["E0432", "E0603"]);
         let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);
 
@@ -268,6 +322,7 @@ use clean_elab::tactic::smt_translate::TranslateError;
 
         for (test_name, source, symbol) in cases {
             let output = compile_external_snippet(test_name, source);
+            assert_external_error(&output, &["E0432", "E0603"]);
             let stdout = String::from_utf8_lossy(&output.stdout);
             let stderr = String::from_utf8_lossy(&output.stderr);
 
@@ -350,6 +405,7 @@ pub fn attempt_trimmed_helpers() {
 
         for (test_name, source, symbol) in cases {
             let output = compile_external_snippet(test_name, source);
+            assert_external_error(&output, &["E0599"]);
             let stdout = String::from_utf8_lossy(&output.stdout);
             let stderr = String::from_utf8_lossy(&output.stderr);
 

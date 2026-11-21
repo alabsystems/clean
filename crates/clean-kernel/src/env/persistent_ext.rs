@@ -50,6 +50,12 @@ pub trait PersistentExtState: Clone + Default + Send + Sync + 'static {
     /// Fold a single entry into this state.
     fn add_entry(&mut self, entry: &Self::Entry);
 
+    /// Drop transient metadata bound to a declaration that was removed or replaced.
+    /// Return true if the extension changed, so local fact deltas account for it.
+    fn forget_declaration(&mut self, _name: &Name) -> bool {
+        false
+    }
+
     /// Export the current state as entries for .olean serialization.
     fn export_entries(&self) -> Vec<EnvExtensionEntry>;
 }
@@ -65,6 +71,9 @@ pub(crate) trait ExtensionStateHolder: Send + Sync {
 
     /// Fold raw entries from .olean import into typed state.
     fn fold_raw_entries(&mut self, entries: &[EnvExtensionEntry]);
+
+    /// Notify the state of a declaration retirement after it commits.
+    fn forget_declaration(&mut self, name: &Name);
 
     /// Export typed state back to raw entries for .olean export.
     fn export_raw_entries(&self) -> Vec<EnvExtensionEntry>;
@@ -132,6 +141,12 @@ impl<S: PersistentExtState + 'static> ExtensionStateHolder for TypedStateHolder<
             }
         }
         self.initialized = true;
+    }
+
+    fn forget_declaration(&mut self, name: &Name) {
+        if self.state.forget_declaration(name) {
+            self.writes += 1;
+        }
     }
 
     fn export_raw_entries(&self) -> Vec<EnvExtensionEntry> {
@@ -319,6 +334,12 @@ impl EnvExtensionStates {
     /// Create a new empty extension state map.
     pub(crate) fn new() -> Self {
         Self { states: Vec::new() }
+    }
+
+    pub(super) fn forget_declaration(&mut self, name: &Name) {
+        for state in self.states.iter_mut().flatten() {
+            state.forget_declaration(name);
+        }
     }
 
     /// Ensure the state holder for the given extension exists.

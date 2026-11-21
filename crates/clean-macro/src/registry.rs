@@ -25,7 +25,7 @@ pub struct MacroDef {
     /// Replacement template (may contain antiquotations for captured values)
     pub replacement: SyntaxQuote,
     /// Priority (higher = tried first)
-    pub priority: i32,
+    pub priority: num_bigint::BigInt,
     /// Documentation string
     pub doc: Option<String>,
     /// Whether the template's own binders are renamed apart at each
@@ -48,7 +48,7 @@ impl MacroDef {
             kind,
             pattern,
             replacement,
-            priority: 0,
+            priority: 0.into(),
             doc: None,
             hygienic: true,
         }
@@ -63,9 +63,26 @@ impl MacroDef {
 
     /// Set priority
     #[must_use]
-    pub fn with_priority(mut self, priority: i32) -> Self {
-        self.priority = priority;
+    pub fn with_priority(mut self, priority: impl Into<num_bigint::BigInt>) -> Self {
+        self.priority = priority.into();
         self
+    }
+
+    /// Set a source parser priority with Lean's full natural-number range.
+    pub fn with_syntax_priority(self, priority: &clean_kernel::BigNat) -> Self {
+        match priority {
+            clean_kernel::BigNat::Small(n) => self.with_priority(*n),
+            clean_kernel::BigNat::Big(limbs) => {
+                let bytes = limbs
+                    .iter()
+                    .flat_map(|limb| limb.to_le_bytes())
+                    .collect::<Vec<_>>();
+                self.with_priority(num_bigint::BigInt::from_bytes_le(
+                    num_bigint::Sign::Plus,
+                    &bytes,
+                ))
+            }
+        }
     }
 
     /// Set documentation
@@ -384,6 +401,7 @@ fn is_term_syntax(syntax: &Syntax) -> bool {
                 | "arrow"
                 | "let"
                 | "hole"
+                | "syntheticHole"
                 | "paren"
                 | "ident"
                 | "num"
@@ -418,7 +436,7 @@ impl MacroRegistry {
         macros.push(def);
 
         // Keep macros sorted by priority (highest first)
-        macros.sort_by_key(|b| std::cmp::Reverse(b.priority));
+        macros.sort_by(|a, b| b.priority.cmp(&a.priority));
     }
 
     /// Look up a macro by name
@@ -562,7 +580,7 @@ mod tests {
             SyntaxQuote::term(Syntax::generated_ident("replaced")),
         );
         assert_eq!(def.name, "test_macro");
-        assert_eq!(def.priority, 0);
+        assert_eq!(def.priority, 0.into());
     }
 
     #[test]

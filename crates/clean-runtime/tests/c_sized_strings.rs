@@ -103,3 +103,36 @@ fn sized_constructor_refuses_overflow_before_reading_source() {
             .contains("clean_mk_string_from_bytes: string size overflow"));
     }
 }
+
+#[test]
+fn byte_size_native_borrows_and_owned_adapter_consumes_one_reference() {
+    let out = run(r#"
+    struct sample { const char* bytes; size_t length; size_t expected; } cases[] = {
+        {"", 0, 0},
+        {"hello", 5, 5},
+        {"\xc3\xa9", 2, 2},
+        {"\xf0\x9f\x99\x82", 4, 4},
+        {"e\xcc\x81", 3, 3},
+        {"a\0b", 3, 3},
+        {"\0", 1, 1},
+        {"\0\xc3\xa9\0\xf0\x9f\x99\x82\0", 9, 9}
+    };
+    for (size_t i = 0; i < sizeof cases / sizeof cases[0]; ++i) {
+        clean_obj* s = clean_mk_string_from_bytes(cases[i].bytes, cases[i].length);
+        clean_inc(s);
+        assert(!clean_is_exclusive(s));
+        clean_obj* size = clean_string_utf8_byte_size(s);
+        assert(clean_is_scalar(size) && clean_unbox(size) == cases[i].expected);
+        assert(!clean_is_exclusive(s)); /* borrowed leaf must not consume */
+        size = clean_string_utf8_byte_size_owned(s);
+        assert(clean_is_scalar(size) && clean_unbox(size) == cases[i].expected);
+        assert(clean_is_exclusive(s)); /* exactly one reference consumed */
+        assert(clean_string_len(s) == cases[i].length);
+        clean_dec(s);
+    }
+    return 0;
+    "#);
+    assert!(out.status.success(), "{:?}: {:?}", out.status, out.stderr);
+    assert!(out.stdout.is_empty());
+    assert!(out.stderr.is_empty());
+}

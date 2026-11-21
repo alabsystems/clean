@@ -1,0 +1,57 @@
+{
+  "advice": {
+    "origin": "synthetic W0 fixture",
+    "path": "data/kcheck_coverage/prelude_roots.advice.bin",
+    "sha256": "b9afa8ae729a4a9d40168cfe9dc31ee82e3329d222e2a5287ca81d0857136d86"
+  },
+  "export": {
+    "path": "crates/clean-olean/tests/fixtures/lean/v4.30.0-rc2/lean4export_minted/prelude_roots.ndjson.gz",
+    "sha256_decompressed": "9615f5b77476b2edbc64b2e6ce51da5cc33f07682aa21181dcc9816c155aeca0",
+    "sha256_file": "b3fecbfbb11e96751ae9aaaf0cc4f60b4ed60d8a11ba9001fb04be0909fac053"
+  },
+  "figures": {
+    "accepted": 1,
+    "accepted_declarations": [
+      {
+        "advice_frame_sha256": "6e2d359ac33ef003b889f099fb1d52df4c552110bf783020864cd816acb54824",
+        "detail": "bound=1;0+1 iota=0 k=0 lparams=1",
+        "kind": "def",
+        "level_params": 1,
+        "line": 12,
+        "name": "[s2:id]",
+        "statement_sha256": "5ad16c24b03d203e7b9a36d1aa3767bb13f940520694b17bad46513ed9107f0c"
+      }
+    ],
+    "declaration_records": 4,
+    "inside_fragment": 2,
+    "ordinary_declarations": 3,
+    "outside_fragment": 2,
+    "recognised_families": 0,
+    "refused_inside": 1
+  },
+  "labels": {
+    "checker": "kcheck_labelled, KCheck.kcheckBytes (by definition KCheck.checker's kcheck from Advice.start of the frame); this run claims NO soundness: whether a theorem of KCheckSpec.C3Owes KCheck.checker is in source is the scoreboard's checker-soundness line, and nothing shown ties the executable upstream Lean compiled to the term that theorem is about",
+    "compiled_by": "upstream Lean (lake build under the pinned toolchain); not Clean, not Trust",
+    "loader": "interim, unproved; an inductive record's recursor and rules are compared with the base family by the loader, never checked by kcheck",
+    "site": "none: no acceptance of clean or Trust consults this run"
+  },
+  "real_declarations_decided": 0,
+  "real_declarations_decided_reason": "no site consults the run; steps K4b and K5 of the interim thread owe the first one",
+  "run": {
+    "command": "synthetic W0 fixture",
+    "executable_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "lean_toolchain": "leanprover/lean4:v0.0.0-test",
+    "lean_version": "synthetic"
+  },
+  "schema": "clean.kcheck_coverage.v1",
+  "sources": {
+    "theories/kcheck_run/KCheckRun.lean": "96bf3b16a0bfcdf761ad06c2509a23438e15fcb32a62d085823877424fce1528",
+    "theories/kcheck_run/KCheckRunMain.lean": "11415782495f97be33e9edc1fcbc4aaa2e94e432557339b6cbc20f15ccf86be9",
+    "theories/kcheck_run/lean-toolchain": "d239bcbb3b58415224200ccadf6afdeb7bc93c46943e50c2c1f2af9f2553d571"
+  },
+  "transcript": {
+    "path": "data/kcheck_coverage/prelude_roots.transcript.txt",
+    "sha256": "8049db7183bd98d3f2fb010b37cbaf0d87dd4df75db6d5d67dc2192df087a6f3"
+  },
+  "what_this_is": "Step K3 of the interim thread of docs/plans/SELF_PROOF_EXECUTION_PLAN_2026-11-12.md: the real declarations the adopted checker accepts in one run of theories/kcheck_run, re-derived by scripts/kcheck_coverage.py. An accepted declaration is not a proved one and decides no site."
+}

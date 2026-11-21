@@ -964,7 +964,7 @@ impl CarrierFn<'_, '_> {
             IRLiteral::UInt32(v) => (Ty::U32, u64::from(*v)),
             IRLiteral::UInt64(v) => (Ty::U64, *v),
             IRLiteral::USize(v) => (Ty::U64, *v as u64),
-            IRLiteral::NatBig(_) => {
+            IRLiteral::NatBig(_) | IRLiteral::NatLimbs(_) => {
                 return Err(
                     self.refuse("has a Nat numeral above u64::MAX (no exported shim builds one)")
                 )

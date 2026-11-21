@@ -514,18 +514,9 @@ pub(in crate::infer) fn motive_domains_from_rec_type(
 }
 
 impl<'a> ElabCtx<'a> {
-    /// Lower a single catch-all arm — `match [h :] e with | x => body` (or
-    /// `| _ => body` with a hypothesis) — as a let-binding:
-    ///
-    /// ```text
-    /// let x := e; [let h : e = x := Eq.refl e;] body
-    /// ```
-    ///
-    /// This is Lean's pattern-variable equation for the annotated
-    /// discriminant: the pattern IS the variable, so `h : e = x`. Because
-    /// `x := e` is a zeta-transparent let, the kernel accepts `Eq.refl e`
-    /// against the annotation `e = x` — no axiom, no sorry, re-checked on
-    /// registration.
+    /// A plain variable pattern binds its discriminant by a let. A named
+    /// discriminant checks a genuinely abstract branch and then instantiates it:
+    /// `(fun (x : T) (h : e = x) => body) e (Eq.refl e)`.
     fn lower_single_catchall_match_arm(
         &mut self,
         discr_hyp: Option<&SurfaceName>,
@@ -538,7 +529,20 @@ impl<'a> ElabCtx<'a> {
         let var_name = pattern_var
             .cloned()
             .unwrap_or_else(|| SurfaceName::generated_path("x✝"));
-        let fvar = self.push_local(var_name.clone(), scrutinee_ty.clone());
+        let fvar = if discr_hyp.is_some() {
+            // The equality hypothesis relates an abstract branch binder to the
+            // discriminant. Lean rejects proving that equation by `rfl` here.
+            self.push_local(var_name.clone(), scrutinee_ty.clone())
+        } else {
+            let fvar = self.fresh_fvar();
+            self.push_local_let_with_fvar(
+                var_name.clone(),
+                fvar,
+                scrutinee_ty.clone(),
+                scrutinee_expr.clone(),
+            );
+            fvar
+        };
         let hyp_binding = match discr_hyp {
             Some(h) => {
                 let u = self.infer_sort(scrutinee_ty)?;
@@ -555,26 +559,38 @@ impl<'a> ElabCtx<'a> {
                     [scrutinee_ty.clone(), scrutinee_expr.clone()],
                 );
                 let h_fvar = self.push_local(h.clone(), eq_ty.clone());
-                Some((h.clone(), h_fvar, eq_ty, refl))
+                Some((h_fvar, eq_ty, refl))
             }
             None => None,
         };
-        let body_expr =
-            self.elaborate_with_expected_type(body, self.current_expected_type.clone())?;
-        let mut inner = body_expr;
-        if let Some((h_name, h_fvar, eq_ty, refl)) = hyp_binding {
+        // A variable field in the pattern is a binder of the branch motive.
+        // Instantiate that motive at the binder the source uses, including
+        // nested annotated-discriminant equations elaborated in the body.
+        let expected = match (pattern_var, discr_hyp, scrutinee_expr.kind()) {
+            (Some(_), None, ExprKind::FVar(owner)) => self
+                .current_expected_type
+                .as_ref()
+                .map(|ty| ty.abstract_fvar(*owner).instantiate(&Expr::fvar(fvar))),
+            _ => self.current_expected_type.clone(),
+        };
+        let body_expr = self.elaborate_with_expected_type(body, expected)?;
+        if let Some((h_fvar, eq_ty, refl)) = hyp_binding {
             self.pop_local();
-            inner = Expr::let_named(
-                h_name.name().clone(),
-                eq_ty,
-                refl,
-                inner.abstract_fvar(h_fvar),
-                false,
+            self.pop_local();
+            // A let for x here would allow a bad branch proof to typecheck
+            // after zeta-reduction. Check its telescope at abstract x and h.
+            let branch = Expr::lam(BinderInfo::Default, eq_ty, body_expr.abstract_fvar(h_fvar));
+            let branch = Expr::lam(
+                BinderInfo::Default,
+                scrutinee_ty.clone(),
+                branch.abstract_fvar(fvar),
             );
+            let _branch_type = self.infer_type_full(&branch)?;
+            return Ok(Expr::apps(branch, [scrutinee_expr.clone(), refl]));
         }
         self.pop_local();
-        let inner = inner.abstract_fvar(fvar);
-        let non_dep = pattern_var.is_none() && discr_hyp.is_none();
+        let inner = body_expr.abstract_fvar(fvar);
+        let non_dep = pattern_var.is_none();
         Ok(Expr::let_named(
             var_name.name().clone(),
             scrutinee_ty.clone(),
@@ -1033,14 +1049,6 @@ impl<'a> ElabCtx<'a> {
                     .is_some());
             match &arm.pattern {
                 SurfacePattern::Var(name) if !single_var_is_nullary_ctor => {
-                    // match e with | x => body  ==  let x := e in body
-                    //
-                    // With an annotated discriminant (`match h : e with | x =>
-                    // body`, Lean matchDiscr) additionally bind the pattern-
-                    // variable equation `h : e = x`. Since `x := e` is a
-                    // zeta-transparent let, `Eq.refl e : e = e` proves it —
-                    // the kernel re-checks the annotation `e = x` against the
-                    // value's type `e = e` through the let binding.
                     return self.lower_single_catchall_match_arm(
                         discr_hyp,
                         Some(name),
@@ -1086,7 +1094,7 @@ impl<'a> ElabCtx<'a> {
                     if discr_hyp.is_some() {
                         // `match h : e with | _ => body` — Lean binds
                         // `h : e = x✝` for an inaccessible pattern variable;
-                        // lower through the same let-encoding as the named
+                        // lower through the same branch function as the named
                         // catch-all (the binder name is cosmetic).
                         return self.lower_single_catchall_match_arm(
                             discr_hyp,

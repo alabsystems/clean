@@ -144,3 +144,33 @@ pub(super) fn legacy_module(label: &str, bytes: &[u8]) {
         std::fs::write(directory.join("legacy-same-input.tmbc"), bytes).unwrap();
     }
 }
+
+/// Exact actual compiler-consumer failure; a refused mutant is never executed.
+pub(super) fn consumer_failure(
+    label: &str,
+    input: &[u8],
+    failure: &clean_compiler::primitive_uses::OwnedObservedPipelineFailure<LaneError>,
+    object: &Path,
+    object_state: &std::io::Result<std::fs::Metadata>,
+) {
+    eprintln!("ACTUAL_TYPED_CONSUMER_REFUSAL {label}: {failure:#}");
+    eprintln!("ACTUAL_CONSUMER_OBJECT_STATE {label}: {object_state:?}");
+    if let Some(directory) = directory(label) {
+        let state = match object_state {
+            Ok(metadata) => {
+                json!({"path":object,"exists":true,"is_file":metadata.is_file(),"is_symlink":metadata.file_type().is_symlink(),"bytes":metadata.len()})
+            }
+            Err(error) => {
+                json!({"path":object,"exists":null,"error_kind":format!("{:?}",error.kind()),"is_not_found":error.kind()==std::io::ErrorKind::NotFound,"raw_os_error":error.raw_os_error(),"error":error.to_string()})
+            }
+        };
+        std::fs::write(
+            directory.join("actual-object-state.json"),
+            serde_json::to_vec_pretty(&state).unwrap(),
+        )
+        .unwrap();
+        std::fs::write(directory.join("actual-consumer-input.tmbc"), input).unwrap();
+        std::fs::write(directory.join("actual-error.txt"), format!("{failure:#}\n")).unwrap();
+        compiler(&directory, failure.observations());
+    }
+}

@@ -428,7 +428,7 @@ impl Environment {
                     None,
                     false,
                 );
-                self.constants.insert(name.clone(), new_info);
+                self.install_resident_constant(name.clone(), new_info);
                 self.declaration_verification.insert(
                     name.clone(),
                     super::DeclarationVerification::FullKernelCheck,
@@ -456,7 +456,7 @@ impl Environment {
                 value,
                 reducible,
             );
-            self.constants.insert(name.clone(), info);
+            self.install_resident_constant(name.clone(), info);
             self.declaration_verification
                 .insert(name.clone(), super::DeclarationVerification::StructuralOnly);
             self.recursors.insert(name, val);
@@ -469,7 +469,7 @@ impl Environment {
                 None,
                 false,
             );
-            self.constants.insert(name.clone(), info);
+            self.install_resident_constant(name.clone(), info);
             self.declaration_verification.insert(
                 name.clone(),
                 // Provisional until the container-major metadata and every
@@ -483,16 +483,16 @@ impl Environment {
         // originals, so no other aux artifact exists.
         for entry in entries {
             let aux = &entry.aux_name;
-            self.constants.remove(aux);
+            self.remove_resident_constant(aux);
             self.declaration_verification.remove(aux);
             self.inductives.remove(aux);
             for (aux_ctor, _) in &entry.ctor_map {
-                self.constants.remove(aux_ctor);
+                self.remove_resident_constant(aux_ctor);
                 self.declaration_verification.remove(aux_ctor);
                 self.constructors.remove(aux_ctor);
             }
             let aux_rec = aux.clone().str("rec");
-            self.constants.remove(&aux_rec);
+            self.remove_resident_constant(&aux_rec);
             self.declaration_verification.remove(&aux_rec);
             self.recursors.remove(&aux_rec);
         }

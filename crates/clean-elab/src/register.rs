@@ -6,7 +6,7 @@
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use clean_kernel::env::TrustedEnvExt;
+use clean_kernel::env::{ConstantOrigin, DeclarationVerification, KernelTheory, TrustedEnvExt};
 use clean_kernel::expr::UsedConstants;
 use clean_kernel::name::Name;
 use clean_parser::DeclModifiers;
@@ -418,8 +418,24 @@ fn add_decl_with_kernel_check(
     let mut candidate = env.needs_bootstrap_stubs(&roots).then(|| env.clone());
     let target = candidate.as_mut().unwrap_or(&mut *env);
     prepare_bootstrap_stubs(target, &roots)?;
+    let native_proof = match &decl {
+        clean_kernel::Declaration::Axiom { name, .. }
+        | clean_kernel::Declaration::Theorem { name, .. }
+            if target.kernel_theory() == KernelTheory::LeanReference
+                && target.get_constant_origin(name).is_none() =>
+        {
+            Some(name.clone())
+        }
+        _ => None,
+    };
     match target.add_decl(decl) {
         Ok(()) => {
+            if let Some(name) = native_proof.filter(|name| {
+                target.declaration_verification(name)
+                    == Some(DeclarationVerification::FullKernelCheck)
+            }) {
+                target.set_constant_origin(name, ConstantOrigin::kernel_checked());
+            }
             if let Some(candidate) = candidate {
                 *env = candidate;
             }
@@ -596,9 +612,17 @@ pub(crate) fn register_elab_result(
     env: &mut clean_kernel::Environment,
     result: &ElabResult,
 ) -> Result<(), ElabError> {
+    register_elab_result_with_matchers(env, result, &[]).map(|_| ())
+}
+
+pub(crate) fn register_elab_result_with_matchers(
+    env: &mut clean_kernel::Environment,
+    result: &ElabResult,
+    matchers: &[(Name, clean_kernel::env::MatcherInfo)],
+) -> Result<Vec<Name>, ElabError> {
     // Diagnostics do not change the enclosed declaration or its transaction.
     if let ElabResult::Diagnosed { result, .. } = result {
-        return register_elab_result(env, result);
+        return register_elab_result_with_matchers(env, result, matchers);
     }
     // Backstop for the source-level refusal (`check_not_reserved_kernel_name`):
     // no elaborated result — auxiliary `where` / `let rec` definitions,
@@ -614,12 +638,29 @@ pub(crate) fn register_elab_result(
             printed: reserved.to_string(),
         });
     }
+    if crate::source_prelude::is_island_prelude(env) {
+        let mut candidate = env.clone();
+        crate::island_fence::enforce_island_registration(&candidate, result)?;
+        register_elab_result_in_place(&mut candidate, result)?;
+        for (name, info) in matchers {
+            candidate
+                .register_matcher_info(name.clone(), info.clone())
+                .map_err(|error| ElabError::KernelRegistrationFailed {
+                    operation: "generated matcher metadata".into(),
+                    detail: format!("{name}: {error}"),
+                })?;
+        }
+        let added = newly_registered_names(env, &candidate);
+        *env = candidate;
+        return Ok(added);
+    }
     let roots = bootstrap_roots(env, result);
     // Composite results perform several independently fallible environment
     // mutations (parent inductive, projections, generated instances, metadata,
     // or multiple leaves).  Commit them as one unit so a late failure cannot
     // leave a partially registered parent or prefix.
-    if env.needs_bootstrap_stubs(&roots)
+    if !matchers.is_empty()
+        || env.needs_bootstrap_stubs(&roots)
         || matches!(
             result,
             ElabResult::Structure { .. }
@@ -631,11 +672,34 @@ pub(crate) fn register_elab_result(
         let mut candidate = env.clone();
         prepare_bootstrap_stubs(&mut candidate, &roots)?;
         register_elab_result_in_place(&mut candidate, result)?;
+        for (name, info) in matchers {
+            candidate
+                .register_matcher_info(name.clone(), info.clone())
+                .map_err(|error| ElabError::KernelRegistrationFailed {
+                    operation: "generated matcher metadata".into(),
+                    detail: format!("{name}: {error}"),
+                })?;
+        }
+        let added = newly_registered_names(env, &candidate);
         *env = candidate;
-        return Ok(());
+        return Ok(added);
     }
 
-    register_elab_result_in_place(env, result)
+    register_elab_result_in_place(env, result)?;
+    Ok(leaf_own_names(result))
+}
+
+fn newly_registered_names(
+    previous: &clean_kernel::Environment,
+    registered: &clean_kernel::Environment,
+) -> Vec<Name> {
+    let mut names: Vec<_> = registered
+        .constants()
+        .filter(|info| previous.get_const(&info.name).is_none())
+        .map(|info| info.name.clone())
+        .collect();
+    names.sort();
+    names
 }
 
 fn bootstrap_roots(
@@ -706,6 +770,12 @@ fn register_elab_result_in_place(
         env.mark_noncomputable(name);
     }
 
+    if !matches!(
+        result,
+        ElabResult::Diagnosed { .. } | ElabResult::Multiple(_)
+    ) {
+        crate::island_fence::enforce_island_registration(env, result)?;
+    }
     match result {
         ElabResult::Diagnosed { result, .. } => return register_elab_result_in_place(env, result),
         ElabResult::Definition {
@@ -918,10 +988,17 @@ fn register_elab_result_in_place(
             // the ctor-arm of `resolve_named_args` leaves param slots
             // unnamed, which failed LOUD before this row existed (U2 rung 2
             // follow-on to the B92 projection rows).
+            let mut ctor_telescope = ctor_ty;
             let ctor_param_infos: Vec<(Name, clean_kernel::BinderInfo)> = projection_param_infos
                 .iter()
                 .take(projection_param_infos.len().saturating_sub(1))
-                .map(|(n, _)| (n.name().clone(), clean_kernel::BinderInfo::Implicit))
+                .map(|(n, _)| {
+                    let clean_kernel::ExprKind::Pi(binder, _, tail) = ctor_telescope.kind() else {
+                        return (n.name().clone(), clean_kernel::BinderInfo::Implicit);
+                    };
+                    ctor_telescope = tail;
+                    (n.name().clone(), binder.info)
+                })
                 .chain(
                     field_names
                         .iter()
@@ -1084,8 +1161,17 @@ fn register_elab_result_in_place(
                         .collect(),
                 }],
             };
-            if let Err(e) = env.add_inductive(decl.clone()) {
+            if let Err(e) = env.add_source_inductive(decl.clone()) {
                 retry_add_inductive_with_local_lift(env, &decl, "add_inductive Inductive", e)?;
+            }
+            for (constructor, _) in constructors {
+                if let Some(theorems) =
+                    crate::tactic::simp::simple_constructor_injectivity(env, constructor)
+                {
+                    for theorem in theorems {
+                        add_decl_with_kernel_check(env, theorem, "constructor injectivity")?;
+                    }
+                }
             }
             generate_deep_induction_post_pass(
                 env,
@@ -1094,6 +1180,12 @@ fn register_elab_result_in_place(
             )?;
             generate_container_map_post_pass(env, name, *wants_container_map)?;
             generate_container_rel_post_pass(env, name, *wants_container_rel)?;
+            if let Some((declarations, instance)) = crate::infer::simple_size_of(env, name) {
+                for declaration in declarations {
+                    add_decl_with_kernel_check(env, declaration, "structural SizeOf")?;
+                }
+                env.register_instance(instance);
+            }
 
             // Register derived instances with full kernel registration. Part of
             // #1301.

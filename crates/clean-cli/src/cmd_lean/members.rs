@@ -100,6 +100,7 @@ fn kind_of(decl: &SurfaceDecl) -> MemberKind {
         | SurfaceDecl::Reduce { .. }
         | SurfaceDecl::Print { .. }
         | SurfaceDecl::PrintAxioms { .. }
+        | SurfaceDecl::PrintEquations { .. }
         | SurfaceDecl::GuardMsgs { .. } => MemberKind::Command,
         _ => MemberKind::Other,
     }

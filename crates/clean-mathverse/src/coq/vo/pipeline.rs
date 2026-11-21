@@ -82,6 +82,16 @@ pub struct PipelineStats {
 }
 
 impl PipelineStats {
+    fn record_declaration(&mut self, kind: VoDeclKind) {
+        self.total_declarations += 1;
+        match kind {
+            VoDeclKind::Constant => self.constants += 1,
+            VoDeclKind::Inductive => self.inductives += 1,
+            VoDeclKind::Module => self.modules += 1,
+            _ => self.other += 1,
+        }
+    }
+
     /// Merge another stats object into this one.
     pub fn merge(&mut self, other: &PipelineStats) {
         self.files_found += other.files_found;
@@ -184,13 +194,7 @@ pub fn process_directory(
         }
 
         for decl in &result.declarations {
-            stats.total_declarations += 1;
-            match decl.kind {
-                VoDeclKind::Constant => stats.constants += 1,
-                VoDeclKind::Inductive => stats.inductives += 1,
-                VoDeclKind::Module => stats.modules += 1,
-                VoDeclKind::Universe | VoDeclKind::Other => stats.other += 1,
-            }
+            stats.record_declaration(decl.kind);
             if decl.is_opaque {
                 stats.opaque_count += 1;
             }
@@ -377,13 +381,7 @@ pub fn process_directory_with_progress(
             }
 
             for decl in &result.declarations {
-                stats.total_declarations += 1;
-                match decl.kind {
-                    VoDeclKind::Constant => stats.constants += 1,
-                    VoDeclKind::Inductive => stats.inductives += 1,
-                    VoDeclKind::Module => stats.modules += 1,
-                    VoDeclKind::Universe | VoDeclKind::Other => stats.other += 1,
-                }
+                stats.record_declaration(decl.kind);
                 if decl.is_opaque {
                     stats.opaque_count += 1;
                 }

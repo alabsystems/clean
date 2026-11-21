@@ -1214,7 +1214,10 @@ impl Environment {
         let stub_verification = self.declaration_verification.remove(&name);
         self.generation += 1;
         match self.add_decl(decl) {
-            Ok(()) => Ok(()),
+            Ok(()) => {
+                self.extension_states.forget_declaration(&name);
+                Ok(())
+            }
             Err(e) => {
                 self.constants.insert(name.clone(), stub);
                 if let Some(verification) = stub_verification {
@@ -1307,7 +1310,7 @@ impl Environment {
             info.name
         );
         let name = info.name.clone();
-        self.constants.insert(name.clone(), info);
+        self.install_resident_constant(name.clone(), info);
         self.declaration_verification
             .insert(name, super::DeclarationVerification::Unchecked);
         self.generation += 1;

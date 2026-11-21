@@ -689,7 +689,7 @@ fn test_parse_by_injection_with_clause_then_next_tactic() {
     // Semantics/Dialect.lean. The `injection` arm now consumes its own
     // `with <names>` clause (stopping at the newline), so the next tactic is
     // parsed cleanly.
-    let src = "by\n  injection h with h'\n  obtain ⟨_, hr⟩ := hc\n  trivial";
+    let src = "by\n  injection h with _ h'\n  obtain ⟨_, hr⟩ := hc\n  trivial";
     let expr = Parser::parse_expr(src).expect("injection-with then obtain parses");
     match expr {
         SurfaceExpr::ByTactic(_, tactics) => {
@@ -700,12 +700,34 @@ fn test_parse_by_injection_with_clause_then_next_tactic() {
             );
             assert!(
                 matches!(&tactics[0], SurfaceTactic::Named { name, args, .. }
-                    if name == "injection" && args.len() == 1),
-                "injection takes only the hypothesis arg; with-names are consumed"
+                    if name == "injection" && matches!(args.as_slice(),
+                        [SurfaceExpr::Ident(_, hyp), SurfaceExpr::Hole(_), SurfaceExpr::Ident(_, field)]
+                        if hyp.is_unescaped_component("h") && field.is_unescaped_component("h'"))),
+                "injection retains the hypothesis, anonymous slot, and named field"
             );
         }
         other => panic!("Expected ByTactic, got {other:?}"),
     }
+}
+
+#[test]
+fn injection_field_names_can_spell_tactics() {
+    let expr = Parser::parse_expr("by\n  injection h with left first\n  exact h")
+        .expect("field names parse");
+    let SurfaceExpr::ByTactic(_, tactics) = expr else {
+        panic!("expected a tactic block");
+    };
+    let [SurfaceTactic::Named { name, args, .. }, SurfaceTactic::Named { name: next, .. }] =
+        tactics.as_slice()
+    else {
+        panic!("expected two tactics: {tactics:?}");
+    };
+    assert_eq!(name, "injection");
+    assert_eq!(next, "exact");
+    assert!(matches!(args.as_slice(),
+        [SurfaceExpr::Ident(_, hyp), SurfaceExpr::Ident(_, left), SurfaceExpr::Ident(_, first)]
+        if hyp.is_unescaped_component("h") && left.is_unescaped_component("left")
+            && first.is_unescaped_component("first")));
 }
 
 // ====================================================================

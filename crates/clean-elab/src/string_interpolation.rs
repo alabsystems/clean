@@ -6,7 +6,7 @@
 //!
 //! Lean 4 supports three interpolated string kinds:
 //!
-//! - `s!"Hello {name}"` → `String.append "Hello " (toString name)`
+//! - `s!"Hello {name}"` → `((ToString.toString "Hello " ++ ToString.toString name) : String)`
 //! - `f!"x = {x}"` → `Format.append (Format.text "x = ") (format x)`
 //! - `m!"error: {msg}"` → `((Lean.ToMessageData.toMessageData "error: " ++ Lean.ToMessageData.toMessageData msg) : Lean.MessageData)`
 //!   (Lean's own `m!` macro, `Lean/Message.lean`)
@@ -39,9 +39,9 @@ use clean_parser::InterpolatedStringKind;
 /// # Desugaring rules
 ///
 /// ## `s!` (String interpolation)
-/// - Literal parts become `String` literals
-/// - Expression parts get wrapped in `toString`
-/// - Parts are joined with `String.append`
+/// - Nonempty literal parts and expression parts use canonical `ToString.toString`
+/// - Converted parts are joined left-associatively with hygienic `HAppend.hAppend`
+/// - An empty interpolation converts `""`; the whole result is ascribed `String`
 ///
 /// ## `f!` (Format interpolation)
 /// - Literal parts become `Format.text "..."` applications
@@ -57,13 +57,11 @@ use clean_parser::InterpolatedStringKind;
 ///
 /// ```text
 /// s!"Hello {name}" →
-///   String.append "Hello " (toString name)
+///   ((ToString.toString "Hello " ++ ToString.toString name) : String)
 ///
-/// s!"{a} + {b} = {c}" →
-///   String.append (toString a)
-///     (String.append " + "
-///       (String.append (toString b)
-///         (String.append " = " (toString c))))
+/// s!"{a} + {b}" →
+///   (((ToString.toString a ++ ToString.toString " + ")
+///       ++ ToString.toString b) : String)
 ///
 /// m!"{msg}" →
 ///   (Lean.ToMessageData.toMessageData msg : Lean.MessageData)
@@ -71,8 +69,8 @@ use clean_parser::InterpolatedStringKind;
 ///
 /// # REQUIRES
 /// - `parts` are well-formed `InterpolationPart` values from the parser
-/// - `ctx` has a valid environment with `toString`, `String.append`, etc.
-///   (or stubs) registered when elaborating `s!` strings
+/// - `ctx` supplies `ToString.toString`, `HAppend.hAppend`, `String`, and the
+///   actual required typeclass instances when elaborating `s!` strings
 ///
 /// # ENSURES
 /// - On success, returns a kernel `Expr` corresponding to the desugared form
@@ -118,9 +116,8 @@ pub(crate) fn desugar_by_kind(
 /// Check whether an interpolation has any expression parts.
 ///
 /// Returns `true` if all parts are literals (no `{expr}` segments).
-/// Useful for optimizing the common case of `s!"plain string"` which
-/// can be elaborated as a simple string literal without the `toString`/
-/// `String.append` overhead.
+/// This describes the chunks, not an elaboration shortcut: even a literal-only
+/// `s!` must use its actual `ToString String` instance.
 #[must_use]
 // Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
 // production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
@@ -134,8 +131,8 @@ pub(crate) fn is_plain_literal(parts: &[InterpolationPart]) -> bool {
 /// Extract the concatenated literal text when all parts are literals.
 ///
 /// Returns `None` if any part is an expression interpolation.
-/// When `Some`, the caller can emit a single string literal instead of
-/// the full `String.append` chain.
+/// The returned text does not replace interpolation elaboration: conversion
+/// and append instances may give the original chunks observable behavior.
 #[must_use]
 // Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
 // production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).

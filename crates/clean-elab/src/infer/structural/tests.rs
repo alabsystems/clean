@@ -443,8 +443,8 @@ fn test_no_decreasing_arg() {
 }
 
 #[test]
-fn test_find_decreasing_arg_mismatched_arity() {
-    let calls = vec![
+fn mixed_saturation_requires_a_decreasing_position_in_the_shared_prefix() {
+    let mut calls = vec![
         RecursiveCall {
             args: vec![RecursiveArg::Var(SurfaceName::generated_path("x"))],
         },
@@ -455,6 +455,8 @@ fn test_find_decreasing_arg_mismatched_arity() {
             ],
         },
     ];
+    assert_eq!(find_decreasing_arg(&calls, &[], None), Some(0));
+    calls[0].args.clear();
     assert_eq!(find_decreasing_arg(&calls, &[], None), None);
 }
 

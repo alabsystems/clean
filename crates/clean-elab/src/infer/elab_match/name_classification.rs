@@ -259,6 +259,19 @@ impl<'a> ElabCtx<'a> {
         }
     }
 
+    /// Use the same typed binder decision as the ordinary pattern compiler
+    /// when a list course-of-values minor introduces a constructor field.
+    pub(in crate::infer) fn list_equation_pattern_binder(
+        &mut self,
+        name: &SurfaceName,
+        expected: &SurfaceName,
+    ) -> bool {
+        matches!(
+            self.classify_match_pattern_name(name, Some(expected), true),
+            Ok(PatternName::Binder)
+        )
+    }
+
     /// Ordinary-resolution constructor reading of every bare identifier in the
     /// patterns of `val`'s whole-body match, for the surface equation
     /// normalizers (`elab_decl_value::PatternIdents`). No scrutinee type is
@@ -403,6 +416,11 @@ impl<'a> ElabCtx<'a> {
         expected_type: &Expr,
     ) -> Result<SurfacePattern, ElabError> {
         let expected = self.get_type_name(expected_type).ok();
+        if expected.is_none()
+            && matches!(pattern, SurfacePattern::Var(name) | SurfacePattern::Ctor(name, _) if name.is_relative_constructor())
+        {
+            self.note_unassigned_expected_type(expected_type);
+        }
         let (constructor, arguments) = match pattern {
             SurfacePattern::Var(name) => {
                 match self.classify_match_pattern_name(name, expected.as_ref(), true)? {

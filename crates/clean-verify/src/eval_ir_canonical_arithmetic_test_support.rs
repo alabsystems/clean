@@ -3,7 +3,7 @@
 use crate::spec::{SpecDefinition, Specification};
 use clean_kernel::{ConstantKind, Declaration, Expr, Level, Name, TypeChecker};
 
-pub(super) const ROOTS: [&str; 21] = [
+pub(super) const ROOTS: [&str; 42] = [
     "ir_div_agrees_at_fuel",
     "ir_rem_agrees_at_fuel",
     "ir_byte_lshr_u64_by_three_v1",
@@ -25,6 +25,27 @@ pub(super) const ROOTS: [&str; 21] = [
     "ir_byte_icmp_int_ugt_canonical_v1",
     "ir_byte_icmp_uint_uge_canonical_v1",
     "ir_byte_icmp_int_uge_canonical_v1",
+    "ir_xor_div_two_canonical_v1",
+    "ir_xor_rem_two_canonical_v1",
+    "ir_xor_low_bit_canonical_v1",
+    "ir_xor_loop_canonical_v1",
+    "ir_xor_width_loop_canonical_v1",
+    "ir_byte_xor_uint_canonical_v1",
+    "ir_byte_xor_int_canonical_v1",
+    "ir_byte_xor_canonical_result_bound_v1",
+    "ir_nat_mul_canonical_agrees_v1",
+    "ir_nat_div_canonical_nonzero_v1",
+    "ir_byte_lshr_uint_canonical_v1",
+    "ir_byte_lshr_uint_canonical_result_bound_v1",
+    "ir_nat_div_canonical_positive_v1",
+    "ir_nat_rem_canonical_positive_v1",
+    "ir_dm_quot_canonical_positive_at_fuel_v1",
+    "ir_and_loop_canonical_v1",
+    "ir_and_width_loop_canonical_v1",
+    "ir_byte_and_uint_canonical_v1",
+    "ir_byte_and_int_canonical_v1",
+    "ir_byte_and_canonical_result_bound_v1",
+    "ir_byte_shl_uint_canonical_v1",
 ];
 
 pub(super) fn strict_root(spec: &Specification, name: &str) {

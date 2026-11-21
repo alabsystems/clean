@@ -67,6 +67,9 @@
 //! test pins; nothing else holds them together.
 
 mod drive;
+pub(crate) mod imported_runtime;
+pub(crate) mod imported_syntax;
+mod lean_v2_export;
 mod setup;
 pub mod source_graph;
 mod source_modules;
@@ -81,10 +84,12 @@ mod tests;
 mod prelude_census_tests;
 
 pub use drive::{elaborate_decls, ModuleObserver};
+pub use imported_syntax::{preload_exported_term_syntax, stable_environment_with_imported_syntax};
+pub use lean_v2_export::CheckedLeanV2Source;
 pub use setup::{
     elaborate_prelude_header, foundation_import_base, module_elaboration_lock, module_environment,
-    module_environment_for_header_in_world, module_environment_in_world,
-    module_environment_with_import_base_in_world, module_file_context,
+    module_environment_and_context_with_import_paths, module_environment_for_header_in_world,
+    module_environment_in_world, module_environment_with_import_base_in_world, module_file_context,
     module_file_context_in_world, parse_module, parse_module_in_world, DeclBudgetScope,
     EnvironmentSetup, ImportArtifacts, ModuleSetupError, PreludeFlavor,
 };

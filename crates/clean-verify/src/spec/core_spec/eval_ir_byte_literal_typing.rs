@@ -76,7 +76,7 @@ Eq.substType (IROption KExpr)
   ({expected}) ({observed})
   (Eq.symm (IROption KExpr) ({observed}) ({expected})
     (ir_byte_literal_{kind}_input_v1 {arguments}))
-  (KernelInfers.lit_{kind} tenv G payload)"
+  (@KernelInfers.lit_{kind} tenv G payload)"
                 ),
                 "Exact existing literal inference transported along the input-derived byte observer equation. Premises are only the canonical address bound, live accessibility and initialized bytes; the model payload/environment/context are arbitrary.",
             )?;

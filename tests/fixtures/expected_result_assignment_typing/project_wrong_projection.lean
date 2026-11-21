@@ -1,0 +1,3 @@
+theorem projectBadProof (a : Nat × Bool) (b : Nat × Nat)
+    (h : (a.1, (0 : Nat)) = b) : a.1 = b.1 :=
+  congrArg (fun p : Nat × Nat => p.2) h

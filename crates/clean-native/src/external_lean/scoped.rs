@@ -67,7 +67,7 @@ impl ExternalLeanScopedProgram {
     pub fn world(&self) -> LeanWorld {
         self.program.world()
     }
-    /// Full global attempt, including its original failures and absent digest.
+    /// Observe the full frozen environment on first request, retaining any failures.
     pub fn source_capture(&self) -> &RuntimeEnvironmentCapture {
         self.program.source_capture()
     }
@@ -190,7 +190,7 @@ fn observe(
     RuntimeScopedEnvironmentCapture::capture(
         &program.base,
         &program.env,
-        program.source_capture().sources.clone(),
+        program.custody.sources.clone(),
         plan,
     )
 }

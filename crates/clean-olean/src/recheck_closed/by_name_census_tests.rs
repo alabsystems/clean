@@ -68,6 +68,7 @@ use reach::Census;
 /// is a root of the census, resolved like any other call.
 const REPLAY_SOURCES: &[&str] = &[
     "src/recheck_closed.rs",
+    "src/recheck_closed/family_index.rs",
     "src/recheck_closed/drive.rs",
     "src/recheck_closed/replay.rs",
     "src/recheck_closed/fingerprint.rs",
@@ -159,7 +160,8 @@ const ENV_VAR: &str = "a process environment-variable name or a profiler frame l
 const UNIV: &str =
     "a universe-PARAMETER name of a kernel-built or kernel-generated declaration, not a constant";
 const SUFFIX: &str = "the suffix under which the kernel NAMES a declaration it generates from a family (`T.rec`, `T.casesOn`, …); a cone member of that name is compared against the regenerated one (`replay_family`), never believed";
-const AUX: &str = "generated-auxiliary construction (`noConfusion`/`below`/`brecOn`): only under `GeneratedAuxDefs::Generate` (`add_inductive`; the closed replay uses `add_inductive_core`, `clean_families: false`), and every generated declaration is type-checked (`check_decl_readonly_strict` / `add_decl`) before it is installed, so a forged meaning of these names yields a checked declaration of that meaning, not a false accept";
+const AUX: &str = "generated-auxiliary construction (`noConfusion`/`below`/`brecOn`): only under the ordinary native or source induction policies; the fenced replay uses `add_inductive_core`. Every generated declaration is type-checked (`check_decl_readonly_strict` / `add_decl`) before installation";
+const SOURCE_CONSTRUCTORS: &str = "ordinary source-only constructor auxiliaries: only `add_source_inductive` selects the `Source` policy. The literals name generated records or constants in ordinary typed terms. Each record is checked by `add_decl` or `add_decl_with_reducibility` before the complete staged environment is installed. The by-name census follows the shared builder regardless of its policy";
 const NATIVE: &str = "a native-reducer operand hook, consulted only AFTER `native_reducer_for(name)?` succeeds (tc/def_eq/delta_helpers.rs); the closed replay's environment installs no native reducer (asserted by `a_forged_bool_not_does_not_prove_false_through_the_default_replay`), and over a consumer's base (the imported-cone gate) a reducer fires only when the kernel's native-fold authority finds its head AND every name it recognizes canonical in the replay environment (`tc/fold_admission.rs` `registry_reducer_admitted`)";
 const OFNAT: &str = "argument normalisation only (tc/def_eq/delta_helpers.rs): rebuilds `f (whnf arg)` with the SAME head, so the term stays def-eq to the original whatever `f` is; nothing is evaluated by name";
 const EAGER: &str = "`eagerReduce` sets Lean's `m_eager_reduce` flag while checking the argument — a reduction-strategy hint, never a value";
@@ -178,9 +180,18 @@ const PROOF_TERM: &str = "names `Eq.refl` in a proof TERM the proof-producing WH
 /// second meaning — it is not a constant name at all, or the code that uses
 /// it cannot run in the closed replay, or it only BUILDS a term the kernel
 /// then type-checks before anything is installed, or it can only add a
-/// rejection. Measured 2026-09-25 (round 24); a new site fails the test.
+/// rejection, or the optimization requires a foundation-free checked reconstruction
+/// and a fold-admitted alias. Measured 2026-09-25 (round 24); a new site fails the test.
 #[rustfmt::skip]
 pub(super) const EXPLAINED: &[(&str, &[&str], &str)] = &[
+    ("tc/reduction/nat_half_alias.rs", &["Eq.refl"], "constructs the reflexivity term for the proposed unary shift alias. The type checker checks this term against the alias equation in the active environment before using the reduction."),
+    ("tc/reduction/nat_parity.rs", &["Nat.div2", "Nat.div2Par"], super::PARITY_RECONSTRUCTION),
+    ("tc/reduction/nat_parity.rs", &["Eq.symm", "Eq.trans", "Nat.add_comm", "Nat.add_sub_cancel", "Nat.div2_rejoin", "congrArg"], "constants inside the reconstruction proof. The checker verifies the proof and its dependency closure before selecting the arithmetic result."),
+    ("env/axiom_audit.rs", &["maxHeartbeats", "tcMaxCacheEntries"], OPTION),
+    ("env/axiom_audit.rs", &["u"], UNIV),
+    ("env/axiom_audit.rs", &["sorry", "sorryAx"], "these markers add a blocking parity-audit issue. Imported-cone scanning discloses them and its separate policy can explicitly allow sorry."),
+    ("env/axiom_audit.rs", &["trustedArith", "trustedAy"], "these ambient trust markers add a blocking parity-audit issue. The imported-cone gate also discloses and always refuses them."),
+    ("env/axiom_audit.rs", &["propext", "Classical.choice", "Iff", "Nonempty"], "the logical foundation audit checks axiom types and records recognised foundations. Any recorded foundation refuses the arithmetic shortcut."),
     (
         "env/matcher.rs",
         &["camelCase"],
@@ -394,7 +405,7 @@ pub(super) const EXPLAINED: &[(&str, &[&str], &str)] = &[
     ),
     (
         "env/inductive_below.rs",
-        &["PProd", "below", "brecOn", "rec"],
+        &["Eq.refl", "PProd", "PProd.mk", "PUnit.unit", "below", "brecOn", "casesOn", "eq", "go", "rec"],
         AUX,
     ),
     (
@@ -406,6 +417,16 @@ pub(super) const EXPLAINED: &[(&str, &[&str], &str)] = &[
         "env/inductive_builder.rs",
         &["casesOn", "noConfusion", "noConfusionType", "rec", "recOn"],
         SUFFIX,
+    ),
+    (
+        "env/inductive_source_constructors.rs",
+        &["Eq.ndrec", "Eq.refl", "Eq.symm", "Nat.decEq", "Not", "PULift", "PULift.down", "PULift.up", "casesOn", "cond", "ctorElim", "ctorElimType", "ctorIdx", "dite", "elim", "id", "noConfusion", "noConfusionType", "rec"],
+        SOURCE_CONSTRUCTORS,
+    ),
+    (
+        "env/inductive_source_constructors.rs",
+        &["backward.linearNoConfusionType", "false", "genCtorIdx"],
+        "source generation option keys and the exact false setting, read from the options table",
     ),
     (
         "env/inductive_fixed_indices.rs",

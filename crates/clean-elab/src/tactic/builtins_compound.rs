@@ -22,16 +22,17 @@ use clean_parser::SurfaceTactic;
 
 /// Register compound combinator tactics into the registry.
 ///
-/// These 10 tactics only need recursive `eval_tactic`/`eval_tactic_seq` —
+/// These tactics only need recursive `eval_tactic`/`eval_tactic_seq` —
 /// they don't need expression elaboration.
 /// ENSURES: `registry` contains compound handlers for `paren`, `try`, `focus`, `focus_block`,
-/// `repeat`, `all_goals`, `any_goals`, `first`, `seq_focus`, and `case`.
+/// `repeat`, `repeat'`, `all_goals`, `any_goals`, `first`, `seq_focus`, and `case`.
 pub(crate) fn register_compound_tactics(registry: &mut TacticRegistry) {
     registry.register_compound(compound_paren());
     registry.register_compound(compound_try());
     registry.register_compound(compound_focus());
     registry.register_compound(compound_focus_block());
     registry.register_compound(compound_repeat());
+    registry.register_compound(compound_repeat_all());
     registry.register_compound(compound_all_goals());
     registry.register_compound(compound_any_goals());
     registry.register_compound(compound_first());
@@ -191,6 +192,10 @@ fn compound_focus_block() -> CompoundTacticEntry {
     }
 }
 
+// Lean's Meta.repeat'Core allows 100,000 attempts. Ordinary repeat uses the
+// same existing local ceiling.
+const REPEAT_FUEL: usize = 100_000;
+
 /// `repeat tacs` — repeat tactics until failure.
 fn compound_repeat() -> CompoundTacticEntry {
     CompoundTacticEntry {
@@ -202,7 +207,6 @@ fn compound_repeat() -> CompoundTacticEntry {
                     detail: "unexpected variant".into(),
                 });
             };
-            const REPEAT_FUEL: usize = 100_000;
             for _ in 0..REPEAT_FUEL {
                 let clone = ps.clone();
                 if eval.eval_seq(ps, tacs).is_err() {
@@ -213,6 +217,49 @@ fn compound_repeat() -> CompoundTacticEntry {
                     break;
                 }
             }
+            Ok(())
+        }),
+    }
+}
+
+/// `repeat' tacs` — try the body on each goal, visiting its new children
+/// before the next sibling. A failed attempt leaves the original goal in order.
+fn compound_repeat_all() -> CompoundTacticEntry {
+    CompoundTacticEntry {
+        name: "repeat'".into(),
+        handler: Arc::new(|eval, ps, tac| {
+            let SurfaceTactic::RepeatAll(_, tacs) = tac else {
+                return Err(TacticError::InvalidTarget {
+                    tactic: "repeat'".into(),
+                    detail: "unexpected variant".into(),
+                });
+            };
+            let mut pending = std::mem::take(&mut ps.goals);
+            let mut attempts = 0;
+            while let Some(goal) = pending.pop_front() {
+                if ps.metas.is_assigned(goal.meta_id) {
+                    continue;
+                }
+                if attempts == REPEAT_FUEL {
+                    ps.goals.push_back(goal);
+                    ps.goals.append(&mut pending);
+                    break;
+                }
+                attempts += 1;
+                let mut focused = ps.clone_with_goal(goal.clone());
+                // FVars for an introduced binder belong to this branch's depth.
+                focused.next_fvar = ps.goal_binder_base(&goal);
+                if eval.eval_seq(&mut focused, tacs).is_ok() {
+                    ps.merge_meta_state(&focused);
+                    while let Some(child) = focused.goals.pop_back() {
+                        pending.push_front(child);
+                    }
+                } else {
+                    ps.goals.push_back(goal);
+                }
+            }
+            // A later sibling can assign a metavariable of an earlier goal.
+            ps.goals.retain(|goal| !ps.metas.is_assigned(goal.meta_id));
             Ok(())
         }),
     }
@@ -473,16 +520,46 @@ pub(super) fn name_prefix_match(goal_tag: &SurfaceName, tag: &SurfaceName) -> bo
     !tag.is_anonymous() && !tag.is_relative_constructor() && goal_tag.has_prefix(tag)
 }
 
+/// Check the original minor's arity and name its selected fields in source order.
+pub(super) fn name_alternative_fields(
+    tactic_name: &str,
+    goal: &mut super::Goal,
+    alt: &clean_parser::SurfaceInductionAlt,
+) -> Result<(), TacticError> {
+    if alt.args.is_empty() {
+        return Ok(());
+    }
+    let fields = alternative_binder_indices(goal, alt.explicit);
+    if alt.args.len() > fields.len() {
+        return Err(TacticError::InvalidTarget {
+            tactic: tactic_name.into(),
+            detail: format!(
+                "Alternative `{}` supplies {} names for {} case binders",
+                alt.name,
+                alt.args.len(),
+                fields.len()
+            ),
+        });
+    }
+    apply_alternative_names(goal, &alt.args, fields);
+    Ok(())
+}
+
 /// Rename an elimination alternative's selected fields in order.
 /// Unlike `case`/`rename_i`, a `| ctor x … =>` alternative names its fields
 /// from the beginning of the eliminator's field inventory.
+#[cfg(test)]
 pub(crate) fn rename_alternative_binders(
     goal: &mut super::Goal,
     binders: &[SurfaceName],
     explicit: bool,
 ) {
-    let auto_hyp_indices = alternative_binder_indices(goal, explicit);
-    for (binder, &hyp_idx) in binders.iter().zip(auto_hyp_indices.iter()) {
+    let fields = alternative_binder_indices(goal, explicit);
+    apply_alternative_names(goal, binders, fields);
+}
+
+fn apply_alternative_names(goal: &mut super::Goal, binders: &[SurfaceName], fields: Vec<usize>) {
+    for (binder, hyp_idx) in binders.iter().zip(fields) {
         if !binder.is_unescaped_component("_") {
             super::target_equation::name_local_shadowing(goal, hyp_idx, binder);
         }

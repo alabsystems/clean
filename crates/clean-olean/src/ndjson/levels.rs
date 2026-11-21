@@ -5,15 +5,13 @@
 //! What the kernel's level constructors may do to a level as written, and
 //! which of their rewrites keep an export from being accepted (decision R125).
 //!
-//! The front door builds every level with the kernel's constructors, as the
-//! `.olean` loader did when this was decided, so that a declaration read alike
-//! through either front door (the native-fold digests are taken over
-//! `.olean`-loaded terms). Since R150 the `.olean` loader builds a stored
-//! level node for node instead (`import/convert_expr.rs`, `convert_level`);
-//! the reader does that only where asked (`tables.rs`,
-//! `LevelBuild::AsWritten`: the fenced-entry check and the writer's round
-//! trip), and the front door has not been moved. Those
-//! constructors simplify: `max u u` is built as `u`, `imax u (v+1)` as
+//! The front door audits levels using the kernel's simplifying constructors.
+//! It preserves the shape of an imax-free level when the simplified level has
+//! the same Lean normal form. This aligns the content native-fold authority
+//! reads with the `.olean` loader. The fenced entry and the export writer's
+//! round trip read every level as written (`tables.rs`, `LevelBuild::AsWritten`).
+//!
+//! The constructors simplify: `max u u` is built as `u`, `imax u (v+1)` as
 //! `max u (v+1)`, `max 0 0` as `0`. Lean's kernel holds the level as
 //! written and compares two levels by its own normalization
 //! (`level.cpp` `is_equivalent`: equal, or equal after `normalize`), and reads

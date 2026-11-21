@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
-# Local enforcement gate (roadmap A1, revised 2026-06-10: GitHub CI deleted by
-# owner decision — enforcement is local and fail-closed).
+# Local fail-closed enforcement gate. GitHub CI was retired by owner decision.
 #
 # Run before pushing main:  scripts/local_gate.sh [--fast]
-# Install as a pre-push hook: ln -sf ../../scripts/local_gate.sh .git/hooks/pre-push
 #
 # Gates (each fail-closed):
 #   1. Soundness certificate (C1-C5+C4') + golden TCB pin + false-axiom guards
@@ -22,7 +20,7 @@
 #   3b. Trust-core evidence staleness tripwire: recomputes the cmd_replacement
 #      module-tree digest + cmd_replacement.rs sha and fails when the checked-in
 #      launch-evidence artifacts pin different digests (prints
-#      TRUSTCORE_STALENESS=fresh|stale|skipped:<reason>)
+#      TRUSTCORE_STALENESS=fresh|stale)
 #   3c. Crystal revalidation scope: binds the crystal chain revalidation records
 #      to the clean-kernel SOURCE tree they were measured at, and fails when a
 #      CHAINED body's own source file has moved past it (whole-crate
@@ -465,6 +463,22 @@ echo "== local gate: help truth =="
 _gate_build 12 2 cli-help-truth scripts/cargo_test_nonvacuous.sh cli-help-truth -- \
   targo --unverified test --locked -p clean-cli --test help_truth -q \
   || fail "CLI help truth — a command prints no description, restates its own name, or names a repo path that does not exist; see crates/clean-cli/tests/help_truth.rs"
+
+# The reduction-bound theorem family (proofs/reduction_bound.lean): every
+# declaration elaborates and is kernel-checked, the headline statements and the
+# definitions they are written in match their pins, each device mode has its
+# witness, and no theorem reaches an axiom outside the kernel's foundations.
+# clean-elab is not a default member, so `test-fast` does not build this
+# target, and its only other runner is the full-mode frontend merge suite at the
+# end of this script (about an hour). The target was red on main at 6780040a17
+# (docs/DECISIONS.md, the reduction-bound section), which is why it has a leg of
+# its own in both modes. Measured 2026-11-19: 181.5 s for the debug test binary;
+# the cold build of that binary took 5m42s and peaked at 33.0 GB.
+# GATE-LEG: reduction-bound-theorem
+echo "== local gate: reduction-bound theorem (statements, definitions, witnesses, axioms) =="
+_gate_build 47 4 reduction-bound-theorem scripts/cargo_test_nonvacuous.sh reduction-bound-theorem -- \
+  targo --unverified test --locked -p clean-elab --test reduction_bound_all_lengths -q \
+  || fail "reduction-bound theorem — proofs/reduction_bound.lean no longer elaborates, a headline statement or a definition under it no longer matches its pin, a device mode lost its witness, or a theorem reaches a non-foundational axiom; the panic names which (crates/clean-elab/tests/reduction_bound_all_lengths.rs)"
 
 # Every CLI help surface has been READ against its handler, and a surface that
 # appears or changes afterwards is refused until it is read again (~0.3 s).
@@ -1266,18 +1280,23 @@ else
   # GATE-FULL-ONLY END
 fi
 
-# Trust-core evidence staleness tripwire. The three trust-core launch-evidence
-# artifacts pin the gate logic that minted them (cmd_replacement.rs sha +, for
-# kernel-soundness/deny-sorry, the sha256_repo_module_tree digest of every
-# non-test .rs under crates/clean-cli/src/cmd_replacement/), so ANY edit there
-# silently stales all three — the in-binary validators reject them at read time
-# but nothing at push time said so. The script recomputes the IDENTICAL digests
-# (byte-identity proven against the Rust-minted pin at 93670bb91) and fails
-# loudly on any mismatch. Prints TRUSTCORE_STALENESS=fresh|stale|skipped:<reason>.
+# Both checks reuse the standalone build in a dedicated target directory.
 # GATE-LEG: trustcore-evidence-staleness
 echo "== local gate: trust-core evidence staleness tripwire =="
-"$GATE_PYTHON" scripts/check_trustcore_evidence_staleness.py \
-  || fail "trust-core evidence staleness — a cmd_replacement/ gate-logic edit outdated the pinned digests in reports/{kernel-soundness,deny-sorry,axiom-audit}-launch-evidence.json; regenerate with a HEAD-built clean binary (clean replacement trust-core-evidence --kernel-soundness / --deny-sorry, clean replacement axiom-audit --verify data/axiom_audit.json --evidence reports/axiom-audit-launch-evidence.json --json) and commit the refreshed artifacts in the SAME change as the gate edit"
+trustcore_targo="$(scripts/rust_frontend.sh --targo)" \
+  || fail "trust-core evidence staleness — cannot resolve the Trust Targo frontend"
+evidence_target="${CLEAN_EVIDENCE_TARGET_DIR:-$PWD/target/clean-evidence-standalone}"
+CARGO_TARGET_DIR="$evidence_target" build-slot --cpus 2 -- "$trustcore_targo" --unverified run --locked -q -p clean-evidence -- \
+  check trustcore-staleness --repo-root "$PWD" \
+  || fail "trust-core evidence staleness — the Rust checker could not run or reported stale evidence (see the diagnostic above)"
+
+# GATE-LEG: python-minters-publication
+echo "== local gate: Python tooling membership against published main =="
+published_main="$(git ls-remote --exit-code --refs origin refs/heads/main)" || fail "Python tooling membership — cannot read published origin/main"
+[[ "$published_main" =~ ^([0-9a-f]{40}|[0-9a-f]{64})$'\t'refs/heads/main$ ]] || fail "Python tooling membership — invalid origin/main advertisement"
+CARGO_TARGET_DIR="$evidence_target" build-slot --cpus 2 -- "$trustcore_targo" --unverified run --locked -q -p clean-evidence -- \
+  check python-minters --published "${BASH_REMATCH[1]}" --repo-root "$PWD" \
+  || fail "Python tooling membership — see the diagnostic above (fetch origin main if its advertised commit is missing)"
 
 # Crystal revalidation SCOPE. Every link-2a gate compares a spec module to a
 # COMMITTED FIXTURE; the only thing that ever compared a fixture to a live
@@ -1587,16 +1606,15 @@ PYCHK
   esac
 
   # GATE-LEG: self-proof-scoreboard
-  # Self-proof plan unit W0: data/self_proof_scoreboard.json holds the two
-  # headline figures (sites that mint a planted False; real declarations the
-  # compiled kcheck decides) re-derived from the artifacts that mint them.
+  # W0 checks the saved scoreboard with the checkout-built native comparator.
   # A record that disagrees with its sources fails; an absent source reads
   # ABSENT, never zero. It states where the work stands and proves nothing.
   echo "== local gate: self-proof scoreboard =="
-  "$GATE_PYTHON" scripts/self_proof_scoreboard.py --self-test \
-    || fail "self-proof-scoreboard self-test -- a planted stale or miscounted record escaped"
-  "$GATE_PYTHON" scripts/self_proof_scoreboard.py --check \
-    || fail "self-proof-scoreboard -- re-mint with: python3 scripts/self_proof_scoreboard.py --write"
+  _gate_build 47 3 self-proof-scoreboard env CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 \
+    CARGO_TARGET_DIR="$PWD/target/w0-scoreboard-gate" CARGO_BUILD_BUILD_DIR="$PWD/target/w0-scoreboard-gate" \
+    scripts/run_w0_scoreboard_gate.sh "$GATE_PYTHON" "$trustcore_targo" \
+    targo --unverified test --locked --offline -p clean-cli -p clean --lib --test w0_scoreboard_cli --message-format=json -- cmd_evidence:: \
+    || fail "self-proof-scoreboard -- build, self-test or board check failed (see above); re-mint a stale board with: \`clean evidence status --scoreboard --write\`"
 
   # GATE-LEG: authority-sites
   # (full mode: a self-test, then a lexed walk of crates/**/*.rs and of the
@@ -1960,7 +1978,10 @@ PYCHK
   #      edit that re-hardcodes the path inside one of these scripts cannot
   #      silently start dirtying the tree again.
   # Neither weakens anything: the verdict is the exit status and the per-lane
-  # lines, all produced before the artifact is written.
+  # lines, all produced before the artifact is written. Since the EV0 review
+  # (2026-11-17) the first two scripts never write their committed receipt at
+  # all: unset, the path is a fresh temp file, and a path naming the receipt is
+  # refused, because only `clean replacement trust-core-evidence` mints it.
   #
   # THE STRIPPED ENV VARS EACH CLOSE A MEASURED FAIL-OPEN PATH, not a
   # hypothetical one:
@@ -2010,7 +2031,7 @@ PYCHK
   _battery_readonly reports/deny-sorry-launch-evidence.json \
     _gate_build 19 2 deny-sorry env -u REGEN_BASELINE -u DENY_SORRY -u DENY_SORRY_GATE_CHILD DENY_SORRY_EVIDENCE_PATH="$ds_evidence" \
     bash scripts/deny_sorry_gate.sh \
-    || { rm -f "$ds_evidence"; fail "DENY_SORRY clean gate — a curated sorry-free lane is no longer sorry-free, a production add_decl_* bypass is unaccounted/unsanctioned/over its pinned cap in data/unchecked_decl_ratchet.json, or DENY_SORRY=1 no longer blocks sorry-term creation in a subprocess. The failing step is named above; reproduce it with: DENY_SORRY_EVIDENCE_PATH=\"\$(mktemp)\" bash scripts/deny_sorry_gate.sh -- a BARE run overwrites the committed reports/deny-sorry-launch-evidence.json with an artifact the Rust validator rejects (two producers write that path and only the Rust one stamps the generated_by validate_deny_sorry_launch_evidence demands); this leg is immune because it already passes a temp path inside _battery_readonly"; }
+    || { rm -f "$ds_evidence"; fail "DENY_SORRY clean gate — a curated sorry-free lane is no longer sorry-free, a production add_decl_* bypass is unaccounted/unsanctioned/over its pinned cap in data/unchecked_decl_ratchet.json, or DENY_SORRY=1 no longer blocks sorry-term creation in a subprocess. The failing step is named above; reproduce it with: bash scripts/deny_sorry_gate.sh -- it writes its run record to a fresh temp file and refuses the committed reports/deny-sorry-launch-evidence.json, which only clean replacement trust-core-evidence --deny-sorry mints"; }
   rm -f "$ds_evidence"
 
   # Trusted-kernel lint ratchet (audit #6): re-surfaces the dead_code/unused

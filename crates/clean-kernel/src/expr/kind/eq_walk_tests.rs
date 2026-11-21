@@ -81,6 +81,15 @@ fn shared_unary(depth: usize) -> (Expr, Vec<Arc<Expr>>) {
 }
 
 #[test]
+fn test_iterative_eq_inline_boundary_skips_the_transient_kind_task() {
+    let (left, _keep_left) = shared_unary(7);
+    let (right, _keep_right) = shared_unary(7);
+    let (walk, _) = parity(&left, &right, Entry::Expr);
+    assert_eq!(walk.visits, 8);
+    assert!(walk.max_pending <= 8 && !walk.spilled);
+}
+
+#[test]
 fn test_iterative_eq_completion_threshold_63_64_65_is_unchanged() {
     for depth in [63, 64, 65] {
         let (left, keep_left) = shared_unary(depth);

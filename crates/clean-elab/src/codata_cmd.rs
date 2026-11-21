@@ -60,7 +60,7 @@
 
 use crate::codata_seed::ensure_codata_seeds;
 use crate::{ElabError, ElabResult, RegisteredElabResult};
-use clean_kernel::Environment;
+use clean_kernel::{Environment, ExprKind};
 use clean_parser::{
     DeclModifiers, LevelExpr, Projection, Span, SurfaceArg, SurfaceBinder, SurfaceBinderInfo,
     SurfaceDecl, SurfaceExpr, SurfaceField, SurfaceName, TerminationHints, UniverseExpr,
@@ -428,6 +428,7 @@ pub(crate) fn walk(expr: &SurfaceExpr, f: &mut impl FnMut(&SurfaceExpr)) {
         }
         SurfaceExpr::Paren(_, e)
         | SurfaceExpr::Explicit(_, e)
+        | SurfaceExpr::Borrowed(_, e)
         | SurfaceExpr::OutParam(_, e)
         | SurfaceExpr::SemiOutParam(_, e)
         // A universe instantiation wraps the name it instantiates. Without
@@ -4553,8 +4554,8 @@ fn generate_mutual_n(shapes: &[MutualMember<'_>], poly: Option<&SurfaceName>) ->
 /// Elaborate a `mutual` block whose members are all `codef`, jointly
 /// defining corecursive functions into the members of one mutual codata
 /// block. Each codef supplies the clauses for ITS result member; a
-/// clause that calls ANY codef of the block is that slot's corecursive
-/// step (the new state), and observation clauses may call none of them.
+/// recursive clause is checked against the instantiated field type before
+/// any candidate definition can be published.
 pub(crate) fn elab_mutual_codef(
     env: &mut Environment,
     members: &[SurfaceDecl],
@@ -4666,19 +4667,20 @@ pub(crate) fn elab_mutual_codef(
     }
     slots.pop(); // the trailing state argument
 
-    // Build the shared slot lambdas: slot `<Member>_<field>F` is supplied
-    // by the codef whose result head is `<Member>`.
-    let mut slot_lambdas: Vec<SurfaceExpr> = Vec::new();
+    // Resolve the entire protocol before type checking calls, preserving the
+    // missing-member/productivity refusals. Keep authored calls intact here.
+    let mut plans = Vec::new();
+    let mut calls = Vec::new();
     for slot in &slots {
         // Recreate the generated protocol from every authored exact pair.
         // Display splitting cannot identify qualified/quoted member or field names.
-        let mut matches = bits.iter().flat_map(|cb| {
+        let mut matches = bits.iter().enumerate().flat_map(|(owner, cb)| {
             cb.clauses.iter().filter_map(move |(field, value)| {
                 (affix_name(&pair_name(&cb.head, "_", field), "", "F") == *slot)
-                    .then_some((cb, field, value))
+                    .then_some((owner, cb, field, value))
             })
         });
-        let Some((cb, field, value)) = matches.next() else {
+        let Some((owner, cb, field, value)) = matches.next() else {
             // Preserve the established ordinary-label refusal after the exact
             // structural search has already failed. This legacy slot spelling
             // is diagnostic only: splitting it never selects a clause or
@@ -4707,9 +4709,14 @@ pub(crate) fn elab_mutual_codef(
                 "mutual codef: ambiguous exact slot `{slot}`"
             )));
         }
-        // A call to ANY block codef is the corecursive step for this slot.
-        let body = match mutual_self_call_arg(value, &fn_names) {
-            Some(next_state) => next_state,
+        let recursive = mutual_self_call(value, &fn_names);
+        match recursive {
+            Some((callee, _)) => calls.push(crate::infer::codata_call_typing::CodefCall {
+                owner,
+                callee,
+                field,
+                value,
+            }),
             None => {
                 for fname in &fn_names {
                     if mentions(value, fname) {
@@ -4721,8 +4728,19 @@ pub(crate) fn elab_mutual_codef(
                         )));
                     }
                 }
-                value.clone()
             }
+        }
+        plans.push((cb, value, recursive));
+    }
+    // Prepare the ordinary generated definitions in a disposable candidate.
+    // Their checked types preserve ordinary body-driven state inference. The
+    // original calls above remain intact for the independent source check.
+    let mut slot_lambdas = Vec::with_capacity(plans.len());
+    for (cb, value, recursive) in plans {
+        let body = match recursive {
+            Some((_, Some(state))) => state.clone(),
+            Some((_, None)) => ident(GlobalPath("PUnit.unit")),
+            None => value.clone(),
         };
         let state_name = cb
             .binders
@@ -4743,21 +4761,10 @@ pub(crate) fn elab_mutual_codef(
     let mut candidate = env.clone();
     let mut declared = Vec::new();
     for cb in &bits {
-        let state_ty = cb
-            .binders
-            .first()
-            .and_then(|b| b.ty.as_deref().cloned())
-            .unwrap_or_else(punit_ty);
         let init_state = cb
             .binders
             .first()
             .map_or_else(|| ident(GlobalPath("PUnit.unit")), |b| ident(&b.name));
-        // The 2-member corec takes {S1 S2}; n-member {S1..Sn} — all
-        // implicit, inferred from the state lambdas' ascribed types and
-        // the init state. Pass the member's OWN state type positionally is
-        // not possible (implicit), so rely on inference via the explicit
-        // fn lambdas — their binder ascriptions pin each S_i.
-        let _ = state_ty;
         // The written result type fixes the codata parameters. They are
         // implicit in corec, so ordinary application starts at the slot lambdas.
         let mut corec_args = slot_lambdas.clone();
@@ -4778,23 +4785,66 @@ pub(crate) fn elab_mutual_codef(
             })?;
         declared.push(registered);
     }
+    let signatures: Vec<_> = bits
+        .iter()
+        .map(|cb| {
+            let info = candidate.get_const(cb.name.name()).ok_or_else(|| {
+                unsupported(format!(
+                    "mutual codef `{}`: no checked candidate header",
+                    cb.name
+                ))
+            })?;
+            Ok(crate::infer::codata_call_typing::CodefSignature {
+                name: cb.name,
+                levels: &info.level_params,
+                params: candidate
+                    .get_typed_param_names(cb.name.name())
+                    .or_else(|| (!matches!(info.type_.kind(), ExprKind::Pi(..))).then_some(&[][..]))
+                    .ok_or_else(|| {
+                        unsupported(format!(
+                            "mutual codef `{}`: no checked parameter names",
+                            cb.name
+                        ))
+                    })?,
+                ty: &info.type_,
+            })
+        })
+        .collect::<Result<_, ElabError>>()?;
+    // The checker receives only these completed types and the ORIGINAL env:
+    // no candidate function body can justify an authored recursive call.
+    crate::infer::codata_call_typing::validate_mutual_codef_calls(env, &signatures, &calls)
+        .map_err(|error| unsupported(format!("mutual codef: authored recursive call failed type checking (env left untouched): {error}")))?;
     *env = candidate;
     Ok(generated_declarations(declared))
 }
 
-/// If `expr` is exactly `<one of fnames> <one-arg>` (or a bare name for
-/// zero-state members), return the new-state expression.
-fn mutual_self_call_arg(expr: &SurfaceExpr, fnames: &[&SurfaceName]) -> Option<SurfaceExpr> {
+/// Recognize a direct call without discarding its declared callee identity.
+fn mutual_self_call<'a>(
+    expr: &'a SurfaceExpr,
+    fnames: &[&SurfaceName],
+) -> Option<(usize, Option<&'a SurfaceExpr>)> {
     match strip_parens(expr) {
-        SurfaceExpr::Ident(_, id) if fnames.contains(&id) => Some(ident(GlobalPath("PUnit.unit"))),
+        SurfaceExpr::Ident(_, id) => fnames
+            .iter()
+            .position(|name| *name == id)
+            .map(|callee| (callee, None)),
         SurfaceExpr::App(_, h, args) => {
-            let SurfaceExpr::Ident(_, id) = strip_parens(h) else {
-                return None;
-            };
-            if !fnames.contains(&id) || args.len() != 1 || args[0].name.is_some() {
+            let id = mutual_call_name(h)?;
+            let callee = fnames.iter().position(|name| **name == id)?;
+            if args.len() != 1 || args[0].name.is_some() {
                 return None;
             }
-            Some(args[0].expr.clone())
+            Some((callee, Some(&args[0].expr)))
+        }
+        _ => None,
+    }
+}
+
+fn mutual_call_name(expr: &SurfaceExpr) -> Option<SurfaceName> {
+    match strip_parens(expr) {
+        SurfaceExpr::Ident(_, name) => Some(name.clone()),
+        SurfaceExpr::Proj(_, parent, Projection::Named(field)) => {
+            Some(mutual_call_name(parent)?.append(field))
         }
         _ => None,
     }

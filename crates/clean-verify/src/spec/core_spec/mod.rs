@@ -336,7 +336,11 @@ pub use eval_ir_ctr_stack::CTR_STACK_NAMES;
 mod eval_ir_e5;
 pub use eval_ir_e5::E5_NAMES;
 mod eval_ir_bmem_core;
+#[cfg(test)]
+mod eval_ir_bmem_strict_tests;
 pub use eval_ir_bmem_core::BMEM_CORE_NAMES;
+#[cfg(test)]
+mod eval_ir_bmem_telescope_tests;
 mod eval_ir_bmem_trie;
 pub use eval_ir_bmem_trie::BMEM_TRIE_NAMES;
 mod eval_ir_lzd_pc;

@@ -470,8 +470,18 @@ pub(super) fn arg(kind: Arg, a: &Sx, tags: &Tags) -> Result<String, MintError> {
         Arg::Cases => cases(a.tagged("cases")?, tags)?,
         Arg::Const => cst(a, tags)?,
         Arg::OptVal => match a.list()?.first().map(Sx::atom).transpose()? {
-            Some("none") => "(@IROption.none Nat)".into(),
-            Some("some") => format!("(@IROption.some Nat {})", nat(a.tagged("some")?[0].num()?)?),
+            Some("none") if a.tagged("none")?.is_empty() => "(@IROption.none Nat)".into(),
+            Some("some") => {
+                let fields = a.tagged("some")?;
+                let [value] = fields else {
+                    return Err(CoreError::Shape(format!(
+                        "expected (some n), found {} operand(s)",
+                        fields.len()
+                    ))
+                    .into());
+                };
+                format!("(@IROption.some Nat {})", nat(value.num()?)?)
+            }
             other => {
                 return Err(CoreError::Shape(format!(
                     "expected (some n) or (none), found `{other:?}`"

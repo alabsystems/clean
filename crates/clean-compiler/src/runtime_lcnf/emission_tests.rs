@@ -675,8 +675,16 @@ fn exact_emission_postflight_rejects_runtime_and_source_abi_mutations() {
         runtime_lowering: RuntimeLowering::ExternCalls,
         ..TrustIrConfig::default()
     };
-    let original = emit_trust_ir_with_config(&declarations, &config).unwrap();
-    let imports = postflight(&original, &declarations, RuntimeLowering::ExternCalls).unwrap();
+    let (emitted, requested) =
+        emit_trust_ir_with_runtime_imports(&declarations, &config, &[]).unwrap();
+    let original = emitted.module;
+    let imports = postflight(
+        &original,
+        &declarations,
+        RuntimeLowering::ExternCalls,
+        &requested,
+    )
+    .unwrap();
     assert!(!imports.is_empty());
     let source = imports.len();
     for mutation in 0..10 {
@@ -710,10 +718,53 @@ fn exact_emission_postflight_rejects_runtime_and_source_abi_mutations() {
             _ => changed.functions[source].blocks.clear(),
         }
         assert!(
-            postflight(&changed, &declarations, RuntimeLowering::ExternCalls).is_err(),
+            postflight(
+                &changed,
+                &declarations,
+                RuntimeLowering::ExternCalls,
+                &requested
+            )
+            .is_err(),
             "mutation {mutation}"
         );
     }
+}
+
+#[test]
+fn postflight_binds_the_sources_requested_runtime_roles() {
+    use crate::emit_trust_ir_runtime::RuntimeImport as Role;
+    let fields = vec![decl(
+        "field",
+        1,
+        bind(
+            1,
+            IRExpr::Proj {
+                idx: 0,
+                ty: IRType::Object,
+                arg: arg(0),
+            },
+            IRBody::Ret(arg(1)),
+        ),
+    )];
+    let config = TrustIrConfig {
+        runtime_lowering: RuntimeLowering::ExternCalls,
+        ..TrustIrConfig::default()
+    };
+    let (emitted, requested) = emit_trust_ir_with_runtime_imports(&fields, &config, &[]).unwrap();
+    assert_eq!(requested, [Role::CtorGet]);
+    let checked = |roles: &[Role]| {
+        postflight(
+            &emitted.module,
+            &fields,
+            RuntimeLowering::ExternCalls,
+            roles,
+        )
+    };
+    let imports = checked(&requested).unwrap();
+    assert_eq!(imports.last().unwrap().symbol, "clean_ctor_get");
+    assert!(checked(&[]).is_err());
+    assert!(checked(&[Role::CtorGet, Role::CtorGet]).is_err());
+    assert!(checked(&[Role::CtorGetUsize]).is_err());
 }
 
 #[test]

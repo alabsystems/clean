@@ -17,6 +17,7 @@
 mod array;
 pub(crate) mod closure;
 mod ctor_scalar;
+mod nat;
 mod public_api;
 mod refcount;
 mod string_reset;

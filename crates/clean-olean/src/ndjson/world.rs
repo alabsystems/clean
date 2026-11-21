@@ -59,9 +59,17 @@ pub struct ReviewedLeanVersion {
     pub review: &'static str,
 }
 
-/// The reviewed table. Reviewed 2026-10-17 against `src/kernel` of the
-/// upstream tags (decision R116 in `docs/DECISIONS.md`).
+const LEAN_431_VERSION: &str = "4.31.0";
+const LEAN_431_GITHASH: &str = "68218e876d2a38b1985b8590fff244a83c321783";
+
+/// The reviewed table, bound to upstream `src/kernel` (R116 in `docs/DECISIONS.md`).
 pub const REVIEWED_LEAN_VERSIONS: &[ReviewedLeanVersion] = &[
+    ReviewedLeanVersion {
+        version: LEAN_431_VERSION,
+        rule_set: KernelRuleSet::LeanV4_30Rc2,
+        review: "src/kernel differs from v4.30.0-rc2 only in a comment and noexcept on \
+                 the unchanged type_checker move constructor",
+    },
     ReviewedLeanVersion {
         version: "4.30.0-rc2",
         rule_set: KernelRuleSet::LeanV4_30Rc2,
@@ -182,10 +190,10 @@ pub(crate) fn read_meta(value: JsonValue) -> Result<ExportMeta, NdjsonError> {
             version: format_version,
         });
     }
-    let Some(row) = REVIEWED_LEAN_VERSIONS
-        .iter()
-        .find(|row| row.version == lean_version)
-    else {
+    let Some(row) = REVIEWED_LEAN_VERSIONS.iter().find(|row| {
+        row.version == lean_version
+            && (row.version != LEAN_431_VERSION || lean_githash == LEAN_431_GITHASH)
+    }) else {
         return Err(NdjsonError::LeanVersionUnmapped {
             version: lean_version,
         });

@@ -25,6 +25,8 @@ pub enum InterpolationError {
     InvalidExpr { offset: usize, message: String },
     #[error("unexpected closing brace at byte offset {offset}")]
     UnmatchedCloseBrace { offset: usize },
+    #[error("invalid escape sequence at byte offset {offset}")]
+    InvalidEscape { offset: usize },
 }
 
 pub(crate) fn parse_interpolation(
@@ -38,7 +40,7 @@ pub(crate) fn parse_interpolation(
         match ch {
             '\\' => {
                 chars.next();
-                handle_escape(&mut chars, &mut literal);
+                handle_escape(&mut chars, &mut literal)?;
             }
             '{' => {
                 if !literal.is_empty() {
@@ -47,7 +49,6 @@ pub(crate) fn parse_interpolation(
                 chars.next();
                 parts.push(extract_interpolation_expr(input, offset, &mut chars)?);
             }
-            '}' => return Err(InterpolationError::UnmatchedCloseBrace { offset }),
             _ => {
                 literal.push(ch);
                 chars.next();
@@ -62,16 +63,16 @@ pub(crate) fn parse_interpolation(
     Ok(parts)
 }
 
-fn handle_escape(chars: &mut std::iter::Peekable<std::str::CharIndices<'_>>, literal: &mut String) {
+fn handle_escape(
+    chars: &mut std::iter::Peekable<std::str::CharIndices<'_>>,
+    literal: &mut String,
+) -> Result<(), InterpolationError> {
     match chars.peek() {
         Some(&(_, '{')) => {
             literal.push('{');
             chars.next();
         }
-        Some(&(_, '}')) => {
-            literal.push('}');
-            chars.next();
-        }
+        Some(&(offset, '}')) => return Err(InterpolationError::InvalidEscape { offset }),
         Some(&(_, '\\')) => {
             literal.push('\\');
             chars.next();
@@ -94,6 +95,7 @@ fn handle_escape(chars: &mut std::iter::Peekable<std::str::CharIndices<'_>>, lit
         }
         _ => literal.push('\\'),
     }
+    Ok(())
 }
 
 fn extract_interpolation_expr(
@@ -237,7 +239,7 @@ fn consume_block_comment(
 
 #[must_use]
 pub fn desugar_interpolation(parts: Vec<InterpolationPart>) -> SurfaceExpr {
-    desugar_parts(parts, mk_string_lit, mk_to_string, "String.append")
+    desugar_typed_chunks(parts, "String", "ToString.toString")
 }
 
 #[cfg(test)]
@@ -286,26 +288,42 @@ pub fn desugar_prefixed_interpolation_parts(
 /// Lean` it failed `Unknown identifier: MessageData.ofFormat` (upstream
 /// tests/elab/2077.lean), and Clean's own prelude has no `MessageData` at all.
 fn desugar_message_data(parts: Vec<InterpolationPart>) -> SurfaceExpr {
-    const OF: &str = "Lean.ToMessageData.toMessageData";
+    desugar_typed_chunks(
+        parts,
+        "Lean.MessageData",
+        "Lean.ToMessageData.toMessageData",
+    )
+}
+
+/// Lean's `expandInterpolatedStr`: convert every nonempty literal and every
+/// expression, join the converted chunks left-associatively with `++`, then
+/// ascribe the result. Names from the macro's quotation are already resolved
+/// at its definition, so an exported short spelling (such as `toString`) must
+/// name its canonical declaration rather than a use-site alias or binder.
+fn desugar_typed_chunks(
+    parts: Vec<InterpolationPart>,
+    type_name: &str,
+    conversion: &str,
+) -> SurfaceExpr {
     let mut acc: Option<SurfaceExpr> = None;
     for part in parts {
         let elem = match part {
             InterpolationPart::Literal(text) if text.is_empty() => continue,
-            InterpolationPart::Literal(text) => mk_unary_app(OF, mk_string_lit(&text)),
-            InterpolationPart::Expr(expr) => mk_unary_app(OF, expr),
+            InterpolationPart::Literal(text) => mk_unary_app(conversion, mk_string_lit(&text)),
+            InterpolationPart::Expr(expr) => mk_unary_app(conversion, expr),
         };
         acc = Some(match acc {
             None => elem,
             Some(left) => mk_binary_app("HAppend.hAppend", left, elem),
         });
     }
-    let body = acc.unwrap_or_else(|| mk_unary_app(OF, mk_string_lit("")));
+    let body = acc.unwrap_or_else(|| mk_unary_app(conversion, mk_string_lit("")));
     SurfaceExpr::Ascription(
         Span::dummy(),
         Box::new(body),
         Box::new(SurfaceExpr::Ident(
             Span::dummy(),
-            crate::SurfaceName::global_path("Lean.MessageData"),
+            crate::SurfaceName::global_path(type_name),
         )),
     )
 }
@@ -336,10 +354,6 @@ fn desugar_parts(
 
 fn mk_string_lit(text: &str) -> SurfaceExpr {
     SurfaceExpr::Lit(Span::dummy(), SurfaceLit::String(text.to_owned()))
-}
-
-fn mk_to_string(expr: SurfaceExpr) -> SurfaceExpr {
-    mk_unary_app("toString", expr)
 }
 
 fn mk_format_text(text: &str) -> SurfaceExpr {

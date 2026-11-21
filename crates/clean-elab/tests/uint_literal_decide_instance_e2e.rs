@@ -54,7 +54,7 @@
 
 use clean_elab::{elaborate_decl_and_register, preprocess_decl_with_context, FileContext};
 use clean_kernel::env::Environment;
-use clean_kernel::{Name, TypeChecker};
+use clean_kernel::{Expr, ExprKind, Name, TypeChecker};
 use clean_parser::parse_file;
 
 /// Drive the real file pipeline (`parse_file → preprocess → elaborate+register`)
@@ -68,6 +68,80 @@ fn try_elaborate(source: &str) -> Result<Environment, String> {
         elaborate_decl_and_register(&mut env, &processed).map_err(|e| e.to_string())?;
     }
     Ok(env)
+}
+
+#[test]
+fn nat_decision_coercions_use_resident_names_and_preserve_the_compared_operands() {
+    let assert_head = |expr: &Expr, expected: &str| {
+        let ExprKind::Const(name, _) = expr.get_app_fn().kind() else {
+            panic!("expected {expected} at the head of {expr:?}")
+        };
+        assert_eq!(name, &Name::from_string(expected));
+    };
+    let source = "structure BoundaryCursor where\n  bytes : ByteArray\n  pos : Nat\n\
+                  def inclusive (c : BoundaryCursor) : Bool := c.bytes.size ≤ c.pos\n\
+                  def strict (c : BoundaryCursor) : Bool := c.bytes.size < c.pos";
+    let env = try_elaborate(source).expect("both ordinary comparisons must elaborate");
+    for (root, relation, instance) in [
+        ("inclusive", "LE.le", "Nat.decLe"),
+        ("strict", "LT.lt", "Nat.decLt"),
+    ] {
+        let decl = env
+            .get_const(&Name::from_string(root))
+            .expect("source declaration");
+        let ExprKind::Lam(_, _, body) = decl.value.as_ref().expect("decision body").kind() else {
+            panic!("expected a cursor function")
+        };
+        assert_head(body, "Decidable.decide");
+        let decision = body.get_app_args();
+        assert_eq!(decision.len(), 2);
+        assert_head(decision[0], relation);
+        assert_head(decision[1], instance);
+        let proposition_args = decision[0].get_app_args();
+        assert_eq!(proposition_args.len(), 4);
+        assert_head(proposition_args[2], "ByteArray.size");
+        assert_eq!(
+            decision[1].get_app_args().as_slice(),
+            &proposition_args[2..]
+        );
+    }
+}
+
+/// Lean's unannotated Nat decision instances beat a source priority of 800.
+/// A more recent equal-tier declaration and a higher tier both take precedence.
+#[test]
+fn nat_decisions_respect_the_resident_priority_and_equal_tier_recency() {
+    let source = include_str!("fixtures/nat_decision_priority.lean");
+    let env = try_elaborate(source).expect("priority fixture elaborates");
+    for (root, expected) in [
+        ("belowLe", "Nat.decLe"),
+        ("belowLt", "Nat.decLt"),
+        ("tiedLe", "equalLe"),
+        ("tiedLt", "equalLt"),
+        ("aboveLe", "highLe"),
+        ("aboveLt", "highLt"),
+        ("strictAfterHighLe", "equalLt"),
+        ("carrierAfterHighLe", "instDecidableUInt32Lt"),
+        ("aliasLt", "highLt"),
+        ("plainCarrierLe", "instDecidableUInt32Le"),
+        ("plainCarrierLt", "instDecidableUInt32Lt"),
+        ("otherCarrierLe", "instDecidableUInt32Le"),
+        ("otherCarrierLt", "instDecidableUInt32Lt"),
+    ] {
+        let decl = env
+            .get_const(&Name::from_string(root))
+            .expect("fixture root");
+        let mut body = decl.value.as_ref().expect("fixture definition");
+        while let ExprKind::Lam(_, _, inner) = body.kind() {
+            body = inner;
+        }
+        let decision = body.get_app_args();
+        assert_eq!(decision.len(), 2, "{root}");
+        let ExprKind::Const(head, _) = decision[1].get_app_fn().kind() else {
+            panic!("{root} must apply the selected decision instance")
+        };
+        assert_eq!(head, &Name::from_string(expected), "{root}");
+    }
 }
 
 /// The source must elaborate, and the named theorem's proof must `infer_type`

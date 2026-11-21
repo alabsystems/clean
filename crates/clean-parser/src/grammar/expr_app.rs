@@ -60,6 +60,7 @@ pub(super) mod cdot {
             // Type ascription / wrappers: rewrite the value (not type) side.
             SurfaceExpr::Ascription(_, inner, _)
             | SurfaceExpr::Explicit(_, inner)
+            | SurfaceExpr::Borrowed(_, inner)
             | SurfaceExpr::OutParam(_, inner)
             | SurfaceExpr::SemiOutParam(_, inner)
             | SurfaceExpr::UniverseInst(_, inner, _)
@@ -125,6 +126,7 @@ pub(super) mod cdot {
             SurfaceExpr::Proj(_, base, _) => collect_spine_placeholders(base, positions),
             SurfaceExpr::Ascription(_, inner, _)
             | SurfaceExpr::Explicit(_, inner)
+            | SurfaceExpr::Borrowed(_, inner)
             | SurfaceExpr::OutParam(_, inner)
             | SurfaceExpr::SemiOutParam(_, inner)
             | SurfaceExpr::UniverseInst(_, inner, _)
@@ -216,6 +218,10 @@ const MAX_PREC: u32 = 1024;
 impl Parser {
     /// Application: f x y z
     pub(super) fn app_expr(&mut self) -> Result<SurfaceExpr, ParseError> {
+        // The registered leading parser binds below an application head.
+        if let Some(term) = self.parse_imported_term_prefix(self.custom_min_prec)? {
+            return Ok(term);
+        }
         let head = self.atom_expr()?;
         self.app_expr_with_head(head)
     }
@@ -523,6 +529,9 @@ impl Parser {
             if self.stop_app_at_by && matches!(self.current_kind(), TokenKind::By) {
                 break;
             }
+            if self.stop_app_at_location && self.at_tactic_location() {
+                break;
+            }
 
             // In an `induction e using r generalizing x` target position, the
             // `using`/`generalizing` clause keywords (plain identifier tokens to
@@ -746,7 +755,11 @@ impl Parser {
             }
             Ok(expr)
         } else {
-            let span = expr.span();
+            // Cover the physical application, including named-argument wrappers
+            // that SurfaceArg keeps only as an inner expression. The current
+            // token belongs to the following syntax; prev_span is the final
+            // token this application actually consumed.
+            let span = Span::new(expr.span().start, self.prev_span().end);
             let app = SurfaceExpr::App(span, Box::new(expr), pending_args);
             if let Some(origins) = &mut self.origins {
                 origins.application(&app);
@@ -801,7 +814,10 @@ impl Parser {
         // Special case: @ followed by identifier is explicit application (@f),
         // but @ followed by [ is an attribute (@[...])
         if matches!(current_kind, TokenKind::At) {
-            return matches!(self.kind_at(offset + 1), Some(TokenKind::Ident(_)));
+            return matches!(
+                self.kind_at(offset + 1),
+                Some(TokenKind::Ident(_) | TokenKind::Amp)
+            );
         }
 
         // Special case: `#[` is an array literal — a valid atom, hence a valid
@@ -1553,6 +1569,44 @@ impl Parser {
         )
     }
 
+    /// Whether the token after a `Type` / `Sort` keyword is that sort's
+    /// universe LEVEL. Lean 4 gives both one guarded optional level
+    /// (`Lean/Parser/Term.lean:135-139`, v4.30.0-rc2):
+    ///
+    /// ```text
+    /// "Type" >> optional (checkWsBefore "" >> checkPrec leadPrec >> checkColGt >> levelParser maxPrec)
+    /// ```
+    ///
+    /// * `checkWsBefore` — the level is separated from the keyword.
+    /// * `checkPrec leadPrec` — not in argument position, where the sort is
+    ///   atomic (`type_atomic`, set for application arguments): `f Sort u`
+    ///   is three arguments, `f (Sort u)` one.
+    /// * `checkColGt` — the level sits right of the saved position. A
+    ///   structure field block saves its first field's column (`manyIndent`),
+    ///   so in `Prov : Type` ⏎ `n : Nat` the `n` is the next field, not
+    ///   `Type n`. Without this guard the level parse swallowed every
+    ///   following field of a `Type`-/`Sort`-valued field.
+    /// * `levelParser maxPrec` — the token can begin a level atom. A level
+    ///   name is `Level.ident := checkPrec maxPrec >> Parser.ident`
+    ///   (`Lean/Parser/Level.lean`), and Lean's `ident` never matches a
+    ///   token-table keyword ([`crate::lexer::Token::lean_keyword`]), so
+    ///   `change T = Type at h`, `def C : Type 1 := Type` ⏎ `local notation …`
+    ///   and `… := Type` ⏎ `initialize …` read no level. An escaped `«at»` is
+    ///   an identifier and is one.
+    fn sort_level_follows(&self, type_atomic: bool) -> bool {
+        !type_atomic
+            && !self.at_token_glued_to_previous()
+            && self.col_gt_saved_position()
+            && match self.current_kind() {
+                TokenKind::Ident(_) => !self.current().lean_keyword,
+                TokenKind::NatLit(_)
+                | TokenKind::LParen
+                | TokenKind::Dollar
+                | TokenKind::Underscore => true,
+                _ => false,
+            }
+    }
+
     fn atom_expr_guarded(&mut self) -> Result<SurfaceExpr, ParseError> {
         let origin_start = self.origins.as_ref().map(|_| self.pos);
         // Track delimiter depth within a structure-field TYPE: while this atom
@@ -1611,7 +1665,17 @@ impl Parser {
         // (e.g. the `expr()` behind `(`) sees the ordinary `Type u` grammar.
         let type_atomic = self.type_atomic_in_arg;
         self.type_atomic_in_arg = false;
+        let min_prec = self
+            .custom_min_prec
+            .max(super::imported_terms::APPLICATION_ARGUMENT_PRECEDENCE);
+        if let Some(term) = self.parse_imported_term_prefix(min_prec)? {
+            return Ok(term);
+        }
         let span = self.current_span();
+
+        if let Some(parsed) = self.try_custom_mixfix(1024) {
+            return parsed;
+        }
 
         match self.current_kind().clone() {
             TokenKind::Ident(name) => {
@@ -1822,8 +1886,13 @@ impl Parser {
             // @f x y means call f with all implicit args provided explicitly
             TokenKind::At => {
                 self.advance(); // consume @
-                                // Parse the expression following @
-                                // This should be an identifier or parenthesized expression
+                if self.eat(&TokenKind::Amp) {
+                    let inner = self.app_expr()?;
+                    let end = inner.span();
+                    return Ok(SurfaceExpr::Borrowed(span.merge(end), Box::new(inner)));
+                }
+                // Parse the expression following @
+                // This should be an identifier or parenthesized expression
                 let mut inner = self.atom_expr()?;
                 // `@Foo.bar.baz` — fold an ADJACENT dotted chain into the
                 // identifier before wrapping in Explicit. Ordinary heads leave
@@ -1863,16 +1932,7 @@ impl Parser {
                 // Check for explicit level: Type u, Type 1, Type (max u v),
                 // Type $u, or a level hole `Type _` (levelMVarToParam — the `_`
                 // becomes a fresh universe metavar during elaboration).
-                } else if !type_atomic
-                    && matches!(
-                        self.current_kind(),
-                        TokenKind::Ident(_)
-                            | TokenKind::NatLit(_)
-                            | TokenKind::LParen
-                            | TokenKind::Dollar
-                            | TokenKind::Underscore
-                    )
-                {
+                } else if self.sort_level_follows(type_atomic) {
                     let level = self.level_expr()?;
                     Ok(SurfaceExpr::Universe(
                         span,
@@ -1916,12 +1976,7 @@ impl Parser {
                     Ok(SurfaceExpr::Universe(span, UniverseExpr::SortStar))
                 // Check for explicit level: Sort u, Sort 0, Sort (u + 1), Sort $u,
                 // or a level hole `Sort _` (fresh universe metavar), etc.
-                } else if let TokenKind::Ident(_)
-                | TokenKind::NatLit(_)
-                | TokenKind::LParen
-                | TokenKind::Dollar
-                | TokenKind::Underscore = self.current_kind()
-                {
+                } else if self.sort_level_follows(type_atomic) {
                     let level = self.level_expr()?;
                     Ok(SurfaceExpr::Universe(
                         span,
@@ -1965,14 +2020,9 @@ impl Parser {
                 Ok(SurfaceExpr::Hole(span))
             }
 
-            // Synthetic hole: `?_`, `?name`, or a bare `?`. In Lean 4 these are
-            // named metavariable holes (`Lean.Parser.Term.syntheticHole`) that
-            // `refine` turns into fresh goals. We model the synthetic hole as a
-            // `SurfaceExpr::Hole`: the elaborator already lowers a hole to a
-            // fresh metavariable, and the refine bridge
-            // (`PendingRefineMetaCollector`) collects each unassigned hole-meta
-            // into its own goal — so `refine ⟨?_, ?_⟩` against `p ∧ q` leaves
-            // exactly the two field goals.
+            // Preserve synthetic holes separately from ordinary placeholders: a
+            // refine-lifted term exposes an unsolved `?_` as a goal, while an
+            // unsolved `_` fails elaboration. The anonymous Name carries no tag.
             //
             // The `_` or identifier naming the hole must be byte-adjacent to the
             // `?` (no intervening whitespace), matching Lean's tokenization;
@@ -1997,10 +2047,13 @@ impl Parser {
                     if matches!(self.current_kind(), TokenKind::Underscore) {
                         let name_span = self.current_span();
                         self.advance();
-                        return Ok(SurfaceExpr::Hole(span.merge(name_span)));
+                        return Ok(SurfaceExpr::NamedHole(
+                            span.merge(name_span),
+                            SurfaceName::default(),
+                        ));
                     }
                 }
-                Ok(SurfaceExpr::Hole(span))
+                Ok(SurfaceExpr::NamedHole(span, SurfaceName::default()))
             }
 
             TokenKind::LParen => {

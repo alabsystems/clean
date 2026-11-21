@@ -43,6 +43,11 @@ impl<'a> ElabCtx<'a> {
         &mut self,
         binders: &[SurfaceBinder],
     ) -> Result<(), ElabError> {
+        // A variable command has no declaration universe telescope. Its binder
+        // annotations can still refer to the rigid levels of the enclosing scope.
+        for level in &self.file_universe_params {
+            self.metas.add_rigid_level_param(level.name().clone());
+        }
         let mut pushed_count: usize = 0;
 
         let result = self.elab_variable_binders_inner(binders, &mut pushed_count);

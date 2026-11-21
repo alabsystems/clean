@@ -104,7 +104,12 @@ pub(super) fn make_env_with_list() -> Environment {
 /// The canonical Tree fixture: `Tree | node : List Tree → Tree` with
 /// `List.{0} Tree` (Tree : Type 0).
 pub(super) fn tree_decl() -> InductiveDecl {
-    let tree = Name::from_string("Tree");
+    nested_list_decl("Tree")
+}
+
+fn nested_list_decl(type_name: &str) -> InductiveDecl {
+    let tree = Name::from_string(type_name);
+    let node = tree.clone().str("node");
     let tree_ref = Expr::const_(tree.clone(), vec![]);
     let node_type = Expr::pi(
         BinderInfo::Default,
@@ -121,7 +126,7 @@ pub(super) fn tree_decl() -> InductiveDecl {
             name: tree,
             type_: Expr::type_(),
             constructors: vec![Constructor {
-                name: Name::from_string("Tree.node"),
+                name: node,
                 type_: node_type,
             }],
         }],
@@ -131,6 +136,66 @@ pub(super) fn tree_decl() -> InductiveDecl {
 fn add_tree(env: &mut Environment) {
     env.add_inductive(tree_decl())
         .expect("Tree with nested List Tree should be accepted");
+}
+
+#[test]
+fn reference_replays_nested_auxiliary_eliminators_and_refuses_a_forged_rule() {
+    fn insert_unused_let(rule: &Expr) -> Expr {
+        match rule.kind() {
+            ExprKind::Lam(binder, ty, body) => {
+                Expr::lam(*binder, ty.as_ref().clone(), insert_unused_let(body))
+            }
+            _ => Expr::let_named(
+                Name::anon(),
+                Expr::type_(),
+                Expr::prop(),
+                rule.lift(1),
+                true,
+            ),
+        }
+    }
+
+    let mut env = make_env_with_list();
+    add_tree(&mut env);
+    let root = Name::from_string("Tree");
+    for suffix in ["casesOn", "recOn"] {
+        let name = root.clone().str(suffix);
+        assert_eq!(
+            env.reference_recheck_aux_eliminator(&name),
+            Ok(Some(root.clone())),
+        );
+        let mut forged = env.clone();
+        let entry = forged
+            .test_recursor_mut(&name)
+            .expect("generated eliminator");
+        entry.rules[0].rhs = insert_unused_let(&entry.rules[0].rhs);
+        forged
+            .authenticate_recursor_readonly(&name)
+            .expect("the harmless local definition preserves subject reduction");
+        let error = forged
+            .reference_recheck_aux_eliminator(&name)
+            .expect_err("a forged reduction must disagree with independent generation");
+        assert!(
+            error.contains("rule right-hand side differs from the generated entry"),
+            "{error}"
+        );
+    }
+}
+
+#[test]
+fn reference_refuses_a_nested_auxiliary_left_over_from_a_different_block() {
+    let mut env = make_env_with_list();
+    add_tree(&mut env);
+    env.add_inductive(nested_list_decl("OtherTree"))
+        .expect("other nested family");
+    let tree = Name::from_string("Tree");
+    env.test_inductive_mut(&tree)
+        .expect("resident Tree")
+        .all_names = vec![Name::from_string("OtherTree")];
+    let error = env
+        .reference_recheck_aux_eliminator(&tree.str("casesOn"))
+        .expect_err("replaying OtherTree cannot generate Tree.casesOn");
+    assert!(error.contains("generates no recursor"), "{error}");
 }
 
 #[test]

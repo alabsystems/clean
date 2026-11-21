@@ -94,12 +94,11 @@ pub(crate) fn source_world(
     }
 }
 
-/// This change qualifies the pinned 4.30 oracle. Other known worlds retain
-/// their previous constructor step until separately measured; no version
-/// ordering silently grants an unmeasured feature to a different world.
+/// The named constructor step is selected for the worlds that were measured
+/// with both empty `simp only` and an explicit `reduceCtorEq`.
 pub(crate) const fn has_named_ctor_eq(world: LeanWorld) -> bool {
     match world {
-        LeanWorld::Lean430Rc2 => true,
+        LeanWorld::Lean430Rc2 | LeanWorld::Lean436 => true,
         LeanWorld::Lean408
         | LeanWorld::Lean413
         | LeanWorld::Lean426

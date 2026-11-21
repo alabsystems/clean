@@ -61,6 +61,7 @@ fn constant(name: &str, kind: ConstantKind, ty: ParsedExpr) -> ParsedConstant {
         recursor_val: None,
         hints: None,
         definition_safety: None,
+        mutual_declarations: None,
         quot_kind: None,
     }
 }

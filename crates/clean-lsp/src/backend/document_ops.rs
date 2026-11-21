@@ -324,6 +324,11 @@ impl CleanBackend {
                 None,
                 (span.start, span.end),
             ),
+            SurfaceDecl::PrintEquations { span, .. } => (
+                CommandKind::Other("print equations".to_string()),
+                None,
+                (span.start, span.end),
+            ),
             SurfaceDecl::Guard { span, .. } => (
                 CommandKind::Other("guard".to_string()),
                 None,

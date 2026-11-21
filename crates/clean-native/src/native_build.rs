@@ -89,7 +89,15 @@ use crate::native_string_layout_policy::StringLayoutPolicy;
 
 #[path = "native_build_artifact.rs"]
 mod artifact;
-pub use artifact::{emit_native_c_artifact, NativeCArtifact};
+#[path = "native_io_error.rs"]
+mod io_error;
+#[path = "native_state_entry.rs"]
+mod state_entry;
+
+pub use artifact::{
+    emit_checked_native_c_artifact, emit_checked_native_c_artifact_in_context,
+    emit_native_c_artifact, NativeCArtifact,
+};
 use clean_compiler::cli::{CompileArgs, EmitFormat};
 use clean_kernel::{Expr, ExprKind};
 
@@ -165,7 +173,7 @@ const NAT_PRELUDE_SHIMS: &[PreludeShim] = &[
     // `"true"`/`"false"`) and passes it in as `inst`. Only the shim threw it
     // away. The `Nat` rendering the old body open-coded is not lost — it is
     // exactly `l_instToStringNat`'s `clean_shim_nat_repr` below, which is the
-    // instance this now applies for `Nat`, heap-aware `u128` buffer and all.
+    // instance this now applies for `Nat`, rendered at any width by the runtime.
     //
     // A non-closure `inst` means the caller erased an instance this projection
     // needs, so fail loudly: `clean_apply_n` would read a tagged scalar's
@@ -300,34 +308,41 @@ const INT_PRELUDE_SHIMS: &[PreludeShim] = &[
 /// missing symbol blocked the whole UIntW lane
 /// (`designs/2026-08-06-clean-extract-width1.md`, rank 5).
 ///
-/// `UInt32.ofNat n` is `n % 2^32`: read the Nat at full width through the
-/// heap-aware helper, then truncate. Truncation IS the semantics, not a
-/// lossy shortcut — `ofNat` is total and wraps, so a Nat above `2^32` must
-/// reduce mod `2^32` rather than saturate or trap. Reading via
-/// `clean_nat_to_u128` (not tagged-only `clean_unbox`) keeps that exact for a
-/// heap-boxed argument. Consumes its argument per the all-owned ABI.
+/// `UInt32.ofNat n` is `n % 2^32`: read the Nat's low limb through the
+/// carrier-aware `clean_nat_low_u64`, then truncate. Truncation IS the
+/// semantics, not a lossy shortcut — `ofNat` is total and wraps, so a Nat
+/// above `2^32` must reduce mod `2^32` rather than saturate or trap, and since
+/// the runtime's `Nat` has variable-length limbs (51e1df918e) that includes a
+/// Nat at or above `2^128`, which the earlier `clean_nat_to_u128` read refused
+/// with a panic. `n % 2^32` depends only on the low limb, and
+/// `clean_nat_low_u64` reads it from a tagged, two-limb or wide carrier alike.
+/// It panics (`invalid native Nat carrier`) on anything that is not a Nat
+/// carrier, where `clean_unbox_uint64` would read eight raw bytes off any
+/// non-wide heap object. `toNat`'s argument is a boxed `UInt32`, tagged or a
+/// `clean_box_uint64` cell, which `clean_unbox_uint64` reads. Each consumes its
+/// argument per the all-owned ABI.
 const UINT32_PRELUDE_SHIMS: &[PreludeShim] = &[
     PreludeShim {
         symbol: "l_UInt32_ofNat",
         definition: "clean_obj* l_UInt32_ofNat(clean_obj* n) {\n  \
-            unsigned __int128 v = clean_nat_to_u128(n);\n  \
+            uint64_t v = clean_nat_low_u64(n);\n  \
             clean_dec(n);\n  \
-            return clean_nat_of_u64((uint64_t)(v & 0xFFFFFFFFu));\n}\n",
+            return clean_nat_of_u64(v & 0xFFFFFFFFu);\n}\n",
     },
     PreludeShim {
         symbol: "l_UInt32_toNat",
         definition: "clean_obj* l_UInt32_toNat(clean_obj* v) {\n  \
-            unsigned __int128 x = clean_nat_to_u128(v);\n  \
+            uint64_t x = clean_unbox_uint64(v);\n  \
             clean_dec(v);\n  \
-            return clean_nat_of_u64((uint64_t)(x & 0xFFFFFFFFu));\n}\n",
+            return clean_nat_of_u64(x & 0xFFFFFFFFu);\n}\n",
     },
 ];
 
 /// The `UInt64` counterparts of [`UINT32_PRELUDE_SHIMS`], same rationale and
-/// same boxed signatures — truncation IS `ofNat`'s semantics, `toNat` is the
-/// identity on the 64-bit window, and both read heap-aware through
-/// `clean_nat_to_u128` rather than tagged-only `clean_unbox` (a `UInt64` above
-/// `2^63` is a heap Nat).
+/// same boxed signatures — truncation IS `ofNat`'s semantics, so `ofNat` is
+/// the Nat's low limb (`clean_nat_low_u64`, any width), and `toNat` is the
+/// identity on the 64-bit window, read through `clean_unbox_uint64`. Neither
+/// uses tagged-only `clean_unbox` (a `UInt64` above `2^63` is a heap cell).
 ///
 /// Measured 2026-08-27, before this table existed: `def main : IO Unit :=
 /// IO.println (toString (9 : UInt64))` was refused with "native build cannot
@@ -338,16 +353,16 @@ const UINT64_PRELUDE_SHIMS: &[PreludeShim] = &[
     PreludeShim {
         symbol: "l_UInt64_ofNat",
         definition: "clean_obj* l_UInt64_ofNat(clean_obj* n) {\n  \
-            unsigned __int128 v = clean_nat_to_u128(n);\n  \
+            uint64_t v = clean_nat_low_u64(n);\n  \
             clean_dec(n);\n  \
-            return clean_nat_of_u64((uint64_t)(v & 0xFFFFFFFFFFFFFFFFull));\n}\n",
+            return clean_nat_of_u64(v);\n}\n",
     },
     PreludeShim {
         symbol: "l_UInt64_toNat",
         definition: "clean_obj* l_UInt64_toNat(clean_obj* v) {\n  \
-            unsigned __int128 x = clean_nat_to_u128(v);\n  \
+            uint64_t x = clean_unbox_uint64(v);\n  \
             clean_dec(v);\n  \
-            return clean_nat_of_u64((uint64_t)(x & 0xFFFFFFFFFFFFFFFFull));\n}\n",
+            return clean_nat_of_u64(x);\n}\n",
     },
 ];
 
@@ -399,6 +414,21 @@ const SOURCE_STRING_PRELUDE_SHIMS: &[PreludeShim] = &[
 /// wired `l_Nat_decEq`.
 ///
 /// The kernel native-reducer String operations borrow their string inputs.
+const STABLE_OWNED_STRING_PUSH: PreludeShim = PreludeShim {
+    symbol: "l_String_push",
+    definition: concat!(
+        include_str!("string_push_codepoint.c"),
+        "clean_obj* l_String_push(clean_obj* s, clean_obj* c) {\n",
+        "  if (!s || clean_is_scalar(s) || s->header.kind != CLEAN_OBJ_KIND_STRING || !c) clean_panic(\"String.push: invalid carrier\");\n",
+        "  if (clean_is_scalar(c) ? clean_unbox(c) > UINT32_MAX :\n",
+        "      c->header.kind != CLEAN_OBJ_KIND_CTOR || c->header.tag != 0 || c->header.num_objs != 0 || c->header.scalar_sz != sizeof(uint32_t)) clean_panic(\"String.push: invalid Char storage\");\n",
+        "  uint32_t scalar = clean_unbox_uint32(c);\n",
+        "  if (scalar > 0x10ffff || (scalar >= 0xd800 && scalar <= 0xdfff)) clean_panic(\"String.push: invalid Unicode scalar\");\n",
+        "  clean_obj* result = clean_push_codepoint_borrowed(s, c);\n",
+        "  clean_dec(s);\n  clean_dec(c);\n  return result;\n}\n"
+    ),
+};
+
 const STRING_PRELUDE_SHIMS: &[PreludeShim] = &[
     PreludeShim {
         symbol: "l_String_append",
@@ -431,32 +461,10 @@ const STRING_PRELUDE_SHIMS: &[PreludeShim] = &[
     // The carrier's explicit byte length includes an appended U+0000.
     PreludeShim {
         symbol: "l_String_push",
-        definition: "clean_obj* l_String_push(clean_obj* s, clean_obj* c) {\n  \
-            uint32_t cp = clean_unbox_uint32(c);\n  \
-            size_t len = clean_string_len(s);\n  \
-            if (len > SIZE_MAX - 5) { clean_panic(\"l_String_push: string size overflow\"); }\n  \
-            char* buf = (char*)malloc(len + 4 + 1);\n  \
-            if (!buf) { clean_panic(\"l_String_push: allocation failed\"); }\n  \
-            memcpy(buf, clean_string_data(s), len);\n  \
-            size_t k = len;\n  \
-            if (cp < 0x80) { buf[k++] = (char)cp; }\n  \
-            else if (cp < 0x800) {\n    \
-            buf[k++] = (char)(0xC0 | (cp >> 6));\n    \
-            buf[k++] = (char)(0x80 | (cp & 0x3F));\n  \
-            } else if (cp < 0x10000) {\n    \
-            buf[k++] = (char)(0xE0 | (cp >> 12));\n    \
-            buf[k++] = (char)(0x80 | ((cp >> 6) & 0x3F));\n    \
-            buf[k++] = (char)(0x80 | (cp & 0x3F));\n  \
-            } else {\n    \
-            buf[k++] = (char)(0xF0 | (cp >> 18));\n    \
-            buf[k++] = (char)(0x80 | ((cp >> 12) & 0x3F));\n    \
-            buf[k++] = (char)(0x80 | ((cp >> 6) & 0x3F));\n    \
-            buf[k++] = (char)(0x80 | (cp & 0x3F));\n  \
-            }\n  \
-            buf[k] = 0;\n  \
-            clean_obj* r = clean_mk_string_from_bytes(buf, k);\n  \
-            free(buf);\n  \
-            return r;\n}\n",
+        definition: concat!(
+            include_str!("string_push_codepoint.c"),
+            "clean_obj* l_String_push(clean_obj* s, clean_obj* c) { return clean_push_codepoint_borrowed(s, c); }\n"
+        ),
     },
     // Byte equality IS code-point equality on UTF-8, so `memcmp` decides both
     // `decEq` and `beq` exactly.
@@ -487,6 +495,16 @@ const STRING_PRELUDE_SHIMS: &[PreludeShim] = &[
             return clean_nat_of_u64((uint64_t)clean_string_len(s));\n}\n",
     },
 ];
+
+/// Boxed native C binding for the exact, imported Prelude byte conversion.
+/// The low-octet equation is checked in reports/self-proof-w1-uint8-boundary-2026-11-19.
+const UINT8_OF_NAT_C_SHIM: &[PreludeShim] = &[PreludeShim {
+    symbol: "l_UInt8_ofNat",
+    definition: "clean_obj* l_UInt8_ofNat(clean_obj* n) {\n  \
+        uint8_t value = (uint8_t)clean_nat_low_u64(n);\n  \
+        clean_dec(n);\n  \
+        return clean_box(value);\n}\n",
+}];
 
 /// All prelude shim tables, in one place. The union of these symbols is the
 /// `PRIMITIVE_DENYLIST` the #14 dependency-closure boundary treats as never
@@ -534,7 +552,6 @@ pub(crate) fn prelude_shim_symbols() -> Vec<&'static str> {
 /// the WS6.14 census's shim-ABI check, which compares each definition's C
 /// signature with the declaration an emitted module links against, and by the
 /// same check in the experimental trust-cg lane (`native_trustcg`).
-#[cfg(feature = "trust-ir-backend")]
 pub(crate) fn prelude_shim_definitions() -> Vec<(&'static str, &'static str)> {
     ALL_PRELUDE_SHIM_TABLES
         .iter()
@@ -547,9 +564,8 @@ pub(crate) fn prelude_shim_definitions() -> Vec<(&'static str, &'static str)> {
 /// links an emitted object against), minus the definitions named in `omit`.
 /// `omit` exists for the census LINK oracle's mutation control: it drops a
 /// definition from the LINK input while the lowering's denylist stays
-/// untouched, so the link must name the missing symbol. The experimental
-/// trust-cg lane (`native_trustcg`) compiles it, with nothing omitted, into the
-/// shim object it links a trust-cg object against.
+/// untouched, so the link must name the missing symbol. A private executable
+/// link renders its own signature-checked definitions in this same table order.
 ///
 /// Not test-only and not feature-gated since WS6.13: this TU is the
 /// `clean_prelude_shims.o` member of the linkable runtime archive
@@ -557,13 +573,20 @@ pub(crate) fn prelude_shim_definitions() -> Vec<(&'static str, &'static str)> {
 /// shims — Rust string tables, not a C file in the tree — reach a consumer
 /// linking an emitted object outside this process.
 pub(crate) fn prelude_shims_translation_unit(omit: &[&str]) -> String {
+    render_shim_translation_unit(
+        prelude_shim_definitions()
+            .into_iter()
+            .filter(|(symbol, _)| !omit.contains(symbol))
+            .map(|(_, definition)| definition),
+    )
+}
+
+pub(crate) fn render_shim_translation_unit<'a>(
+    definitions: impl IntoIterator<Item = &'a str>,
+) -> String {
     let mut tu = String::from("#include <stdio.h>\n#include \"clean_runtime.h\"\n");
-    for shim in ALL_PRELUDE_SHIM_TABLES
-        .iter()
-        .flat_map(|table| table.iter())
-        .filter(|shim| !omit.contains(&shim.symbol))
-    {
-        tu.push_str(shim.definition);
+    for definition in definitions {
+        tu.push_str(definition);
         tu.push('\n');
     }
     tu
@@ -669,22 +692,17 @@ const TYPECLASS_PRELUDE_SHIMS: &[PreludeShim] = &[
     // source. The shim builds the instance ctor around a decimal renderer.
     // When the instance closure is actually applied — `ToString.toString inst x`
     // lowers to `clean_apply_1(inst, x)`, invoking `clean_shim_nat_repr` — a
-    // heap `Nat` (>= 2^63) must be read heap-aware: the renderer decodes via
-    // `clean_nat_to_u128` (RUNG B, the same faithful rendering as `l_toString`)
-    // rather than the tagged-only `clean_unbox`, which silently truncated a heap
-    // pointer to garbage. Consumes `x` per the all-owned closure ABI. `u128`
-    // needs up to 39 digits, so the buffer is 48.
+    // heap `Nat` (>= 2^63) must be read heap-aware, never through the
+    // tagged-only `clean_unbox`, which silently truncated a heap pointer to
+    // garbage. The runtime's `Nat` is variable-length limbs (51e1df918e), so
+    // the shim renders through the runtime's `clean_nat_repr`, which reads
+    // every limb. Its earlier `clean_nat_to_u128` read refused any value at or
+    // above 2^128 ("native Nat does not fit u128") that the arithmetic now
+    // produces. `clean_nat_repr` consumes `x`, per the all-owned closure ABI.
     PreludeShim {
         symbol: "l_instToStringNat",
         definition: "static clean_obj* clean_shim_nat_repr(clean_obj* n) {\n  \
-            unsigned __int128 v = clean_nat_to_u128(n);\n  \
-            clean_dec(n);\n  \
-            char buf[48];\n  \
-            int i = (int)sizeof(buf);\n  \
-            buf[--i] = 0;\n  \
-            if (v == 0) { buf[--i] = '0'; }\n  \
-            else { while (v > 0) { buf[--i] = (char)('0' + (unsigned)(v % 10)); v /= 10; } }\n  \
-            return clean_mk_string(buf + i);\n}\n\
+            return clean_nat_repr(n);\n}\n\
             clean_obj* l_instToStringNat(void) {\n  \
             return clean_alloc_closure((void*)clean_shim_nat_repr, 1, 0);\n}\n",
     },
@@ -817,8 +835,8 @@ const IO_PRELUDE_SHIMS: &[PreludeShim] = &[
 /// consumes both. As in `l_toString`, a scalar or non-closure `inst` means the
 /// caller erased the instance, so each shim panics rather than let
 /// `clean_apply_1` jump through a tagged scalar's payload. These are never in [`ALL_PRELUDE_SHIM_TABLES`]: they define
-/// the same symbols, and [`genuine_init_arity_variant`] picks one per build
-/// from the arity the emitted C actually calls.
+/// the same symbols. The C path reads call arities from its emitted source;
+/// a TrustCG executable link reads them from the emitted IR declarations.
 const GENUINE_INIT_IO_PRELUDE_SHIMS: &[PreludeShim] = &[
     PreludeShim {
         symbol: "l_IO_println",
@@ -863,10 +881,20 @@ const GENUINE_INIT_IO_PRELUDE_SHIMS: &[PreludeShim] = &[
 /// The C argument count of [`GENUINE_INIT_IO_PRELUDE_SHIMS`]' definitions.
 const GENUINE_INIT_IO_ARITY: usize = 3;
 
-/// Mask C literal/comment contents only for the arity scanner. Keep byte
-/// offsets and newlines stable, and retain each literal as an opaque operand.
-/// This does not change the emitted-C coverage checks or parse preprocessing.
-fn c_arity_scan_code(source: &str) -> String {
+fn genuine_init_console_shim(symbol: &str) -> Option<&'static PreludeShim> {
+    GENUINE_INIT_IO_PRELUDE_SHIMS
+        .iter()
+        .find(|shim| shim.symbol == symbol)
+}
+
+#[cfg(feature = "trust-ir-backend")]
+pub(crate) fn genuine_init_console_definition(symbol: &str) -> Option<(usize, &'static str)> {
+    genuine_init_console_shim(symbol).map(|shim| (GENUINE_INIT_IO_ARITY, shim.definition))
+}
+
+/// Mask literals and comments before inspecting the emitted C for symbols.
+/// Keep byte offsets and newlines stable, and retain literals as opaque operands.
+fn c_scan_code(source: &str) -> String {
     fn blank(out: &mut String, ch: char) {
         if ch == '\n' || ch == '\r' {
             out.push(ch);
@@ -947,10 +975,9 @@ fn c_arity_scan_code(source: &str) -> String {
 /// (top-level arguments counted with parentheses balanced) and each closure
 /// `clean_alloc_closure((void*)symbol, N, …)`. A line that opens with
 /// `clean_obj* symbol(` declares or defines it and is not a use.
-fn symbol_use_arities(emitted_c: &str, symbol: &str) -> BTreeSet<usize> {
+fn symbol_use_arities(code: &str, symbol: &str) -> BTreeSet<usize> {
     let mut arities = BTreeSet::new();
     let declaration = format!("clean_obj* {symbol}(");
-    let code = c_arity_scan_code(emitted_c);
     for line in code.lines() {
         if line.trim_start().starts_with(&declaration) {
             continue;
@@ -1017,10 +1044,7 @@ fn genuine_init_arity_variant(
     emitted_c: &str,
     shim: &'static PreludeShim,
 ) -> anyhow::Result<&'static PreludeShim> {
-    let Some(genuine) = GENUINE_INIT_IO_PRELUDE_SHIMS
-        .iter()
-        .find(|candidate| candidate.symbol == shim.symbol)
-    else {
+    let Some(genuine) = genuine_init_console_shim(shim.symbol) else {
         return Ok(shim);
     };
     let arities = symbol_use_arities(emitted_c, shim.symbol);
@@ -1078,7 +1102,7 @@ const QUOT_PRELUDE_SHIMS: &[PreludeShim] = &[
 /// The shape of the entry declaration, which selects the synthesized driver.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EntryKind {
-    /// A nullary `Nat`-returning entry: unbox and print the result.
+    /// A nullary `Nat`-returning entry: print the decimal result.
     Nat,
     /// An `IO` entry: drive the (eager) IO action, then exit per [`EntryExit`].
     Io,
@@ -1138,9 +1162,10 @@ pub(crate) const IO_ENTRY_MARKERS: [&str; 8] = [
 /// computation, by detecting the `IO`-monad prelude externs the L5 emitter only
 /// lowers to for `IO` entries.
 pub fn classify_entry(emitted_c: &str) -> EntryKind {
-    if IO_ENTRY_MARKERS
-        .iter()
-        .any(|m| emitted_c.contains(&format!("{m}(")))
+    if c_scan_code(emitted_c)
+        .lines()
+        .flat_map(extract_mangled_calls)
+        .any(|name| IO_ENTRY_MARKERS.contains(&name))
     {
         EntryKind::Io
     } else {
@@ -1156,29 +1181,49 @@ pub fn classify_entry(emitted_c: &str) -> EntryKind {
 /// binders between the Lean type and the emitted symbol). `Some(0)` is a
 /// declared `(void)`; `None` means the emitted C declares no such entry.
 pub fn entry_arity_in_c(emitted_c: &str, mangled_entry: &str) -> Option<usize> {
-    let needle = format!("{mangled_entry}(");
-    let bytes = emitted_c.as_bytes();
-    let mut from = 0usize;
-    while let Some(rel) = emitted_c[from..].find(&needle) {
-        let start = from + rel;
-        from = start + needle.len();
-        // Whole-identifier match only: `l_mainly(` must not answer for `l_main`.
-        if start > 0 && is_ident_byte(bytes[start - 1]) {
-            continue;
-        }
-        let open = start + needle.len();
-        let close = match emitted_c[open..].find(')') {
-            Some(rel_close) => open + rel_close,
-            None => continue,
-        };
-        let params = emitted_c[open..close].trim();
-        return Some(if params.is_empty() || params == "void" {
-            0
-        } else {
-            params.split(',').count()
-        });
+    c_scan_code(emitted_c)
+        .lines()
+        .filter_map(emitted_declarator)
+        .find(|(name, _, _)| *name == mangled_entry)
+        .map(|(_, params, _)| {
+            if params.is_empty() || params == "void" {
+                0
+            } else {
+                params.split(',').count()
+            }
+        })
+}
+
+/// The native emitter writes a function's result, name and flat parameter
+/// list on one line, followed by a semicolon or the opening brace of its body.
+fn emitted_declarator(line: &str) -> Option<(&str, &str, bool)> {
+    let (head, tail) = line.trim_start().split_once('(')?;
+    let (result, name) = head.trim_end().rsplit_once(char::is_whitespace)?;
+    let result = result.trim();
+    let result = result.strip_prefix("extern ").unwrap_or(result);
+    if !matches!(
+        result,
+        "clean_obj*"
+            | "uint8_t"
+            | "uint16_t"
+            | "uint32_t"
+            | "uint64_t"
+            | "size_t"
+            | "float"
+            | "double"
+            | "void"
+    ) || !name.starts_with("l_")
+        || !name.bytes().all(is_ident_byte)
+    {
+        return None;
     }
-    None
+    let (params, suffix) = tail.split_once(')')?;
+    let definition = match suffix.trim_start().as_bytes().first()? {
+        b'{' => true,
+        b';' => false,
+        _ => return None,
+    };
+    Some((name, params.trim(), definition))
 }
 
 /// Peel the type-checking-transparent `MData` wrapper off an expression.
@@ -1248,7 +1293,35 @@ pub(crate) fn entry_contract_from_parts(
     c_arity: Option<usize>,
     decl_type: Option<&Expr>,
 ) -> anyhow::Result<EntryContract> {
-    // The Nat driver prints the unboxed result and exits 0; it has exactly one
+    // Optimized code may return a constant without calling any IO shim.
+    // The elaborated type also distinguishes a Nat entry with IO helpers.
+    if let Some(signature) =
+        decl_type.and_then(clean_compiler::main_signature::MainSignature::from_type)
+    {
+        let arity = usize::from(signature.takes_argv);
+        if c_arity != Some(arity) {
+            bail!("native build entry `{decl}` has Lean entry arity {arity}, but its emitted arity is {c_arity:?}");
+        }
+        return Ok(EntryContract {
+            kind: EntryKind::Io,
+            args: if signature.takes_argv {
+                EntryArgs::Argv
+            } else {
+                EntryArgs::None
+            },
+            exit: if signature.returns_status {
+                EntryExit::FromUInt32
+            } else {
+                EntryExit::AlwaysZero
+            },
+        });
+    }
+    let kind = if decl_type.is_some_and(|ty| is_const_named(ty, "Nat")) {
+        EntryKind::Nat
+    } else {
+        kind
+    };
+    // The Nat driver prints the decimal result and exits 0; it has exactly one
     // supported shape (nullary), guarded in `build_native_binary_in_scratch`.
     if kind == EntryKind::Nat {
         return Ok(EntryContract {
@@ -1415,6 +1488,7 @@ pub fn build_native_binary_in_scratch(
         decl_type,
         nat_strict_guard,
         StringLayoutPolicy::default(),
+        false,
     )
 }
 
@@ -1424,12 +1498,11 @@ fn build_native_binary_with_policy(
     decl_type: Option<&Expr>,
     nat_strict_guard: bool,
     policy: StringLayoutPolicy,
+    uint8_of_nat_shim: bool,
 ) -> anyhow::Result<BuiltBinary> {
     let mangled_entry = mangle_decl(decl);
-    let kind = classify_entry(emitted_c);
-
     if nat_strict_guard
-        && kind == EntryKind::Nat
+        && entry_contract(decl, emitted_c, decl_type)?.kind == EntryKind::Nat
         && entry_arity_in_c(emitted_c, &mangled_entry) != Some(0)
     {
         bail!(
@@ -1439,11 +1512,19 @@ fn build_native_binary_with_policy(
         );
     }
 
-    let program = if policy.permits_byte_backed_bodies() {
-        render_native_translation_unit_with_policy(decl, emitted_c, decl_type, policy)?
-    } else {
-        render_native_translation_unit(decl, emitted_c, decl_type)?
-    };
+    let program =
+        if policy.permits_byte_backed_bodies() || policy.owns_string_push() || uint8_of_nat_shim {
+            render_native_translation_unit_with_policy(
+                decl,
+                emitted_c,
+                decl_type,
+                policy,
+                None,
+                uint8_of_nat_shim,
+            )?
+        } else {
+            render_native_translation_unit(decl, emitted_c, decl_type)?
+        };
     link_program_in_scratch(&program)
 }
 
@@ -1467,6 +1548,8 @@ pub(crate) fn render_native_translation_unit(
         emitted_c,
         decl_type,
         StringLayoutPolicy::default(),
+        None,
+        false,
     )
 }
 
@@ -1475,9 +1558,19 @@ fn render_native_translation_unit_with_policy(
     emitted_c: &str,
     decl_type: Option<&Expr>,
     policy: StringLayoutPolicy,
+    state_entry: Option<&state_entry::StateEntry>,
+    uint8_of_nat_shim: bool,
 ) -> anyhow::Result<String> {
     let mangled_entry = mangle_decl(decl);
-    let contract = entry_contract(decl, emitted_c, decl_type)?;
+    let contract = match state_entry {
+        Some(entry) => entry.contract(emitted_c, &mangled_entry)?,
+        None => entry_contract(decl, emitted_c, decl_type)?,
+    };
+    let byte_shims = if uint8_of_nat_shim {
+        UINT8_OF_NAT_C_SHIM
+    } else {
+        &[]
+    };
     let program = match contract.kind {
         EntryKind::Nat => {
             let shims = select_shims_from_tables_with_policy(
@@ -1487,6 +1580,7 @@ fn render_native_translation_unit_with_policy(
                     INT_PRELUDE_SHIMS,
                     UINT32_PRELUDE_SHIMS,
                     UINT64_PRELUDE_SHIMS,
+                    byte_shims,
                     SOURCE_STRING_PRELUDE_SHIMS,
                     STRING_PRELUDE_SHIMS,
                     BOOL_PRELUDE_SHIMS,
@@ -1509,6 +1603,7 @@ fn render_native_translation_unit_with_policy(
                     INT_PRELUDE_SHIMS,
                     UINT32_PRELUDE_SHIMS,
                     UINT64_PRELUDE_SHIMS,
+                    byte_shims,
                     SOURCE_STRING_PRELUDE_SHIMS,
                     STRING_PRELUDE_SHIMS,
                     BOOL_PRELUDE_SHIMS,
@@ -1517,7 +1612,11 @@ fn render_native_translation_unit_with_policy(
                 ],
                 policy,
             )?;
-            render_io_program(emitted_c, &shims, &mangled_entry, contract)
+            let driver = match state_entry {
+                Some(entry) => entry.driver(&mangled_entry),
+                None => render_entry_driver(contract, &mangled_entry, "main"),
+            };
+            render_io_program(emitted_c, &shims, &driver)
         }
     };
     Ok(program)
@@ -1616,8 +1715,16 @@ fn select_shims_from_tables_with_policy(
     // would link cleanly and compute garbage against the byte-string carrier
     // (see STRING_PRELUDE_SHIMS), so it can never ride the double-emit guard
     // into the binary — shimmed symbol or not.
-    if let Some(op) =
-        first_source_lowered_string_body(emitted_c).filter(|_| !policy.permits_byte_backed_bodies())
+    let code = c_scan_code(emitted_c);
+    let definitions: BTreeSet<_> = code
+        .lines()
+        .filter_map(emitted_declarator)
+        .filter_map(|(name, _, definition)| definition.then_some(name))
+        .collect();
+    if let Some(op) = definitions
+        .iter()
+        .find(|name| name.starts_with("l_String_"))
+        .filter(|_| !policy.permits_byte_backed_bodies())
     {
         bail!(
             "native build refuses source-lowered String body `{op}`: the runtime \
@@ -1635,15 +1742,21 @@ fn select_shims_from_tables_with_policy(
     let needed: Vec<&PreludeShim> = tables
         .iter()
         .flat_map(|table| table.iter())
-        .filter(|shim| c_references_symbol(emitted_c, shim.symbol))
+        .filter(|shim| c_references_symbol(&code, shim.symbol))
         // Double-emit guard: if a prelude fn is now compiled from source into the
         // emitted C, do NOT also inject the shim, or the linker sees two
         // definitions of `l_X`.
-        .filter(|shim| !file_defines_symbol(emitted_c, shim.symbol))
-        .map(|shim| genuine_init_arity_variant(emitted_c, shim))
+        .filter(|shim| !definitions.contains(shim.symbol))
+        .map(|shim| {
+            if shim.symbol == "l_String_push" && policy.owns_string_push() {
+                Ok(&STABLE_OWNED_STRING_PUSH)
+            } else {
+                genuine_init_arity_variant(&code, shim)
+            }
+        })
         .collect::<anyhow::Result<_>>()?;
 
-    if let Some(unknown) = first_uncovered_prelude_call(emitted_c, &needed) {
+    if let Some(unknown) = first_uncovered_prelude_call(&code, &definitions, &needed) {
         bail!(
             "native build cannot satisfy prelude extern `{unknown}`: only the \
              shims {:?} are wired for this entry shape. Add a shim in native_build \
@@ -1684,62 +1797,18 @@ fn select_prelude_shims(emitted_c: &str) -> anyhow::Result<Vec<&'static PreludeS
 
 /// Find the first mangled prelude call (`l_Foo_bar(`) in `emitted_c` that is
 /// neither a user-emitted body nor a covered shim. Returns the symbol name.
-fn first_uncovered_prelude_call(
-    emitted_c: &str,
+fn first_uncovered_prelude_call<'a>(
+    code: &'a str,
+    definitions: &BTreeSet<&str>,
     covered: &[&'static PreludeShim],
-) -> Option<String> {
-    for line in emitted_c.lines() {
-        let trimmed = line.trim_start();
-        for token in extract_mangled_calls(trimmed) {
-            if trimmed.contains(&format!("{token}(")) && trimmed.ends_with('{') {
-                continue;
-            }
-            if covered.iter().any(|s| s.symbol == token) {
-                continue;
-            }
-            if file_defines_symbol(emitted_c, &token) {
-                continue;
-            }
-            return Some(token);
-        }
-    }
-    None
-}
-
-/// Whether `emitted_c` contains a *definition* (body) for mangled `symbol`.
-fn file_defines_symbol(emitted_c: &str, symbol: &str) -> bool {
-    emitted_c.lines().any(|line| {
-        let l = line.trim_start();
-        l.contains(&format!("{symbol}(")) && l.trim_end().ends_with('{')
+) -> Option<&'a str> {
+    code.lines().flat_map(extract_mangled_calls).find(|token| {
+        !definitions.contains(*token) && !covered.iter().any(|shim| shim.symbol == *token)
     })
 }
 
-/// Find the first `l_String_*` symbol the emitted C DEFINES (same brace-line
-/// heuristic as [`file_defines_symbol`]). The `l_String_` prefix cannot false-
-/// positive on compound names (`Stringify.foo` mangles to `l_Stringify_foo`,
-/// which the trailing underscore excludes); it does catch a String op's mangled
-/// helpers (`l_String_take_go`, `l_String_take___boxed`), which lower from the
-/// same `List Char` model and are equally wrong on the byte-string carrier.
-/// L5CNF is let-normalized — calls are bound to temps, never opened on a
-/// brace-line — so a brace-line match is a definition, not a call.
-fn first_source_lowered_string_body(emitted_c: &str) -> Option<String> {
-    for line in emitted_c.lines() {
-        let trimmed = line.trim_start();
-        if !trimmed.trim_end().ends_with('{') {
-            continue;
-        }
-        if let Some(sym) = extract_mangled_calls(trimmed)
-            .into_iter()
-            .find(|token| token.starts_with("l_String_"))
-        {
-            return Some(sym);
-        }
-    }
-    None
-}
-
 /// Extract mangled `l_*` identifiers immediately followed by `(` on a line.
-fn extract_mangled_calls(line: &str) -> Vec<String> {
+fn extract_mangled_calls(line: &str) -> Vec<&str> {
     let bytes = line.as_bytes();
     let mut out = Vec::new();
     let mut i = 0;
@@ -1752,7 +1821,7 @@ fn extract_mangled_calls(line: &str) -> Vec<String> {
                 j += 1;
             }
             if j < bytes.len() && bytes[j] == b'(' {
-                out.push(line[start..j].to_string());
+                out.push(&line[start..j]);
             }
             i = j.max(i + 1);
         } else {
@@ -1846,12 +1915,7 @@ const ARGV_MARSHAL_HELPER: &str = "static clean_obj* clean_driver_argv_list(int 
 /// Render the combined translation unit for an `IO` entry, honouring Lean's
 /// entry contract: `argv` marshalling when the entry takes `List String`, and
 /// the returned `UInt32` propagated to the process exit status.
-fn render_io_program(
-    emitted_c: &str,
-    shims: &[&PreludeShim],
-    mangled_entry: &str,
-    contract: EntryContract,
-) -> String {
+fn render_io_program(emitted_c: &str, shims: &[&PreludeShim], driver: &str) -> String {
     let mut s = String::new();
     s.push_str(
         "/* Synthesized by clean native_build — IO prelude shims + emitted closure + IO main. */\n",
@@ -1867,7 +1931,7 @@ fn render_io_program(
     if !emitted_c.ends_with('\n') {
         s.push('\n');
     }
-    s.push_str(&render_entry_driver(contract, mangled_entry, "main"));
+    s.push_str(driver);
     s
 }
 
@@ -1891,7 +1955,9 @@ pub(crate) fn render_entry_driver(
         s.push_str(&format!("int {driver_fn}(void) {{\n"));
         s.push_str("  clean_runtime_init();\n");
         s.push_str(&format!("  clean_obj* _r = {entry_callee}();\n"));
-        s.push_str("  printf(\"%zu\\n\", clean_unbox(_r));\n");
+        s.push_str("  clean_obj* _text = clean_nat_repr(_r);\n");
+        s.push_str("  puts(clean_string_data(_text));\n");
+        s.push_str("  clean_dec(_text);\n");
         s.push_str("  clean_runtime_finalize();\n");
         s.push_str("  return 0;\n");
         s.push_str("}\n");
@@ -2142,7 +2208,7 @@ mod tests {
     #[test]
     fn test_extract_mangled_calls_finds_call_site() {
         let calls = extract_mangled_calls("  clean_obj* _x2 = l_Nat_add(_x6, _x7);");
-        assert!(calls.contains(&"l_Nat_add".to_string()), "{calls:?}");
+        assert!(calls.contains(&"l_Nat_add"), "{calls:?}");
     }
 
     #[test]
@@ -2287,12 +2353,39 @@ mod tests {
     }
 
     #[test]
+    fn test_native_symbols_come_from_code_and_function_declarations() {
+        let c = r#"/* clean_obj* l_String_fake(void) { */
+const char* text = "l_missingFromThisString() l_IO_println() l_main(a,b,c)";
+clean_obj* l_main(void) { return l_helper(); }
+uint32_t l_helper(void) { return 7; }"#;
+        assert!(select_prelude_shims(c)
+            .expect("only local functions")
+            .is_empty());
+        assert_eq!(classify_entry(c), EntryKind::Nat);
+        assert_eq!(entry_arity_in_c(c, "l_main"), Some(0));
+        assert_eq!(entry_arity_in_c("return l_main(42);", "l_main"), None);
+
+        let c = "clean_obj* l_main(void) { return l_missingFromBody(); }";
+        let err = select_prelude_shims(c).expect_err("unresolved call in a compact body");
+        assert!(err.to_string().contains("l_missingFromBody"), "{err}");
+        let c = "clean_obj* l_String_bad(void) { return clean_box(0); }";
+        let err = select_prelude_shims(c).expect_err("bootstrap string layout must refuse");
+        assert!(
+            err.to_string().contains("source-lowered String body"),
+            "{err}"
+        );
+    }
+
+    #[test]
     fn test_symbol_use_arities_reads_calls_and_closures_not_definitions() {
         let c = "clean_obj* l_IO_print(clean_obj* s) {\n\
                  clean_obj* _x = l_IO_print(f(a, b), c);\n\
                  clean_obj* _y = clean_alloc_closure((void*)l_IO_print, 3, 0);\n\
                  clean_obj* _z = l_IO_println(_q);";
-        assert_eq!(symbol_use_arities(c, "l_IO_print"), BTreeSet::from([2, 3]));
+        assert_eq!(
+            symbol_use_arities(&c_scan_code(c), "l_IO_print"),
+            BTreeSet::from([2, 3])
+        );
     }
 
     #[test]
@@ -2312,7 +2405,10 @@ clean_alloc_closure((void*)l_IO_println, 3, 0);
 */
 clean_obj* _actual = l_IO_println(_text);
 "#;
-        assert_eq!(symbol_use_arities(c, "l_IO_println"), BTreeSet::from([1]));
+        assert_eq!(
+            symbol_use_arities(&c_scan_code(c), "l_IO_println"),
+            BTreeSet::from([1])
+        );
         let shims = select_shims_from(c, IO_PRELUDE_SHIMS)
             .expect("literal/comment lookalikes do not manufacture mixed arities");
         assert!(
@@ -2330,7 +2426,7 @@ clean_obj* _b = l_IO_println(',');
 clean_obj* _c = l_IO_println('(');
 clean_obj* _d = l_IO_println('\'');
 "#;
-        let masked = c_arity_scan_code(c);
+        let masked = c_scan_code(c);
         assert_eq!(masked.len(), c.len());
         assert_eq!(
             masked
@@ -2341,10 +2437,13 @@ clean_obj* _d = l_IO_println('\'');
                 .map(|(offset, _)| offset)
                 .collect::<Vec<_>>()
         );
-        assert_eq!(symbol_use_arities(c, "l_IO_println"), BTreeSet::from([1]));
+        assert_eq!(
+            symbol_use_arities(&c_scan_code(c), "l_IO_println"),
+            BTreeSet::from([1])
+        );
         assert_eq!(
             symbol_use_arities(
-                "clean_obj* _x = l_IO_println(clean_box(0), _inst, \"a,b(c)\");",
+                &c_scan_code("clean_obj* _x = l_IO_println(clean_box(0), _inst, \"a,b(c)\");"),
                 "l_IO_println"
             ),
             BTreeSet::from([3])
@@ -2354,21 +2453,50 @@ clean_obj* _d = l_IO_println('\'');
     #[test]
     fn test_render_io_program_drives_entry_and_exits_zero() {
         let emitted = "clean_obj* l_main(void) { return clean_box(0); }\n";
-        let program = render_io_program(
-            emitted,
-            &[],
-            "l_main",
+        let driver = render_entry_driver(
             EntryContract {
                 kind: EntryKind::Io,
                 args: EntryArgs::None,
                 exit: EntryExit::AlwaysZero,
             },
+            "l_main",
+            "main",
         );
+        let program = render_io_program(emitted, &[], &driver);
         assert!(program.contains("int main(void)"), "{program}");
         assert!(program.contains("l_main();"), "{program}");
         assert!(!program.contains("printf(\"%zu"), "{program}");
         assert!(program.contains("int _status = 0;"), "{program}");
         assert!(program.contains("return _status;"), "{program}");
+    }
+
+    #[test]
+    fn checked_entry_drives_markerless_uint32_and_validates_argv_arity() {
+        if !cc_available() {
+            return;
+        }
+        let c = |name: &str| Expr::const_(Name::from_string(name), vec![]);
+        let io_status = Expr::app(c("IO"), c("UInt32"));
+        let nullary = "clean_obj* l_main(void) { return clean_box(7); }\n";
+        let built = build_native_binary_in_scratch("main", nullary, Some(&io_status), true)
+            .expect("link constant IO UInt32");
+        let output = Command::new(built.binary()).output().unwrap();
+        assert_eq!(output.status.code(), Some(7));
+        assert!(output.stdout.is_empty());
+        let with_argv = Expr::pi(
+            BinderInfo::Default,
+            Expr::app(c("List"), c("String")),
+            io_status.clone(),
+        );
+        assert!(entry_contract("main", nullary, Some(&with_argv)).is_err());
+        let unary =
+            "clean_obj* l_main(clean_obj* args) { clean_dec(args); return clean_box(3); }\n";
+        assert!(entry_contract("main", unary, Some(&io_status)).is_err());
+        let built = build_native_binary_in_scratch("main", unary, Some(&with_argv), true)
+            .expect("link constant IO UInt32 with argv");
+        let output = Command::new(built.binary()).arg("hello").output().unwrap();
+        assert_eq!(output.status.code(), Some(3));
+        assert!(output.stdout.is_empty());
     }
 
     /// The emitted C prototype — not a source-text scan — decides the arity the
@@ -2457,16 +2585,16 @@ clean_obj* _d = l_IO_println('\'');
     #[test]
     fn test_render_io_program_argv_driver_uses_the_emitter_list_layout() {
         let emitted = "clean_obj* l_main(clean_obj* _x0) { return clean_box(0); }\n";
-        let program = render_io_program(
-            emitted,
-            &[],
-            "l_main",
+        let driver = render_entry_driver(
             EntryContract {
                 kind: EntryKind::Io,
                 args: EntryArgs::Argv,
                 exit: EntryExit::FromUInt32,
             },
+            "l_main",
+            "main",
         );
+        let program = render_io_program(emitted, &[], &driver);
         assert!(
             program.contains("int main(int argc, char** argv)"),
             "{program}"
@@ -2584,6 +2712,23 @@ clean_obj* _d = l_IO_println('\'');
             program.contains("clean_obj* l_String_length(clean_obj* s)"),
             "rendered program should inject the String length shim: {program}"
         );
+    }
+
+    #[test]
+    fn test_driver_for_nat_prints_scalar_and_heap_results() {
+        if !cc_available() {
+            eprintln!("skipping native Nat entry test: no C compiler");
+            return;
+        }
+        let (dir, file) =
+            write_temp_lean("def small : Nat := 42\ndef large : Nat := 18446744073709551621\n");
+        for (decl, expected) in [("small", "42\n"), ("large", "18446744073709551621\n")] {
+            let exe = dir.path().join(decl);
+            build_native_executable(&file, decl, 0, &exe).expect("build the Nat entry");
+            let output = Command::new(exe).output().expect("run the Nat entry");
+            assert!(output.status.success(), "{output:?}");
+            assert_eq!(String::from_utf8_lossy(&output.stdout), expected, "{decl}");
+        }
     }
 
     /// Full end-to-end: build a native binary to an explicit out_path and run it.

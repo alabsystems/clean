@@ -545,6 +545,8 @@ def fam_rec(fam: str, var: str, motive, arms: dict, default, major: str, names: 
     `default(fields, ihs)` every other. With `hyp`, the motive is
     premise-passing and every minor takes one more binder, the premise at the
     applied constructor (`hyp(ctor_app)`), named `h` where the body uses it."""
+    if fam not in {"IRScalar", "IRTy", "IRInst"}:
+        raise ValueError(f"no checked recursor emitter for {fam}")
     minors = []
     for ctor, ftypes in ctors(fam):
         fnames = [f"{n}_{tag}" for n in names[ctor]]

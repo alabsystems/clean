@@ -614,6 +614,22 @@ fn test_execute_simple_tactic_wires_at_target_tactics() {
     }
 }
 
+#[test]
+fn test_execute_simple_tactic_split_requires_its_named_hypothesis() {
+    let env = setup_type_env();
+    let mut state = elab_tactic::ProofState::new(env.clone(), identity_goal());
+    let original = state.current_goal().unwrap().clone();
+    let error = execute_simple_tactic(&mut state, "split at missing", &env)
+        .expect_err("the script entry must select its named hypothesis");
+    assert!(matches!(
+        error,
+        elab_tactic::TacticError::HypothesisNotFound(_)
+    ));
+    assert_eq!(state.goals.len(), 1);
+    assert_eq!(state.current_goal().unwrap().target, original.target);
+    assert_eq!(state.current_goal().unwrap().meta_id, original.meta_id);
+}
+
 /// Routing: `norm_num at <hyp>` dispatches to the hypothesis-targeted variant,
 /// not the goal-directed `norm_num`. With no such hypothesis the at-variant
 /// reports `HypothesisNotFound`, distinguishing it from the bare form.

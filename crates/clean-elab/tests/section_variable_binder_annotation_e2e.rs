@@ -234,3 +234,189 @@ fn binder_annotation_update_is_section_scoped() {
         "after `end Inner`, `P` must be implicit again: {outer:?}"
     );
 }
+
+/// Source modules may group declarations in namespaces and sections. Their
+/// leaf rejections are reported in the batch outcome.
+fn elaborate_family_batch(source: &str) -> Result<Environment, String> {
+    use clean_elab::module_batch::{elaborate_module, BatchOptions, SourceUnit, UnitId};
+
+    let mut env = Environment::with_prelude();
+    let declarations = parse_file(source).map_err(|error| format!("{error:?}"))?;
+    let outcome = elaborate_module(
+        &mut env,
+        &mut FileContext::new(),
+        &[SourceUnit {
+            id: UnitId(0),
+            decls: &declarations,
+        }],
+        BatchOptions::islands(),
+    );
+    if outcome.is_clean() && outcome.committed {
+        Ok(env)
+    } else {
+        Err(outcome.render_rejections())
+    }
+}
+
+fn elaborate_family_module(source: &str) -> Result<Environment, String> {
+    use clean_elab::module_driver::{
+        elaborate_decls, module_elaboration_lock, DriverOptions, VerdictKind,
+    };
+
+    let _guard = module_elaboration_lock();
+    let decls = parse_file(source).map_err(|error| format!("{error:?}"))?;
+    let mut env = Environment::with_prelude();
+    let report = elaborate_decls(
+        &mut env,
+        &decls,
+        source,
+        &mut FileContext::new(),
+        DriverOptions {
+            lean_front_door: true,
+            ..Default::default()
+        },
+        &mut (),
+    );
+    if let Some(verdict) = report
+        .verdicts
+        .iter()
+        .find(|v| v.kind != VerdictKind::Passed)
+    {
+        return Err(format!("{verdict:?}"));
+    }
+    Ok(env)
+}
+
+/// A family abstracts exactly the ambient locals used by its elaborated
+/// parameters or fields, including their transitive type dependencies.
+#[test]
+fn family_section_parameters_follow_dependencies_and_shadowing() {
+    let code = r#"
+universe u
+section
+variable {α : Type u} (x : α) (unused : Nat)
+structure Packet (p : x = x) : Prop where
+  accepts : p = p
+structure FieldOnly : Prop where
+  accepts : x = x
+structure Shadow (x : Nat) : Prop where
+  accepts : x = x
+class Label where
+  value : α
+class Decorated extends @Label α where
+  another : α
+inductive Chain where
+  | leaf (y : α) : Chain
+  | next (prev : Chain) : Chain
+inductive Flag where
+  | yes : Flag
+end
+"#;
+    let env = elaborate_family_module(code).unwrap_or_else(|e| panic!("{e}"));
+    for (name, expected) in [
+        (
+            "Packet",
+            vec![
+                BinderInfo::Implicit,
+                BinderInfo::Default,
+                BinderInfo::Default,
+            ],
+        ),
+        ("FieldOnly", vec![BinderInfo::Implicit, BinderInfo::Default]),
+        ("Shadow", vec![BinderInfo::Default]),
+        ("Label", vec![BinderInfo::Implicit]),
+        ("Decorated", vec![BinderInfo::Implicit]),
+        ("Chain", vec![BinderInfo::Implicit]),
+        ("Flag", vec![]),
+    ] {
+        let former = type_of(&env, name);
+        let kinds: Vec<_> = telescope(&former).iter().map(|(kind, _)| *kind).collect();
+        assert_eq!(kinds, expected, "{name}");
+        assert_eq!(
+            env.get_inductive(&Name::from_string(name))
+                .unwrap()
+                .num_params as usize,
+            expected.len(),
+            "{name}"
+        );
+        assert!(!former.has_fvar_quick(), "{name}");
+    }
+    for name in [
+        "Packet.mk",
+        "Packet.accepts",
+        "FieldOnly.accepts",
+        "Chain.next",
+        "Decorated.another",
+    ] {
+        assert!(!type_of(&env, name).has_fvar_quick(), "{name}");
+    }
+}
+
+#[test]
+fn family_section_parameters_preserve_field_and_proof_refusals() {
+    let originals = [
+        include_str!("../../../reports/self-proof-w1-quotient-packet/fixtures/Ambient.lean"),
+        include_str!(
+            "../../../reports/self-proof-w1-quotient-packet/fixtures/SignatureAmbient.lean"
+        ),
+        include_str!("../../../reports/self-proof-w1-quotient-packet/fixtures/Explicit.lean"),
+        include_str!(
+            "../../../reports/self-proof-w1-quotient-packet/fixtures/SignatureExplicit.lean"
+        ),
+        include_str!("../../../reports/self-proof-w1-quotient-packet/fixtures/Independent.lean"),
+    ];
+    for check in [elaborate_family_module, elaborate_family_batch] {
+        for input in originals {
+            check(input).unwrap_or_else(|error| panic!("{error}: {input}"));
+        }
+        assert!(check(include_str!(
+            "../../../reports/self-proof-w1-quotient-packet/fixtures/BadField.lean"
+        ))
+        .is_err());
+        assert!(check(include_str!(
+            "../../../reports/self-proof-w1-quotient-packet/fixtures/BadProof.lean"
+        ))
+        .is_err());
+    }
+}
+
+#[test]
+fn family_section_parameters_keep_only_used_instances_and_their_binder_kinds() {
+    let code = r#"
+universe u
+section
+variable {α : Type u} [inst : Inhabited α]
+structure Keeps where
+  ok : (default : α) = default
+inductive Needs where
+  | mk (ok : (default : α) = default) : Needs
+inductive Drops where
+  | mk (a : α) : Drops
+end
+"#;
+    let env = elaborate_family_module(code).unwrap_or_else(|e| panic!("{e}"));
+    for name in ["Keeps", "Keeps.mk", "Needs", "Needs.mk"] {
+        let ty = type_of(&env, name);
+        let binders = telescope(&ty);
+        assert_eq!(binders[0].0, BinderInfo::Implicit, "{name}");
+        assert_eq!(binders[1].0, BinderInfo::InstImplicit, "{name}");
+    }
+    assert_eq!(telescope(&type_of(&env, "Drops")).len(), 1);
+}
+
+#[test]
+fn family_namespace_binders_restore_at_end_in_driver_and_batch() {
+    let source = "variable (x : Nat)\nnamespace Inner\nvariable {x}\nstructure Uses : Prop where\n  ok : x = x\nend Inner\nstructure Outer : Prop where\n  ok : x = x\n";
+    for check in [elaborate_family_module, elaborate_family_batch] {
+        let env = check(source).unwrap_or_else(|e| panic!("{e}"));
+        for (name, info) in [
+            ("Inner.Uses", BinderInfo::Implicit),
+            ("Outer", BinderInfo::Default),
+        ] {
+            let ty = type_of(&env, name);
+            let binders = telescope(&ty);
+            assert_eq!(binders.len(), 1, "{name}");
+            assert_eq!(binders[0].0, info, "{name}");
+        }
+    }
+}

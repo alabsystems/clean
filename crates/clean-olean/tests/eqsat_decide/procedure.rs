@@ -366,7 +366,12 @@ pub(super) fn refused_for_the_claim(k: &ReferenceKernel, ty: &Expr, val: &Expr, 
 /// (`Environment::check_decl_readonly_with_heartbeat`, the check
 /// `check_closed_term` runs). Every refusal below that limit must name
 /// heartbeats: a caller tells `timed-out` from `kernel-refused` by it.
-fn smallest_passing_limit(k: &ReferenceKernel, ty: &Expr, val: &Expr, what: &str) -> u32 {
+pub(super) fn smallest_passing_limit(
+    k: &ReferenceKernel,
+    ty: &Expr,
+    val: &Expr,
+    what: &str,
+) -> u32 {
     let decl = Declaration::Definition {
         name: n("eqsat_decide.cost"),
         level_params: vec![],

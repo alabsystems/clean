@@ -74,6 +74,17 @@ fn probe(decls: &str, expr: &str) -> String {
     panic!("no `def probe` in {parsed:#?}");
 }
 
+// The named precedences exported by Init.Notation determine the operand
+// tree. Lean 4.36.0 and 4.30.0-rc2 agree on all three groupings.
+#[test]
+fn named_precedences_match_lean_operand_grouping() {
+    let decls =
+        "infixl:5 \" ⋇ \" => low\ninfixr:min \" ⋈ \" => middle\ninfixr:min1 \" ⋉ \" => high";
+    assert_eq!(probe(decls, "a ⋇ b ⋈ c"), "(low a (middle b c))");
+    assert_eq!(probe(decls, "a ⋈ b ⋉ c"), "(middle a (high b c))");
+    assert_eq!(probe("prefix:lead \"⁂\" => mark", "⁂f x"), "(mark (f x))");
+}
+
 // ---------------------------------------------------------------------------
 // Every declarable level parses.
 //
@@ -425,21 +436,60 @@ fn test_mathlib_hom_arrow_declarations_parse_and_group() {
 }
 
 // ---------------------------------------------------------------------------
-// What still fails closed, on purpose.
+// Postfix precedence and parentheses, measured with Lean 4.36.0.
 // ---------------------------------------------------------------------------
 
 #[test]
-fn test_low_precedence_postfix_still_fails_closed() {
-    // Opening the INFIX bands says nothing about postfix: the modeled postfix
-    // band is still 60+, and a `postfix:50` must not leave a definition behind.
-    let code = "postfix:50 \" !! \" => Observe\ndef rejected := p !!";
-    let decls = parse_file(code).expect("file parser should recover after the invalid declaration");
-    assert!(
-        !decls
-            .iter()
-            .any(|d| matches!(d, SurfaceDecl::Def { name, .. } if name.name() == clean_parser::SurfaceName::generated_path("rejected").name())),
-        "unsupported low-precedence postfix must not leave a partial definition: {decls:#?}",
-    );
+fn low_postfix_binds_at_its_declared_level() {
+    for level in 0..60 {
+        let decl = format!("postfix:{level} \" !! \" => Observe");
+        assert_eq!(probe(&decl, "p !! !!"), "(Observe (Observe p))");
+    }
+    for (level, expr, expected) in [
+        (0, "a = b !!", "(Observe (Eq a b))"),
+        (10, "a |> b !!", "(Observe (b a))"),
+        (10, "a !! |> b", "(b (Observe a))"),
+        (25, "a → b !!", "(-> a (Observe b))"),
+        (25, "a × b !!", "(Observe (Prod a b))"),
+        (26, "(a → b) !!", "(Observe (-> a b))"),
+        (35, "a ∧ b !!", "(And a (Observe b))"),
+        (35, "a × b !!", "(Prod a (Observe b))"),
+        (36, "(a × b) !!", "(Observe (Prod a b))"),
+        (49, "a = b !!", "(Observe (Eq a b))"),
+        (50, "(a !!) = b", "(Eq (Observe a) b)"),
+        (51, "a = b !!", "(Eq a (Observe b))"),
+        (51, "a !! = b", "(Eq (Observe a) b)"),
+        (51, "a + b !!", "(Observe (HAdd.hAdd a b))"),
+        (56, "a >>= b !!", "(Bind.bind a (Observe b))"),
+        (59, "a ^^^ b !!", "(HXor.hXor a (Observe b))"),
+    ] {
+        let decl = format!("postfix:{level} \" !! \" => Observe");
+        let report =
+            clean_parser::parse_file_with_diagnostics(&format!("{decl}\ndef probe := {expr}"))
+                .unwrap();
+        assert!(
+            report.diagnostics.is_empty(),
+            "{level} {expr}: {:?}",
+            report.diagnostics
+        );
+        assert_eq!(probe(&decl, expr), expected, "{level} {expr}");
+    }
+}
+
+#[test]
+fn low_postfix_rejects_stronger_trailing_operators_without_parentheses() {
+    for (level, expression) in [
+        (35, "a !! ∧ b"),
+        (49, "a !! = b"),
+        (50, "a !! = b"),
+        (51, "a !! + b"),
+        (49, "a !! ~> b"),
+        (49, "a !! ⁇"),
+    ] {
+        let code = format!("infixl:50 \" ~> \" => And\npostfix:50 \" ⁇ \" => Other\npostfix:{level} \" !! \" => Observe\ndef rejected := {expression}");
+        let report = clean_parser::parse_file_with_diagnostics(&code).unwrap();
+        assert!(!report.diagnostics.is_empty(), "{level} {expression}");
+    }
 }
 
 #[test]

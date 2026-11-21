@@ -21,7 +21,7 @@
 
 use std::collections::HashSet;
 
-use super::{Expr, ExprKind};
+use super::{Expr, ExprKind, Literal};
 use crate::name::Name;
 
 /// Which names [`Expr::used_constants_dag`] reports.
@@ -32,11 +32,26 @@ pub enum UsedConstants {
     ConstantsOnly,
     /// Every `Const` head and the structure name of every `Proj` node.
     WithProjectionStructures,
+    /// References in value positions, including projections and all application
+    /// arguments. Lambda/let domains and entire Pi expressions are type slots.
+    /// Unknown expression forms retain their complete conservative walk.
+    ValuePositions,
 }
 
 impl Expr {
     /// Insert every constant `self` uses into `out` (see the module docs).
     pub fn used_constants_dag(&self, mode: UsedConstants, out: &mut HashSet<Name>) {
+        self.used_constants_dag_with_literals(mode, out, |_| {});
+    }
+
+    /// Collect constant references and visit literal leaves in the same DAG walk.
+    /// A caller can account for implicit literal dependencies of the Lean format.
+    pub fn used_constants_dag_with_literals(
+        &self,
+        mode: UsedConstants,
+        out: &mut HashSet<Name>,
+        mut visit_literal: impl FnMut(&Literal),
+    ) {
         let mut seen: HashSet<usize> = HashSet::new();
         let mut stack: Vec<&Expr> = vec![self];
         while let Some(e) = stack.pop() {
@@ -47,22 +62,29 @@ impl Expr {
                 ExprKind::Const(name, _) => {
                     out.insert(name.clone());
                 }
-                ExprKind::BVar(_) | ExprKind::FVar(_) | ExprKind::Sort(_) | ExprKind::Lit(_) => {}
+                ExprKind::BVar(_) | ExprKind::FVar(_) | ExprKind::Sort(_) => {}
+                ExprKind::Lit(lit) => visit_literal(lit),
                 ExprKind::App(f, a) => {
                     stack.push(f);
                     stack.push(a);
+                }
+                ExprKind::Pi(..) if mode == UsedConstants::ValuePositions => {}
+                ExprKind::Lam(_, _, body) if mode == UsedConstants::ValuePositions => {
+                    stack.push(body)
                 }
                 ExprKind::Lam(_, ty, body) | ExprKind::Pi(_, ty, body) => {
                     stack.push(ty);
                     stack.push(body);
                 }
                 ExprKind::Let(_, ty, val, body, _) => {
-                    stack.push(ty);
+                    if mode != UsedConstants::ValuePositions {
+                        stack.push(ty);
+                    }
                     stack.push(val);
                     stack.push(body);
                 }
                 ExprKind::Proj(structure, _, inner) => {
-                    if mode == UsedConstants::WithProjectionStructures {
+                    if mode != UsedConstants::ConstantsOnly {
                         out.insert(structure.clone());
                     }
                     stack.push(inner);

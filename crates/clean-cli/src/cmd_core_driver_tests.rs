@@ -17,15 +17,10 @@ use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 // The census lexes before it counts (CLAUDE.md: a gate reading Rust source
-// blanks comments and string literals first). It uses the sanctioned
-// `blank_noncode`, reached by path rather than copied: the canonical copy in
-// `clean-elab` (`src/test_support/source_scan.rs`) is `#[cfg(test)]` and
-// crate-private, and `clean-auto` keeps a self-contained copy of the same
-// lexer in step with it, which is the one included here.
-#[path = "../../clean-auto/src/test_support/source_scan.rs"]
-mod source_scan;
-
-use source_scan::blank_noncode;
+// blanks comments and string literals first), with the one sanctioned lexer,
+// `clean_evidence::source_scan::blank_noncode` (design unit EV0). It used to
+// include `clean-auto`'s hand-synced copy by `#[path]`; that copy is gone.
+use clean_evidence::source_scan::blank_noncode;
 
 /// The identifiers left in `src` once its comments and literals are blanked.
 fn code_identifiers(src: &str) -> Vec<String> {

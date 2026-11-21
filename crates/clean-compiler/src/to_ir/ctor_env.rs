@@ -21,14 +21,18 @@ use clean_kernel::Name;
 /// A constructor type is a Pi chain, e.g., `{A : Type} → A → List A → List A`
 /// for `List.cons`. The first `num_params` Pi binders are type parameters
 /// (skipped). The remaining domains are the field types.
-fn extract_field_ir_types(ctor_type: &Expr, num_params: u32) -> Result<Vec<IRType>, CompilerError> {
+fn extract_field_ir_types(
+    ctor_type: &Expr,
+    num_params: u32,
+    checked_void_layout: bool,
+) -> Result<Vec<IRType>, CompilerError> {
     let mut types = Vec::new();
     let mut current = ctor_type.clone();
     let mut arg_idx = 0u32;
 
     while let ExprKind::Pi(_, domain, codomain) = current.kind() {
         if arg_idx >= num_params {
-            types.push(ctor_field_ir_type(domain)?);
+            types.push(ctor_field_ir_type(domain, checked_void_layout)?);
         }
         arg_idx += 1;
         current = (**codomain).clone();
@@ -96,6 +100,13 @@ pub(crate) fn build_external_arities(env: &clean_kernel::Environment) -> HashMap
 pub fn build_ctor_env(
     ctors: &[&ConstructorVal],
 ) -> Result<(HashMap<Name, CtorMeta>, HashMap<Name, CtorMeta>), CompilerError> {
+    build_source_ctor_env(ctors, false)
+}
+
+pub(super) fn build_source_ctor_env(
+    ctors: &[&ConstructorVal],
+    checked_void_layout: bool,
+) -> Result<(HashMap<Name, CtorMeta>, HashMap<Name, CtorMeta>), CompilerError> {
     let mut ctor_env = HashMap::with_capacity(ctors.len());
     let mut inductive_env = HashMap::with_capacity(ctors.len());
     // Callers hand over `Environment::constructors()`, a hash-map iteration, so
@@ -104,8 +115,8 @@ pub fn build_ctor_env(
     let mut ordered: Vec<&&ConstructorVal> = ctors.iter().collect();
     ordered.sort_by_cached_key(|ctor| ctor.name.to_string());
     for ctor in ordered {
-        let field_types =
-            extract_field_ir_types(&ctor.type_, ctor.num_params).map_err(|error| match error {
+        let field_types = extract_field_ir_types(&ctor.type_, ctor.num_params, checked_void_layout)
+            .map_err(|error| match error {
                 CompilerError::UnsupportedIrType { expr } => CompilerError::UnsupportedIrType {
                     expr: format!("{expr} (a field of constructor {})", ctor.name),
                 },

@@ -18,6 +18,13 @@ under WHAT IT DOES NOT MEASURE and in the artifact's `limits`:
   * a mint classified `clean-kernel` whose function calls (in code position)
     no kernel entry of KERNEL_ENTRY_CALLS, nor a declared wrapper whose own
     chain of checked calls reaches one, fails the gate (KERNEL EVIDENCE);
+  * a mint classified `kcheck` must name its door (`clean-compiled` on Clean
+    sites, `trust-island` on Trust sites; plan §0 rule 7) and compare all four
+    Decision 15 bindings in code position (`statement_digest`, `env_after`,
+    `root_digest`, `level_bound_at_numeral`) plus refuse `familyConstant`
+    receipts (plan units P1 and P2), either directly at the site or through a
+    declared `kcheck_token_wrappers` validator whose own body is checked for all
+    four comparisons and the `familyConstant` guard (DECISION 15);
   * a mint or root row with no classification fails the gate, and so does a
     Trust row that does not say what Trust's docs/TCB.md says about it;
   * the header list of sites that mint an authority-shaped label with no
@@ -78,10 +85,10 @@ WHAT IT DOES NOT MEASURE
 ------------------------
   * Acceptance by exit status or by a printed line (`clean check` succeeding,
     `clean lake build` writing an `.olean`). Those are the `entries` rows of
-    the artifact: hand-anchored to a function, and the gate checks only that
-    the anchor still exists and still shows its recorded checker evidence. A
-    new verb that reaches the kernel through an already-counted helper is not
-    detected.
+    the artifact: hand-anchored to a function checked for its recorded checker
+    evidence. The P3 measurement independently requires an entry for each
+    public clean-olean NDJSON reader it exercised. Other new verbs that reach
+    the kernel through an already-counted helper are not detected.
   * An environment built without a censused root. Such an environment runs
     `KernelTheory::Extended`, the enum's `#[default]`; the census does not
     list the hundreds of `Environment::new()` calls.
@@ -139,13 +146,15 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import check_add_decl_ratchet as lexer  # noqa: E402  (the reference lexer and test classification)
 
-# check_gate_registry.py R7 pins what `--pinned-inputs` prints: the lexer and
-# the target-side test classification this gate imports and runs.
+# R7 pins the lexer/test classification and the independent measurement
+# that names the NDJSON public acceptance sites.
+P3_RECORD = "reports/self-proof-p3-2026-11-12/patched_kernel_control.json"
 ANSWERS_PINNED_INPUTS = True
-PINNED_INPUTS = ("scripts/check_add_decl_ratchet.py",)
+PINNED_INPUTS = ("scripts/check_add_decl_ratchet.py", P3_RECORD)
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(os.environ.get("CLEAN_REPO_ROOT") or Path(__file__).resolve().parent.parent)
 ARTIFACT_REL = Path("data") / "authority_sites.json"
+NDJSON_MODULE = "crates/clean-olean/src/ndjson/mod.rs"
 SCHEMA = "clean.authority_sites.v1"
 
 # ---------------------------------------------------------------------------
@@ -289,6 +298,7 @@ CLASSES = (
 )
 CHECKER_KINDS = (
     "clean-kernel",     # the Clean kernel decided: `entry` says through which door
+    "kcheck",           # the compiled proved Lean checker decided via a Decision 15 sealed token
     "in-repo-checker",  # trusted Rust that is not the kernel (a proof-format checker, a step validator)
     "external-tool",    # a tool outside this repository decided
     "none",             # nothing checks at this site: import or source confidence, a policy mapping
@@ -296,6 +306,14 @@ CHECKER_KINDS = (
     "not-a-mint",       # the label is a value being compared or configured, nothing is accepted
     "unexamined",       # Trust rows only: the census did not read behind this site; no claim either way
 )
+KCHECK_DOORS = ("clean-compiled", "trust-island")
+DECISION_15_COMPARISONS = (
+    "statement_digest",
+    "env_after",
+    "root_digest",
+    "level_bound_at_numeral",
+)
+KCHECK_WRAPPER_BASE_FIELDS = ("name", "file", "symbol", "detail")
 KERNEL_ENTRIES = ("add_decl", "replay", "reference", "typecheck")
 THEORIES = ("Extended", "Lean", "LeanReference", "caller-selected", "n/a")
 REACH = ("user", "trust", "user+trust", "internal", "example", "bench")
@@ -901,6 +919,27 @@ def _classification_problems(row: dict) -> list[str]:
             out.append(f"UNCLASSIFIED: {rid} is clean-kernel with no checker.entry ({', '.join(KERNEL_ENTRIES)})")
         if checker.get("theory") not in THEORIES[:-1]:
             out.append(f"UNCLASSIFIED: {rid} is clean-kernel with no checker.theory ({', '.join(THEORIES[:-1])})")
+    if kind == "kcheck":
+        door = checker.get("door")
+        if door not in KCHECK_DOORS:
+            out.append(f"UNCLASSIFIED: {rid} is kcheck with no checker.door ({', '.join(KCHECK_DOORS)})")
+        elif rid.startswith("trust:") and door != "trust-island":
+            out.append(
+                f"INCONSISTENT: {rid} is a Trust site claiming kcheck door {door}; Trust sites must "
+                f"take trust-island (plan §0 rule 7: a verdict from one door is never presented as the other's)"
+            )
+        elif not rid.startswith("trust:") and not rid.startswith("entry ") and door != "clean-compiled":
+            out.append(
+                f"INCONSISTENT: {rid} is a Clean site claiming kcheck door {door}; Clean sites must "
+                f"take clean-compiled (plan §0 rule 7: a verdict from one door is never presented as the other's)"
+            )
+        elif rid.startswith("entry ") and door != "clean-compiled":
+            out.append(
+                f"INCONSISTENT: {rid} is a Clean entry claiming kcheck door {door}; Clean entries must "
+                f"take clean-compiled (plan §0 rule 7)"
+            )
+        if cls == "mint":
+            out.extend(_kcheck_schema_problems(rid, checker))
     if kind == "unexamined":
         if not rid.startswith("trust:"):
             out.append(
@@ -935,6 +974,122 @@ def _classification_problems(row: dict) -> list[str]:
         out.append(
             f"UNCLASSIFIED: {rid} claims a Clean-kernel check and names no evidence token in "
             f"its function; a kernel claim with nothing to re-derive is a label"
+        )
+    elif cls == "mint" and kind == "kcheck" and not tokens:
+        out.append(
+            f"UNCLASSIFIED: {rid} claims a kcheck token check and names no evidence token in "
+            f"its function"
+        )
+    return out
+
+
+_LET_PREFIX_RE = re.compile(r"\A\s*let(?:\s+mut)?\s+[^=;{}]*=(?!=)\s*")
+_CMP_OP_RE = re.compile(r"==|!=|<=|>=|(?<=\s)[<>](?=\s)")
+
+
+def _has_comparison_or_call(body: str, name: str) -> bool:
+    """True when `name` is called in code position OR participates in a real
+    comparison (`==`, `!=`, `<=`, `>=`, or whitespace-flanked `<` / `>`) inside
+    blanked function `body`. A bare `let x = ...` binding, parameter or struct
+    construction without a comparison or validator call returns False."""
+    if re.search(
+        r"(?<!fn\s)(?<![A-Za-z0-9_])" + re.escape(name) + r"\s*(?:::\s*<[^;{}()]*>\s*)?\(",
+        body,
+    ):
+        return True
+    ident_re = re.compile(r"(?<![A-Za-z0-9_])" + re.escape(name) + r"(?![A-Za-z0-9_])")
+    for raw_clause in re.split(r"[;{}]", body):
+        clause = _LET_PREFIX_RE.sub("", raw_clause)
+        if not ident_re.search(clause):
+            continue
+        if _CMP_OP_RE.search(clause):
+            return True
+    return False
+
+
+def _has_family_constant_refusal(body: str, name: str) -> bool:
+    """True when `name` checks or pattern-matches against `familyConstant` receipts
+    in blanked function `body` (comparison, validator call, or match/matches! arm)."""
+    if _has_comparison_or_call(body, name):
+        return True
+    pat_re = re.compile(
+        r"(?<![A-Za-z0-9_])" + re.escape(name) + r"(?![A-Za-z0-9_])[^{};]*=>"
+        r"|matches!\s*\([^;{}]*\b" + re.escape(name) + r"\b"
+    )
+    return pat_re.search(body) is not None
+
+
+def _kcheck_direct_spec_problems(subject: str, spec: dict) -> list[str]:
+    """Validate direct Decision 15 `comparisons` + `refuses_family_constant` fields."""
+    out: list[str] = []
+    comps = spec.get("comparisons")
+    if not isinstance(comps, dict):
+        out.append(
+            f"DECISION 15: {subject} lacks `comparisons` mapping all four Decision 15 checks "
+            f"({', '.join(DECISION_15_COMPARISONS)})"
+        )
+    else:
+        missing = [k for k in DECISION_15_COMPARISONS if not str(comps.get(k) or "").strip()]
+        extra = sorted(set(comps) - set(DECISION_15_COMPARISONS))
+        if missing:
+            out.append(
+                f"DECISION 15: {subject} omits Decision 15 comparison(s) {missing} "
+                f"(must check {', '.join(DECISION_15_COMPARISONS)})"
+            )
+        if extra:
+            out.append(f"DECISION 15: {subject} names unknown comparison key(s) {extra}")
+        vals = [str(comps[k]).strip() for k in DECISION_15_COMPARISONS if str(comps.get(k) or "").strip()]
+        if len(vals) != len(set(vals)):
+            out.append(
+                f"DECISION 15: {subject} reuses the same token across multiple Decision 15 "
+                f"comparisons ({vals}); each of the four checks must bind its own comparison"
+            )
+    fam = str(spec.get("refuses_family_constant") or "").strip()
+    if not fam:
+        out.append(
+            f"DECISION 15: {subject} lacks `refuses_family_constant` (plan unit P2 / LV3-1: "
+            f"a familyConstant receipt grants nothing)"
+        )
+    elif isinstance(comps, dict) and fam in {str(v).strip() for v in comps.values()}:
+        out.append(
+            f"DECISION 15: {subject} reuses `{fam}` for `refuses_family_constant` and a "
+            f"Decision 15 comparison; keep the receipt-kind refusal distinct"
+        )
+    return out
+
+
+def _kcheck_schema_problems(rid: str, checker: dict) -> list[str]:
+    via = checker.get("via_wrapper")
+    if via is not None:
+        if not isinstance(via, str) or not via.strip():
+            return [f"DECISION 15: {rid} sets empty `checker.via_wrapper`"]
+        if any(k in checker for k in ("comparisons", "refuses_family_constant")):
+            return [
+                f"DECISION 15: {rid} sets both `via_wrapper` and inline `comparisons`; "
+                f"declare one or the other"
+            ]
+        return []
+    return _kcheck_direct_spec_problems(rid, checker)
+
+
+def _kcheck_body_problems(subject: str, spec: dict, body: str, symbol: str) -> list[str]:
+    """Verify that `body` actually compares all four Decision 15 tokens and refuses
+    `familyConstant` in blanked Rust code."""
+    out: list[str] = []
+    comps = spec.get("comparisons")
+    if isinstance(comps, dict):
+        for key in DECISION_15_COMPARISONS:
+            tok = str(comps.get(key) or "").strip()
+            if tok and not _has_comparison_or_call(body, tok):
+                out.append(
+                    f"DECISION 15: {subject} records `{tok}` for `{key}`, and `{symbol}` does not "
+                    f"compare or call `{tok}` in code position"
+                )
+    fam = str(spec.get("refuses_family_constant") or "").strip()
+    if fam and not _has_family_constant_refusal(body, fam):
+        out.append(
+            f"DECISION 15: {subject} records `{fam}` for `refuses_family_constant`, and `{symbol}` "
+            f"does not check or match `{fam}` in code position"
         )
     return out
 
@@ -1035,6 +1190,122 @@ def check_wrappers(
     return problems, frozenset(admitted)
 
 
+def check_kcheck_wrappers(
+    wrappers: list[dict], read, label: str, base: frozenset[str] = frozenset()
+) -> tuple[list[str], frozenset[str]]:
+    """Declared `kcheck_token_wrappers`: production functions that validate a
+    Decision 15 sealed `kcheck` token. Each wrapper either directly performs all
+    four Decision 15 comparisons + `refuses_family_constant` in code position,
+    or calls (in code position) another admitted `kcheck` wrapper that does."""
+    problems: list[str] = []
+    calls_of: dict[str, set[str]] = {}
+    direct_valid: set[str] = set()
+    seen: set[str] = set()
+    for w in wrappers:
+        wid = f"{label} kcheck wrapper {w.get('name', '?')}"
+        missing = [f for f in KCHECK_WRAPPER_BASE_FIELDS if not w.get(f)]
+        if missing:
+            problems.append(f"UNCLASSIFIED: {wid} lacks {missing}")
+            continue
+        name = str(w["name"])
+        if name in seen:
+            problems.append(f"DUPLICATE: {wid} is declared twice")
+            continue
+        seen.add(name)
+        if str(w["symbol"]).rsplit("::", 1)[-1] != name:
+            problems.append(f"SHAPE: {wid} names symbol `{w['symbol']}`, whose function is not `{name}`")
+            continue
+        raw = read(str(w["file"]))
+        if raw is None:
+            problems.append(f"STALE ROW: {wid} anchors to {w['file']}, which cannot be read")
+            continue
+        body, why = function_body(lexer.strip_noncode(raw), str(w["file"]), str(w["symbol"]))
+        if body is None:
+            problems.append(f"STALE ROW: {wid} anchors to `{w['symbol']}`: {why}")
+            continue
+        has_direct = "comparisons" in w or "refuses_family_constant" in w
+        has_calls = bool(w.get("calls"))
+        if has_direct and has_calls:
+            problems.append(f"DECISION 15: {wid} declares both direct `comparisons` and delegated `calls`")
+            continue
+        if not has_direct and not has_calls:
+            problems.append(f"DECISION 15: {wid} declares neither direct `comparisons` nor delegated `calls`")
+            continue
+        if has_direct:
+            spec_probs = _kcheck_direct_spec_problems(wid, w)
+            body_probs = _kcheck_body_problems(wid, w, body, str(w["symbol"]))
+            problems.extend(spec_probs)
+            problems.extend(body_probs)
+            if not spec_probs and not body_probs:
+                direct_valid.add(name)
+            calls_of[name] = set()
+        else:
+            made = {c for c in w["calls"] if isinstance(c, str) and _has_call(body, c)}
+            lost = sorted(set(w["calls"]) - made)
+            if lost:
+                problems.append(
+                    f"CHECKER MOVED: {wid} records that `{w['symbol']}` calls {lost}, and it no "
+                    f"longer calls them in code position"
+                )
+            calls_of[name] = made
+    admitted: set[str] = set(direct_valid)
+    changed = True
+    while changed:
+        changed = False
+        for name, made in calls_of.items():
+            if name not in admitted and any(c in base or c in admitted for c in made):
+                admitted.add(name)
+                changed = True
+    for name in sorted((set(calls_of) - direct_valid) - admitted):
+        if calls_of[name]:
+            problems.append(
+                f"DECISION 15: {label} kcheck wrapper {name} reaches no verified Decision 15 "
+                f"validator through checked calls (it calls {sorted(calls_of[name])})"
+            )
+    return problems, frozenset(admitted)
+
+
+def _kcheck_evidence_problems(
+    rid: str, row: dict, body: str, symbol: str, kcheck_wrappers: frozenset[str]
+) -> list[str]:
+    """Enforce Plan P1 & P2 Decision 15 four-comparison + familyConstant refusal
+    on every `mint` (or `entry`) classified `kcheck`."""
+    checker = row.get("checker") or {}
+    via = checker.get("via_wrapper")
+    tokens = [t for t in row.get("evidence_tokens") or [] if isinstance(t, str)]
+    if via is not None:
+        via_name = str(via).strip()
+        out: list[str] = []
+        if via_name not in tokens:
+            out.append(
+                f"DECISION 15: {rid} cites `checker.via_wrapper` `{via_name}`, which must also "
+                f"appear in `evidence_tokens`"
+            )
+        if via_name not in kcheck_wrappers or not _has_call(body, via_name):
+            out.append(
+                f"DECISION 15: {rid} is a mint classified kcheck via `{via_name}`, which is not "
+                f"an admitted `kcheck_token_wrappers` validator called by `{symbol}` in code position"
+            )
+        return out
+    out = _kcheck_body_problems(rid, checker, body, symbol)
+    comps = checker.get("comparisons")
+    if isinstance(comps, dict):
+        for key in DECISION_15_COMPARISONS:
+            tok = str(comps.get(key) or "").strip()
+            if tok and tok not in tokens:
+                out.append(
+                    f"DECISION 15: {rid} records `{tok}` for `{key}`, which must also appear in "
+                    f"`evidence_tokens`"
+                )
+    fam = str(checker.get("refuses_family_constant") or "").strip()
+    if fam and fam not in tokens:
+        out.append(
+            f"DECISION 15: {rid} records `{fam}` for `refuses_family_constant`, which must also "
+            f"appear in `evidence_tokens`"
+        )
+    return out
+
+
 def _kernel_evidence_problem(rid: str, row: dict, body: str, symbol: str, kernel_calls: frozenset[str]) -> str:
     """The tightened rule for a mint classified clean-kernel ("" when it holds)."""
     tokens = [t for t in row.get("evidence_tokens") or [] if isinstance(t, str)]
@@ -1064,6 +1335,7 @@ def compare(
     recorded: list[dict],
     label: str,
     kernel_calls: frozenset[str] = frozenset(KERNEL_ENTRY_CALLS),
+    kcheck_wrappers: frozenset[str] = frozenset(),
 ) -> list[str]:
     problems: list[str] = []
     by_id: dict[str, dict] = {}
@@ -1099,16 +1371,47 @@ def compare(
                 why = _kernel_evidence_problem(rid, row, site["_body"], site["symbol"], kernel_calls)
                 if why:
                     problems.append(why)
+            if row.get("class") == "mint" and (row.get("checker") or {}).get("kind") == "kcheck":
+                problems.extend(
+                    _kcheck_evidence_problems(rid, row, site["_body"], site["symbol"], kcheck_wrappers)
+                )
     for rid in sorted(set(by_id) - set(measured)):
         problems.append(f"STALE ROW: {rid} is in the artifact and no longer in the {label} tree")
     return problems
 
 
+def check_p3_ndjson_entries(root: Path, entries: list[dict]) -> list[str]:
+    """P3 independently names its public NDJSON readers by module and function."""
+    try:
+        measured = json.loads((root / P3_RECORD).read_text())["sites"]
+        readers = {
+            row["site"].removeprefix("olean.ndjson.")
+            for row in measured
+            if row["package"] == "clean-olean" and row["site"].startswith("olean.ndjson.")
+        }
+    except (OSError, ValueError, KeyError, TypeError, AttributeError) as err:
+        return [f"P3 NDJSON: cannot read the measured site roster in {P3_RECORD}: {err}"]
+    if not readers:
+        return [f"P3 NDJSON: {P3_RECORD} names no measured NDJSON reader"]
+    anchors = {
+        row.get("symbol") for row in entries
+        if row.get("file") == NDJSON_MODULE
+    }
+    return [
+        f"P3 NDJSON: measured public reader `{reader}` has no census entry"
+        for reader in sorted(readers - anchors)
+    ]
+
+
 def check_entries(
-    root: Path, entries: list[dict], kernel_calls: frozenset[str] = frozenset(KERNEL_ENTRY_CALLS)
+    root: Path,
+    entries: list[dict],
+    kernel_calls: frozenset[str] = frozenset(KERNEL_ENTRY_CALLS),
+    kcheck_wrappers: frozenset[str] = frozenset(),
 ) -> list[str]:
     """The hand-anchored verbs: the anchor function exists and shows its evidence;
-    one classified clean-kernel calls a kernel entry or a declared wrapper."""
+    one classified clean-kernel calls a kernel entry or a declared wrapper;
+    one classified kcheck checks all four Decision 15 bindings + familyConstant."""
     problems: list[str] = []
     seen: set[str] = set()
     for entry in entries:
@@ -1119,7 +1422,7 @@ def check_entries(
         for field in ("verb", "file", "symbol", "accepts", "reach"):
             if not str(entry.get(field) or "").strip():
                 problems.append(f"UNCLASSIFIED: entry {eid} has no `{field}`")
-        probe = dict(entry, role="call", **{"class": "mint"})
+        probe = dict(entry, id=f"entry {eid}", role="call", **{"class": "mint"})
         probe.setdefault("mints", entry.get("accepts"))
         problems.extend(p for p in _classification_problems(probe) if "`class`" not in p)
         path = root / str(entry.get("file"))
@@ -1139,9 +1442,19 @@ def check_entries(
                     f"checker, and `{want}` no longer names it in code"
                 )
         if (entry.get("checker") or {}).get("kind") == "clean-kernel":
-            why = _kernel_evidence_problem(f"entry {eid}", entry, body, want, kernel_calls)
+            # A path through a name such as replay provides evidence only for
+            # this entry. Other sites cannot cite these local wrappers.
+            path_problems, local_calls = check_wrappers(
+                entry.get("kernel_entry_wrappers") or [], _reader_dir(root), f"entry {eid}", kernel_calls
+            )
+            problems.extend(path_problems)
+            why = _kernel_evidence_problem(f"entry {eid}", entry, body, want, kernel_calls | local_calls)
             if why:
                 problems.append(why)
+        if (entry.get("checker") or {}).get("kind") == "kcheck":
+            problems.extend(
+                _kcheck_evidence_problems(f"entry {eid}", entry, body, want, kcheck_wrappers)
+            )
     return problems
 
 
@@ -1171,6 +1484,22 @@ def _trust_clean_wrappers(root: Path, trust: dict, dir_mode: bool) -> tuple[list
     if not re.fullmatch(r"[0-9a-f]{40}", pin):
         return [f"SHAPE: trust.clean_wrappers needs trust.clean_pin, a full commit sha (it is {pin!r})"], frozenset()
     return check_wrappers(wrappers, _reader_commit(root, pin), f"Clean@{pin[:12]} (trust.clean_pin)")
+
+
+def _trust_clean_kcheck_wrappers(root: Path, trust: dict, dir_mode: bool) -> tuple[list[str], frozenset[str]]:
+    """`trust.clean_kcheck_wrappers`: Clean Decision 15 token validators that Trust
+    sites call, checked at `trust.clean_pin` in this repository."""
+    wrappers = trust.get("clean_kcheck_wrappers") or []
+    if not wrappers:
+        return [], frozenset()
+    pin = str(trust.get("clean_pin") or "")
+    if dir_mode:
+        return check_kcheck_wrappers(wrappers, _reader_dir(root), "Clean@trust.clean_pin")
+    if not re.fullmatch(r"[0-9a-f]{40}", pin):
+        return [
+            f"SHAPE: trust.clean_kcheck_wrappers needs trust.clean_pin, a full commit sha (it is {pin!r})"
+        ], frozenset()
+    return check_kcheck_wrappers(wrappers, _reader_commit(root, pin), f"Clean@{pin[:12]} (trust.clean_pin)")
 
 
 # The first-risk ceiling (plan unit P7: "its count is a ratchet that only
@@ -1225,12 +1554,18 @@ def run(
         clean.get("kernel_entry_wrappers") or [], _reader_dir(root), "Clean"
     )
     problems.extend(wrapper_problems)
+    kcheck_wrapper_problems, clean_kcheck_wrappers = check_kcheck_wrappers(
+        clean.get("kcheck_token_wrappers") or [], _reader_dir(root), "Clean"
+    )
+    problems.extend(kcheck_wrapper_problems)
     clean_calls = frozenset(KERNEL_ENTRY_CALLS) | clean_wrappers
     measured, errors = measure_clean(root)
     problems.extend(errors)
     clean_rows = clean.get("sites") or []
-    problems.extend(compare(measured, clean_rows, "Clean", clean_calls))
-    problems.extend(check_entries(root, clean.get("entries") or [], clean_calls))
+    problems.extend(compare(measured, clean_rows, "Clean", clean_calls, clean_kcheck_wrappers))
+    entries = clean.get("entries") or []
+    problems.extend(check_p3_ndjson_entries(root, entries))
+    problems.extend(check_entries(root, entries, clean_calls, clean_kcheck_wrappers))
 
     trust = artifact.get("trust") or {}
     trust_rows = trust.get("sites") or []
@@ -1262,11 +1597,20 @@ def run(
                     base=pin_wrappers,
                 )
                 found += more
+                kfound, pin_kcheck_wrappers = _trust_clean_kcheck_wrappers(root, trust, trust_dir_mode)
+                kmore, trust_kcheck_wrappers = check_kcheck_wrappers(
+                    trust.get("kcheck_token_wrappers") or [],
+                    reader,
+                    f"Trust@{commit[:12] or 'dir'}",
+                    base=pin_kcheck_wrappers,
+                )
+                found += kfound + kmore
                 found += compare(
                     trust_measured,
                     trust_rows,
                     f"Trust@{commit[:12] or 'dir'}",
                     frozenset(KERNEL_ENTRY_CALLS) | trust_wrappers | pin_wrappers,
+                    trust_kcheck_wrappers | pin_kcheck_wrappers,
                 )
                 if trust_ref and commit != trust.get("commit"):
                     found = [f"{p} [Trust read at {trust_ref} = {commit[:12]}, pinned {str(trust.get('commit'))[:12]}]" for p in found]
@@ -1351,6 +1695,8 @@ def summarize(rows: list[dict]) -> dict:
         kind = checker.get("kind") or "unclassified"
         if kind == "clean-kernel":
             kind = f"clean-kernel/{checker.get('entry')}/{checker.get('theory')}"
+        elif kind == "kcheck":
+            kind = f"kcheck/{checker.get('door')}"
         by_checker[kind] += 1
     return {
         "sites_by_role": dict(sorted(by_role.items())),
@@ -1528,6 +1874,11 @@ def _selftest_tree() -> tuple[Path, Path]:
     (root / "data").mkdir()
     (root / "crates" / "c" / "src").mkdir(parents=True)
     (root / "crates" / "c" / "src" / "lib.rs").write_text(_SELFTEST_LIB)
+    reader_path = NDJSON_MODULE
+    (root / reader_path).parent.mkdir(parents=True)
+    (root / reader_path).write_text("fn read_stream() { replay(); }\nfn replay() { env.add_decl(d); }\n")
+    (root / P3_RECORD).parent.mkdir(parents=True)
+    (root / P3_RECORD).write_text(json.dumps({"sites": [{"package": "clean-olean", "site": "olean.ndjson.read_stream"}]}))
     (trust / "crates" / "trust-certify" / "src").mkdir(parents=True)
     (trust / "crates" / "trust-certify" / "src" / "reference_mint.rs").write_text(_SELFTEST_TRUST)
     measured, errors = measure_clean(root)
@@ -1592,7 +1943,22 @@ def _selftest_tree() -> tuple[Path, Path]:
                     "evidence_tokens": ["add_decl"],
                     "reach": "internal",
                     "kcheck_rung": 2,
-                }
+                },
+                {
+                    "id": "entry:selftest-ndjson",
+                    "verb": "selftest read stream",
+                    "file": reader_path,
+                    "symbol": "read_stream",
+                    "accepts": "a checked stream",
+                    "mints": "an exit status",
+                    "checker": {"kind": "clean-kernel", "entry": "replay", "theory": "Lean"},
+                    "evidence_tokens": ["replay"],
+                    "kernel_entry_wrappers": [
+                        {"name": "replay", "file": reader_path, "symbol": "replay", "calls": ["add_decl"], "detail": "selftest reader"}
+                    ],
+                    "reach": "user",
+                    "kcheck_rung": 2,
+                },
             ],
         },
         "trust": {"commit": "", "sites": trust_rows, "links": link_rows},
@@ -1792,6 +2158,15 @@ def real_tree_arms() -> list[tuple[str, bool, str]]:
         not control and not wrapper_problems,
         "; ".join((control + wrapper_problems)[:4]),
     )]
+    entries = clean["entries"]
+    readers = [row for row in entries if row.get("file") == NDJSON_MODULE]
+    reader_problems = check_p3_ndjson_entries(REPO_ROOT, entries) + check_entries(REPO_ROOT, readers, calls)
+    out.append(("real tree: P3 NDJSON readers have checked production call paths",
+                not reader_problems, "; ".join(reader_problems)))
+    without_readers = [row for row in entries if row.get("file") != NDJSON_MODULE]
+    missing = check_p3_ndjson_entries(REPO_ROOT, without_readers)
+    out.append(("real tree PLANT: removing the NDJSON entries loses a measured P3 reader",
+                any(problem.startswith("P3 NDJSON: measured public reader") for problem in missing), "; ".join(missing)))
     mint_body = f"fn {REAL_TREE_ARM_MINT_FN}("
     plants = (
         ("a new function returning ConstResult::KernelVerified",
@@ -2154,6 +2529,29 @@ def selftest() -> int:
             row.pop("tcb", None)
         (root / ARTIFACT_REL).write_text(json.dumps(doc))
 
+    @arm("P3 NDJSON: deleting the measured public reader entry fails", 1, "measured public reader `read_stream` has no census entry")
+    def _(root, trust):
+        doc = json.loads((root / ARTIFACT_REL).read_text())
+        doc["clean"]["entries"].pop()
+        (root / ARTIFACT_REL).write_text(json.dumps(doc))
+
+    @arm("P3 NDJSON: losing the independent measurement fails", 1, "cannot read the measured site roster")
+    def _(root, trust):
+        (root / P3_RECORD).unlink()
+
+    @arm("ENTRY: a broken local wrapper refuses the reader", 1, "CHECKER MOVED: entry entry:selftest-ndjson wrapper replay")
+    def _(root, trust):
+        path = root / NDJSON_MODULE
+        path.write_text(path.read_text().replace("env.add_decl(d)", "env.add_decl_unchecked(d)"))
+
+    @arm("ENTRY: a local wrapper cannot vouch for another verb", 1, "KERNEL EVIDENCE: entry entry:selftest-stamp")
+    def _(root, trust):
+        doc = json.loads((root / ARTIFACT_REL).read_text())
+        doc["clean"]["entries"][0]["evidence_tokens"] = ["replay"]
+        (root / ARTIFACT_REL).write_text(json.dumps(doc))
+        path = root / lib
+        path.write_text(path.read_text().replace("match env.add_decl(d)", "replay(); match env.add_decl(d)"))
+
     @arm("ENTRY: a verb whose anchor function is gone is refused", 1, "STALE ROW: entry")
     def _(root, trust):
         text = (root / lib).read_text()
@@ -2205,6 +2603,273 @@ def selftest() -> int:
         (trust / "crates" / "trust-certify" / "tests" / "t.rs").write_text(
             "fn t() -> TrustStatus { TrustStatus::Certified }\n"
         )
+
+    def _add_kcheck_mint(
+        root,
+        *,
+        body: str | None = None,
+        comparisons: dict[str, str] | None = None,
+        refuses_family_constant: str = "FamilyConstant",
+        door: str = "clean-compiled",
+        evidence_tokens: list[str] | None = None,
+    ) -> None:
+        if body is None:
+            body = (
+                "    if matches!(tok.receipt_kind, ReceiptKind::FamilyConstant) {\n"
+                "        return TrustLevel::Unverified;\n"
+                "    }\n"
+                "    if tok.statement_digest == expected_stmt\n"
+                "        && tok.env_after == expected_env\n"
+                "        && tok.root_digest == expected_root\n"
+                "        && tok.level_bound_at_numeral <= bound_n\n"
+                "    {\n"
+                "        TrustLevel::KernelVerified\n"
+                "    } else {\n"
+                "        TrustLevel::Unverified\n"
+                "    }\n"
+            )
+        if comparisons is None:
+            comparisons = {
+                "statement_digest": "statement_digest",
+                "env_after": "env_after",
+                "root_digest": "root_digest",
+                "level_bound_at_numeral": "level_bound_at_numeral",
+            }
+        if evidence_tokens is None:
+            evidence_tokens = sorted(
+                {v for v in comparisons.values() if v} | ({refuses_family_constant} if refuses_family_constant else set())
+            )
+        with (root / lib).open("a") as fh:
+            fh.write(
+                "\npub fn stamp_kcheck(\n"
+                "    tok: &SealedToken,\n"
+                "    expected_stmt: Hash,\n"
+                "    expected_env: Hash,\n"
+                "    expected_root: Hash,\n"
+                "    bound_n: usize,\n"
+                ") -> TrustLevel {\n"
+                f"{body}"
+                "}\n"
+            )
+        doc = json.loads((root / ARTIFACT_REL).read_text())
+        doc["clean"]["sites"].append(
+            _classified(
+                {
+                    "id": "clean:crates/c/src/lib.rs#stamp_kcheck#TrustLevel::KernelVerified#construct",
+                    "file": "crates/c/src/lib.rs",
+                    "symbol": "stamp_kcheck",
+                    "family": "label",
+                    "token": "TrustLevel::KernelVerified",
+                    "role": "construct",
+                    "count": 1,
+                    "lines": [1],
+                },
+                checker={
+                    "kind": "kcheck",
+                    "door": door,
+                    "comparisons": comparisons,
+                    "refuses_family_constant": refuses_family_constant,
+                },
+                evidence_tokens=evidence_tokens,
+            )
+        )
+        (root / ARTIFACT_REL).write_text(json.dumps(doc))
+
+    @arm("DECISION 15: a kcheck mint comparing all four bindings and refusing familyConstant stays green", 0)
+    def _(root, trust):
+        _add_kcheck_mint(root)
+
+    for omitted_key, omitted_clause in (
+        ("statement_digest", "tok.statement_digest == expected_stmt\n        && "),
+        ("env_after", "tok.env_after == expected_env\n        && "),
+        ("root_digest", "tok.root_digest == expected_root\n        && "),
+        ("level_bound_at_numeral", "\n        && tok.level_bound_at_numeral <= bound_n"),
+    ):
+        def _drop_code_cmp(root, trust, omitted_clause=omitted_clause):
+            default_body = (
+                "    if matches!(tok.receipt_kind, ReceiptKind::FamilyConstant) {\n"
+                "        return TrustLevel::Unverified;\n"
+                "    }\n"
+                "    if tok.statement_digest == expected_stmt\n"
+                "        && tok.env_after == expected_env\n"
+                "        && tok.root_digest == expected_root\n"
+                "        && tok.level_bound_at_numeral <= bound_n\n"
+                "    {\n"
+                "        TrustLevel::KernelVerified\n"
+                "    } else {\n"
+                "        TrustLevel::Unverified\n"
+                "    }\n"
+            )
+            # Keep the identifier in a mere `let` binding so `_has_token` passes and
+            # only `_has_comparison_or_call` can catch the missing comparison!
+            kept_let = (
+                "    let statement_digest = tok.statement_digest;\n"
+                "    let env_after = tok.env_after;\n"
+                "    let root_digest = tok.root_digest;\n"
+                "    let level_bound_at_numeral = tok.level_bound_at_numeral;\n"
+            )
+            _add_kcheck_mint(root, body=kept_let + default_body.replace(omitted_clause, ""))
+
+        arms.append((
+            f"DECISION 15: dropping `{omitted_key}` comparison in code (even if bound by `let`) is refused",
+            1,
+            f"for `{omitted_key}`, and `stamp_kcheck` does not compare or call",
+            _drop_code_cmp,
+        ))
+
+    @arm("DECISION 15: omitting one of the four comparison keys in metadata is refused", 1, "omits Decision 15 comparison(s) ['root_digest']")
+    def _(root, trust):
+        _add_kcheck_mint(
+            root,
+            comparisons={
+                "statement_digest": "statement_digest",
+                "env_after": "env_after",
+                "level_bound_at_numeral": "level_bound_at_numeral",
+            },
+        )
+
+    @arm("DECISION 15: reusing the same token for two comparisons is refused", 1, "reuses the same token across multiple Decision 15 comparisons")
+    def _(root, trust):
+        _add_kcheck_mint(
+            root,
+            comparisons={
+                "statement_digest": "statement_digest",
+                "env_after": "statement_digest",
+                "root_digest": "root_digest",
+                "level_bound_at_numeral": "level_bound_at_numeral",
+            },
+        )
+
+    @arm("DECISION 15: omitting familyConstant receipt refusal (P2 / LV3-1) is refused", 1, "does not check or match `FamilyConstant`")
+    def _(root, trust):
+        _add_kcheck_mint(
+            root,
+            body=(
+                "    let _unused = FamilyConstant;\n"
+                "    if tok.statement_digest == expected_stmt\n"
+                "        && tok.env_after == expected_env\n"
+                "        && tok.root_digest == expected_root\n"
+                "        && tok.level_bound_at_numeral <= bound_n\n"
+                "    {\n"
+                "        TrustLevel::KernelVerified\n"
+                "    } else {\n"
+                "        TrustLevel::Unverified\n"
+                "    }\n"
+            ),
+        )
+
+    @arm("DECISION 15: Clean site claiming Trust's `trust-island` door is refused (plan §0 rule 7)", 1, "Clean sites must take clean-compiled")
+    def _(root, trust):
+        _add_kcheck_mint(root, door="trust-island")
+
+    @arm("DECISION 15: Trust site claiming Clean's `clean-compiled` door is refused (plan §0 rule 7)", 1, "Trust sites must take trust-island")
+    def _(root, trust):
+        with (trust / "crates" / "trust-certify" / "src" / "reference_mint.rs").open("a") as fh:
+            fh.write(
+                "\npub fn grant_kcheck(tok: &SealedToken, s: Hash, e: Hash, r: Hash, n: usize) -> TrustStatus {\n"
+                "    if matches!(tok.kind, ReceiptKind::FamilyConstant) { return TrustStatus::Open; }\n"
+                "    if tok.statement_digest == s && tok.env_after == e && tok.root_digest == r && tok.level_bound_at_numeral <= n {\n"
+                "        TrustStatus::Certified\n"
+                "    } else {\n"
+                "        TrustStatus::Open\n"
+                "    }\n"
+                "}\n"
+            )
+        doc = json.loads((root / ARTIFACT_REL).read_text())
+        doc["trust"]["sites"].append(
+            _classified(
+                {
+                    "id": "trust:crates/trust-certify/src/reference_mint.rs#grant_kcheck#TrustStatus::Certified#construct",
+                    "file": "crates/trust-certify/src/reference_mint.rs",
+                    "symbol": "grant_kcheck",
+                    "family": "label",
+                    "token": "TrustStatus::Certified",
+                    "role": "construct",
+                    "count": 1,
+                    "lines": [1],
+                },
+                checker={
+                    "kind": "kcheck",
+                    "door": "clean-compiled",
+                    "comparisons": {
+                        "statement_digest": "statement_digest",
+                        "env_after": "env_after",
+                        "root_digest": "root_digest",
+                        "level_bound_at_numeral": "level_bound_at_numeral",
+                    },
+                    "refuses_family_constant": "FamilyConstant",
+                },
+                evidence_tokens=[
+                    "FamilyConstant",
+                    "env_after",
+                    "level_bound_at_numeral",
+                    "root_digest",
+                    "statement_digest",
+                ],
+                reach="trust",
+                tcb="selftest: not a real Trust tree",
+            )
+        )
+        (root / ARTIFACT_REL).write_text(json.dumps(doc))
+
+    def _add_kcheck_via_wrapper(root, *, drop_root_cmp: bool = False) -> None:
+        root_cmp = "" if drop_root_cmp else " && tok.root_digest == r"
+        with (root / lib).open("a") as fh:
+            fh.write(
+                "\npub fn validate_kcheck_token(tok: &SealedToken, s: Hash, e: Hash, r: Hash, n: usize) -> bool {\n"
+                "    let root_digest = tok.root_digest;\n"
+                "    !matches!(tok.kind, ReceiptKind::FamilyConstant)\n"
+                f"        && tok.statement_digest == s && tok.env_after == e{root_cmp} && tok.level_bound_at_numeral <= n\n"
+                "}\n"
+                "pub fn stamp_via_kcheck(tok: &SealedToken, s: Hash, e: Hash, r: Hash, n: usize) -> TrustLevel {\n"
+                "    if validate_kcheck_token(tok, s, e, r, n) { TrustLevel::KernelVerified } else { TrustLevel::Unverified }\n"
+                "}\n"
+            )
+        doc = json.loads((root / ARTIFACT_REL).read_text())
+        doc["clean"]["kcheck_token_wrappers"] = [
+            {
+                "name": "validate_kcheck_token",
+                "file": "crates/c/src/lib.rs",
+                "symbol": "validate_kcheck_token",
+                "comparisons": {
+                    "statement_digest": "statement_digest",
+                    "env_after": "env_after",
+                    "root_digest": "root_digest",
+                    "level_bound_at_numeral": "level_bound_at_numeral",
+                },
+                "refuses_family_constant": "FamilyConstant",
+                "detail": "selftest Decision 15 validator",
+            }
+        ]
+        doc["clean"]["sites"].append(
+            _classified(
+                {
+                    "id": "clean:crates/c/src/lib.rs#stamp_via_kcheck#TrustLevel::KernelVerified#construct",
+                    "file": "crates/c/src/lib.rs",
+                    "symbol": "stamp_via_kcheck",
+                    "family": "label",
+                    "token": "TrustLevel::KernelVerified",
+                    "role": "construct",
+                    "count": 1,
+                    "lines": [1],
+                },
+                checker={
+                    "kind": "kcheck",
+                    "door": "clean-compiled",
+                    "via_wrapper": "validate_kcheck_token",
+                },
+                evidence_tokens=["validate_kcheck_token"],
+            )
+        )
+        (root / ARTIFACT_REL).write_text(json.dumps(doc))
+
+    @arm("DECISION 15 WRAPPER: a kcheck mint calling a verified Decision 15 wrapper stays green", 0)
+    def _(root, trust):
+        _add_kcheck_via_wrapper(root, drop_root_cmp=False)
+
+    @arm("DECISION 15 WRAPPER: a wrapper that drops `root_digest` comparison fails both the wrapper and its caller", 1, "Clean kcheck wrapper validate_kcheck_token records `root_digest`")
+    def _(root, trust):
+        _add_kcheck_via_wrapper(root, drop_root_cmp=True)
 
     for name, expect, needle, mutate in arms:
         root, trust = _selftest_tree()

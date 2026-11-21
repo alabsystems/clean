@@ -503,3 +503,7 @@ fn apply(f: Expr, args: Vec<Expr>) -> Expr {
     }
     cur
 }
+
+#[cfg(test)]
+#[path = "tests_optional_alloca.rs"]
+mod tests_optional_alloca;

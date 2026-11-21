@@ -29,20 +29,13 @@ use clean_kernel::name::Name;
 use clean_olean::load_module_with_deps;
 use std::path::PathBuf;
 
-/// The pinned toolchain whose `InstanceEntry` layout the decoder targets.
-const PINNED_TOOLCHAIN: &str = "leanprover--lean4---v4.30.0-rc2";
-
 /// Lean's default instance priority; Clean's heuristic fabricates 100.
 const LEAN_DEFAULT_PRIORITY: u32 = 1000;
 
-/// Locate the pinned v4.30.0-rc2 stdlib, or `None` to skip.
-fn v4_30_lib_path() -> Option<PathBuf> {
-    let home = std::env::var("HOME").ok()?;
-    let lib = PathBuf::from(home)
-        .join(".elan/toolchains")
-        .join(PINNED_TOOLCHAIN)
-        .join("lib/lean");
-    lib.exists().then_some(lib)
+/// Require the exact workspace-pinned standard library through the shared resolver.
+fn pinned_lib_path() -> PathBuf {
+    clean_olean::require_pinned_lean_lib_path()
+        .expect("real import probe requires the exact repository-pinned Lean standard library")
 }
 
 /// Collect every `Const` name mentioned in an expression.
@@ -69,10 +62,7 @@ fn collect_consts(expr: &Expr, out: &mut Vec<Name>) {
 
 #[test]
 fn test_resolution_over_imported_prelude_uses_decoded_instance_registration() {
-    let Some(lib) = v4_30_lib_path() else {
-        eprintln!("Skipping test: {PINNED_TOOLCHAIN} not installed");
-        return;
-    };
+    let lib = pinned_lib_path();
 
     let mut env = Environment::new();
     load_module_with_deps(&mut env, "Init.Prelude", &[lib]).expect("Init.Prelude should import");

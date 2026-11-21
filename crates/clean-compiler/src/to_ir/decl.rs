@@ -8,7 +8,7 @@
 //! `to_ir`, and `to_ir_with_env`.
 
 use super::code::lower_code;
-use super::ctor_env::{build_ctor_env, build_external_arities};
+use super::ctor_env::{build_external_arities, build_source_ctor_env};
 use super::lower::lower_param;
 use super::state::{CtorMeta, ToIRState};
 use super::types::expr_to_ir_type_return;
@@ -86,8 +86,16 @@ pub fn lower_decl_with_env(
     ctor_env: &HashMap<Name, CtorMeta>,
     inductive_env: &HashMap<Name, CtorMeta>,
 ) -> Result<(Option<IRDecl>, Vec<String>), CompilerError> {
-    lower_decl_tracking_rc(decl, arities, ctor_env, inductive_env, false)
-        .map(|(ir_decl, warnings, _)| (ir_decl, warnings))
+    lower_decl_tracking_rc(
+        decl,
+        arities,
+        ctor_env,
+        inductive_env,
+        false,
+        false,
+        Default::default(),
+    )
+    .map(|(ir_decl, warnings, _)| (ir_decl, warnings))
 }
 
 /// [`lower_decl_with_env`], also returning the declaration's RC-unmanaged
@@ -98,10 +106,14 @@ fn lower_decl_tracking_rc(
     ctor_env: &HashMap<Name, CtorMeta>,
     inductive_env: &HashMap<Name, CtorMeta>,
     byte_array_string: bool,
+    checked_void_layout: bool,
+    external_constructors: std::sync::Arc<HashSet<Name>>,
 ) -> Result<(Option<IRDecl>, Vec<String>, HashSet<VarId>), CompilerError> {
     let mut state =
         ToIRState::with_arities_and_ctors(arities.clone(), ctor_env.clone(), inductive_env.clone());
     state.set_byte_array_string(byte_array_string);
+    state.set_checked_void_layout(checked_void_layout);
+    state.external_constructors = external_constructors;
 
     // Convert parameters
     let params: Vec<(VarId, IRType)> = decl
@@ -167,7 +179,15 @@ pub(crate) fn lower_decls_with_env_and_arities(
     inductive_env: &HashMap<Name, CtorMeta>,
     external_arities: &HashMap<Name, u16>,
 ) -> Result<ToIROutput, CompilerError> {
-    lower_decls_with_source_layout(decls, ctor_env, inductive_env, external_arities, false)
+    lower_decls_with_source_layout(
+        decls,
+        ctor_env,
+        inductive_env,
+        external_arities,
+        false,
+        false,
+        Default::default(),
+    )
 }
 
 fn lower_decls_with_source_layout(
@@ -176,6 +196,8 @@ fn lower_decls_with_source_layout(
     inductive_env: &HashMap<Name, CtorMeta>,
     external_arities: &HashMap<Name, u16>,
     byte_array_string: bool,
+    checked_void_layout: bool,
+    external_constructors: std::sync::Arc<HashSet<Name>>,
 ) -> Result<ToIROutput, CompilerError> {
     // Lambda-lift all declarations to eliminate Code::Fun nodes before IR
     // lowering. Produces the original decls (with Code::Fun replaced by
@@ -201,8 +223,15 @@ fn lower_decls_with_source_layout(
         .filter_map(crate::rust_abi::RustExternSig::of_decl)
         .collect();
     for decl in &lifted_decls {
-        let (ir_decl, warnings, unmanaged) =
-            lower_decl_tracking_rc(decl, &arities, ctor_env, inductive_env, byte_array_string)?;
+        let (ir_decl, warnings, unmanaged) = lower_decl_tracking_rc(
+            decl,
+            &arities,
+            ctor_env,
+            inductive_env,
+            byte_array_string,
+            checked_void_layout,
+            external_constructors.clone(),
+        )?;
         if let Some(ir_decl) = ir_decl {
             if !unmanaged.is_empty() {
                 rc_unmanaged.insert(ir_decl.name.clone(), unmanaged);
@@ -273,8 +302,17 @@ pub fn to_ir_with_env(
     decls: &[Decl],
     env: &clean_kernel::Environment,
 ) -> Result<ToIROutput, CompilerError> {
+    to_ir_with_bindings(decls, env, None)
+}
+
+pub(crate) fn to_ir_with_bindings(
+    decls: &[Decl],
+    env: &clean_kernel::Environment,
+    closure: Option<&crate::RuntimeBindingClosure>,
+) -> Result<ToIROutput, CompilerError> {
     let ctors: Vec<&ConstructorVal> = env.constructors().collect();
-    let (ctor_env, inductive_env) = build_ctor_env(&ctors)?;
+    let checked_void_layout = crate::world_token::has_checked_void_layout(env);
+    let (ctor_env, inductive_env) = build_source_ctor_env(&ctors, checked_void_layout)?;
     let external_arities = build_external_arities(env);
     lower_decls_with_source_layout(
         decls,
@@ -282,5 +320,10 @@ pub fn to_ir_with_env(
         &inductive_env,
         &external_arities,
         crate::string_layout::has_byte_array_string_layout(env),
+        checked_void_layout,
+        closure
+            .map(|c| c.executable_extern_constructors(env))
+            .unwrap_or_default()
+            .into(),
     )
 }

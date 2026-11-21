@@ -117,6 +117,174 @@ fn base_families(env: &mut Environment) {
     .expect("RC.B must be admissible");
 }
 
+fn source_wrapper_env() -> Environment {
+    let mut env = Environment::default();
+    env.add_inductive(InductiveDecl {
+        level_params: vec![],
+        num_params: 0,
+        types: vec![InductiveType {
+            name: n("RC.Source"),
+            type_: type0(),
+            constructors: vec![
+                Constructor {
+                    name: n("RC.Source.z"),
+                    type_: konst("RC.Source"),
+                },
+                Constructor {
+                    name: n("RC.Source.s"),
+                    type_: Expr::arrow(konst("RC.Source"), konst("RC.Source")),
+                },
+            ],
+        }],
+    })
+    .expect("admit source family with Clean's generated wrappers");
+    env
+}
+
+#[test]
+fn source_wrapper_replay_admits_both_original_definitions() {
+    let env = source_wrapper_env();
+    let roots = targets(&["RC.Source"]);
+    let owned = targets(&["RC.Source", "RC.Source.casesOn", "RC.Source.recOn"]);
+    let options = ClosedRecheckOptions::default();
+    let replay = crate::reference_base_closed_with_source_wrappers(&env, &roots, &owned, &options)
+        .expect("create reference base");
+    let kernel = replay.into_kernel().expect("check the source wrappers");
+    let rebuilt = kernel.environment();
+    for name in [n("RC.Source.casesOn"), n("RC.Source.recOn")] {
+        assert!(env.get_recursor(&name).is_some());
+        assert!(rebuilt.get_recursor(&name).is_none());
+        let original = env.get_const(&name).expect("source wrapper definition");
+        let checked = rebuilt
+            .get_const(&name)
+            .expect("replayed wrapper definition");
+        assert!(original.value.is_some());
+        assert_eq!(checked.value, original.value);
+        assert_eq!(checked.type_, original.type_);
+        assert_eq!(checked.level_params, original.level_params);
+        assert_eq!(checked.reducibility, original.reducibility);
+        assert_eq!(checked.is_reducible, original.is_reducible);
+    }
+    assert!(rebuilt.get_recursor(&n("RC.Source.rec")).is_some());
+}
+
+#[test]
+fn source_wrapper_replay_refuses_unowned_valueless_or_mismatched_wrappers() {
+    let mut env = source_wrapper_env();
+    let roots = targets(&["RC.Source"]);
+    let options = ClosedRecheckOptions::default();
+    let refuses = |replay: crate::ReferenceBase, expected: &str| {
+        let report = replay.into_kernel().expect_err("refuse unreplayed wrapper");
+        assert!(
+            report.refusals.iter().any(|refusal| matches!(
+                refusal,
+                ClosedRecheckRefusal::MemberNotRegenerated { name, family }
+                    if name == expected && family == "RC.Source"
+            )),
+            "{:?}",
+            report.refusals
+        );
+    };
+    refuses(
+        crate::reference_base_closed(&env, &roots, &options).expect("create reference base"),
+        "RC.Source.casesOn",
+    );
+
+    let partial = targets(&["RC.Source", "RC.Source.casesOn"]);
+    refuses(
+        crate::reference_base_closed_with_source_wrappers(&env, &roots, &partial, &options)
+            .expect("create reference base"),
+        "RC.Source.recOn",
+    );
+
+    let owned = targets(&["RC.Source", "RC.Source.casesOn", "RC.Source.recOn"]);
+    let name = n("RC.Source.casesOn");
+    let mut mismatched = env.clone();
+    let mut record = env.get_const(&name).expect("source wrapper").clone();
+    record.type_ = type0();
+    import_structurally(&mut mismatched, record);
+    refuses(
+        crate::reference_base_closed_with_source_wrappers(&mismatched, &roots, &owned, &options)
+            .expect("create reference base"),
+        "RC.Source.casesOn",
+    );
+
+    assert!(env.forget_value(&name));
+    refuses(
+        crate::reference_base_closed_with_source_wrappers(&env, &roots, &owned, &options)
+            .expect("create reference base"),
+        "RC.Source.casesOn",
+    );
+}
+
+#[test]
+fn source_wrapper_replay_checks_the_original_body() {
+    let mut env = source_wrapper_env();
+    let name = n("RC.Source.casesOn");
+    let mut record = env.get_const(&name).expect("source wrapper").clone();
+    record.value = Some(konst("RC.Source.z"));
+    import_structurally(&mut env, record);
+
+    let roots = targets(&["RC.Source"]);
+    let owned = targets(&["RC.Source", "RC.Source.casesOn", "RC.Source.recOn"]);
+    let replay = crate::reference_base_closed_with_source_wrappers(
+        &env,
+        &roots,
+        &owned,
+        &ClosedRecheckOptions::default(),
+    )
+    .expect("create reference base");
+    assert!(replay.report.refusals.iter().any(|refusal| matches!(
+        refusal,
+        ClosedRecheckRefusal::DeclarationRefused { name, .. } if name == "RC.Source.casesOn"
+    )));
+    assert!(replay.into_kernel().is_err());
+}
+
+#[test]
+fn source_wrapper_replay_hashes_the_body_for_dependent_extension_keys() {
+    let mut env = source_wrapper_env();
+    let wrapper_name = n("RC.Source.casesOn");
+    let mut wrapper = env
+        .get_const(&wrapper_name)
+        .expect("source wrapper")
+        .clone();
+    let key_name = n("Nat.add");
+    let levels: Vec<_> = wrapper
+        .level_params
+        .iter()
+        .cloned()
+        .map(Level::param)
+        .collect();
+    // A synthetic key referencing the wrapper models the hash dependency.
+    // The test only computes its fingerprint.
+    let key = ConstantInfo {
+        name: key_name,
+        value: Some(Expr::const_(wrapper_name, levels)),
+        ..wrapper.clone()
+    };
+    import_structurally(&mut env, key);
+
+    let mut changed = env.clone();
+    let value = wrapper.value.take().expect("source wrapper body");
+    let identity = Expr::lam(BinderInfo::Default, wrapper.type_.clone(), Expr::bvar(0));
+    wrapper.value = Some(Expr::app(identity, value));
+    import_structurally(&mut changed, wrapper);
+
+    let cone = targets(&["Nat.add"]);
+    let fingerprints = |env: &Environment, owned: &BTreeSet<Name>| {
+        let index = super::FamilyIndex::with_source_wrappers(env, owned);
+        super::extension_key_fingerprints(env, &cone, &index)
+    };
+    let owned = targets(&["RC.Source", "RC.Source.casesOn"]);
+    let unscoped = BTreeSet::new();
+    assert_eq!(
+        fingerprints(&env, &unscoped),
+        fingerprints(&changed, &unscoped)
+    );
+    assert_ne!(fingerprints(&env, &owned), fingerprints(&changed, &owned));
+}
+
 /// A four-deep definition chain ending in `RC.top`, optionally with the value
 /// of `RC.g{depth}` replaced by a term of the WRONG type.
 ///

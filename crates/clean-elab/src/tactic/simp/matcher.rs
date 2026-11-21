@@ -8,8 +8,12 @@
 
 use clean_kernel::{Expr, ExprKind};
 
-use super::{binder::open_binder, budget::SimpBudget, reduce::beta_reduce};
+use super::{
+    binder::open_binder, budget::SimpBudget, match_target::successor_from_addition,
+    reduce::beta_reduce,
+};
 use crate::tactic::core::{Goal, ProofState};
+use crate::tactic::op_projection::reduce_op_projection_head_instances;
 
 pub(super) fn reduce_matcher_app(
     state: &ProofState,
@@ -55,14 +59,31 @@ pub(super) fn reduce_matcher_app(
         .value
         .as_ref()?
         .instantiate_level_params_direct(&declaration.level_params, levels);
+    // Lean's reduceRec exposes one constructor of a positive Nat offset.
+    // Preserve parameters, motive and alternatives. Only the probe sees the
+    // checked successor view of a discriminant; final checks use the original.
+    let discr_start = info.num_params as usize + 1;
+    let discriminants = arguments[discr_start..prefix_len].iter().map(|discr| {
+        successor_from_addition(
+            state,
+            goal,
+            discr,
+            budget,
+            reduce_op_projection_head_instances,
+        )
+        .unwrap_or_else(|| (*discr).clone())
+    });
     let probe = Expr::apps(
         body,
-        arguments[..prefix_len]
+        arguments[..discr_start]
             .iter()
             .map(|a| (*a).clone())
+            .chain(discriminants)
             .chain(alternatives.iter().copied().map(Expr::fvar)),
     );
-    if !budget.admit(&probe) || !budget.admit_before_zeta(&probe) {
+    if !budget.admit(&probe, format_args!("preparing matcher {name}"))
+        || !budget.admit_before_zeta(&probe, format_args!("preparing matcher {name}"))
+    {
         return None;
     }
     // Selection must not unfold arbitrary semireducible discriminant
@@ -85,7 +106,7 @@ pub(super) fn reduce_matcher_app(
                 .map(|argument| (*argument).clone()),
         ),
     ));
-    if !budget.admit(&result) {
+    if !budget.admit(&result, format_args!("reducing matcher {name}")) {
         return None;
     }
     // Full checking in the original context rejects a leaked placeholder or

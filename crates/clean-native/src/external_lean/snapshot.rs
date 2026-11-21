@@ -3,7 +3,7 @@
 
 use super::ExternalLeanError;
 use clean_kernel::Name;
-use clean_olean::{parse_typed_imports, resolve_typed_module_path, LeanWorldScope};
+use clean_olean::{parse_typed_imports, resolve_typed_module_path_in_world, LeanWorldScope};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Read;
@@ -275,7 +275,7 @@ pub(super) fn capture_imports(
                 "import closure exceeds 4096 modules".into(),
             ));
         }
-        let input = resolve_typed_module_path(&module, search)
+        let input = resolve_typed_module_path_in_world(&module, search, scope.world())
             .map_err(|e| ExternalLeanError::Input(e.to_string()))?;
         let target = module_path(snapshot, &module, "olean")?;
         if let Some(parent) = target.parent() {
@@ -305,6 +305,11 @@ pub(super) fn capture_imports(
                         );
                     }
                 }
+            } else if extension == "olean" {
+                return Err(ExternalLeanError::Input(format!(
+                    "selected object file {} of module {module} does not exist",
+                    path.display()
+                )));
             } else {
                 files.absent(&path);
                 files.absent(&target.with_extension(extension));

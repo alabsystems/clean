@@ -1,0 +1,62 @@
+# Seam register for the 2026-11-16 combined Rust/Lean Trust route
+# Design unit D4: designs/2026-11-16-full-rust-lean-models-combined-trust.md §3 Ph1 D4 & §7 RK1-RK7
+# Enforced by `clean evidence check seams`.
+# Any seam marked `closed` or `refuted` MUST cite an existing `evidence_artifact` path.
+
+schema = "clean.seams/v1"
+
+[[seam]]
+id = "SM1"
+title = "One trust-ir semantics (SemR) covering Lean's object model and single-threaded SC AtomicRMW"
+probe_unit = "R1.1/XK.2"
+refutation_criterion = "SemR's AtomicRMW/Arc or Lean RC ctor/proj/case/Retain/Release/IsUnique rules fail interpret.rs parity or fail to compose cleanly without contradiction (RK3)"
+status = "open"
+evidence_artifact = ""
+
+[[seam]]
+id = "SM2"
+title = "Generated Trust.Repr over recursive inductive and Arc-shared kernel data"
+probe_unit = "R1.0"
+refutation_criterion = "Generator fails to refuse K4 p5 negative-control shapes (swapped Ordering constructors or index-paired Except/Result) or infers positional matches (RK4)"
+status = "open"
+evidence_artifact = ""
+
+[[seam]]
+id = "SM3"
+title = "Clean-elaborated island statement digests reproduce pinned Lean statement pins (or kernel-defeq fallback)"
+probe_unit = "I.0/W3"
+refutation_criterion = "Clean-elaborated theorem statements neither match pinned Lean SHA-256 digests nor pass kernel defeq against the committed pinned term (RK1)"
+status = "open"
+evidence_artifact = "reports/self-proof-w3-reference-roster-2026-11-18/README.md"
+
+[[seam]]
+id = "SM4"
+title = "Function-granular Rust-to-trust-ir withholding and compiler-bound bytes_of(path) matching trust-cg input"
+probe_unit = "RB0/RB1/RB2"
+refutation_criterion = "trustc cannot withhold selected kernel functions to trust-ir/trust-cg or cannot bind bytes_of(path) to exact trust-cg input bytes, repeating Crystal's unclosed Link 4 (RK2)"
+status = "open"
+evidence_artifact = ""
+
+[[seam]]
+id = "SM5"
+title = "Bounded, monotone-falling boundary premise set for std/alloc/Arc/hashbrown/stacker-psm"
+probe_unit = "R1.3"
+refutation_criterion = "Boundary premises proliferate without falling or introduce unsound purity/aliasing assumptions across memoization or stack growth (RK5)"
+status = "open"
+evidence_artifact = ""
+
+[[seam]]
+id = "SM6"
+title = "General parameterized/indexed/mutual inductive families and structure eta per universe bound in set model and kcheck"
+probe_unit = "G.1/G.2"
+refutation_criterion = "Set model per universe bound cannot carry certified general inductive families or definitional structure eta / nested inductives without redesigning C2/kcheck rules (RK6)"
+status = "closed"
+evidence_artifact = "reports/ph9-g1-certified-family-2026-11-17/README.md"
+
+[[seam]]
+id = "SM7"
+title = "Computable fuel-indexed runFuel with proved runFuel_adequate for specr-generated MiniRust/Core"
+probe_unit = "RM1.b/RM1.d"
+refutation_criterion = "Generated MiniRust model cannot emit computable fuel-indexed runFuel elaborated by Clean with proved adequacy to relational SOut/runLeast (RK7)"
+status = "open"
+evidence_artifact = ""

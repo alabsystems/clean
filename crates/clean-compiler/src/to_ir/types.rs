@@ -90,7 +90,14 @@ pub fn expr_to_ir_type(expr: &Expr) -> Result<IRType, CompilerError> {
 /// same, which `crates/clean/tests/sort_typed_ctor_field_cli.rs` asserts byte
 /// for byte against Lean's output. Moving to Lean's slot-free layout is a
 /// layout change for proofs and types together, never for one of them.
-pub(crate) fn ctor_field_ir_type(domain: &Expr) -> Result<IRType, CompilerError> {
+/// The checked SDK world token has its own erased representation.
+pub(crate) fn ctor_field_ir_type(
+    domain: &Expr,
+    checked_void_layout: bool,
+) -> Result<IRType, CompilerError> {
+    if checked_void_layout && crate::world_token::is_void_type(domain) {
+        return Ok(IRType::Void);
+    }
     match domain.strip_mdata().kind() {
         ExprKind::Sort(_) | ExprKind::SProp => Ok(IRType::Object),
         _ => expr_to_ir_type(domain),

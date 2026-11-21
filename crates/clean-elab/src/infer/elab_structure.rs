@@ -117,11 +117,10 @@ fn head_const_levels(ty: &Expr) -> Vec<Level> {
 ///
 /// Controls the binder infos of the generated projection functions, mirroring
 /// Lean 4's `mkProjections` (invoked with `isClass` from
-/// `src/Lean/Elab/Structure.lean`; implementation in
-/// `src/library/constructions/projection.cpp`): for a CLASS, every structure
-/// parameter becomes an implicit binder and the major premise `self` is
-/// instance-implicit, so `C.f x` inserts `{α}` as a metavariable and `[self]`
-/// via instance synthesis. Verified against Lean 4 v4.30.0-rc2:
+/// `Lean/Elab/Structure.lean`; implementation in `Lean/Meta/Structure.lean`).
+/// A class projection has instance-implicit `self`; its parameters become
+/// implicit when determined by explicit arguments or the result range.
+/// Examples verified against Lean 4 v4.30.0-rc2:
 /// `@MyMag.op : {α : Type} → [self : MyMag α] → α → α → α`, and an
 /// instance-implicit class param `[BEq α]` also becomes implicit
 /// (`@WithInst.w : {α : Type} → {inst : BEq α} → [self : WithInst α] → α → Nat`).
@@ -339,6 +338,7 @@ impl<'a> ElabCtx<'a> {
             let field_name = SurfaceName::from_name(parent_subobject_name(parent_name.name())?);
             all_fields.push(SurfaceField {
                 span: Span::dummy(),
+                documentation: None,
                 name: field_name,
                 ty: parent_expr.as_ref().clone(),
                 default: None,
@@ -351,7 +351,7 @@ impl<'a> ElabCtx<'a> {
         // The class path prepends its own `toParent` fields into `all_fields`
         // and generates `toParent` instances below, so pass an empty `extends`
         // to `elab_structure` — it must not additionally flatten parent fields.
-        let mut result = self.elab_structure(
+        let (mut result, selected_binders) = self.elab_structure(
             name,
             universe_params,
             binders,
@@ -366,6 +366,7 @@ impl<'a> ElabCtx<'a> {
             },
         )?;
 
+        let binders = selected_binders.as_deref().unwrap_or(binders);
         let class_name = name.name().clone();
         let ElabResult::Structure { ty: class_type, .. } = &result else {
             return Err(ElabError::Unsupported {
@@ -1405,7 +1406,7 @@ impl<'a> ElabCtx<'a> {
         deriving: &[SurfaceName],
         modifiers: &DeclModifiers,
         kind: StructureKind,
-    ) -> Result<ElabResult, ElabError> {
+    ) -> Result<(ElabResult, Option<Vec<SurfaceBinder>>), ElabError> {
         let struct_name = name.name().clone();
         // Lean resolves every class of the `deriving` clause before it
         // elaborates the structure: a name that does not resolve fails the
@@ -1417,8 +1418,8 @@ impl<'a> ElabCtx<'a> {
             .map(|ctor| name.append(ctor).into_name())
             .unwrap_or_else(|| struct_name.clone().str("mk"));
 
-        // SAFETY: Number of params bounded by practical limits (no structure has billions of params)
-        let num_params = u32::try_from(binders.len()).unwrap_or(u32::MAX);
+        let pushed_params = binders.len();
+        let ambient_count = super::family_section_parameters::section_prefix(binders);
 
         // Cache elaborated binder types so we can rebuild the declaration shape
         // after field elaboration without re-elaborating under the field scope.
@@ -1719,6 +1720,30 @@ impl<'a> ElabCtx<'a> {
             self.infer_implicit_structure_result_ty(&field_types)?
         };
 
+        // Select before building the constructor result, which applies the
+        // family to every retained parameter and would make all appear used.
+        let selected = self.used_family_section(
+            ambient_count,
+            &param_fvars,
+            &binder_types,
+            std::iter::once(&result_ty)
+                .chain(field_types.iter())
+                .chain(dependent_field_defaults.iter().map(|(_, _, val)| val)),
+        );
+        let selected_binders = if selected.len() < ambient_count {
+            let keep: Vec<usize> = selected
+                .into_iter()
+                .chain(ambient_count..pushed_params)
+                .collect();
+            param_fvars = keep.iter().map(|&i| param_fvars[i]).collect();
+            binder_types = keep.iter().map(|&i| binder_types[i].clone()).collect();
+            Some(keep.iter().map(|&i| binders[i].clone()).collect::<Vec<_>>())
+        } else {
+            None
+        };
+        let binders = selected_binders.as_deref().unwrap_or(binders);
+        let num_params = u32::try_from(binders.len()).unwrap_or(u32::MAX);
+
         // Build the structure type: (param1 : T1) → ... → (paramN : TN) → Type
         let mut struct_ty = result_ty.clone();
         for i in (0..binders.len()).rev() {
@@ -1913,8 +1938,8 @@ impl<'a> ElabCtx<'a> {
             }
             proj_ty = proj_ty.infer_implicit_n(num_params, false);
 
-            // Pop param fvars
-            for _ in 0..binders.len() {
+            // Pop the locals that were recreated for this projection.
+            for _ in 0..proj_param_fvars.len() {
                 self.pop_local();
             }
 
@@ -1929,7 +1954,10 @@ impl<'a> ElabCtx<'a> {
         // (`S.mk Nat x`) working unchanged (U2 rung 2).
         for i in (0..binders.len()).rev() {
             ctor_ty = ctor_ty.abstract_fvar(param_fvars[i]);
-            ctor_ty = Expr::pi(BinderInfo::Implicit, binder_types[i].clone(), ctor_ty);
+            let kind = super::family_section_parameters::constructor_parameter(
+                convert_binder_info(binders[i].info),
+            );
+            ctor_ty = Expr::pi(kind, binder_types[i].clone(), ctor_ty);
         }
 
         // Pop param fvars, and first the class-typed ones among them that were
@@ -1937,7 +1965,7 @@ impl<'a> ElabCtx<'a> {
         for _ in 0..param_local_instances {
             self.pop_local_instance();
         }
-        for _ in 0..binders.len() {
+        for _ in 0..pushed_params {
             self.pop_local();
         }
 
@@ -2098,21 +2126,24 @@ impl<'a> ElabCtx<'a> {
 
         // Use the surviving universe params, preserving declaration order while
         // dropping auto-bound params that unified to concrete levels.
-        Ok(ElabResult::Structure {
-            name: struct_name,
-            universe_params: surviving_universe_params,
-            num_params,
-            ty: struct_ty,
-            ctor_name,
-            ctor_ty,
-            field_names,
-            field_defaults,
-            projections,
-            projection_param_infos,
-            parents,
-            derived_instances,
-            class_info: None, // Set by caller for class declarations
-            modifiers: *modifiers,
-        })
+        Ok((
+            ElabResult::Structure {
+                name: struct_name,
+                universe_params: surviving_universe_params,
+                num_params,
+                ty: struct_ty,
+                ctor_name,
+                ctor_ty,
+                field_names,
+                field_defaults,
+                projections,
+                projection_param_infos,
+                parents,
+                derived_instances,
+                class_info: None, // Set by caller for class declarations
+                modifiers: modifiers.clone(),
+            },
+            selected_binders,
+        ))
     }
 }

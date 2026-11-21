@@ -110,7 +110,8 @@ impl Parser {
         // own modifier prefix; this one's is restored after it.
         let outer_command_start = std::mem::replace(&mut self.command_start, self.pos);
         let origin_checkpoint = self.origins.as_ref().map(|origins| origins.checkpoint());
-        let decl = stacker::maybe_grow(
+        let documentation = self.documentation_before(self.pos);
+        let mut decl = stacker::maybe_grow(
             Self::EXPR_STACK_RED_ZONE,
             Self::EXPR_STACK_GROW_SIZE,
             || {
@@ -120,6 +121,13 @@ impl Parser {
                 })
             },
         );
+        if let Ok(declaration) = &mut decl {
+            if let Some(modifiers) = declaration.modifiers_mut() {
+                if documentation.is_some() {
+                    modifiers.documentation = documentation;
+                }
+            }
+        }
         self.command_start = outer_command_start;
         if let Some(origins) = &mut self.origins {
             match &decl {

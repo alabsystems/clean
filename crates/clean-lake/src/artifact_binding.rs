@@ -44,6 +44,7 @@
 
 use crate::build::{BuildContext, CLEAN_OLEAN_GIT_HASH};
 use crate::workspace::Workspace;
+use clean_kernel::LeanWorld;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -85,19 +86,21 @@ pub struct ImportAdmissionFindings {
     pub disclosures: Vec<String>,
 }
 
-/// The file `module` resolves to on `search_paths`: the loader's rule, the
-/// first root holding `<module path>.olean`.
+/// The artifact found in the first search root that owns its package.
 #[must_use]
-pub(crate) fn resolve_import(module: &str, search_paths: &[PathBuf]) -> Option<PathBuf> {
-    if module.is_empty() || module.split('.').any(str::is_empty) {
-        return None;
-    }
-    let mut rel: PathBuf = module.split('.').collect();
-    rel.set_extension("olean");
-    search_paths
-        .iter()
-        .map(|root| root.join(&rel))
-        .find(|path| path.exists())
+pub(crate) fn resolve_import(
+    module: &str,
+    search_paths: &[PathBuf],
+    world: Option<LeanWorld>,
+) -> Option<PathBuf> {
+    let module = Workspace::parse_module_name(module).ok()?;
+    clean_olean::resolve_typed_module_path_in_world(
+        &module,
+        search_paths,
+        world.map(LeanWorld::tag),
+    )
+    .ok()
+    .filter(|path| path.is_file())
 }
 
 fn artifact_digest(path: &Path) -> String {
@@ -112,7 +115,7 @@ fn artifact_digest(path: &Path) -> String {
 #[derive(Debug, Default)]
 pub struct ImportAdmitter {
     binder: ArtifactBinder,
-    decided: HashMap<(String, PathBuf), ImportAdmission>,
+    decided: HashMap<(String, PathBuf, Option<LeanWorld>), ImportAdmission>,
 }
 
 impl ImportAdmitter {
@@ -122,53 +125,63 @@ impl ImportAdmitter {
         Self::default()
     }
 
-    /// Admit the artifact `olean` that was (or is about to be) loaded for
-    /// `module`.
-    pub(crate) fn admit(&mut self, module: &str, olean: &Path) -> ImportAdmission {
-        let key = (module.to_string(), olean.to_path_buf());
+    /// Apply artifact admission with the declaration used by the loader.
+    pub(crate) fn admit_in_world(
+        &mut self,
+        module: &str,
+        olean: &Path,
+        world: Option<LeanWorld>,
+    ) -> ImportAdmission {
+        let key = (module.to_string(), olean.to_path_buf(), world);
         if let Some(decided) = self.decided.get(&key) {
             return decided.clone();
         }
-        let decided =
-            if clean_olean::toolchain_identity::pinned_toolchain_module(module, olean).is_ok() {
-                ImportAdmission::Toolchain
-            } else if let Err(e) = clean_olean::lean_world_of_olean_file(olean) {
-                // A Lean world this build does not read, or an artifact whose
-                // header does not parse, is refused whether or not a source
-                // sits beside it (R81). A readable world goes on to be bound
-                // or disclosed; loading it into an environment of another
-                // world is the loader's refusal (`MixedLeanWorlds`).
-                ImportAdmission::Refused(format!(
-                    "import `{module}`: {} ({}): {e}",
-                    olean.display(),
-                    artifact_digest(olean)
-                ))
-            } else {
-                match self.binder.bind(module, olean) {
-                    ArtifactSourceBinding::Bound { .. } => ImportAdmission::Bound,
-                    ArtifactSourceBinding::Unbound { source, reason } => {
-                        ImportAdmission::Refused(format!(
-                            "import `{module}`: the artifact {} is not the build of its source {} \
+        let pinned =
+            clean_olean::toolchain_identity::pinned_toolchain_module(module, olean).is_ok();
+        let world_check = match world {
+            Some(world) => clean_olean::check_olean_file_in_world(olean, world),
+            None if pinned => Ok(()),
+            None => clean_olean::lean_world_of_olean_file(olean).map(|_| ()),
+        };
+        let decided = if let Err(e) = world_check {
+            // A Lean world this build does not read, or an artifact whose
+            // header does not parse, is refused whether or not a source
+            // sits beside it (R81). A readable world goes on to be bound
+            // or disclosed; loading it into an environment of another
+            // world is the loader's refusal (`MixedLeanWorlds`).
+            ImportAdmission::Refused(format!(
+                "import `{module}`: {} ({}): {e}",
+                olean.display(),
+                artifact_digest(olean)
+            ))
+        } else if pinned {
+            ImportAdmission::Toolchain
+        } else {
+            match self.binder.bind(module, olean) {
+                ArtifactSourceBinding::Bound { .. } => ImportAdmission::Bound,
+                ArtifactSourceBinding::Unbound { source, reason } => {
+                    ImportAdmission::Refused(format!(
+                        "import `{module}`: the artifact {} is not the build of its source {} \
                          ({reason}); nothing is checked against it — run `clean lake build`",
-                            olean.display(),
-                            source.display()
-                        ))
-                    }
-                    ArtifactSourceBinding::ForeignBuilt { git_hash } => {
-                        ImportAdmission::Disclosed(format!(
-                            "{module}: {} ({}), written by another tool (header git hash \
+                        olean.display(),
+                        source.display()
+                    ))
+                }
+                ArtifactSourceBinding::ForeignBuilt { git_hash } => {
+                    ImportAdmission::Disclosed(format!(
+                        "{module}: {} ({}), written by another tool (header git hash \
                          {git_hash}); no build trace binds it to a source",
-                            olean.display(),
-                            artifact_digest(olean)
-                        ))
-                    }
-                    ArtifactSourceBinding::NoSource { why } => ImportAdmission::Disclosed(format!(
-                        "{module}: {} ({}); {why}",
                         olean.display(),
                         artifact_digest(olean)
-                    )),
+                    ))
                 }
-            };
+                ArtifactSourceBinding::NoSource { why } => ImportAdmission::Disclosed(format!(
+                    "{module}: {} ({}); {why}",
+                    olean.display(),
+                    artifact_digest(olean)
+                )),
+            }
+        };
         self.decided.insert(key, decided.clone());
         decided
     }
@@ -181,15 +194,25 @@ impl ImportAdmitter {
         modules: impl IntoIterator<Item = String>,
         search_paths: &[PathBuf],
     ) -> ImportAdmissionFindings {
+        self.examine_in_world(modules, search_paths, None)
+    }
+
+    /// Examine resolved modules using the caller's selected import declaration.
+    pub fn examine_in_world(
+        &mut self,
+        modules: impl IntoIterator<Item = String>,
+        search_paths: &[PathBuf],
+        world: Option<LeanWorld>,
+    ) -> ImportAdmissionFindings {
         let mut modules: Vec<String> = modules.into_iter().collect();
         modules.sort();
         modules.dedup();
         let mut findings = ImportAdmissionFindings::default();
         for module in modules {
-            let Some(olean) = resolve_import(&module, search_paths) else {
+            let Some(olean) = resolve_import(&module, search_paths, world) else {
                 continue;
             };
-            match self.admit(&module, &olean) {
+            match self.admit_in_world(&module, &olean, world) {
                 ImportAdmission::Toolchain | ImportAdmission::Bound => {}
                 ImportAdmission::Refused(row) => findings.refusals.push(row),
                 ImportAdmission::Disclosed(row) => findings.disclosures.push(row),

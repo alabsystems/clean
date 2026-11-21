@@ -97,6 +97,29 @@ class AyRegistrySourceOwnerTests(unittest.TestCase):
             with self.subTest(selection=selection), self.assertRaises(owner.OwnerError):
                 owner.from_ay(self.authority, selection, self.home)
 
+    def test_patch_owner_binds_exact_member_version_and_unchanged_archive(self):
+        workspace = self.authority.docs["Cargo.toml"]["workspace"]
+        workspace["package"]["version"] = "0.28.3"
+        system = self.authority.docs["crates/ay-sys/Cargo.toml"]["package"]
+        system["version"] = "0.28.3"
+        self.assertEqual(self.capture()[owner.NAME, owner.VERSION].checksum, self.checksum)
+        captured = self.capture()
+        old, new = self.graph()
+        new[-2]["version"] = "0.28.3"
+        self.assertTrue(owner.validate_gain(old, new, captured,
+                         lambda edge: resolve(edge, new), matches_version))
+        new[-2]["version"] = "0.29.0"
+        with self.assertRaises(owner.OwnerError):
+            owner.validate_gain(old, new, captured, lambda edge: resolve(edge, new), matches_version)
+        for version in ("0.28.2", "0.28.0", "0.29.0"):
+            system["version"] = version
+            with self.subTest(version=version), self.assertRaises(owner.OwnerError):
+                self.capture()
+        system["version"] = {"workspace": True}
+        workspace["package"]["version"] = "0.28.03"
+        with self.assertRaises(owner.OwnerError):
+            self.capture()
+
     def test_foreign_unix_owner_requirement_feature_or_checksum_refuses(self):
         mutations = [
             lambda d: d["Cargo.toml"]["workspace"]["package"].update(version="0.27.0"),

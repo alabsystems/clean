@@ -459,7 +459,7 @@ impl RustExtEmitter {
                 IRType::UInt32 => format!("clean_unbox_uint32({})", self.emit_arg(arg)),
                 _ => format!("clean_unbox({})", self.emit_arg(arg)),
             },
-            IRExpr::Lit(lit) => emit_rust_literal(lit),
+            IRExpr::Lit(lit) => emit_rust_literal(lit)?,
             IRExpr::Apply { fn_id, args } => {
                 format!(
                     "{}({})",
@@ -652,8 +652,8 @@ impl Default for RustExtEmitter {
 
 // ── Free functions ──
 
-fn emit_rust_literal(lit: &IRLiteral) -> String {
-    match lit {
+fn emit_rust_literal(lit: &IRLiteral) -> Result<String, IRError> {
+    Ok(match lit {
         IRLiteral::Bool(b) => if *b { "1u8" } else { "0u8" }.to_string(),
         IRLiteral::UInt8(n) => format!("{}u8", n),
         IRLiteral::UInt16(n) => format!("{}u16", n),
@@ -662,6 +662,9 @@ fn emit_rust_literal(lit: &IRLiteral) -> String {
         IRLiteral::USize(n) => format!("{}usize", n),
         IRLiteral::NatBig(v) => {
             format!("clean_nat_big({}u64, {}u64)", *v as u64, (*v >> 64) as u64)
+        }
+        IRLiteral::NatLimbs(limbs) => {
+            return crate::emit_rust::emit_wide_nat_literal(limbs);
         }
         IRLiteral::Float32(f) if f.is_nan() => "f32::NAN".into(),
         IRLiteral::Float32(f) if f.is_infinite() => if f.is_sign_positive() {
@@ -679,7 +682,7 @@ fn emit_rust_literal(lit: &IRLiteral) -> String {
         }
         .into(),
         IRLiteral::Float64(f) => format!("{}f64", f),
-    }
+    })
 }
 
 fn scalar_getter(ty: &IRType) -> &'static str {
@@ -705,5 +708,22 @@ fn scalar_setter(ty: &IRType) -> &'static str {
         IRType::Float64 => "clean_ctor_set_float",
         IRType::USize => "clean_ctor_set_usize",
         _ => "clean_ctor_set",
+    }
+}
+
+#[test]
+fn wide_nat_extended_expression_propagates_literal_errors() {
+    let mut emitter = RustExtEmitter::new();
+    assert_eq!(
+        emitter
+            .emit_expr(&IRExpr::Lit(IRLiteral::NatLimbs(vec![0, 0, 1])))
+            .unwrap(),
+        "clean_nat_from_limbs(&[0u64, 0u64, 1u64])"
+    );
+    for words in [vec![], vec![1], vec![0, 1], vec![1, 0, 0]] {
+        assert!(matches!(
+            emitter.emit_expr(&IRExpr::Lit(IRLiteral::NatLimbs(words))),
+            Err(IRError::NonCanonicalNatLimbs)
+        ));
     }
 }

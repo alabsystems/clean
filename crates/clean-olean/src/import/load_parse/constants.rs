@@ -144,7 +144,7 @@ fn read_load_constant_info(region: &CompactedRegion<'_>, ptr: u64) -> OleanResul
         kernel_all,
         kernel_ctors,
         kernel_inductive,
-        runtime_mutual: None,
+        runtime_mutual: region.read_ordinary_mutual_declarations(&kind, val_offset, &val_header)?,
         kind,
         type_ptr,
         value_ptr,
@@ -225,19 +225,11 @@ pub(super) fn read_runtime_constant_rows(
                     "invalid runtime ConstantVal header".into(),
                 ));
             }
-            let all_at = match (&row.kind, header.other, header.cs_sz) {
-                (ConstantKind::Definition, 4, 48) => Some(val + 32),
-                (ConstantKind::Theorem, 3, 0 | 32) => Some(val + 24),
-                (ConstantKind::Opaque, 3, 40) => Some(val + 24),
-                (ConstantKind::Definition, 4, 0) => None,
-                (ConstantKind::Opaque, 4, 0) => Some(val + 32),
-                (ConstantKind::Theorem, _, _) => {
-                    return Err(OleanError::Region(
-                        "unsupported runtime theorem metadata layout".into(),
-                    ))
-                }
-                _ => None,
-            };
+            if row.kind == ConstantKind::Theorem && row.runtime_mutual.is_none() {
+                return Err(OleanError::Region(
+                    "unsupported runtime theorem metadata layout".into(),
+                ));
+            }
             if row.kind == ConstantKind::Inductive && row.num_nested.is_some() {
                 row.num_nested = Some(region.read_kernel_nat_u64(region.read_u64_at(val + 48)?)?);
             }
@@ -253,9 +245,6 @@ pub(super) fn read_runtime_constant_rows(
             for offset in count_offsets {
                 region.read_kernel_nat_u64(region.read_u64_at(val + offset)?)?;
             }
-            row.runtime_mutual = all_at
-                .map(|offset| region.read_kernel_name_list(region.read_u64_at(offset)?))
-                .transpose()?;
             if row.kind == ConstantKind::Recursor {
                 validate_runtime_recursor_rules(region, ptr)?;
             }

@@ -23,10 +23,24 @@
 //! This file pins it on the real judgment at the 20-bit word `2^20 - 1`:
 //! measured 2026-10-15 (debug, the rechecker's strict checker with 100,000
 //! cache entries, no limit), 919,535 heartbeats of steps without the equality
-//! charge and 1,095,099 with the walks past the steps' allowance billed. So a
-//! budget of 1,000,000 heartbeats, which the steps fit, refuses it with the
-//! meter and admits it under the mutant that drops the equality charge, and
-//! the kernel's default 2,000,000 still admits it. The fixtures are the
+//! charge and 1,095,099 with the walks past the steps' allowance billed, about
+//! 175,000 apart. Wider cached hashes for closed expressions then removed the
+//! long colliding probes: measured 2026-11-08 the two costs were 919,539 and
+//! 919,535, and on 2026-11-17 (the merge of fix/implicit-positional-arguments
+//! with main) a bisection put the smallest admitting budgets at 919,421 with
+//! the meter and 919,418 under the mutant. A fixed budget between two costs
+//! three heartbeats apart flipped with any unrelated change to the checker's
+//! step count, so the guard now finds its budget on the judgment itself
+//! (2026-11-18): it bisects the smallest budget that admits the judgment under
+//! the mutant that drops the equality charge, and requires the meter to refuse
+//! that same budget by `HeartbeatExceeded`. That still fails the day the
+//! charge stops billing this judgment, and no longer fails when the steps
+//! alone grow or shrink. What it cannot show is a WIDE margin: under the
+//! current hashing this judgment's billed walking is a few heartbeats. The
+//! mechanism at scale is pinned by the kernel's own
+//! `growing_chain_probes_are_refused_by_a_budget_their_steps_fit` and its
+//! mutant (`clean-kernel`, `tc/tests/work_billing.rs`); a real judgment with a
+//! wide margin under the current hashing needs a new fixture. The fixtures are the
 //! judgment exactly as the rechecker replays it: the proof term and the
 //! reconstructed claim, produced by trust-ir 409a9ed6 with 67b91383's
 //! `one_step` change reverted (`Claim { shift: Logical, word: 2^20 - 1, answer:
@@ -73,35 +87,64 @@ fn check(
     checker.check_type(term, claim)
 }
 
-/// Fits the judgment's steps (919,535) and not its billed walks (1,095,099).
-const BUDGET: u32 = 1_000_000;
+/// The smallest budget that admits the judgment under `admits`, by bisection
+/// over `(0, DEFAULT_HEARTBEAT_LIMIT]` (a check's cost does not depend on its
+/// limit, so admission is monotone in the budget). Budget 0 is never tried: it
+/// disables the limit.
+fn smallest_admitting_budget(admits: impl Fn(u32) -> bool) -> u32 {
+    let (mut refused, mut admitted) = (0_u32, DEFAULT_HEARTBEAT_LIMIT);
+    assert!(
+        admits(admitted),
+        "the kernel's default budget must admit the judgment"
+    );
+    while admitted - refused > 1 {
+        let mid = refused + (admitted - refused) / 2;
+        if admits(mid) {
+            admitted = mid;
+        } else {
+            refused = mid;
+        }
+    }
+    admitted
+}
 
 #[test]
 fn gate9_judgment_is_refused_by_a_budget_its_steps_fit_and_not_under_the_mutant() {
     crate::test_utils::run_with_stack(|| {
         let spec = shift_spec();
         let (term, claim) = (root(TERM), root(CLAIM));
-        let verdict = check(&spec, &term, &claim, Some(BUDGET));
+
+        // MUTANT: drop the equality charge (the kernel before the meter, where
+        // a cache probe's key comparison spent nothing). The smallest budget
+        // it admits the judgment at is what the judgment's steps cost.
+        let steps = work_meter::mutant::with_equality_charge_dropped(|| {
+            smallest_admitting_budget(|budget| match check(&spec, &term, &claim, Some(budget)) {
+                Ok(()) => true,
+                Err(TypeError::HeartbeatExceeded { .. }) => false,
+                Err(other) => panic!("the claim is true; only the budget may refuse: {other:?}"),
+            })
+        });
+
+        // With the meter, the walks past the steps' allowance spend that
+        // budget, and the refusal says so: the refusal is the charge's doing.
+        let verdict = check(&spec, &term, &claim, Some(steps));
         assert!(
             matches!(
                 verdict,
-                Err(TypeError::HeartbeatExceeded { limit: BUDGET, .. })
+                Err(TypeError::HeartbeatExceeded { limit, .. }) if limit == steps
             ),
-            "the walks past the steps' allowance must spend the budget, and say so: {verdict:?}"
+            "the walks past the steps' allowance must spend the {steps}-heartbeat budget \
+             the steps fit, and say so: {verdict:?}"
         );
-
-        // MUTANT: drop the equality charge (the kernel before the meter, where
-        // a cache probe's key comparison spent nothing). The same judgment
-        // under the same budget is admitted: the refusal above is the charge's
-        // doing, and the claim itself is true.
-        let mutant = work_meter::mutant::with_equality_charge_dropped(|| {
-            check(&spec, &term, &claim, Some(BUDGET))
-        });
-        assert!(mutant.is_ok(), "MUTANT survives the guard: {mutant:?}");
 
         // The kernel's default budget still admits it: the meter moved this
         // judgment's heartbeats, not its verdict.
         let default = check(&spec, &term, &claim, None);
         assert!(default.is_ok(), "{default:?}");
+
+        // The original guard's million-heartbeat budget is now a positive
+        // control: wider closed keys avoid its formerly expensive collisions.
+        let original_budget = check(&spec, &term, &claim, Some(1_000_000));
+        assert!(original_budget.is_ok(), "{original_budget:?}");
     });
 }

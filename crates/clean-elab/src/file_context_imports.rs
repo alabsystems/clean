@@ -5,7 +5,7 @@
 //! A file's import context: search paths, Lean world, resolution policy,
 //! source refusals and compiler dependencies (gap G72, decision R111).
 
-use super::FileContext;
+use super::{FileContext, FixedImportPaths};
 use crate::imports::ImportPolicy;
 use clean_kernel::name::Name;
 use std::collections::HashSet;
@@ -26,6 +26,19 @@ impl FileContext {
         }
     }
 
+    /// Source world declared for artifacts loaded by this file.
+    ///
+    /// # Errors
+    /// A declared project world without a corresponding source language.
+    pub fn declared_lean_world(
+        &self,
+    ) -> Result<Option<clean_kernel::LeanWorld>, clean_olean::SourceWorldRefusal> {
+        match &self.import_world {
+            Some(Ok(world)) if world.declared_world().is_some() => Ok(Some(world.source_world()?)),
+            _ => Ok(None),
+        }
+    }
+
     /// Bind a decision shared with the parser. Every source import in a run
     /// inherits the entry file's decision, not its own nested toolchain.
     pub fn set_source_world(
@@ -35,16 +48,40 @@ impl FileContext {
     ) {
         self.set_import_context(path, decision.import_world());
     }
-    /// Bind captured source to its selected world without discovering a
-    /// project from a diagnostic path. Only that world's library is searched.
+    /// Bind the selected source world and exact artifact roots. Skip project
+    /// discovery and additional default roots.
     pub(crate) fn set_captured_source_world(
         &mut self,
         decision: &clean_olean::SourceWorldDecision,
         paths: Vec<PathBuf>,
     ) {
+        self.set_fixed_source_world(decision, FixedImportPaths::Captured(paths));
+    }
+
+    /// Require actual artifacts on the given roots for the raw Lean front door.
+    pub(crate) fn set_artifact_source_world(
+        &mut self,
+        decision: &clean_olean::SourceWorldDecision,
+        paths: Vec<PathBuf>,
+    ) {
+        self.set_fixed_source_world(decision, FixedImportPaths::ArtifactsOnly(paths));
+    }
+
+    fn set_fixed_source_world(
+        &mut self,
+        decision: &clean_olean::SourceWorldDecision,
+        paths: FixedImportPaths,
+    ) {
         self.import_world = Some(decision.import_world());
         self.import_search_paths.clear();
-        self.captured_import_paths = Some(paths);
+        self.fixed_import_paths = Some(paths);
+    }
+
+    pub(crate) fn imports_require_artifacts(&self) -> bool {
+        matches!(
+            &self.fixed_import_paths,
+            Some(FixedImportPaths::ArtifactsOnly(_))
+        )
     }
 
     /// Replace the file-level import search paths used for `.olean` loading.
@@ -80,7 +117,7 @@ impl FileContext {
         world: Result<clean_olean::ImportWorld, clean_olean::ImportWorldRefusal>,
     ) {
         self.import_search_paths = crate::lake_import_search_paths_for_file(path);
-        self.captured_import_paths = None;
+        self.fixed_import_paths = None;
         self.import_world = Some(world);
     }
 
@@ -92,9 +129,9 @@ impl FileContext {
         self.import_world.as_ref()
     }
 
-    /// Every root this file's `.olean` imports resolve on: its own search
-    /// paths, then its world's defaults ([`clean_olean::search_paths_in_world`];
-    /// the checkout's pin when no world was set).
+    /// Every root this file's `.olean` imports resolve on. An exact list is
+    /// used as supplied. Project contexts use their own search paths followed
+    /// by their world's defaults ([`clean_olean::search_paths_in_world`]).
     ///
     /// # Errors
     ///
@@ -102,7 +139,9 @@ impl FileContext {
     pub fn effective_import_search_paths(
         &self,
     ) -> Result<Vec<PathBuf>, clean_olean::ImportWorldRefusal> {
-        if let Some(paths) = &self.captured_import_paths {
+        if let Some(FixedImportPaths::Captured(paths) | FixedImportPaths::ArtifactsOnly(paths)) =
+            &self.fixed_import_paths
+        {
             if let Some(Err(refusal)) = &self.import_world {
                 return Err(refusal.clone());
             }
@@ -190,6 +229,7 @@ impl FileContext {
         // Loader availability is shared across the import walk. Only the
         // file's actual Import declarations authorize compiler visibility.
         self.imports_satisfied_from_source.insert(module.clone());
+        self.imports_satisfied_without_search.insert(module.clone());
     }
 
     /// Only the maintained source-module initializer supplies this immutable
@@ -208,11 +248,48 @@ impl FileContext {
         self.preloaded_artifact_imports.as_ref()
     }
 
+    /// Record the module keys of an original-reference checked fixed context.
+    /// This resolution record installs no declarations and grants no theorem or
+    /// source authority; the caller must use this context's paired environment.
+    /// Only its replayed declaration cone is citable; any missing library
+    /// declaration still refuses, with no artifact search or prelude fallback.
+    pub fn install_checked_source_context(
+        &mut self,
+        context: &clean_olean::fixed_cohort::CheckedSourceContext,
+    ) -> Result<(), String> {
+        if self
+            .checked_source_context_identity
+            .as_deref()
+            .is_some_and(|identity| identity != context.identity())
+        {
+            return Err(
+                "file context already belongs to a different checked source context".into(),
+            );
+        }
+        self.checked_source_context_identity = Some(context.identity().into());
+        for module in context.modules() {
+            let module = Name::from_string(module);
+            if !self.imports_refused_from_source.contains_key(&module) {
+                self.imports_satisfied_from_checked_context
+                    .insert(module.clone());
+                self.imports_satisfied_without_search.insert(module);
+            }
+        }
+        Ok(())
+    }
+
+    #[must_use]
+    pub fn import_satisfied_from_checked_context(&self, module: &Name) -> bool {
+        self.imports_satisfied_from_checked_context.contains(module)
+    }
+
     /// Record a source import's refusal, retaining its first diagnostic.
     /// This takes precedence over satisfied records, artifacts and permissive
     /// builtin fallback: the partial environment is not the imported module.
     pub fn mark_import_refused_from_source(&mut self, module: &Name, reason: String) {
         self.imports_satisfied_from_source.remove(module);
+        self.imports_satisfied_from_checked_context.remove(module);
+        self.imports_satisfied_without_search.remove(module);
         self.compiler_imports.remove(module);
         self.imports_refused_from_source
             .entry(module.clone())
@@ -249,24 +326,23 @@ impl FileContext {
         self.imports_satisfied_from_source.contains(module)
     }
 
-    /// The whole satisfied-from-source record, read-only — the clean-native
-    /// import path threads it into its resolution the same way
-    /// [`Self::import_loader_state_mut`] hands it to the `.olean` loader.
+    /// Modules supplied by successfully elaborated source or the checked source
+    /// context. Each provenance remains available from its own record.
     #[must_use]
-    pub(crate) fn imports_satisfied_from_source(&self) -> &HashSet<Name> {
-        &self.imports_satisfied_from_source
+    pub(crate) fn imports_satisfied_without_search(&self) -> &HashSet<Name> {
+        &self.imports_satisfied_without_search
     }
 
     /// The two per-file loader records the import path needs together: the
     /// `visited` memo it mutates, and the read-only set of modules already
-    /// satisfied from source. Returned as a pair so callers do not have to
+    /// supplied by source or its checked context. Returned together so callers need not
     /// clone either to satisfy the borrow checker.
     pub(crate) fn import_loader_state_mut(
         &mut self,
     ) -> (&mut hashbrown::HashSet<String>, &HashSet<Name>) {
         (
             &mut self.import_visited,
-            &self.imports_satisfied_from_source,
+            &self.imports_satisfied_without_search,
         )
     }
 }

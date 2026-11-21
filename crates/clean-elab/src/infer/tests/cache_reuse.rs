@@ -4,9 +4,8 @@
 
 //! Regression tests for ElabCtx TypeChecker cache authority (#1852).
 //!
-//! Installing the elaborator's level callback and reducibility policy clears
-//! answer-bearing caches. Seeds from a default checker therefore cannot be
-//! assumed compatible with an elaboration call.
+//! Default-policy seeds are incompatible with elaboration. Matching policy
+//! also needs the same local/meta state and pending level-callback facts.
 
 use super::*;
 
@@ -27,6 +26,7 @@ fn test_issue1852_whnf_discards_def_eq_seed_from_default_policy() {
     let mut env = Environment::new();
     env.init_nat().expect("Nat environment should initialize");
     let seed_tc = TypeChecker::new(&env);
+    // Deliberately retain the default policy on this seed.
     let prop = Expr::prop();
     let lit_zero = Expr::nat_lit(0);
     let const_zero = Expr::const_(Name::from_string("Nat.zero"), vec![]);
@@ -61,6 +61,7 @@ fn test_issue1852_is_def_eq_discards_whnf_seed_from_default_policy() {
     let mut env = Environment::new();
     env.init_nat().expect("Nat environment should initialize");
     let seed_tc = TypeChecker::new(&env);
+    // Deliberately retain the default policy on this seed.
     let lit_zero = Expr::nat_lit(0);
     let const_zero = Expr::const_(Name::from_string("Nat.zero"), vec![]);
 
@@ -94,6 +95,7 @@ fn test_issue1852_infer_type_repopulates_projection_cache_after_policy_change() 
     let expr = elab_with_env(&env, "(pairVal).snd").expect("(pairVal).snd should elaborate");
 
     let seed_tc = TypeChecker::new(&env);
+    // Deliberately retain the default policy on this seed.
     let seed_ty = seed_tc
         .infer_type(&expr)
         .expect("seed TypeChecker should infer projection type");
@@ -300,4 +302,128 @@ fn test_issue1852_kernel_answers_do_not_cross_elaboration_reducibility() {
             assert!(!ctx.is_def_eq(&value, &Expr::nat_lit(0)));
         }
     }
+}
+
+#[test]
+fn raw_meta_rollback_cannot_retain_a_let_local_whnf_answer() {
+    let mut env = Environment::new();
+    env.init_nat().expect("Nat fixture");
+    let mut ctx = ElabCtx::new(&env);
+    let nat = Expr::const_(Name::from_string("Nat"), vec![]);
+    let meta = ctx.fresh_meta(nat.clone());
+    let x = ctx.fresh_fvar();
+    ctx.push_local_let_with_fvar(
+        SurfaceName::generated_path("cachedLet"),
+        x,
+        nat,
+        meta.clone(),
+    );
+    let root = Expr::fvar(x);
+    let zero = Expr::nat_lit(0);
+
+    ctx.metas.push_scope();
+    assert!(ctx.try_unify(&meta, &zero));
+    assert_eq!(ctx.whnf(&root), zero);
+    // A repeated unchanged call must keep the real answer; compatible warm
+    // adoption is supported, not something this regression should forbid.
+    assert_eq!(ctx.whnf(&root), zero);
+    assert!(ctx.metas.pop_scope());
+    assert_eq!(ctx.metas.instantiate(&meta), meta);
+
+    // Rollback changes the demanded let value without changing its FVar key.
+    assert_eq!(ctx.whnf(&root), meta);
+}
+
+fn nat_let_local(ctx: &mut ElabCtx<'_>, value: Expr) -> Expr {
+    let x = ctx.fresh_fvar();
+    ctx.push_local_let_with_fvar(
+        SurfaceName::generated_path("cachedLet"),
+        x,
+        Expr::const_(Name::from_string("Nat"), vec![]),
+        value,
+    );
+    Expr::fvar(x)
+}
+
+#[test]
+fn meta_assignment_recomputes_a_warm_let_local() {
+    let env = Environment::with_prelude();
+    let mut ctx = ElabCtx::new(&env);
+    let meta = ctx.fresh_meta(Expr::const_(Name::from_string("Nat"), vec![]));
+    let root = nat_let_local(&mut ctx, meta.clone());
+    assert_eq!(ctx.whnf(&root), meta);
+    assert!(ctx.try_unify(&meta, &Expr::nat_lit(0)));
+    assert_eq!(ctx.whnf(&root), Expr::nat_lit(0));
+}
+
+#[test]
+fn restored_meta_clone_cannot_repeat_a_different_cache_timeline() {
+    let env = Environment::with_prelude();
+    let mut ctx = ElabCtx::new(&env);
+    let meta = ctx.fresh_meta(Expr::const_(Name::from_string("Nat"), vec![]));
+    let root = nat_let_local(&mut ctx, meta.clone());
+    let original = ctx.metas.clone();
+    assert!(ctx.try_unify(&meta, &Expr::nat_lit(0)));
+    let first_generation = ctx.metas.generation();
+    assert_eq!(ctx.whnf(&root), Expr::nat_lit(0));
+
+    ctx.metas = original;
+    assert!(ctx.try_unify(&meta, &Expr::nat_lit(1)));
+    assert_ne!(ctx.metas.generation(), first_generation);
+    assert_eq!(ctx.whnf(&root), Expr::nat_lit(1));
+}
+
+#[test]
+fn local_bridge_rebinding_cannot_retain_the_previous_let_value() {
+    let env = Environment::with_prelude();
+    let mut ctx = ElabCtx::new(&env);
+    let root = nat_let_local(&mut ctx, Expr::nat_lit(0));
+    assert_eq!(ctx.whnf(&root), Expr::nat_lit(0));
+    let ExprKind::FVar(x) = root.kind() else {
+        panic!("let-local fixture")
+    };
+    ctx.pop_local();
+    ctx.push_local_let_with_fvar(
+        SurfaceName::generated_path("reboundLet"),
+        *x,
+        Expr::const_(Name::from_string("Nat"), vec![]),
+        Expr::nat_lit(1),
+    );
+    assert_eq!(ctx.whnf(&root), Expr::nat_lit(1));
+}
+
+#[test]
+fn unchanged_elaboration_state_preserves_real_checker_answers() {
+    let env = Environment::with_prelude();
+    let ctx = ElabCtx::new(&env);
+    assert!(ctx.is_def_eq(
+        &Expr::nat_lit(0),
+        &Expr::const_(Name::from_string("Nat.zero"), vec![])
+    ));
+    let before = cache_count(&cache_debug(&ctx), "def_eq_entries");
+    assert!(before > 0, "the actual checker must populate the cache");
+    // A no-op WHNF cannot create def-eq entries. A surviving entry therefore
+    // demonstrates reuse, rather than success after disabling every cache.
+    assert_eq!(ctx.whnf(&Expr::prop()), Expr::prop());
+    assert_eq!(cache_count(&cache_debug(&ctx), "def_eq_entries"), before);
+}
+
+#[test]
+fn restored_pending_level_facts_must_reproduce_callback_assignments() {
+    let env = Environment::with_prelude();
+    let mut ctx = ElabCtx::new(&env);
+    let left = Expr::sort(ctx.fresh_universe_param());
+    let right = Expr::prop();
+    let generation = ctx.metas.generation();
+    assert!(ctx.is_def_eq(&left, &right));
+    let pending = ctx.pending_level_assigns.take();
+    assert!(
+        !pending.is_empty(),
+        "the actual callback must learn a constraint"
+    );
+    assert_eq!(ctx.metas.generation(), generation);
+    // The buffered packet was rolled back, not committed to MetaState. A
+    // cached positive verdict must not bypass its required assignment effect.
+    assert!(ctx.is_def_eq(&left, &right));
+    assert_eq!(*ctx.pending_level_assigns.borrow(), pending);
 }

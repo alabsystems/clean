@@ -11,6 +11,7 @@
 
 use super::{ArtifactBinder, ArtifactSourceBinding, ImportAdmission, ImportAdmitter};
 use crate::workspace::Workspace;
+use clean_kernel::LeanWorld;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -77,7 +78,7 @@ fn a_pinned_lean_v2_artifact_beside_its_source_is_disclosed_with_its_githash() {
             git_hash: githash.clone()
         }
     );
-    match ImportAdmitter::new().admit("Target", &olean) {
+    match ImportAdmitter::new().admit_in_world("Target", &olean, None) {
         ImportAdmission::Disclosed(row) => {
             assert!(row.contains(&githash), "the row names the githash: {row}");
         }
@@ -99,7 +100,7 @@ fn a_foreign_world_artifact_is_refused_with_or_without_its_source() {
     let beside = workspace_with_artifact(&tmp.path().join("ws"), &bytes);
 
     for olean in [&bare, &beside] {
-        match ImportAdmitter::new().admit("Target", olean) {
+        match ImportAdmitter::new().admit_in_world("Target", olean, None) {
             ImportAdmission::Refused(row) => {
                 assert!(row.contains(FOREIGN_GITHASH), "names its githash: {row}");
                 assert!(row.contains("v4.30.0-rc2"), "names the world read: {row}");
@@ -110,4 +111,24 @@ fn a_foreign_world_artifact_is_refused_with_or_without_its_source() {
             ),
         }
     }
+}
+
+#[test]
+fn a_measured_lean_artifact_is_admitted_only_with_its_own_declaration() {
+    let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/fixtures/olean/v4.36.0/plain/StablePlain.olean");
+    let dir = tempfile::tempdir().expect("tempdir");
+    let artifact = dir.path().join("StablePlain.olean");
+    fs::copy(fixture, &artifact).expect("stable Lean fixture");
+    let mut admitter = ImportAdmitter::new();
+    let unresolved = admitter.admit_in_world("StablePlain", &artifact, None);
+    assert!(matches!(unresolved, ImportAdmission::Refused(_)));
+    let selected = admitter.admit_in_world("StablePlain", &artifact, Some(LeanWorld::Lean436));
+    assert!(matches!(selected, ImportAdmission::Disclosed(_)));
+    let other = admitter.admit_in_world("StablePlain", &artifact, Some(LeanWorld::Lean436Rc2));
+    assert!(matches!(other, ImportAdmission::Refused(row) if row.contains("v4.36.0-rc2")));
+    assert_eq!(
+        admitter.admit_in_world("StablePlain", &artifact, None),
+        unresolved
+    );
 }

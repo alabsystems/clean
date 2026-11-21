@@ -95,6 +95,22 @@ pub(crate) fn with_location(
 /// ENSURES: `push_neg`, `dsimp`, and `unfold` are registered with handlers that decode optional location args.
 /// ENSURES: Existing simple entries with those names are replaced.
 pub(crate) fn register_phase3d_location(registry: &mut TacticRegistry) {
+    registry.register(TacticEntry {
+        name: "split".to_string(),
+        pattern: TacticArgPattern::IdentList,
+        handler: Arc::new(|ps, args| match args {
+            [] => super::split_(ps),
+            [argument] => {
+                let name = expr_to_hyp_name(ps, argument)?;
+                super::connective_split_at::split_at(ps, &name)
+            }
+            _ => Err(TacticError::InvalidTarget {
+                tactic: "split".into(),
+                detail: "split currently requires one explicit hypothesis location".into(),
+            }),
+        }),
+    });
+
     // push_neg [at h1 h2 | at * | (goal)]
     registry.register(TacticEntry {
         name: "push_neg".to_string(),

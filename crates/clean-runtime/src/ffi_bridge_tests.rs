@@ -70,55 +70,8 @@ fn test_ffi_bridge_registered_names_sorted() {
     assert_eq!(names, sorted, "registered_names should be sorted");
 }
 
-// ---------------------------------------------------------------------------
-// String operations
-// ---------------------------------------------------------------------------
-
-#[test]
-fn test_string_append_basic() {
-    let bridge = FfiBridge::new();
-    let result = bridge
-        .call_native(
-            "String.append",
-            &[
-                Value::String("hello".into()),
-                Value::String(" world".into()),
-            ],
-        )
-        .expect("append should succeed");
-    assert_eq!(result, Value::String("hello world".into()));
-}
-
-#[test]
-fn test_string_length_returns_byte_count() {
-    let bridge = FfiBridge::new();
-    let result = bridge
-        .call_native("String.length", &[Value::String("hello".into())])
-        .expect("length should succeed");
-    assert_eq!(result, Value::Nat(5));
-}
-
-#[test]
-fn test_string_push_appends_char() {
-    let bridge = FfiBridge::new();
-    let result = bridge
-        .call_native(
-            "String.push",
-            &[Value::String("hell".into()), Value::Nat(97)], // 'a'
-        )
-        .expect("push should succeed");
-    assert_eq!(result, Value::String("hella".into()));
-}
-
-#[test]
-fn test_string_mk_from_char_codes() {
-    let bridge = FfiBridge::new();
-    let codes = Value::Array(vec![Value::Nat(104), Value::Nat(105)]); // 'h', 'i'
-    let result = bridge
-        .call_native("String.mk", &[codes])
-        .expect("mk should succeed");
-    assert_eq!(result, Value::String("hi".into()));
-}
+#[path = "ffi_bridge_string_tests.rs"]
+mod string_operations;
 
 // ---------------------------------------------------------------------------
 // Array operations

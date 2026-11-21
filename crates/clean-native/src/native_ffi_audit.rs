@@ -60,15 +60,19 @@
 //! (`clean_olean`'s `register_real_compiler_attr_entries`) for every
 //! declaration the importing module itself added. A declaration the builtin
 //! prelude holds keeps the prelude's meaning (the loader keeps the first
-//! declaration of a name), and a runtime primitive the dependency walk keeps
-//! as a shim (`is_primitive_denylisted`) is skipped before this audit routes
-//! it. The `attribute [extern]` and `attribute [implemented_by]` commands
+//! declaration of a name). This audit routes every reached dependency with
+//! constant info before the shim predicate can skip it: a shim name does not
+//! override explicit extern or implemented_by metadata. The `attribute
+//! [extern]` and `attribute [implemented_by]` commands
 //! cannot bind a prelude constant: elaboration refuses either on one (Lean's
 //! imported-module check, `clean_elab`'s `declared_here`).
 
 use clean_compiler::ffi_bridge::ImplementedByMap;
 use clean_compiler::CompiledBefore;
-use clean_kernel::{ConstantInfo, Environment, Name};
+use clean_kernel::env::{CompilerExternArity, CompilerExternEntry, CompilerExternMetadata};
+use clean_kernel::{
+    ConstantInfo, ConstantKind, Environment, Expr, ExprKind, LeanWorld, MDataValue, Name,
+};
 
 /// The meaning a build promises for the code it compiles: clean-compiler's
 /// own, which `to_lcnf` and the pipeline take too.
@@ -262,6 +266,293 @@ pub(crate) fn route_ffi_dep(
     }
     refuse_extern(env, info, root)?;
     Ok(FfiRoute::Ordinary)
+}
+
+pub(crate) fn select_stable_uint32_shim(
+    env: &Environment,
+    info: &ConstantInfo,
+) -> anyhow::Result<Option<&'static str>> {
+    if clean_olean::environment_world(env) != Some(LeanWorld::Lean436.tag()) {
+        return Ok(None);
+    }
+    checked_uint32_shim(env, info)
+}
+
+/// The pinned SDK conversion and the stable world use the same boxed adapter.
+/// Validate the imported compiler descriptor separately from the logical definition.
+fn checked_uint32_shim(
+    env: &Environment,
+    info: &ConstantInfo,
+) -> anyhow::Result<Option<&'static str>> {
+    let name = &info.name;
+    let (artifact, upstream, shim, expected_type) =
+        if *name == Name::anon().str("UInt32").str("ofNat") {
+            let borrowed_nat = Expr::mdata(
+                vec![(Name::anon().str("borrowed"), MDataValue::Bool(true))],
+                Expr::const_str("Nat"),
+            );
+            (
+                "Init.Data.UInt.BasicAux",
+                "lean_uint32_of_nat",
+                "l_UInt32_ofNat",
+                Expr::arrow(borrowed_nat, Expr::const_str("UInt32")),
+            )
+        } else if *name == Name::anon().str("UInt32").str("toNat") {
+            (
+                "Init.Prelude",
+                "lean_uint32_to_nat",
+                "l_UInt32_toNat",
+                Expr::arrow(Expr::const_str("UInt32"), Expr::const_str("Nat")),
+            )
+        } else {
+            return Ok(None);
+        };
+
+    anyhow::ensure!(
+        clean_olean::import::lean_declaration_artifact(env, name).as_deref() == Some(artifact),
+        "stable UInt32 extern `{name}` requires its `{artifact}` artifact"
+    );
+    anyhow::ensure!(
+        info.kind == ConstantKind::Definition
+            && info.level_params.is_empty()
+            && info.type_ == expected_type
+            && !env.is_unsafe(name)
+            && !env.is_partial(name)
+            && !env.is_noncomputable(name)
+            && env.get_implemented_by(name).is_none(),
+        "stable UInt32 extern `{name}` has an incompatible definition or telescope"
+    );
+    let Some(CompilerExternMetadata::Complete(descriptor)) = env.extern_metadata(name)? else {
+        anyhow::bail!("stable UInt32 extern `{name}` requires complete compiler metadata");
+    };
+    anyhow::ensure!(
+        descriptor.arity == CompilerExternArity::Unspecified
+            && matches!(descriptor.entries.as_slice(),
+                [CompilerExternEntry::Standard { backend, symbol }]
+                if *backend == Name::anon().str("all") && symbol == upstream),
+        "stable UInt32 extern `{name}` requires exactly the SDK `{upstream}` binding"
+    );
+    Ok(Some(shim))
+}
+
+pub(crate) fn checked_char_carrier(env: &Environment, name: &Name) -> anyhow::Result<Expr> {
+    let family_name = Name::from_string("Char");
+    let scalar_predicate = Name::from_string("UInt32.isValidChar");
+    let char_ty = Expr::const_str("Char");
+    let ctor = Name::from_string("Char.mk");
+    let ty = Expr::arrow(
+        Expr::const_str("UInt32"),
+        Expr::arrow(
+            Expr::app(Expr::const_str("UInt32.isValidChar"), Expr::bvar(0)),
+            char_ty.clone(),
+        ),
+    );
+    anyhow::ensure!(
+        [&family_name, &ctor, &scalar_predicate]
+            .into_iter()
+            .all(
+                |n| clean_olean::import::lean_declaration_artifact(env, n).as_deref()
+                    == Some("Init.Prelude")
+            )
+            && env
+                .get_const(&scalar_predicate)
+                .is_some_and(|p| p.kind == ConstantKind::Definition
+                    && p.level_params.is_empty()
+                    && p.type_ == Expr::arrow(Expr::const_str("UInt32"), Expr::prop()))
+            && env
+                .get_constructor(&ctor)
+                .is_some_and(
+                    |constructor| constructor.inductive_name == Name::from_string("Char")
+                        && constructor.num_params == 0
+                        && constructor.num_fields == 2
+                        && constructor.constructor_idx == 0
+                        && constructor.level_params.is_empty()
+                        && constructor.type_ == ty
+                )
+            && env
+                .get_inductive(&family_name)
+                .is_some_and(|family| family.type_ == Expr::type_()
+                    && family.level_params.is_empty()
+                    && !family.is_recursive
+                    && family.num_params == 0
+                    && family.num_indices == 0
+                    && family.constructor_names.as_slice() == [ctor]),
+        "stable {name} requires the SDK Unicode scalar carrier"
+    );
+    Ok(char_ty)
+}
+
+pub(crate) fn stable_string_push(env: &Environment, info: &ConstantInfo) -> anyhow::Result<()> {
+    let name = Name::from_string("String.push");
+    let string = Expr::const_str("String");
+    let expected = Expr::arrow(
+        string.clone(),
+        Expr::arrow(checked_char_carrier(env, &name)?, string),
+    );
+    anyhow::ensure!(
+        clean_olean::environment_world(env) == Some(LeanWorld::Lean436.tag())
+            && info.name == name
+            && clean_olean::import::lean_declaration_artifact(env, &name).as_deref()
+                == Some("Init.Data.String.Bootstrap")
+            && clean_compiler::string_layout::has_byte_array_string_layout(env)
+            && info.kind == ConstantKind::Definition
+            && info.level_params.is_empty()
+            && info.type_ == expected
+            && !env.is_unsafe(&name)
+            && !env.is_partial(&name)
+            && !env.is_noncomputable(&name)
+            && env.get_implemented_by(&name).is_none(),
+        "stable String.push requires the selected SDK declaration and its owned String and Char"
+    );
+    let Some(CompilerExternMetadata::Complete(descriptor)) = env.extern_metadata(&name)? else {
+        anyhow::bail!("stable String.push requires complete compiler extern metadata");
+    };
+    anyhow::ensure!(
+        descriptor.arity == CompilerExternArity::Unspecified
+            && matches!(descriptor.entries.as_slice(),
+                [CompilerExternEntry::Standard { backend, symbol }]
+                if *backend == Name::from_string("all") && symbol == "lean_string_push"),
+        "stable String.push requires the original lean_string_push extern binding"
+    );
+    Ok(())
+}
+
+/// Select a supported stable primitive for the existing all-owned boxed ABI.
+pub(crate) fn select_stable_core_shim(
+    env: &Environment,
+    info: &ConstantInfo,
+) -> anyhow::Result<Option<&'static str>> {
+    if clean_olean::environment_world(env) == Some(LeanWorld::Lean436.tag())
+        && info.name == Name::from_string("String.push")
+    {
+        stable_string_push(env, info)?;
+        return Ok(Some("l_String_push"));
+    }
+    if clean_olean::environment_world(env) == Some(LeanWorld::Lean436.tag())
+        && info.name == Name::anon().str("Nat").str("add")
+    {
+        require_stable_nat_add(env)?;
+        return Ok(Some("l_Nat_add"));
+    }
+    Ok(select_stable_uint32_shim(env, info)?)
+}
+
+/// Select the all-owned Clean Nat shim for addition found in captured Lean IR.
+/// The registered stable Init binding borrows both managed Nat inputs. The
+/// native backend adapts it through `l_Nat_add`, which consumes both inputs.
+pub(crate) fn require_stable_nat_add(env: &Environment) -> anyhow::Result<()> {
+    let name = Name::anon().str("Nat").str("add");
+    anyhow::ensure!(
+        clean_olean::environment_world(env) == Some(LeanWorld::Lean436.tag()),
+        "captured Nat IR requires stable Init.Prelude Nat.add"
+    );
+    require_nat_add_binding(env, &name)
+}
+
+/// The pinned SDK shares the two-borrowed-input ABI with stable Lean, but
+/// ordinary native C also requires the reviewed 4.30 definition closure.
+pub(crate) fn has_pinned_nat_add_binding(env: &Environment, name: &Name) -> bool {
+    *name == Name::interned("Nat.add")
+        && clean_olean::environment_world(env) == Some(LeanWorld::Lean430Rc2.tag())
+        && !env.is_staged_header(name)
+        && matches!(
+            env.native_fold_definition_verdict(name),
+            Ok((
+                "lean-v4.30.0-rc2" | "clean-import+lean-v4.30.0-rc2",
+                clean_kernel::env::FoldRole::Fold,
+            ))
+        )
+        && require_nat_add_binding(env, name).is_ok()
+}
+
+fn require_nat_add_binding(env: &Environment, name: &Name) -> anyhow::Result<()> {
+    anyhow::ensure!(
+        clean_olean::import::lean_declaration_artifact(env, name).as_deref()
+            == Some("Init.Prelude"),
+        "native Nat.add requires its Init.Prelude artifact"
+    );
+    let metadata = env.extern_metadata(name)?;
+    let Some(CompilerExternMetadata::Complete(descriptor)) = metadata else {
+        anyhow::bail!("native addition requires complete Nat.add extern metadata");
+    };
+    anyhow::ensure!(
+        descriptor.arity == CompilerExternArity::Unspecified
+            && matches!(descriptor.entries.as_slice(),
+                [CompilerExternEntry::Standard {backend, symbol}]
+                if *backend == Name::anon().str("all") && symbol == "lean_nat_add")
+            && !env.is_unsafe(name)
+            && !env.is_partial(name)
+            && !env.is_noncomputable(name)
+            && env.get_implemented_by(name).is_none(),
+        "native addition requires the original Nat.add managed extern"
+    );
+    let info = env
+        .get_const(name)
+        .ok_or_else(|| anyhow::anyhow!("native Nat.add declaration is absent"))?;
+    let nat = Expr::const_str("Nat");
+    let borrowed = Name::anon().str("borrowed");
+    let borrowed_nat = |type_: &Expr| {
+        matches!(type_.kind(), ExprKind::MData(entries, inner)
+            if **inner == nat && matches!(entries.as_slice(),
+                [(key, MDataValue::Bool(true))] if *key == borrowed))
+    };
+    let ExprKind::Pi(_, left, tail) = info.type_.kind() else {
+        anyhow::bail!("native Nat.add must take two borrowed Nat inputs");
+    };
+    let ExprKind::Pi(_, right, result) = tail.kind() else {
+        anyhow::bail!("native Nat.add must take two borrowed Nat inputs");
+    };
+    anyhow::ensure!(
+        info.level_params.is_empty()
+            && borrowed_nat(left)
+            && borrowed_nat(right)
+            && **result == nat,
+        "native Nat.add must take two borrowed Nat inputs and return Nat"
+    );
+    Ok(())
+}
+
+/// Authorize only the 4.30 SDK definition and its borrowed Nat extern.
+pub(crate) fn has_pinned_uint32_of_nat_binding(env: &Environment, info: &ConstantInfo) -> bool {
+    let name = &info.name;
+    clean_olean::environment_world(env) == Some(LeanWorld::Lean430Rc2.tag())
+        && *name == Name::interned("UInt32.ofNat")
+        && !env.is_staged_header(name)
+        && matches!(
+            env.native_fold_definition_verdict(name),
+            Ok((
+                "lean-v4.30.0-rc2" | "clean-import+lean-v4.30.0-rc2",
+                clean_kernel::env::FoldRole::Definition,
+            ))
+        )
+        && matches!(checked_uint32_shim(env, info), Ok(Some("l_UInt32_ofNat")))
+}
+
+/// The imported Prelude byte conversion has a closed, pinned definition and
+/// a separately checked low-octet implementation for the native C ABI.
+pub(crate) fn has_pinned_uint8_of_nat_binding(env: &Environment, name: &Name) -> bool {
+    if *name != Name::from_string("UInt8.ofNat")
+        || env.is_unsafe(name)
+        || env.is_partial(name)
+        || env.is_noncomputable(name)
+        || env.is_staged_header(name)
+        || env.get_implemented_by(name).is_some()
+        || env.get_extern(name).map(String::as_str) != Some("lean_uint8_of_nat")
+        || !clean_kernel::env::csimp::rules_for(env, Some(name)).is_empty()
+    {
+        return false;
+    }
+    matches!(
+        env.get_constant_origin(name),
+        Some(clean_kernel::env::ConstantOrigin::Olean { module: Some(module), .. })
+            if module == "Init.Prelude"
+    ) && matches!(
+        env.native_fold_definition_verdict(name),
+        Ok((
+            "lean-v4.30.0-rc2" | "clean-import+lean-v4.30.0-rc2",
+            clean_kernel::env::FoldRole::Definition,
+        ))
+    )
 }
 
 /// Refuse a reached `@[extern]` declaration: with a body, Lean never runs the

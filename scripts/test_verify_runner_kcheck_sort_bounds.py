@@ -52,7 +52,9 @@ class SortBoundsQualificationInputs(unittest.TestCase):
             crate = root / "crates/clean-olean"
             crate.mkdir(parents=True)
             (crate / "Cargo.toml").write_text("# fixture\n")
-            inputs = ["lean-toolchain"]
+            world_fixture = "tests/fixtures/olean/world.olean"
+            (crate / "lean_worlds.tsv").write_text(f"v1\toracle\tlean:v1\t{world_fixture}\n")
+            inputs = ["lean-toolchain", world_fixture]
             for package in self.PACKAGES:
                 inputs.extend(f"theories/{package}/{name}" for name in
                               ("Root.lean", "ORDER", "statement_pins.json",

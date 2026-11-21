@@ -182,7 +182,7 @@ pub(crate) mod carrier;
 pub mod boundary;
 use names::{is_legacy_name, wire_name};
 
-use crate::emit_trust_ir_runtime::RuntimeAbi;
+use crate::emit_trust_ir_runtime::{RuntimeAbi, RuntimeImport};
 use crate::ir::{
     CtorInfo, FnId, IRArg, IRBody, IRDecl, IRExpr, IRLiteral, IRType, JoinPointId, VarId,
 };
@@ -762,6 +762,25 @@ fn emit_trust_ir_with_carriers_data(
     carriers: &[boundary::CarrierExport],
     observation: Option<&crate::primitive_uses::ObservationFrame>,
 ) -> Result<TrustIrEmissionData, TrustIrError> {
+    emit_trust_ir_with_recorded_imports(decls, config, carriers, observation).map(|(data, _)| data)
+}
+
+pub(crate) fn emit_trust_ir_with_runtime_imports(
+    decls: &[IRDecl],
+    config: &TrustIrConfig,
+    carriers: &[boundary::CarrierExport],
+) -> Result<(TrustIrEmissionData, Vec<RuntimeImport>), TrustIrError> {
+    emit_trust_ir_with_recorded_imports(decls, config, carriers, None)
+}
+
+fn emit_trust_ir_with_recorded_imports(
+    decls: &[IRDecl],
+    config: &TrustIrConfig,
+    carriers: &[boundary::CarrierExport],
+    observation: Option<&crate::primitive_uses::ObservationFrame>,
+) -> Result<(TrustIrEmissionData, Vec<RuntimeImport>), TrustIrError> {
+    crate::ir_checker::validate_nat_literals(decls)
+        .map_err(|error| TrustIrError::Unsupported(error.to_string()))?;
     let mut identities = HashSet::new();
     for decl in decls {
         if !identities.insert(&decl.name) {
@@ -874,33 +893,22 @@ fn emit_trust_ir_with_carriers_data(
         col: 0,
     });
 
-    // In `ExternCalls` mode, declare the Clean-runtime imports FIRST. trust-ir
-    // assigns FuncIds sequentially, so the externs occupy `0..n_externs` and the
-    // user functions follow at `n_externs..`. (`RuntimeAbi::declare` must run
-    // before any `FunctionBuilder` is live, since one borrows the ModuleBuilder.)
-    let abi = match config.runtime_lowering {
-        RuntimeLowering::ExternCalls => Some(RuntimeAbi::declare(&mut mb)),
-        RuntimeLowering::Dialect => None,
-    };
-
-    // --- Dropped-callee extern pre-pass (ExternCalls only; C1 boundary). ---
-    //
-    // The #14 dependency boundary (clean-cli `select_lcnf_decl`) drops
-    // non-compilable dependencies from the slice; `emit_c` still emits calls to
-    // their mangled symbols and lets the linker resolve them (runtime shims or
-    // other objects). Parity here: forward-declare each such `Apply` target as
-    // a bodyless `Linkage::External` function with the boxed all-Ptr signature,
-    // fail-closed — a callee whose call sites do not certify that signature is
-    // NOT declared and keeps the `UndefinedFunction` refusal at emit time.
-    // Must run after `RuntimeAbi::declare` and before pass 1 (FuncIds are
-    // sequential).
-    let extern_fallbacks = declare_extern_fallbacks(&mut mb, decls, abi.is_some());
-
-    let base = abi
-        .as_ref()
-        .map(RuntimeAbi::next_user_func_index)
-        .unwrap_or(0)
-        + extern_fallbacks.len() as u32;
+    // ARC lowering depends on the routing triple, even for native ARC nodes
+    // with no direct runtime call. Dropped callees retain their original boxes.
+    let external = config.runtime_lowering == RuntimeLowering::ExternCalls;
+    if external {
+        RuntimeAbi::declare_arc(&mut mb);
+    }
+    let extern_fallbacks = declare_extern_fallbacks(&mut mb, decls, external);
+    let base = mb
+        .peek_next_func_id()
+        .map_err(|e| TrustIrError::Unsupported(e.to_string()))?
+        .index();
+    let after_users = u32::try_from(decls.len())
+        .ok()
+        .and_then(|n| base.checked_add(n))
+        .ok_or_else(|| TrustIrError::Unsupported("user function FuncId space exhausted".into()))?;
+    let abi = external.then(|| RuntimeAbi::new(&mut mb, after_users));
 
     // --- Pass 1: predict every user function's FuncId by declaration index. ---
     //
@@ -965,6 +973,11 @@ fn emit_trust_ir_with_carriers_data(
         )?;
     }
 
+    let runtime_imports = match abi {
+        Some(abi) => abi.finish(&mut mb)?,
+        None => Vec::new(),
+    };
+
     // WS6.9: the typed boundary wrappers, after every user function so the
     // FuncIds predicted in pass 1 are untouched.
     boundary::emit_carrier_wrappers(&mut mb, carriers, decls, &fn_ids, span)?;
@@ -987,11 +1000,14 @@ fn emit_trust_ir_with_carriers_data(
             })
         })
         .collect::<Result<Vec<_>, TrustIrError>>()?;
-    Ok(TrustIrEmissionData {
-        module,
-        native_arithmetic_supplies,
-        native_arithmetic_uses,
-    })
+    Ok((
+        TrustIrEmissionData {
+            module,
+            native_arithmetic_supplies,
+            native_arithmetic_uses,
+        },
+        runtime_imports,
+    ))
 }
 
 /// Finalize an emitted module: pin the target, then gate it fail-closed.
@@ -1901,13 +1917,21 @@ fn emit_body(ctx: &mut FnCtx, body: &IRBody) -> Result<(), TrustIrError> {
                 .get(jp)
                 .ok_or(TrustIrError::UndefinedJoinPoint(*jp))?;
             let target = jp_info.block;
-            // Filter erased args: a join point param that was erased has no SSA
-            // value. We pass arguments positionally for non-erased args only.
+            // Every join-point parameter is a block parameter (the `JDecl` arm
+            // adds one per parameter, an `Erased`-typed one as a pointer), so
+            // every argument is passed positionally. An erased argument is
+            // materialized the way an erased call or constructor slot is
+            // (`erased_slot_value`). Dropping it, as this arm once did, left the
+            // branch one value short of its target block: the validator
+            // refused the module, and a loop whose back edge passes an erased
+            // type argument (`tail_loop` over a polymorphic recursion) could
+            // never be emitted.
             let mut arg_vals = Vec::with_capacity(args.len());
             for arg in args {
-                if let IRArg::Var(_) = arg {
-                    arg_vals.push(ctx.value_of_arg(arg)?);
-                }
+                arg_vals.push(match arg {
+                    IRArg::Var(_) => ctx.value_of_arg(arg)?,
+                    IRArg::Erased => erased_slot_value(ctx),
+                });
             }
             ctx.fb.br(target, arg_vals);
             Ok(())
@@ -2244,11 +2268,38 @@ fn emit_expr_inner(ctx: &mut FnCtx, expr: &IRExpr, ty: &IRType) -> Result<ValueI
             {
                 let lo = ctx.fb.iconst(Ty::U64, (*v as u64) as i128);
                 let hi = ctx.fb.iconst(Ty::U64, ((*v >> 64) as u64) as i128);
-                Ok(ctx.call(abi.clean_nat_big, vec![lo, hi]))
+                Ok(ctx.call(abi.import(RuntimeImport::NatBig), vec![lo, hi]))
             } else {
                 Err(TrustIrError::Unsupported(
                     "big Nat literal (>= 2^64) has no Dialect-mode lowering; the \
                      ExternCalls runtime provides clean_nat_big"
+                        .to_string(),
+                ))
+            }
+        }
+        IRExpr::Lit(IRLiteral::NatLimbs(limbs)) => {
+            if let (RuntimeLowering::ExternCalls, Some(abi)) =
+                (ctx.config.runtime_lowering, ctx.abi.clone())
+            {
+                let n = limbs.len();
+                let lo_top = ctx.fb.iconst(
+                    Ty::U64,
+                    limbs.get(n.wrapping_sub(2)).copied().unwrap_or(0) as i128,
+                );
+                let hi_top = ctx.fb.iconst(
+                    Ty::U64,
+                    limbs.get(n.wrapping_sub(1)).copied().unwrap_or(0) as i128,
+                );
+                let mut acc = ctx.call(abi.import(RuntimeImport::NatBig), vec![lo_top, hi_top]);
+                for &w in limbs.iter().take(n.saturating_sub(2)).rev() {
+                    let limb = ctx.fb.iconst(Ty::U64, w as i128);
+                    acc = ctx.call(abi.import(RuntimeImport::NatLimbStep), vec![acc, limb]);
+                }
+                Ok(acc)
+            } else {
+                Err(TrustIrError::Unsupported(
+                    "big Nat literal (>= 2^128) has no Dialect-mode lowering; the \
+                     ExternCalls runtime provides clean_nat_limb_step"
                         .to_string(),
                 ))
             }
@@ -2318,7 +2369,8 @@ fn emit_expr_inner(ctx: &mut FnCtx, expr: &IRExpr, ty: &IRType) -> Result<ValueI
                     let arity_c = ctx.fb.iconst(Ty::U32, 2);
                     let nfixed_c = ctx.fb.iconst(Ty::U32, 0);
                     let call_args = vec![fn_ptr, arity_c, nfixed_c];
-                    let result = ctx.call(abi.clean_alloc_closure, call_args.clone());
+                    let result =
+                        ctx.call(abi.import(RuntimeImport::AllocClosure), call_args.clone());
                     ctx.native_arithmetic_uses.push(NativeArithmeticUseData {
                         primitive: name.clone(),
                         caller_name: ctx.caller_name.clone(),
@@ -2330,7 +2382,7 @@ fn emit_expr_inner(ctx: &mut FnCtx, expr: &IRExpr, ty: &IRType) -> Result<ValueI
                         result,
                         call_args,
                         code_pointer: Some(fn_ptr),
-                        runtime_entry: Some(abi.clean_alloc_closure),
+                        runtime_entry: Some(abi.import(RuntimeImport::AllocClosure)),
                         scalar_read: None,
                         kind: NativeArithmeticUseKind::FunctionValue,
                     });
@@ -2495,7 +2547,10 @@ fn emit_expr_inner(ctx: &mut FnCtx, expr: &IRExpr, ty: &IRType) -> Result<ValueI
                     let fn_ptr = ctx.closure_fn_ptr(&abi, callee, callee_sig);
                     let arity_c = ctx.fb.iconst(Ty::U32, arity as i128);
                     let nfixed_c = ctx.fb.iconst(Ty::U32, 0);
-                    return Ok(ctx.call(abi.clean_alloc_closure, vec![fn_ptr, arity_c, nfixed_c]));
+                    return Ok(ctx.call(
+                        abi.import(RuntimeImport::AllocClosure),
+                        vec![fn_ptr, arity_c, nfixed_c],
+                    ));
                 }
                 // Defensive fail-closed: certification guarantees every call
                 // site is at least saturated; refuse an under-applied call
@@ -2705,7 +2760,7 @@ fn emit_expr_inner(ctx: &mut FnCtx, expr: &IRExpr, ty: &IRType) -> Result<ValueI
                 })?;
                 let ptr = ctx.fb.global_addr(gid);
                 let len = ctx.fb.iconst(Ty::U64, s.len() as i128);
-                return Ok(ctx.call(abi.clean_mk_string_from_bytes, vec![ptr, len]));
+                return Ok(ctx.call(abi.import(RuntimeImport::MkStringFromBytes), vec![ptr, len]));
             }
             // Dialect mode (no runtime): carry the bytes as a `clean.str.const`
             // op producing a managed string pointer.
@@ -2899,7 +2954,7 @@ fn emit_literal(ctx: &mut FnCtx, lit: &IRLiteral) -> ValueId {
         // A big Nat literal is an OBJECT (heap Nat), not a scalar const, and is
         // lowered at the `IRExpr::Lit` dispatch (via `clean_nat_big`) before this
         // scalar-only helper is ever reached.
-        IRLiteral::NatBig(_) => {
+        IRLiteral::NatBig(_) | IRLiteral::NatLimbs(_) => {
             unreachable!("NatBig is lowered at the IRExpr::Lit dispatch, not emit_literal")
         }
         IRLiteral::Float32(v) => ctx.fb.fconst(Ty::F32, *v as f64),
@@ -3541,15 +3596,15 @@ fn emit_clean_value_extern(
             // clean_obj_tag returns the whole tag as U32, the op's contract
             // and the `switch` scrutinee width. (An 8-bit import plus a zext
             // read boxed tag 299 as 43.)
-            ctx.call(abi.clean_obj_tag, vec![obj])
+            ctx.call(abi.import(RuntimeImport::ObjTag), vec![obj])
         }
         "obj.proj" => {
             let idx = ctx.fb.iconst(Ty::U64, attr_u64(attrs, "idx") as i128);
-            ctx.call(abi.clean_ctor_get, vec![obj, idx])
+            ctx.call(abi.import(RuntimeImport::CtorGet), vec![obj, idx])
         }
         "obj.uproj" => {
             let idx = ctx.fb.iconst(Ty::U32, attr_u64(attrs, "idx") as i128);
-            ctx.call(abi.clean_ctor_get_usize, vec![obj, idx])
+            ctx.call(abi.import(RuntimeImport::CtorGetUsize), vec![obj, idx])
         }
         "obj.sproj" => {
             let w = match RuntimeAbi::scalar_width(result_ty) {
@@ -3558,7 +3613,7 @@ fn emit_clean_value_extern(
             };
             let byte_off = 8 * attr_u64(attrs, "n") + attr_u64(attrs, "offset");
             let off = ctx.fb.iconst(Ty::U32, byte_off as i128);
-            let raw = ctx.call(abi.scalar_get[w.idx()], vec![obj, off]);
+            let raw = ctx.call(abi.import(RuntimeImport::ScalarGet(w)), vec![obj, off]);
             if *result_ty == Ty::Bool {
                 // A `Bool` field is stored as one byte (0 / 1, the runtime's
                 // `uint8_t`); the getter returns `U8`, so read it back as
@@ -3570,7 +3625,7 @@ fn emit_clean_value_extern(
                 raw
             }
         }
-        "obj.reset" => ctx.call(abi.clean_reset, vec![obj]),
+        "obj.reset" => ctx.call(abi.import(RuntimeImport::Reset), vec![obj]),
         // obj.box / obj.unbox are handled in their `IRExpr` arms (they need the
         // L5IR scalar type for width-correct dispatch + casts).
         _ => return Ok(None),
@@ -3584,10 +3639,10 @@ fn emit_clean_value_extern(
 /// the header's `static inline clean_box`).
 fn emit_box_extern(ctx: &mut FnCtx, abi: &RuntimeAbi, bty: &IRType, scalar: ValueId) -> ValueId {
     match bty {
-        IRType::Float64 => ctx.call(abi.clean_box_float, vec![scalar]),
+        IRType::Float64 => ctx.call(abi.import(RuntimeImport::BoxFloat), vec![scalar]),
         IRType::Float32 => {
             let d = ctx.cast(CastOp::FPExt, Ty::F32, Ty::F64, scalar);
-            ctx.call(abi.clean_box_float, vec![d])
+            ctx.call(abi.import(RuntimeImport::BoxFloat), vec![d])
         }
         // WS6.1 producer canonicalization: one value, one boxed spelling. A
         // `USize` is how a small `Nat` literal is typed (`to_ir::lower`: a Nat
@@ -3599,18 +3654,18 @@ fn emit_box_extern(ctx: &mut FnCtx, abi: &RuntimeAbi, bty: &IRType, scalar: Valu
         // always-heap `clean_box_uint64`, so a
         // small Nat had two boxed spellings and a tagged-only reader got
         // pointer bits (F-101).
-        IRType::USize => ctx.call(abi.clean_nat_of_u64, vec![scalar]),
+        IRType::USize => ctx.call(abi.import(RuntimeImport::NatOfU64), vec![scalar]),
         // A genuine `UInt64` object is heap in Lean's ABI, and every `UInt64`
         // consumer reads through the dispatching `clean_unbox_uint64`.
-        IRType::UInt64 => ctx.call(abi.clean_box_uint64, vec![scalar]),
-        IRType::UInt32 => ctx.call(abi.clean_box_uint32, vec![scalar]),
+        IRType::UInt64 => ctx.call(abi.import(RuntimeImport::BoxUint64), vec![scalar]),
+        IRType::UInt32 => ctx.call(abi.import(RuntimeImport::BoxUint32), vec![scalar]),
         IRType::UInt16 => {
             let w = ctx.fb.zext(Ty::U16, Ty::U32, scalar);
-            ctx.call(abi.clean_box_uint32, vec![w])
+            ctx.call(abi.import(RuntimeImport::BoxUint32), vec![w])
         }
         IRType::UInt8 => {
             let w = ctx.fb.zext(Ty::U8, Ty::U32, scalar);
-            ctx.call(abi.clean_box_uint32, vec![w])
+            ctx.call(abi.import(RuntimeImport::BoxUint32), vec![w])
         }
         IRType::Bool => {
             // trust-ir casts are integer<->integer; `Bool` is not an integer
@@ -3621,7 +3676,7 @@ fn emit_box_extern(ctx: &mut FnCtx, abi: &RuntimeAbi, bty: &IRType, scalar: Valu
             let one = ctx.fb.iconst(Ty::U32, 1);
             let zero = ctx.fb.iconst(Ty::U32, 0);
             let w = ctx.fb.select(Ty::U32, scalar, one, zero);
-            ctx.call(abi.clean_box_uint32, vec![w])
+            ctx.call(abi.import(RuntimeImport::BoxUint32), vec![w])
         }
         // C2b: an ERASED (or void) payload carries no runtime information —
         // its carrier SSA value is whatever placeholder the body materialized
@@ -3708,11 +3763,11 @@ fn box_scalar_tagged(
             let one = ctx.fb.iconst(Ty::U64, 1);
             let zero = ctx.fb.iconst(Ty::U64, 0);
             let w = ctx.fb.select(Ty::U64, scalar, one, zero);
-            ctx.call(abi.clean_box, vec![w])
+            ctx.call(abi.import(RuntimeImport::Box), vec![w])
         }
         IRType::UInt8 | IRType::UInt16 | IRType::UInt32 => {
             let w = ctx.fb.zext(lower_ty(carrier), Ty::U64, scalar);
-            ctx.call(abi.clean_box, vec![w])
+            ctx.call(abi.import(RuntimeImport::Box), vec![w])
         }
         // U64-lowering carriers (`UInt64`/`USize`): a `Nat` carrier whose value
         // may reach bit 63, which the tagged `clean_box` `(v<<1)|1` would
@@ -3720,8 +3775,10 @@ fn box_scalar_tagged(
         // `clean_nat_of_u64` producer (RUNG B): tagged below 2^63, a heap Nat
         // cell at or above it. The UInt8/16/32 carriers above are always < 2^63,
         // so their tagged `clean_box` stays exact.
-        IRType::UInt64 | IRType::USize => ctx.call(abi.clean_nat_of_u64, vec![scalar]),
-        _ => ctx.call(abi.clean_box, vec![scalar]),
+        IRType::UInt64 | IRType::USize => {
+            ctx.call(abi.import(RuntimeImport::NatOfU64), vec![scalar])
+        }
+        _ => ctx.call(abi.import(RuntimeImport::Box), vec![scalar]),
     }
 }
 
@@ -3780,10 +3837,10 @@ fn emit_unbox_extern_data(
     obj: ValueId,
 ) -> Result<NativeScalarReadData, TrustIrError> {
     let reader = match uty {
-        IRType::Float64 | IRType::Float32 => abi.clean_unbox_float,
-        IRType::UInt32 => abi.clean_unbox_uint32,
+        IRType::Float64 | IRType::Float32 => abi.import(RuntimeImport::UnboxFloat),
+        IRType::UInt32 => abi.import(RuntimeImport::UnboxUint32),
         IRType::UInt64 | IRType::USize | IRType::UInt16 | IRType::UInt8 | IRType::Bool => {
-            abi.clean_unbox_uint64
+            abi.import(RuntimeImport::UnboxUint64)
         }
         other => return Err(unbox_non_scalar(other)),
     };
@@ -3838,7 +3895,7 @@ fn emit_sset_extern(
                 val
             };
             ctx.fb
-                .call_void(abi.scalar_set[w.idx()], vec![obj, off, val]);
+                .call_void(abi.import(RuntimeImport::ScalarSet(w)), vec![obj, off, val]);
             true
         }
         None => false,
@@ -3869,7 +3926,8 @@ fn emit_clean_void_extern(
                 None => return Ok(false),
             };
             let idx = ctx.fb.iconst(Ty::U64, attr_u64(attrs, "idx") as i128);
-            ctx.fb.call_void(abi.clean_ctor_set, vec![obj, idx, val]);
+            ctx.fb
+                .call_void(abi.import(RuntimeImport::CtorSet), vec![obj, idx, val]);
         }
         "obj.uset" => {
             let val = match operands.get(1).copied() {
@@ -3878,11 +3936,12 @@ fn emit_clean_void_extern(
             };
             let idx = ctx.fb.iconst(Ty::U32, attr_u64(attrs, "idx") as i128);
             ctx.fb
-                .call_void(abi.clean_ctor_set_usize, vec![obj, idx, val]);
+                .call_void(abi.import(RuntimeImport::CtorSetUsize), vec![obj, idx, val]);
         }
         "obj.set_tag" => {
             let tag = ctx.fb.iconst(Ty::U8, attr_u64(attrs, "tag") as i128);
-            ctx.fb.call_void(abi.clean_ctor_set_tag, vec![obj, tag]);
+            ctx.fb
+                .call_void(abi.import(RuntimeImport::CtorSetTag), vec![obj, tag]);
         }
         // obj.sset reaches here only for a NON-scalar field (the scalar case
         // was handled by `emit_sset_extern` at the `IRBody::SSet` site); the
@@ -3906,14 +3965,14 @@ fn emit_ctor_extern(
             ensure_object_operands(op, operands.len(), info)?;
             if operands.is_empty() && info.scalar_size() == 0 {
                 let tag = ctx.fb.iconst(Ty::U64, info.tag as i128);
-                ctx.call(abi.clean_box, vec![tag])
+                ctx.call(abi.import(RuntimeImport::Box), vec![tag])
             } else {
                 let tag = ctx.fb.iconst(Ty::U32, info.tag as i128);
                 let nobj = ctx.fb.iconst(Ty::U32, info.num_objects as i128);
                 let scalar = ctx.fb.iconst(Ty::U32, info.scalar_size() as i128);
                 let mut args = vec![tag, nobj, scalar];
                 args.extend_from_slice(operands);
-                ctx.call(abi.clean_alloc_ctor, args)
+                ctx.call(abi.import(RuntimeImport::AllocCtor), args)
             }
         }
         "obj.reuse" => {
@@ -3927,7 +3986,7 @@ fn emit_ctor_extern(
             let scalar = ctx.fb.iconst(Ty::U32, info.scalar_size() as i128);
             let mut args = vec![slot, tag, nobj, scalar];
             args.extend_from_slice(fields);
-            ctx.call(abi.clean_reuse, args)
+            ctx.call(abi.import(RuntimeImport::Reuse), args)
         }
         _ => return Ok(None),
     };
@@ -3952,7 +4011,7 @@ fn ensure_object_operands(op: &str, passed: usize, info: &CtorInfo) -> Result<()
 /// closure captures keep a valid managed pointer in every slot.
 fn box_erased(ctx: &mut FnCtx, abi: &RuntimeAbi) -> ValueId {
     let z = ctx.fb.iconst(Ty::U64, 0);
-    ctx.call(abi.clean_box_uint64, vec![z])
+    ctx.call(abi.import(RuntimeImport::BoxUint64), vec![z])
 }
 
 /// `ExternCalls` lowering of `PartialApply` -> `clean_alloc_closure(fn, arity,
@@ -4051,7 +4110,7 @@ fn emit_partial_apply_extern(
         };
         call_args.push(v);
     }
-    let result = ctx.call(abi.clean_alloc_closure, call_args.clone());
+    let result = ctx.call(abi.import(RuntimeImport::AllocClosure), call_args.clone());
     if native_entry {
         ctx.native_arithmetic_uses.push(NativeArithmeticUseData {
             primitive: name,
@@ -4064,7 +4123,7 @@ fn emit_partial_apply_extern(
             result,
             call_args,
             code_pointer: Some(fn_ptr),
-            runtime_entry: Some(abi.clean_alloc_closure),
+            runtime_entry: Some(abi.import(RuntimeImport::AllocClosure)),
             scalar_read: None,
             kind: NativeArithmeticUseKind::PartialApply {
                 arity,
@@ -4134,7 +4193,7 @@ fn emit_apply_runtime(
     let mut call = Vec::with_capacity(n + 1);
     call.push(closure);
     call.extend(args);
-    Ok(ctx.call(abi.apply[n], call))
+    Ok(ctx.call(abi.import(RuntimeImport::Apply(n)), call))
 }
 
 /// Build a single-`U64` type attribute list for box/unbox ops.

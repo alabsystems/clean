@@ -912,6 +912,104 @@ impl<'a> ElabCtx<'a> {
         branch_ty: &Expr,
         fallback_alt: Option<&Expr>,
     ) -> Result<Expr, ElabError> {
+        self.elab_do_ctor_minor(
+            ctor_name,
+            sub_pats,
+            scrutinee_ty,
+            type_name,
+            branch_ty,
+            fallback_alt,
+            |this| this.elab_do_body_with_outer_continuation(&arm.body),
+        )
+    }
+
+    /// Each branch of a loop match returns the same action over `ForInStep`.
+    /// Use the inductive's constructor order even when the source arms are reversed.
+    pub(super) fn elab_do_for_ctor_match(
+        &mut self,
+        discr: &SurfaceExpr,
+        arms: &[DoMatchArm],
+        result_ty: &Expr,
+        mut elab_body: impl FnMut(&mut Self, &[DoElem]) -> Result<Expr, ElabError>,
+    ) -> Result<Expr, ElabError> {
+        let scrutinee = self.elaborate_with_expected_type(discr, None)?;
+        let scrutinee_ty = self.infer_type(&scrutinee)?;
+        let type_name = self.get_type_name(&scrutinee_ty)?;
+        let unsupported = || ElabError::Unsupported {
+            feature: "mutable for loop match requires one exhaustive arm per constructor".into(),
+        };
+        let info = self
+            .env
+            .get_inductive(type_name.name())
+            .ok_or_else(unsupported)?;
+        if info.num_indices != 0 {
+            return Err(unsupported());
+        }
+        let constructors = info.constructor_names.clone();
+        let cases_on = type_name.name().clone().str("casesOn");
+        let layout = self.match_eliminator_metadata(&type_name, &cases_on, true)?;
+        if layout.eliminator_num_motives() != 1 {
+            return Err(unsupported());
+        }
+        let levels = self.eliminator_levels(&cases_on, &scrutinee_ty, result_ty)?;
+        let eliminator = self.apply_eliminator_params(
+            Expr::const_(cases_on, levels),
+            &scrutinee_ty,
+            &type_name,
+        )?;
+        let motive = Expr::lam(BinderInfo::Default, scrutinee_ty.clone(), result_ty.clone());
+        let mut minors = vec![None; constructors.len()];
+        for arm in arms {
+            let [pattern] = arm.patterns.as_slice() else {
+                return Err(unsupported());
+            };
+            let pattern = self.normalize_match_pattern_names(pattern, &scrutinee_ty)?;
+            self.check_pattern_linear(&pattern)?;
+            let SurfacePattern::Ctor(ctor, fields) = pattern else {
+                return Err(unsupported());
+            };
+            let idx = constructors
+                .iter()
+                .position(|name| name == ctor.name())
+                .ok_or_else(unsupported)?;
+            if minors[idx].is_some() {
+                return Err(unsupported());
+            }
+            minors[idx] = Some(self.with_temporary_local_scope(|this| {
+                this.elab_do_ctor_minor(
+                    &ctor,
+                    &fields,
+                    &scrutinee_ty,
+                    &type_name,
+                    result_ty,
+                    None,
+                    |this| elab_body(this, &arm.body),
+                )
+            })?);
+        }
+        let mut result = Expr::app(eliminator, motive);
+        if layout.major_after_motive {
+            result = Expr::app(result, scrutinee.clone());
+        }
+        for minor in minors {
+            result = Expr::app(result, minor.ok_or_else(unsupported)?);
+        }
+        if !layout.major_after_motive {
+            result = Expr::app(result, scrutinee);
+        }
+        Ok(result)
+    }
+
+    fn elab_do_ctor_minor(
+        &mut self,
+        ctor_name: &SurfaceName,
+        sub_pats: &[SurfacePattern],
+        scrutinee_ty: &Expr,
+        type_name: &SurfaceName,
+        branch_ty: &Expr,
+        fallback_alt: Option<&Expr>,
+        elab_body: impl FnOnce(&mut Self) -> Result<Expr, ElabError>,
+    ) -> Result<Expr, ElabError> {
         let normalized_sub_pats: Vec<SurfacePattern> = sub_pats
             .iter()
             .map(normalize_nested_nat_numeral_add_pattern)
@@ -933,7 +1031,7 @@ impl<'a> ElabCtx<'a> {
             normalized_sub_pats.len(),
         )?;
         if normalized_sub_pats.is_empty() {
-            return self.elab_do_body_with_outer_continuation(&arm.body);
+            return elab_body(self);
         }
         let field_types = self.compute_ctor_field_types(full_ctor.name(), scrutinee_ty)?;
         if field_types.len() != normalized_sub_pats.len() {
@@ -961,7 +1059,7 @@ impl<'a> ElabCtx<'a> {
             &normalized_sub_pats,
             &fvar_tys,
         )?;
-        let arm_body = self.elab_do_body_with_outer_continuation(&arm.body)?;
+        let arm_body = elab_body(self)?;
         // Thread the same-constructor fallback (when grouping multiple arms under
         // one minor), mirroring the plain-match `elaborate_ctor_arm`: apply the
         // prior compiled minor to this arm's field fvars to obtain a `branch_ty`

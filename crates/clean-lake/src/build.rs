@@ -8,6 +8,7 @@
 
 use crate::build_trace;
 use crate::error::{LakeError, LakeResult};
+use crate::module_world::ModuleWorld;
 use crate::workspace::Workspace;
 use clean_elab::ElabResult;
 use clean_kernel::env::ConstantInfo;
@@ -108,10 +109,10 @@ pub struct BuildContext {
     /// invalidated for a module whenever its artifact is about to be
     /// rewritten, so a digest is never served for bytes that changed under it.
     artifact_digests: Mutex<HashMap<std::path::PathBuf, String>>,
-    /// Per module of the current pass: every module its build loads, with the
-    /// file it is loaded from ([`Self::loaded_closure`]). Cleared with
-    /// `artifact_digests`.
-    closures: Mutex<HashMap<String, Arc<Vec<LoadedImport>>>>,
+    /// Per module of the current pass: the source world's import closure,
+    /// with the file each module is loaded from ([`Self::loaded_closure`]).
+    /// Cleared with `artifact_digests`.
+    closures: Mutex<HashMap<String, (ModuleWorld, Arc<Vec<LoadedImport>>)>>,
     /// Per file read for its imports during the current pass.
     import_headers: Mutex<HashMap<std::path::PathBuf, Arc<Vec<Name>>>>,
     /// The admission of every module a build loads that this workspace does
@@ -540,7 +541,8 @@ impl BuildContext {
         };
 
         let content = std::fs::read_to_string(&src_path)?;
-        let imports = self.extract_imports(&content)?;
+        let world = ModuleWorld::of(&src_path, &content).map_err(LakeError::Elaboration)?;
+        let imports = self.local_imports(&world);
 
         // Recursively discover deps for imported modules
         for imp in &imports {
@@ -553,26 +555,18 @@ impl BuildContext {
         Ok(())
     }
 
-    /// Extract import statements from Lean source (for local dependency tracking)
-    /// This filters out stdlib imports since they don't need to be built locally.
-    fn extract_imports(&self, content: &str) -> LakeResult<Vec<String>> {
-        Ok(Self::extract_all_imports(content)?
-            .into_iter()
+    /// Select the parsed imports this workspace is responsible for building.
+    fn local_imports(&self, world: &ModuleWorld) -> Vec<String> {
+        if world.decision.imports().is_err() {
+            return world
+                .imports()
+                .filter(|m| self.workspace.find_module(m).is_some())
+                .collect();
+        }
+        world
+            .imports()
             .filter(|m| !self.is_stdlib_import(m))
-            .collect())
-    }
-
-    /// Read dependency names with the same header grammar as elaboration.
-    /// Line scanning loses public/meta imports, modifiers, multiline names and
-    /// comments, and can mistake text in a comment for a dependency.
-    fn extract_all_imports(content: &str) -> LakeResult<Vec<String>> {
-        let header = clean_parser::Parser::parse_header(content)
-            .map_err(|error| LakeError::Elaboration(format!("invalid module header: {error}")))?;
-        Ok(header
-            .imports
-            .into_iter()
-            .map(|import| import.module.name().to_string())
-            .collect())
+            .collect()
     }
 
     /// Does `module` carry one of the toolchain's reserved name prefixes?
@@ -740,15 +734,6 @@ impl BuildContext {
                         }
                     };
                     if reuse {
-                        // A reused module rests on the same imports as a
-                        // built one: admitted the same way, every pass.
-                        if let Err(error) = self.admit_imports(module) {
-                            failed
-                                .lock()
-                                .unwrap_or_else(|e| e.into_inner())
-                                .push((module.clone(), error.to_string()));
-                            return;
-                        }
                         skipped
                             .lock()
                             .unwrap_or_else(|e| e.into_inner())
@@ -849,7 +834,12 @@ impl BuildContext {
     /// What `module`'s build reads, as its build trace records it: the source
     /// `content`, the artifacts of every in-workspace module in its transitive
     /// import closure, and the root `.olean` of each toolchain import.
-    fn trace_inputs(&self, module: &str, content: &str) -> LakeResult<build_trace::TraceInputs> {
+    fn trace_inputs(
+        &self,
+        module: &str,
+        content: &str,
+        world: &ModuleWorld,
+    ) -> LakeResult<build_trace::TraceInputs> {
         let mut closure: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
         let mut stack: Vec<&String> = self.deps.get(module).into_iter().flatten().collect();
         while let Some(dep) = stack.pop() {
@@ -870,7 +860,7 @@ impl BuildContext {
         // `.olean`, is a changed input.
         let mut external: std::collections::BTreeMap<String, String> =
             std::collections::BTreeMap::new();
-        for loaded in self.loaded_closure(module, content)?.iter() {
+        for loaded in self.loaded_closure(module, world)?.iter() {
             if self.built_here(loaded) {
                 continue;
             }
@@ -889,16 +879,22 @@ impl BuildContext {
                 })
                 .or_insert(digest);
         }
-        let stdlib_paths = self.module_world(module, content)?.stdlib_search_paths();
-        for imp in Self::extract_all_imports(content)? {
+        for imp in world.imports() {
             if self.is_stdlib_import(&imp)
-                && clean_olean::find_module_olean(&imp, &stdlib_paths).is_none()
+                && clean_olean::find_module_olean_in_world(
+                    &imp,
+                    &world.stdlib_search_paths,
+                    world.decision.declared_world(),
+                )
+                .is_none_or(|path| !path.exists())
             {
                 external.insert(imp, "unresolved".to_string());
             }
         }
         Ok(build_trace::TraceInputs {
             source: content.as_bytes().to_vec(),
+            source_world: world.decision.world().tag(),
+            lean_imports_permitted: world.decision.imports().is_ok(),
             inputs,
             stdlib: external,
             permissive_imports: self.options.permissive_imports,
@@ -957,8 +953,10 @@ impl BuildContext {
         root: &str,
         search_paths: &[std::path::PathBuf],
         out: &mut std::collections::BTreeSet<LoadedImport>,
+        world: Option<&str>,
     ) -> LakeResult<()> {
-        let Some(root_path) = clean_olean::find_module_olean(root, search_paths) else {
+        let Some(root_path) = clean_olean::find_module_olean_in_world(root, search_paths, world)
+        else {
             return Ok(());
         };
         let mut seen: HashSet<Name> = HashSet::new();
@@ -968,7 +966,9 @@ impl BuildContext {
                 if !seen.insert(import.clone()) {
                     continue;
                 }
-                if let Ok(path) = clean_olean::resolve_typed_module_path(import, search_paths) {
+                if let Ok(path) =
+                    clean_olean::resolve_typed_module_path_in_world(import, search_paths, world)
+                {
                     stack.push((import.to_string(), path));
                 }
             }
@@ -1020,44 +1020,53 @@ impl BuildContext {
     /// ([`crate::module_world`]): genuine Init of its project's Lean world,
     /// or, for a `prelude` module or a refused world, the bootstrap prelude.
     fn module_world(
-        &self,
         module: &str,
+        source: &std::path::Path,
         content: &str,
-    ) -> LakeResult<crate::module_world::ModuleWorld> {
-        let src_path = self
-            .workspace
-            .find_module(module)
-            .ok_or_else(|| LakeError::ModuleNotFound(module.to_string()))?;
-        crate::module_world::ModuleWorld::of(&src_path, content).map_err(|reason| {
-            LakeError::BuildFailed {
-                module: module.to_string(),
-                reason,
-            }
+    ) -> LakeResult<ModuleWorld> {
+        ModuleWorld::of(source, content).map_err(|reason| LakeError::BuildFailed {
+            module: module.to_string(),
+            reason,
         })
     }
 
-    fn loaded_closure(&self, module: &str, content: &str) -> LakeResult<Arc<Vec<LoadedImport>>> {
-        if let Some(closure) = self
+    fn loaded_closure(
+        &self,
+        module: &str,
+        world: &ModuleWorld,
+    ) -> LakeResult<Arc<Vec<LoadedImport>>> {
+        if let Some((_, closure)) = self
             .closures
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .get(module)
+            .filter(|(cached_world, _)| cached_world == world)
         {
             return Ok(Arc::clone(closure));
         }
-        let world = self.module_world(module, content)?;
-        let defaults = world.stdlib_search_paths();
+        let defaults = &world.stdlib_search_paths;
         let mut out = std::collections::BTreeSet::new();
         // Lean's implicit `import Init` is loaded like any toolchain import:
         // walked here, so it is admitted and its parts enter the trace.
         if world.imports_init() {
-            if let Err(e) = self.walk_imports("Init", &defaults, &mut out) {
+            if let Err(e) =
+                self.walk_imports("Init", defaults, &mut out, world.decision.declared_world())
+            {
                 self.unreadable_import(module, &format!("failed to load implicit Init: {e}"))?;
             }
         }
-        for imp in Self::extract_all_imports(content)? {
-            if self.is_stdlib_import(&imp) {
-                if let Err(e) = self.walk_imports(&imp, &defaults, &mut out) {
+        for imp in world.imports() {
+            if let Err(refusal) = world.decision.imports() {
+                if self.workspace.find_module(&imp).is_none() {
+                    return Err(LakeError::BuildFailed {
+                        module: module.to_string(),
+                        reason: format!("cannot resolve import '{imp}': {refusal}"),
+                    });
+                }
+            } else if self.is_stdlib_import(&imp) {
+                if let Err(e) =
+                    self.walk_imports(&imp, defaults, &mut out, world.decision.declared_world())
+                {
                     self.unreadable_import(
                         module,
                         &format!("failed to load stdlib import '{imp}': {e}"),
@@ -1066,11 +1075,16 @@ impl BuildContext {
             }
         }
         let mut dep_search_paths = vec![self.workspace.lib_dir()];
-        dep_search_paths.extend(defaults);
+        dep_search_paths.extend(defaults.iter().cloned());
         for dep in self.deps.get(module).into_iter().flatten() {
             let olean_path = self.workspace.olean_path(dep)?;
             if olean_path.exists() {
-                if let Err(e) = self.walk_imports(dep, &dep_search_paths, &mut out) {
+                if let Err(e) = self.walk_imports(
+                    dep,
+                    &dep_search_paths,
+                    &mut out,
+                    world.decision.declared_world(),
+                ) {
                     self.unreadable_import(
                         module,
                         &format!(
@@ -1085,7 +1099,7 @@ impl BuildContext {
         self.closures
             .lock()
             .unwrap_or_else(|e| e.into_inner())
-            .insert(module.to_string(), Arc::clone(&closure));
+            .insert(module.to_string(), (world.clone(), Arc::clone(&closure)));
         Ok(closure)
     }
 
@@ -1097,20 +1111,30 @@ impl BuildContext {
     /// written by another tool, is taken as built and disclosed. A module's
     /// name grants nothing: `Mathlib.*`, `Std.*` or `Init.*` outside the
     /// pinned toolchain is an artifact like any other.
-    fn admit_imports(&self, module: &str) -> LakeResult<()> {
-        let src_path = self
-            .workspace
-            .find_module(module)
-            .ok_or_else(|| LakeError::ModuleNotFound(module.to_string()))?;
-        let content = std::fs::read_to_string(&src_path)?;
-        let closure = self.loaded_closure(module, &content)?;
+    fn admit_imports(
+        &self,
+        module: &str,
+        world: &ModuleWorld,
+    ) -> LakeResult<Arc<Vec<LoadedImport>>> {
+        let closure = self.loaded_closure(module, world)?;
         let mut admission = self.admission.lock().unwrap_or_else(|e| e.into_inner());
         let mut refusals = Vec::new();
+        let declared_world = world
+            .decision
+            .declared_world()
+            .map(|_| world.decision.world());
         for loaded in closure.iter() {
             if self.built_here(loaded) {
                 continue;
             }
-            match admission.admit(&loaded.module, &loaded.olean) {
+            if let Err(refusal) = world.decision.imports() {
+                refusals.push(format!(
+                    "cannot resolve import '{}': {refusal}",
+                    loaded.module
+                ));
+                continue;
+            }
+            match admission.admit_in_world(&loaded.module, &loaded.olean, declared_world) {
                 crate::artifact_binding::ImportAdmission::Toolchain
                 | crate::artifact_binding::ImportAdmission::Bound => {}
                 crate::artifact_binding::ImportAdmission::Refused(row) => refusals.push(row),
@@ -1123,7 +1147,7 @@ impl BuildContext {
             }
         }
         if refusals.is_empty() {
-            Ok(())
+            Ok(closure)
         } else {
             Err(LakeError::BuildFailed {
                 module: module.to_string(),
@@ -1158,8 +1182,9 @@ impl BuildContext {
             .ok_or_else(|| LakeError::ModuleNotFound(module.to_string()))?;
         self.discover_module_deps(module)?;
         let content = std::fs::read_to_string(&src_path)?;
+        let world = Self::module_world(module, &src_path, &content)?;
         let parts = self.artifact_parts(module)?;
-        let mut current = self.trace_inputs(module, &content)?;
+        let mut current = self.trace_inputs(module, &content, &world)?;
         current.permissive_imports = false;
         build_trace::reuse_refusal(&parts[0], &parts, current)
     }
@@ -1178,15 +1203,21 @@ impl BuildContext {
             .find_module(module)
             .ok_or_else(|| LakeError::ModuleNotFound(module.to_string()))?;
         let content = std::fs::read_to_string(&src_path)?;
+        let world = Self::module_world(module, &src_path, &content)?;
         let parts = self.artifact_parts(module)?;
-        let refusal =
-            build_trace::reuse_refusal(&parts[0], &parts, self.trace_inputs(module, &content)?)?;
+        let refusal = build_trace::reuse_refusal(
+            &parts[0],
+            &parts,
+            self.trace_inputs(module, &content, &world)?,
+        )?;
         if let Some(reason) = refusal {
             if self.options.verbose {
                 eprintln!("Rebuilding {module}: existing artifact not reused ({reason})");
             }
             return Ok(false);
         }
+        // Reuse and a fresh build admit the same closure under the same world.
+        self.admit_imports(module, &world)?;
         Ok(true)
     }
 
@@ -1254,83 +1285,109 @@ impl BuildContext {
 
         // Read source
         let content = std::fs::read_to_string(&src_path)?;
+        let world = Self::module_world(module, &src_path, &content)?;
 
         // What this build reads, recorded BEFORE anything is loaded, and the
         // old trace removed before anything is written: a failed build must
         // not leave a trace that still names the old artifact.
-        let trace_inputs = self.trace_inputs(module, &content)?;
+        let trace_inputs = self.trace_inputs(module, &content, &world)?;
         let artifact_parts = self.artifact_parts(module)?;
         build_trace::remove_trace(&artifact_parts[0])?;
         self.forget_digest(&artifact_parts[0]);
         // Every module this build is about to load that the workspace does
         // not build itself is admitted first, as `clean check` admits it.
-        self.admit_imports(module)?;
-        let admitted = self.loaded_closure(module, &content)?;
+        let admitted = self.admit_imports(module, &world)?;
 
-        // Parse
-        let parsed = clean_parser::parse_file_with_diagnostics(&content).map_err(|e| {
-            LakeError::BuildFailed {
-                module: module.to_string(),
-                reason: format!("parse error: {e}"),
-            }
+        let parsed = clean_parser::parse_file_seeded_in_world(
+            &content,
+            &clean_parser::TacticPatterns::new(),
+            &clean_parser::NotationSeed::default(),
+            world.decision.world(),
+        )
+        .map_err(|e| LakeError::BuildFailed {
+            module: module.to_string(),
+            reason: format!("parse error: {e}"),
         })?;
 
         let header = parsed.header;
-        let surface = parsed.decls;
+        let decls = parsed.decls;
+        let mut file_ctx = clean_elab::FileContext::new();
+        file_ctx.set_file_header(&header);
+        file_ctx.set_source_world(&src_path, &world.decision);
 
         // Create environment with imported modules. A module without
         // `prelude` starts, as Lean's implicit `import Init` makes it start,
         // from genuine Init of its project's Lean world; its cited closure is
         // re-admitted over that world's reference-admitted foundations, the
-        // citation base `clean check` gives a genuine-Init consumer. A
-        // `prelude` module or a refused world keeps the bootstrap prelude:
-        // there everything loaded below — stdlib and local dependency
-        // artifacts alike — enters structurally (never type-checked), so
-        // before this module is exported its declarations' cited closure is
-        // re-admitted by the kernel over the environment as this build
-        // constructed it, BEFORE any import (module-trust, 2026-09-24).
-        let world = self.module_world(module, &content)?;
-        let stdlib_search_paths = world.stdlib_search_paths();
-        let (mut env, mut import_gate, genuine_init) = match &world {
-            crate::module_world::ModuleWorld::GenuineInit { decision, .. } => {
-                let files = crate::module_world::init_files(&trace_inputs.stdlib);
-                let init =
-                    crate::module_world::genuine_init(decision, &files).map_err(|reason| {
-                        LakeError::BuildFailed {
-                            module: module.to_string(),
-                            reason: format!("cannot load implicit Init: {reason}"),
-                        }
-                    })?;
-                (init.environment(), init.citation_base(), Some(init))
-            }
-            crate::module_world::ModuleWorld::Bootstrap => {
-                let mut env = clean_kernel::Environment::with_prelude();
-                env.init_io_ops().map_err(|e| LakeError::BuildFailed {
-                    module: module.to_string(),
-                    reason: format!("IO operation initialization failed: {e}"),
+        // citation base `clean check` gives a genuine-Init consumer. Check
+        // a recent world's explicit prelude in the bare environment before
+        // loading its imports. Earlier bootstrap modes keep their own
+        // citation gates.
+        let stdlib_search_paths = &world.stdlib_search_paths;
+        let (mut env, mut import_gate, genuine_init) = if world.imports_init() {
+            let files = crate::module_world::init_files(&trace_inputs.stdlib);
+            let init =
+                crate::module_world::genuine_init(&world.decision, &files).map_err(|reason| {
+                    LakeError::BuildFailed {
+                        module: module.to_string(),
+                        reason: format!("cannot load implicit Init: {reason}"),
+                    }
                 })?;
-                let gate = clean_olean::ImportedConeGate::new(&env);
-                (env, gate, None)
+            (init.environment(), init.citation_base(), Some(init))
+        } else if world.decision.world().requires_genuine_init() {
+            let (env, gate) = clean_elab::module_driver::module_environment_for_header_in_world(
+                clean_elab::module_driver::EnvironmentSetup::default(),
+                &world.decision,
+                &header,
+            )
+            .map_err(|error| LakeError::BuildFailed {
+                module: module.to_string(),
+                reason: error.to_string(),
+            })?;
+            (env, gate, None)
+        } else {
+            let mut env = clean_kernel::Environment::with_prelude();
+            if let Some(declared_world) = world.decision.declared_world() {
+                clean_olean::declare_environment_world(&mut env, declared_world).map_err(|e| {
+                    LakeError::BuildFailed {
+                        module: module.to_string(),
+                        reason: format!("cannot declare the module's Lean world: {e}"),
+                    }
+                })?;
             }
+            if world.decision.imports().is_err() {
+                clean_olean::require_clean_payload_imports(&mut env);
+            }
+            env.init_io_ops().map_err(|e| LakeError::BuildFailed {
+                module: module.to_string(),
+                reason: format!("IO operation initialization failed: {e}"),
+            })?;
+            let gate = clean_olean::ImportedConeGate::new(&env);
+            (env, gate, None)
+        };
+        let surface = if header.is_prelude && world.decision.world().requires_genuine_init() {
+            clean_elab::module_driver::elaborate_prelude_header(&mut env, &decls, &mut file_ctx)
+                .map_err(|error| LakeError::BuildFailed {
+                    module: module.to_string(),
+                    reason: error.to_string(),
+                })?
+        } else {
+            decls.as_slice()
         };
 
-        // Extract ALL imports (including stdlib) from this file
-        let all_imports = Self::extract_all_imports(&content)?;
-
         // Load stdlib imports from the Lean toolchain
-        let stdlib_imports: Vec<_> = all_imports
-            .iter()
+        let stdlib_imports: Vec<_> = world
+            .imports()
             .filter(|m| self.is_stdlib_import(m))
             .collect();
 
         if !stdlib_imports.is_empty() {
-            let search_paths = stdlib_search_paths.clone();
-            if self.options.verbose && !search_paths.is_empty() {
-                eprintln!("  Stdlib search paths: {:?}", search_paths);
+            if self.options.verbose && !stdlib_search_paths.is_empty() {
+                eprintln!("  Stdlib search paths: {:?}", stdlib_search_paths);
             }
 
             for imp in &stdlib_imports {
-                match clean_olean::load_module_with_deps(&mut env, imp, &search_paths) {
+                match clean_olean::load_module_with_deps(&mut env, imp, stdlib_search_paths) {
                     Ok(summaries) => {
                         Self::loaded_as_admitted(module, &summaries, &admitted)?;
                         if self.options.verbose {
@@ -1382,7 +1439,7 @@ impl BuildContext {
         // (every package's modules land there) and falls back to the stdlib
         // search paths for deps that import Init/Std.
         let mut dep_search_paths = vec![self.workspace.lib_dir()];
-        dep_search_paths.extend(stdlib_search_paths);
+        dep_search_paths.extend(stdlib_search_paths.iter().cloned());
         for dep in &import_names {
             let olean_path = self.workspace.olean_path(dep)?;
             if olean_path.exists() {
@@ -1401,7 +1458,10 @@ impl BuildContext {
                     }
                     Err(e) => {
                         // Fail-closed by default (see the stdlib branch above).
-                        if !self.options.permissive_imports || !Self::import_allows_fallback(&e) {
+                        if world.decision.imports().is_err()
+                            || !self.options.permissive_imports
+                            || !Self::import_allows_fallback(&e)
+                        {
                             return Err(LakeError::BuildFailed {
                                 module: module.to_string(),
                                 reason: format!(
@@ -1445,7 +1505,7 @@ impl BuildContext {
         // installed as the initial option state of its file (gap G50).
         let lean_args = self.module_lean_options(module)?;
         let (example_roots, global_readds) =
-            Self::elaborate_module(module, &surface, &header, &mut env, &lean_args, &world)?;
+            Self::elaborate_module(module, surface, &mut env, &mut file_ctx, &lean_args, &world)?;
 
         Self::gate_module_examples(module, &env, &mut import_gate, &example_roots)?;
         Self::gate_module_closure(module, &env, &mut import_gate, &baseline_consts)?;
@@ -1513,11 +1573,14 @@ impl BuildContext {
         // Generate .olean file using the exporter. A module over genuine Init
         // records it first, then every import of its header, as Lean's
         // `headerToImports` does (an explicit `import Init` is not repeated);
-        // a bootstrap module records its in-workspace imports, as before.
+        // an explicit recent-world prelude records its header's imports.
+        // A bootstrap module records its in-workspace imports.
         let recorded_imports: Vec<String> = if world.imports_init() {
             std::iter::once("Init".to_string())
-                .chain(all_imports.iter().filter(|m| *m != "Init").cloned())
+                .chain(world.imports().filter(|module| module != "Init"))
                 .collect()
+        } else if world.decision.world().requires_genuine_init() {
+            world.imports().collect()
         } else {
             import_names.clone()
         };
@@ -1579,6 +1642,20 @@ impl BuildContext {
             })
             .collect();
         externs.sort_by_key(|(name, _)| name.to_string());
+        let mut extern_metadata = Vec::with_capacity(externs.len());
+        for (name, _) in &externs {
+            let metadata = env
+                .extern_metadata(name)
+                .map_err(|error| LakeError::BuildFailed {
+                    module: module.to_string(),
+                    reason: format!("extern metadata carrier: {error}"),
+                })?
+                .ok_or_else(|| LakeError::BuildFailed {
+                    module: module.to_string(),
+                    reason: format!("extern diagnostic has no metadata status: {name}"),
+                })?;
+            extern_metadata.push((name.clone(), metadata));
+        }
         // The module's own constants a late `attribute [implemented_by]`
         // command of the module came too late for: an importer must refuse
         // to compile them as this build's own lanes do (`docs/DECISIONS.md`
@@ -1614,10 +1691,12 @@ impl BuildContext {
             namespaces: module_exports.namespaces,
             implemented_by,
             externs,
+            extern_metadata,
             implemented_by_order,
             // Over genuine Init, Init's own compiler records are the
             // importer's to rebuild from its own load of the `Init` this
-            // artifact records; only this module's records travel.
+            // artifact records. New bodies carry their captured inline views
+            // and the registrations those views rely on.
             csimp: match &genuine_init {
                 Some(init) => clean_kernel::env::csimp::export_compilation_snapshot_over(
                     &env,
@@ -1625,6 +1704,7 @@ impl BuildContext {
                 ),
                 None => clean_kernel::env::csimp::export_compilation_snapshot(&env),
             },
+            compiler_context: clean_olean::CompilerContextKind::Source,
             definition_exposure,
         };
 
@@ -1819,20 +1899,18 @@ impl BuildContext {
     fn elaborate_module(
         module: &str,
         surface: &[clean_parser::SurfaceDecl],
-        header: &clean_parser::FileHeader,
         env: &mut clean_kernel::Environment,
+        file_ctx: &mut clean_elab::FileContext,
         options: &[clean_elab::command_line_options::CommandLineOption],
-        world: &crate::module_world::ModuleWorld,
+        world: &ModuleWorld,
     ) -> LakeResult<(std::collections::BTreeSet<Name>, Vec<Name>)> {
         let fail = |reason: String| LakeError::BuildFailed {
             module: module.to_string(),
             reason,
         };
         let kernel_before = clean_elab::register::kernel_check_failures_on_this_thread();
-        let mut file_ctx = clean_elab::FileContext::new();
-        file_ctx.set_file_header(header);
         // Exactly a leading `set_option` per override, as `lean -D` applies it.
-        clean_elab::command_line_options::apply_command_line_options(env, &mut file_ctx, options);
+        clean_elab::command_line_options::apply_command_line_options(env, file_ctx, options);
         // Dependencies were loaded from the workspace's own artifacts above;
         // an `import` must not reach past them to an external `.olean`.
         file_ctx.disable_external_import_search();
@@ -1869,11 +1947,9 @@ impl BuildContext {
             if matches!(decl, clean_parser::SurfaceDecl::Import { .. }) {
                 continue;
             }
-            let processed = clean_elab::preprocess_decl_with_context(decl, &mut file_ctx);
+            let processed = clean_elab::preprocess_decl_with_context(decl, file_ctx);
             match clean_elab::elaborate_decl_and_register_with_context_and_warning(
-                env,
-                &processed,
-                &mut file_ctx,
+                env, &processed, file_ctx,
             ) {
                 Ok(registered) => {
                     let mut leaves: Vec<&ElabResult> = Vec::new();
@@ -2057,18 +2133,22 @@ open MyLib
 
 def foo := 1
 ";
-        let imports = empty_ctx(&tmp).extract_imports(content).expect("header");
+        let world = ModuleWorld::of(&tmp.path().join("Probe.lean"), content).expect("header");
+        let imports = empty_ctx(&tmp).local_imports(&world);
         assert_eq!(imports, vec!["MyLib.Core", "MyLib.Utils"]);
     }
 
     #[test]
     fn test_extract_imports_uses_header_grammar() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("Probe.lean");
         let content = "module\n/- import NotAnImport -/\npublic import PublicDep\nmeta import MetaDep\nimport all PrivateDep\nimport\n  MultilineDep\ndef x := 0\n-- import AlsoNotAnImport\n";
+        let world = ModuleWorld::of(&path, content).expect("header");
         assert_eq!(
-            BuildContext::extract_all_imports(content).expect("header"),
+            world.imports().collect::<Vec<_>>(),
             vec!["PublicDep", "MetaDep", "PrivateDep", "MultilineDep"]
         );
-        assert!(BuildContext::extract_all_imports("public import MissingModuleHeader").is_err());
+        assert!(ModuleWorld::of(&path, "public import MissingModuleHeader").is_err());
     }
 
     #[test]
@@ -2080,7 +2160,8 @@ import Std.Data.List
 import Lean.Elab
 import MyProject.Core
 ";
-        let imports = empty_ctx(&tmp).extract_imports(content).expect("header");
+        let world = ModuleWorld::of(&tmp.path().join("Probe.lean"), content).expect("header");
+        let imports = empty_ctx(&tmp).local_imports(&world);
         assert_eq!(imports, vec!["MyProject.Core"]);
     }
 
@@ -2109,9 +2190,12 @@ import MyProject.Core
             "an unprovided module still routes to the toolchain"
         );
 
-        let imports = ctx
-            .extract_imports("import Std.Mine\nimport Std.Data.List\n")
-            .expect("header");
+        let world = ModuleWorld::of(
+            &tmp.path().join("Std/Mine.lean"),
+            "import Std.Mine\nimport Std.Data.List\n",
+        )
+        .expect("header");
+        let imports = ctx.local_imports(&world);
         assert_eq!(imports, vec!["Std.Mine"]);
     }
 

@@ -1008,6 +1008,11 @@ impl Environment {
             return Ok(());
         }
         self.init_nat()?;
+        // Standalone UInt arithmetic initializers also reach this foundation.
+        self.init_unit()?;
+        self.init_eq()?;
+        self.init_or()?;
+        self.init_subtype()?;
         self.init_ofnat_nat()?;
 
         let nat = Expr::const_(Name::from_string("Nat"), vec![]);

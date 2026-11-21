@@ -1,0 +1,44 @@
+[
+  {
+    "command": [
+      "$HOME/clean-have-oracle-work/lean-4.30.0-rc2-darwin_aarch64/bin/lean",
+      "-j1",
+      "-M1024",
+      "/tmp/clean-root-congrfun-universe-oracles/declarations.lean"
+    ],
+    "version": "Lean (version 4.30.0-rc2, arm64-apple-darwin24.6.0, commit 3dc1a088b6d2d8eafe25a7cd7ec7b58d731bd7cc, Release)",
+    "binary_sha256": "b48bc5ab229bd8b320a224b87e20fc428dba6fa8a1c054bd4fa6def846e19997",
+    "source_sha256": "39c21bd57cd53e27ee56c18bf005435cfc48471c7cb23020f224e66864ff02ab",
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "$HOME/clean-have-oracle-work/lean-4.35.0-darwin_aarch64/bin/lean",
+      "-j1",
+      "-M1024",
+      "/tmp/clean-root-congrfun-universe-oracles/declarations.lean"
+    ],
+    "version": "Lean (version 4.35.0, arm64-apple-darwin24.6.0, commit eb6cafb7290e8bd5f2937522d8d804f58f02bafc, Release)",
+    "binary_sha256": "d1d9c26a539f54fe839d2aa7760bf1ac1dd76a30b26e2c9684bebf2900038fcf",
+    "source_sha256": "39c21bd57cd53e27ee56c18bf005435cfc48471c7cb23020f224e66864ff02ab",
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "$HOME/clean-root-lean-oracles/lean-4.36.0-rc2-darwin_aarch64/bin/lean",
+      "-j1",
+      "-M1024",
+      "/tmp/clean-root-congrfun-universe-oracles/declarations.lean"
+    ],
+    "version": "Lean (version 4.36.0-rc2, arm64-apple-darwin24.6.0, commit b35cb10cf2ced51a2fd1880cfdbf75c71ab7a35a, Release)",
+    "binary_sha256": "a4c5d3dfc1672faf014e59bd17724035259ff0d22a4ffbdf5a75e142f564817e",
+    "source_sha256": "39c21bd57cd53e27ee56c18bf005435cfc48471c7cb23020f224e66864ff02ab",
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": ""
+  }
+]

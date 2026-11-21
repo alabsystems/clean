@@ -9,11 +9,11 @@ fn public_parser_selects_only_the_measured_variable_visibility_world() {
     assert!(parse_file(source).is_err());
     for world in LeanWorld::ALL {
         let result = parse_file_in_world(source, world);
-        if world != LeanWorld::Lean436Rc2 {
+        if !matches!(world, LeanWorld::Lean436Rc2 | LeanWorld::Lean436) {
             assert!(result.is_err(), "{world}");
             continue;
         }
-        let decls = result.expect("qualified rc2 accepts private variable before public def");
+        let decls = result.expect("4.36 accepts private variable before public def");
         assert!(matches!(
             decls.as_slice(),
             [
@@ -25,7 +25,7 @@ fn public_parser_selects_only_the_measured_variable_visibility_world() {
             ]
         ));
     }
-    for unknown in ["v4.31.0", "v4.36.0", "v4.99.0"] {
+    for unknown in ["v4.31.0", "v4.36.0-rc1", "v4.99.0"] {
         assert!(unknown.parse::<LeanWorld>().is_err(), "{unknown}");
     }
 }

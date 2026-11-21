@@ -17,6 +17,7 @@ pub(super) struct InfoFrame {
     application_head: Option<clean_parser::Span>,
 }
 
+#[derive(Clone)]
 enum PendingTerm {
     Elaborated {
         expr: Expr,
@@ -37,9 +38,9 @@ pub(super) struct PendingInfo {
 }
 
 impl ElabCtx<'_> {
-    /// Commit only the outer observation from an accepted body check. The
-    /// inference-first lane deliberately hides the target from its producer,
-    /// but the successful check still has this real declaration target.
+    /// Commit the outer observation from an accepted typed body check after
+    /// implicit insertion or coercion has produced its checked value. Child
+    /// observations retain their actual elaboration targets.
     pub(super) fn commit_checked_body_info(
         &mut self,
         mark: usize,
@@ -159,14 +160,32 @@ impl ElabCtx<'_> {
         expected_type: Option<Expr>,
         elaborate: impl FnOnce(&mut Self) -> Result<Expr, ElabError>,
     ) -> Result<Expr, ElabError> {
-        let application_head = match surface {
-            SurfaceExpr::App(_, head, _) if matches!(head.as_ref(), SurfaceExpr::Ident(..)) => {
-                Some(head.span())
+        let Some(frame) = self.begin_info(surface.span(), None) else {
+            return elaborate(self);
+        };
+        // A complete application and its written head are distinct source
+        // ranges. Keep both tied to the actual applied value. This frame must
+        // enclose the head and argument elaborations: it supersedes the partial
+        // function observation at the head without hiding argument observations.
+        // Parenthesized heads remain separate authored function contexts.
+        let head_frame = match surface {
+            SurfaceExpr::App(_, head, _)
+                if matches!(
+                    head.as_ref(),
+                    SurfaceExpr::Ident(..) | SurfaceExpr::Proj(..)
+                ) =>
+            {
+                let span = head.span();
+                if frame.span.start <= span.start
+                    && span.start < span.end
+                    && span.end <= frame.span.end
+                {
+                    self.begin_info(span, Some(span))
+                } else {
+                    None
+                }
             }
             _ => None,
-        };
-        let Some(frame) = self.begin_info(surface.span(), application_head) else {
-            return elaborate(self);
         };
         let locals = self.observed_locals();
         let result = elaborate(self);
@@ -191,6 +210,14 @@ impl ElabCtx<'_> {
         };
         // Ordinary errors keep their real child observations. Speculative
         // alternatives are discarded by the existing local-scope checkpoint.
+        if let Some(head_frame) = head_frame {
+            self.term_contexts.push(PendingInfo {
+                frame: head_frame,
+                is_variable,
+                is_partial: result.is_err(),
+                term: term.clone(),
+            });
+        }
         self.term_contexts.push(PendingInfo {
             frame,
             is_variable,
@@ -470,6 +497,92 @@ mod tests {
         );
         assert!(term.expected_type.is_none());
         assert_eq!(term.render_goal(&env), "⊢ Sort ?u.1");
+    }
+
+    #[test]
+    fn positional_projection_preserves_the_observed_head_range_and_goal() {
+        let mut env = Environment::with_prelude();
+        crate::elaborate_decl_and_register(
+            &mut env,
+            &clean_parser::parse_decl(
+                "def Nat.takeReceiverLater (step : Bool) (n : Nat) : Nat := n",
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let mut ctx = ElabCtx::new(&env);
+        ctx.push_local(
+            SurfaceName::component("n", false),
+            Expr::const_(Name::from_string("Nat"), vec![]),
+        );
+        let head = "n.takeReceiverLater";
+        let capture = TermInfoCapture::default();
+        ctx.set_term_info_capture(Some(capture.clone()));
+        let source = format!("{head} true");
+        let applied = ctx
+            .elaborate(&clean_parser::parse_expr(&source).unwrap())
+            .unwrap();
+        assert!(matches!(applied.kind(), ExprKind::App(..)));
+        ctx.finish_term_info();
+        let contexts = capture.take().unwrap();
+        // The normal plainTermGoal endpoint reports the applied Nat term
+        // on the written projection range, distinct from the argument range.
+        let recorded = contexts
+            .iter()
+            .filter(|info| info.span.start == 0 && info.span.end == head.len())
+            .filter_map(|info| info.term.as_ref())
+            .find(|term| term.expr == applied)
+            .expect("the source range identifies the applied field term");
+        assert_eq!(recorded.render_goal(&env), "n : Nat\n⊢ Nat");
+        let full_application = contexts
+            .iter()
+            .find(|info| {
+                info.span == clean_parser::Span::new(0, source.len())
+                    && info.term.as_ref().is_some_and(|term| term.expr == applied)
+            })
+            .expect("the complete physical application remains observed");
+        let applied_head = contexts
+            .iter()
+            .find(|info| {
+                info.span == clean_parser::Span::new(0, head.len())
+                    && info.term.as_ref().is_some_and(|term| term.expr == applied)
+            })
+            .expect("the applied head has its own source-info node");
+        assert_eq!(applied_head.parent_id, Some(full_application.id));
+        assert_eq!(applied_head.application_head, Some(applied_head.span));
+        assert!(contexts.iter().any(|info| {
+            info.span == clean_parser::Span::new(0, 1)
+                && info.is_variable
+                && info
+                    .term
+                    .as_ref()
+                    .is_some_and(|term| term.render_goal(&env) == "n : Nat\n⊢ Nat")
+        }));
+        let argument = contexts
+            .iter()
+            .find(|info| {
+                info.span == clean_parser::Span::new(head.len() + 1, source.len())
+                    && info
+                        .term
+                        .as_ref()
+                        .is_some_and(|term| term.render_goal(&env) == "n : Nat\n⊢ Bool")
+            })
+            .expect("the argument retains its own observed goal");
+        let mut parent = argument.parent_id;
+        let mut under_applied_head = false;
+        for _ in 0..contexts.len() {
+            let Some(id) = parent else { break };
+            if id == applied_head.id {
+                under_applied_head = true;
+                break;
+            }
+            parent = contexts
+                .iter()
+                .find(|info| info.id == id)
+                .unwrap()
+                .parent_id;
+        }
+        assert!(under_applied_head);
     }
 
     #[test]

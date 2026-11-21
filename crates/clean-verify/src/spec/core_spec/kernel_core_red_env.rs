@@ -98,7 +98,7 @@ impl Specification {
     /// a fresh in-memory script against an artifact-independent seed before
     /// publishing it.
     pub(super) fn add_kernel_core_red_env_script(&mut self, script: &str) -> Result<(), SpecError> {
-        for line in script.lines() {
+        for (line_index, line) in script.lines().enumerate() {
             let line = line.trim();
             if line.is_empty() {
                 continue;
@@ -168,7 +168,15 @@ impl Specification {
                  (generated/kernel_core_red_env.interning.tsv; real name in the line comment). \
                  Value-ful def: census-neutral."
             };
-            self.add_recursive_def(line, description)?;
+            self.add_recursive_def(line, description)
+                .map_err(|error| match error {
+                    SpecError::ElabError(message) => SpecError::ElabError(format!(
+                        "generated reflection declaration `{}` at line {}: {message}",
+                        line.split_whitespace().nth(1).unwrap_or("<unnamed>"),
+                        line_index + 1,
+                    )),
+                    other => other,
+                })?;
         }
         Ok(())
     }

@@ -501,8 +501,13 @@ fn lzd_exercised_forms() -> BTreeSet<&'static str> {
     BTreeSet::new()
 }
 
-/// The census members NO committed fixture exercises yet, and who owes them.
+/// Modelled census members that still need their committed chain fixture.
 const OWED_BY_THE_LZD_CHAIN: &[&str] = &["borrow", "copy"];
+
+/// Declared syntax that all three evaluators deliberately refuse as unmodelled.
+/// The typed refusal controls live in `eval_ir::release_tests`; they do not earn
+/// an exercised semantic-differential form.
+const UNMODELLED_SYNTAX_ONLY: &[&str] = &["release"];
 
 /// Coverage is stated over a REAL denominator and never rounded up.
 ///
@@ -519,6 +524,8 @@ const OWED_BY_THE_LZD_CHAIN: &[&str] = &["borrow", "copy"];
 /// reached the census with neither a fixture nor an owed row, which turned
 /// this test red; they are exercised by the WAT lane (`wat_chains.rs`), whose
 /// E1 is the ByteV1 machine because the legacy one refuses them.
+/// `release` remains in the same full census, but its syntax-only refusal is
+/// separate from the modelled forms awaiting the lzd fixture.
 #[test]
 fn crystal_a3_coverage_is_reported_over_the_full_irinst_surface() {
     let narrow = exercised_forms();
@@ -541,23 +548,26 @@ fn crystal_a3_coverage_is_reported_over_the_full_irinst_surface() {
         alien.is_empty(),
         "a battery lane claims a form the IRInst census does not declare: {alien:?}"
     );
-    let owed: BTreeSet<String> = census
+    let missing: BTreeSet<String> = census
         .iter()
         .filter(|c| !combined.contains(c.as_str()))
         .cloned()
         .collect();
-    let expected_owed: BTreeSet<String> = OWED_BY_THE_LZD_CHAIN
+    let expected_missing: BTreeSet<String> = OWED_BY_THE_LZD_CHAIN
         .iter()
+        .chain(UNMODELLED_SYNTAX_ONLY)
         .map(|s| (*s).to_string())
         .collect();
     assert_eq!(
-        owed,
-        expected_owed,
-        "the un-exercised IRInst forms must be EXACTLY the ones a named future chain owes \
-         ({expected_owed:?}). A form that fell out is erosion — a committed fixture stopped \
+        missing,
+        expected_missing,
+        "the un-exercised IRInst forms must be EXACTLY the named fixture debt \
+         ({OWED_BY_THE_LZD_CHAIN:?}) and syntax-only unmodelled forms \
+         ({UNMODELLED_SYNTAX_ONLY:?}). A form that fell out is erosion — a committed fixture stopped \
          exercising it, and the ladder may only be rebuilt deliberately. A form that left \
-         the owed list is progress and must move in the same commit as the fixture that \
-         earns it. Exercised {}/{n}: {combined:?}",
+         either list needs the committed fixture that earns exercised coverage; a \
+         syntax-only form also needs its evaluator implementation. \
+         Exercised {}/{n}: {combined:?}",
         combined.len(),
     );
     eprintln!(
@@ -566,8 +576,10 @@ fn crystal_a3_coverage_is_reported_over_the_full_irinst_surface() {
          {}/{n} adding the W2b synthetic chains; {}/{n} adding the W2c synthetic chains; \
          {}/{n} adding the W3 overflow chains; {}/{n} adding the W4 fcmp chain; {}/{n} \
          adding the WAT byte-profile atomic chains; {}/{n} adding the Phase-B \
-         derived-bundle chain — the outstanding {} are owed by the lzd \
-         chain (B7) and are pinned by name, never rounded away. The MEASURED fraction is \
+         derived-bundle chain — the outstanding {} modelled forms \
+         {OWED_BY_THE_LZD_CHAIN:?} are owed by the lzd chain (B7), while \
+         {UNMODELLED_SYNTAX_ONLY:?} remain syntax-only and unmodelled. All are pinned by \
+         name, never rounded away. The MEASURED fraction is \
          whatever the last minted data/crystal_gap2_semdiff_*.json records — this test \
          derives what the committed fixtures EXERCISE, which becomes measured only when a \
          gate run mints it, and a synthetic chain's rows measure E1/E2 agreement on \

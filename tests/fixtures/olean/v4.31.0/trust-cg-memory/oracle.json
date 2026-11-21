@@ -1,0 +1,228 @@
+{
+  "schema": "clean-lean431-machine-fixture-v1",
+  "scope": "Official Lean producer qualification input for exact original Trust-CG BitVec memory definitions. Independent Clean431 checking, world admission and full Machine.step/object correspondence remain owed.",
+  "producer": {
+    "version": "Lean (version 4.31.0, arm64-apple-darwin24.6.0, commit 68218e876d2a38b1985b8590fff244a83c321783, Release)",
+    "source_commit": "68218e876d2a38b1985b8590fff244a83c321783",
+    "repository": "leanprover/lean4",
+    "release": "v4.31.0",
+    "asset_id": 448155813,
+    "asset": "lean-4.31.0-darwin_aarch64.tar.zst",
+    "asset_bytes": 543754552,
+    "asset_sha256": "264105500c8abdf37b68ffe03390a783ed259807807222698da8dd92d6ce0a27",
+    "memory_MB_limit": 2048,
+    "threads": 1,
+    "allocation_limit": 10000000,
+    "upstream_producer_only": true
+  },
+  "positive_modules": [
+    {
+      "source": "MachineMemory431.lean",
+      "output": "MachineMemory431.olean",
+      "exit": 0,
+      "elapsed_s": 1.7231590747833252
+    },
+    {
+      "source": "MachineFetch431.lean",
+      "output": "MachineFetch431.olean",
+      "exit": 0,
+      "elapsed_s": 1.7028288841247559
+    }
+  ],
+  "producer_axiom_inspection": [
+    {
+      "name": "Trust.A64.byteAddress_add",
+      "producer_axioms": [
+        "propext"
+      ]
+    },
+    {
+      "name": "Trust.A64.differentByteOffsets",
+      "producer_axioms": [
+        "propext"
+      ]
+    },
+    {
+      "name": "Trust.A64.MachState.writeMem_frame",
+      "producer_axioms": [
+        "propext",
+        "Quot.sound"
+      ]
+    },
+    {
+      "name": "Trust.A64.next64_toNat",
+      "producer_axioms": [
+        "propext"
+      ]
+    },
+    {
+      "name": "Trust.A64.secondStore64_toNat",
+      "producer_axioms": [
+        "propext"
+      ]
+    },
+    {
+      "name": "Trust.A64.divisorCopySurvives",
+      "producer_axioms": [
+        "propext",
+        "Quot.sound"
+      ]
+    },
+    {
+      "name": "Trust.A64.s21StorePair_frame",
+      "producer_axioms": [
+        "propext",
+        "Quot.sound"
+      ]
+    },
+    {
+      "name": "Trust.A64.s21StorePair_text",
+      "producer_axioms": [
+        "propext",
+        "Quot.sound"
+      ]
+    },
+    {
+      "name": "Trust.A64.overlapChangesByte",
+      "producer_axioms": [
+        "propext"
+      ]
+    },
+    {
+      "name": "Trust.A64.MachState.readMem_congr_bytes",
+      "producer_axioms": [
+        "propext",
+        "Quot.sound"
+      ]
+    },
+    {
+      "name": "Trust.A64.s21StorePair_fetch4",
+      "producer_axioms": [
+        "propext",
+        "Quot.sound"
+      ]
+    }
+  ],
+  "negative_controls": [
+    {
+      "source": "FalseNext.lean",
+      "expected_exit": 1,
+      "actual_exit": 1,
+      "output_written": false,
+      "actual_error": "FalseNext.lean:3:63: error: Tactic `decide` proved that the proposition\n  (0#64 + 1).toNat = 2\nis false\n"
+    },
+    {
+      "source": "FalseOverlap.lean",
+      "expected_exit": 1,
+      "actual_exit": 1,
+      "output_written": false,
+      "actual_error": "FalseOverlap.lean:4:69: error: Tactic `decide` proved that the proposition\n  (Trust.A64.s21StorePair Trust.A64.overlapState).mem 32 = 0\nis false\n"
+    },
+    {
+      "source": "FalseFetch.lean",
+      "expected_exit": 1,
+      "actual_exit": 1,
+      "output_written": false,
+      "actual_error": "FalseFetch.lean:4:75: error: Tactic `decide` proved that the proposition\n  (Trust.A64.s21StorePair Trust.A64.overlapState).readMem 32 4 = 0\nis false\n"
+    }
+  ],
+  "installed_clean": {
+    "version": "0.9.4+gca8e256472eb00a8e4fdfa9d1e42401750d3273e",
+    "package": 19979,
+    "memory_parse_only": {
+      "lean_world": "v4.30.0-rc2",
+      "schema_version": "Clean-parse-only-report-v1",
+      "command": "clean check --parse-only",
+      "file": "MachineMemory431.lean",
+      "decls": 30,
+      "parse_ok": 30,
+      "rawdecl_recovered": 0,
+      "hard_error": 0,
+      "recovery_diagnostics": 0,
+      "imported_notations": 0,
+      "import_modules_read": 0,
+      "first_errors": []
+    },
+    "fetch_parse_only": {
+      "lean_world": "v4.30.0-rc2",
+      "schema_version": "Clean-parse-only-report-v1",
+      "command": "clean check --parse-only",
+      "file": "MachineFetch431.lean",
+      "decls": 5,
+      "parse_ok": 5,
+      "rawdecl_recovered": 0,
+      "hard_error": 0,
+      "recovery_diagnostics": 0,
+      "imported_notations": 0,
+      "import_modules_read": 1,
+      "first_errors": []
+    },
+    "parse_scope": "Unchanged4.30 Oracle grammar only; no typing or proof verification.",
+    "explicit431_verification_exit": 2,
+    "explicit431_verification_error": "error: invalid value 'v4.31.0' for '--lean-world <LEAN_WORLD>': unsupported Lean world `v4.31.0`\n\nFor more information, try '--help'.\n",
+    "independent431_verified": false
+  },
+  "artifact_headers": {
+    "MachineMemory431.olean": {
+      "format": 2,
+      "flags": 1,
+      "git_hash": "68218e876d2a38b1985b8590fff244a83c321783",
+      "version": "4.31.0"
+    },
+    "MachineFetch431.olean": {
+      "format": 2,
+      "flags": 1,
+      "git_hash": "68218e876d2a38b1985b8590fff244a83c321783",
+      "version": "4.31.0"
+    }
+  },
+  "artifacts": {
+    "MachineMemory431.lean": {
+      "bytes": 5787,
+      "sha256": "5590bdb452283cdf836c91f1ec63408c74f2ce1ccabd6c702ecf63c2e1a1377d"
+    },
+    "MachineMemory431.olean": {
+      "bytes": 369280,
+      "sha256": "52732bbe4231c4eb22e2de2cd29e291366ec47d7469eb3ff104af43c12e230cb"
+    },
+    "MachineFetch431.lean": {
+      "bytes": 1314,
+      "sha256": "9c956d91e01d3379517c3a5a946a834e955b19c1c0d35f538851cb1d9f823db5"
+    },
+    "MachineFetch431.olean": {
+      "bytes": 72832,
+      "sha256": "be3c80aa3b546c65a3c19c64874f89dbb62b85d6976583f1d763a9cbe405250d"
+    },
+    "Inspect.lean": {
+      "bytes": 412,
+      "sha256": "e1d48a4c952de4eaa83a4c08cd880d7baed3fc1a2be6d4efd264d6cadc9cd6eb"
+    },
+    "FalseNext.lean": {
+      "bytes": 95,
+      "sha256": "8e6619e32f9e41075a3821e013b7c4ffc5ac4ac68c7edb65779a2fe91dd18ce8"
+    },
+    "FalseOverlap.lean": {
+      "bytes": 135,
+      "sha256": "113c7ee0a5b8b37180645ec08ed56946a09e7dab6991c212f043179711b9fb4d"
+    },
+    "FalseFetch.lean": {
+      "bytes": 138,
+      "sha256": "391ecd586d977958863bf88d6c3aa4d4a9eb6d7ce496839d6c02d78e54897cdb"
+    },
+    "lean-toolchain": {
+      "bytes": 25,
+      "sha256": "efac0b94923b2d8b6840cd35be9177ad0fc5ab2332f4f4311c98712cee92fdee"
+    },
+    "source-book.json": {
+      "bytes": 2427,
+      "sha256": "ad08c48e24c0c225772827781e8e5ab53f3131ef12fd24180916dab148890975"
+    }
+  },
+  "whole_producer_input_bookends": {
+    "before_after_equal": true,
+    "entries": 15193,
+    "elapsed_s": 5.254305124282837,
+    "comparison": "Every file SHA256/type/mode/size/mtime, directory metadata and symlink target under entire distribution; installation root itself excluded identically.",
+    "upstream_executable_scope": "Version/help and bounded .olean fixture production only, no native code emission/global installation."
+  }
+}

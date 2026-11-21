@@ -104,12 +104,11 @@ pub fn source_closure_needs_world_setup(
             path: path.clone(),
             reason: error.to_string(),
         })?;
-        let header = clean_parser::Parser::parse_header(&source).map_err(|error| {
-            SourceModuleError::Header {
+        let header = clean_parser::Parser::parse_header_in_world(&source, decision.world())
+            .map_err(|error| SourceModuleError::Header {
                 path: path.clone(),
                 reason: error.to_string(),
-            }
-        })?;
+            })?;
         if header.is_prelude {
             return Ok(true);
         }
@@ -146,9 +145,10 @@ fn served_by_declared_prelude(
         return false;
     };
     matches!(
-        clean_olean::resolve_typed_module_path(
+        clean_olean::resolve_typed_module_path_in_world(
             module,
-            &artifact_search_paths(source_path, imports)
+            &artifact_search_paths(source_path, imports),
+            decision.declared_world(),
         ),
         Err(clean_olean::ImportError::ModuleNotFound { .. })
     )
@@ -252,7 +252,8 @@ impl SourceModuleSetup {
         import_policy: crate::ImportPolicy,
     ) -> Result<Self, SourceModuleError> {
         let mut fresh = Self::new(setup, decision)?;
-        if decision.world() == clean_kernel::lean_world::LeanWorld::ORACLE
+        if !setup.prelude.is_pinned_init()
+            && decision.world() == clean_kernel::lean_world::LeanWorld::ORACLE
             && decision.imports().is_ok()
             && match import_policy {
                 crate::ImportPolicy::FailClosed => clean_format_source_closure(path, decision)?,
@@ -546,8 +547,8 @@ fn clean_format_source_closure_with_import_policy(
         sources.push(SourceVisit::Leave { canonical, parent });
         let source =
             std::fs::read_to_string(&source_path).map_err(|error| fail(error.to_string()))?;
-        let header =
-            clean_parser::Parser::parse_header(&source).map_err(|error| fail(error.to_string()))?;
+        let header = clean_parser::Parser::parse_header_in_world(&source, decision.world())
+            .map_err(|error| fail(error.to_string()))?;
         if header.is_prelude {
             return Ok(false);
         }
@@ -571,7 +572,11 @@ fn clean_format_source_closure_with_import_policy(
     let mut seen_artifacts = HashSet::new();
     let mut found_artifact = false;
     while let Some((module, search_paths, source_import)) = artifacts.pop() {
-        let artifact = match clean_olean::resolve_typed_module_path(&module, &search_paths) {
+        let artifact = match clean_olean::resolve_typed_module_path_in_world(
+            &module,
+            &search_paths,
+            decision.declared_world(),
+        ) {
             Ok(artifact) => artifact,
             Err(clean_olean::ImportError::ModuleNotFound { .. })
                 if source_import && import_policy == crate::ImportPolicy::Permissive =>

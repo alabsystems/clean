@@ -58,7 +58,21 @@ pub(super) fn expand_occurrences(
                 .iter()
                 .any(|f| has_other_container(env, f, &occ.container))
         });
-        if other {
+        // A parameter field can expose a nested type only after substitution.
+        // In `List (Option T)`, the generic List fields do not mention Option.
+        // A direct recursive result, even behind positive function binders,
+        // adds no container of its own. Their domains have already passed
+        // the negative-position guard in collect_in_domain.
+        let composed_recursive_argument = occ.args.iter().any(|argument| {
+            let mut result = argument;
+            while let TermKind::Pi(_, _, body) = result.kind() {
+                result = body;
+            }
+            let (head, _) = result.unfold_apps();
+            !matches!(head.kind(), TermKind::Const(c) if family.names.contains(c.name()))
+                && crate::positivity::term_mentions_any(result, &family.names)
+        });
+        if other || composed_recursive_argument {
             needed = true;
             let aux = build_auxiliary(env, decl, &occ, levels, room)?;
             for ctor in &aux.constructors {

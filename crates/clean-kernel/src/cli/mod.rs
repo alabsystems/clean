@@ -146,6 +146,10 @@ pub const DEFAULT_AUTOMATION_BUDGET: u64 = 10_000_000;
 pub struct CheckArgs {
     /// File to check.
     pub file: PathBuf,
+    /// Write the declarations this file adds and their transitive dependency
+    /// closure as lean4export NDJSON 3.1 after a successful check.
+    #[arg(long, value_name = "OUT", conflicts_with = "parse_only")]
+    pub export_ndjson: Option<PathBuf>,
     /// Explicit source world, as a `lean-toolchain` tag (`v4.35.0`). Otherwise
     /// use the owning project's nearest lean-toolchain, then the unchanged
     /// oracle. An unknown release given here is refused; one the project's
@@ -398,6 +402,12 @@ module called `Lean` or `Lean.*` with no `.olean` present is served the \
 meta-type prelude stand-ins, logged at `warn`. Pass `--permissive-imports` to \
 restore the substituting behavior; a run under that flag is not a verification \
 claim.\n\n\
+Use `--export-ndjson FILE` to write the entry file's registered declarations \
+and their dependencies in lean4export NDJSON 3.1 after a successful check. \
+The header identifies the selected source world. The existing destination \
+is replaced only after the export finishes. To check the declarations in \
+a fresh environment under the replay reader's supported rules, run \
+`clean olean replay --from-export FILE`.\n\n\
 Every declaration gets a bounded, COOPERATIVE budget (`--decl-budget`, in \
 kernel operations; `0` disables it). A declaration that spends the whole \
 budget is reported `diverged` — its own verdict, listed under `Did not \
@@ -412,6 +422,10 @@ finish, so it does not change verdicts; recalibrate it with \
             Example {
                 cmd: "clean check foo.lean",
                 what: "type-check every declaration in foo.lean",
+            },
+            Example {
+                cmd: "clean check --export-ndjson checked.ndjson foo.lean",
+                what: "export the declarations registered by foo.lean and their dependencies",
             },
             Example {
                 cmd: "clean check --allow-sorry draft.lean",

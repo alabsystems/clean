@@ -108,8 +108,10 @@ fn test_set_mode_clears_all_caches_on_mode_change() {
         "expected WHNF cache to contain entries before mode change"
     );
 
-    // Populate def_eq cache with a negative result.
-    assert!(!tc.is_def_eq(&Expr::nat_lit(1), &Expr::nat_lit(2)));
+    // Populate def_eq cache with a negative result. Two distinct sorts reach
+    // the cache; two Nat literals no longer do (`def_eq/cached_nat.rs`
+    // answers literal pairs before the cache lookup).
+    assert!(!tc.is_def_eq(&Expr::prop(), &Expr::type_()));
     assert!(
         tc.def_eq_cache_entries() > 0,
         "expected def_eq cache to contain entries before mode change"
@@ -173,7 +175,7 @@ fn test_set_mode_clears_all_caches_on_mode_change() {
 }
 
 #[test]
-fn test_manual_mode_mutation_without_invalidation_can_expose_stale_type_cache_entry() {
+fn test_manual_mode_mutation_is_reconciled_before_semantic_cache_use() {
     let env = empty_env();
     let mut tc = TypeChecker::with_mode(&env, CleanMode::Cubical);
     tc.enable_type_cache();
@@ -188,15 +190,24 @@ fn test_manual_mode_mutation_without_invalidation_can_expose_stale_type_cache_en
         cache.insert(&cubical_interval, cubical_interval_ty.clone());
     }
 
-    // Simulate the pre-fix bug by bypassing set_mode invalidation.
+    // Bypass the setter so the dangerous stale answer is present immediately
+    // before the semantic entry point. The policy fence must reconcile it.
     tc.mode = CleanMode::Constructive;
+    {
+        let mut cache_ref = tc.type_cache.borrow_mut();
+        let cache = cache_ref.as_mut().expect("type cache stays enabled");
+        assert_eq!(
+            cache.get(&cubical_interval).cloned(),
+            Some(cubical_interval_ty)
+        );
+    }
     let infer_result = tc.infer_type_with_cert(&cubical_interval);
     assert!(
         matches!(infer_result, Err(TypeError::ModeRequired { .. })),
         "constructive mode must reject CubicalInterval"
     );
 
-    // With stale mode hash, cached Cubical result is still visible.
+    // Even a raw mode change cannot lend a Cubical answer to this query.
     let stale_entry = {
         let mut cache_ref = tc.type_cache.borrow_mut();
         let cache = cache_ref
@@ -205,8 +216,7 @@ fn test_manual_mode_mutation_without_invalidation_can_expose_stale_type_cache_en
         cache.get(&cubical_interval).cloned()
     };
     assert_eq!(
-        stale_entry,
-        Some(cubical_interval_ty),
-        "without invalidation, stale mode-specific cache entry remains accessible"
+        stale_entry, None,
+        "the semantic policy fence must discard the stale mode-specific answer"
     );
 }

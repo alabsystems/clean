@@ -2321,6 +2321,13 @@ impl Environment {
                 repaired_names.push(name.clone());
             }
         }
+        // Temporary removals and candidate insertions above roll back on refusal.
+        // At successful commit the old declarations really have been replaced.
+        for snapshot in &snapshots {
+            if snapshot.constant.is_some() {
+                self.extension_states.forget_declaration(&snapshot.name);
+            }
+        }
         self.lazy_source = original_lazy_source;
         if bump_generation {
             self.generation += 1;

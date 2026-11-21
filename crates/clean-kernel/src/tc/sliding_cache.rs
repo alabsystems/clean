@@ -174,7 +174,6 @@ impl<K: Eq + Hash + Clone, V: Clone> SlidingCache<K, V> {
     }
 
     /// Whether both generations are empty.
-    #[cfg(test)]
     pub(crate) fn is_empty(&self) -> bool {
         self.current.is_empty() && self.previous.is_empty()
     }

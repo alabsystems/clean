@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! Canonical qualification of the already-held exact equality-header bridge.
-//! Source registration earns no pass; actual calibration and default replay are owed.
+//! Each public proof is replayed against its independent literal and against False.
 
 #[path = "support/standalone_theory.rs"]
 mod standalone_theory;
@@ -34,9 +34,14 @@ fn exact_eq_headers_recheck_all_owned_bodies_and_exact_controls() {
         root_imports_init: false,
         mint_env: "CLEAN_MINT_KCHECK_EQ_HEADERS_PINS",
         contract_pairs: include_str!("fixtures/lean/v4.30.0-rc2/kcheck_eq_headers/CONTRACTS.json"),
-        contract_count: 12,
+        contract_count: 13,
         data_pairs: &[],
         mutations: &[
+            Mutation {
+                proof: "KCheckEqHeaders.Slot.member_endpoints",
+                literal: "EqHeaderContracts.omittedMemberTyping",
+                change: Change::DeleteBinder(9),
+            },
             Mutation {
                 proof: "KCheckEqHeaders.check_sound_with_eq_headers",
                 literal: "EqHeaderContracts.omittedInitial",

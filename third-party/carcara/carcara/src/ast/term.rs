@@ -1,3 +1,4 @@
+// Modified in Clean: typed array-lambda dialect and explicit lambda export refusal.
 use super::{
     macros::impl_str_conversion_traits,
     match_term, match_term_err,
@@ -104,8 +105,12 @@ pub enum Binder {
     /// The `choice` binder.
     Choice,
 
-    /// The `lambda` binder.
+    /// The higher-order function `lambda` binder.
     Lambda,
+
+    /// A unary array lambda, elaborated only in an actual Array context.
+    /// This remains distinct from an ordinary function lambda.
+    ArrayLambda,
 }
 
 /// A list of bindings, where each binding is a variable associated with a value.

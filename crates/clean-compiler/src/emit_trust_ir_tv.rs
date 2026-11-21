@@ -186,8 +186,6 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use clean_kernel::env::{Declaration, Environment};
 use clean_kernel::{BinderInfo, Expr, Name};
-#[cfg(test)]
-use clean_reflect::denote_source;
 use clean_reflect::{
     denote_function, denote_source_nat, denote_source_nat_in_environment,
     denote_source_with_requirements, tv_anchor_environment, tv_proof_term, tv_statement,
@@ -1038,16 +1036,20 @@ fn check_original_source_equation(
 
 #[path = "emit_trust_ir_tv_binding.rs"]
 mod binding;
-#[cfg(test)]
-pub(crate) use binding::certify_backend_translation_bound;
 pub(crate) use binding::certify_backend_translation_bound_in_environment;
-#[cfg(test)]
-pub(crate) use binding::kernel_tv_gate;
 use binding::{bound_binding, BindingInputs};
 #[path = "emit_trust_ir_tv_comparand.rs"]
 mod comparand;
 use comparand::comparand_lambda;
 pub(crate) use comparand::source_comparand_bytes;
+
+// Keep test-only items after production for the structural license audit.
+#[cfg(test)]
+pub(crate) use binding::certify_backend_translation_bound;
+#[cfg(test)]
+pub(crate) use binding::kernel_tv_gate;
+#[cfg(test)]
+use clean_reflect::denote_source;
 
 #[cfg(test)]
 #[path = "emit_trust_ir_tv_tests.rs"]

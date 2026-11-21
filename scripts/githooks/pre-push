@@ -137,8 +137,8 @@ HOOK_SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/$(basename "${BASH_S
 HOOK_ROOT="$(cd "$(dirname "$HOOK_SELF")/../.." && pwd -P)"
 
 # pre-push is fed "<local-ref> <local-sha> <remote-ref> <remote-sha>" lines on
-# stdin. Drain every one so git never sees EPIPE. A push that only DELETES refs
-# has nothing to gate -- its local sha is all-zero -- and is let through.
+# stdin. Drain every one so git never sees EPIPE. Deletion-only pushes exit
+# early after checking for a protected origin main ref.
 PUSHED_REFS="$(cat 2>/dev/null || true)"
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || {
@@ -195,10 +195,33 @@ if trust_sysroot="$(rustc +trust --print sysroot 2>/dev/null)" \
   export PATH
 fi
 
+resolve_ev3_main_update() {
+  local source_root="$1" remote_name="$2" remote_url="$3"
+  local main_rows origin_urls _main_local_ref _main_ref extra
+  main_local="" main_prior=""
+  main_rows="$(awk '$3 == "refs/heads/main"' <<<"$PUSHED_REFS")" || return 1
+  if [ -n "$main_rows" ]; then
+    origin_urls="$(git -C "$source_root" remote get-url --push --all origin 2>/dev/null)" || origin_urls=""
+    if [[ -n "$remote_url" && "$remote_url" != *$'\n'* ]] && grep -Fqx -- "$remote_url" <<<"$origin_urls"; then
+      read -r _main_local_ref main_local _main_ref main_prior extra <<<"$main_rows"
+      if [[ "$main_rows" == *$'\n'* || -n "$extra" \
+            || ! "$main_local" =~ ^([0-9a-f]{40}|[0-9a-f]{64})$ || ! "$main_local" =~ [1-9a-f] \
+            || ! "$main_prior" =~ ^([0-9a-f]{40}|[0-9a-f]{64})$ || ! "$main_prior" =~ [1-9a-f] ]]; then
+        echo "clean pre-push: EV3 requires one origin/main update with nonzero full commit IDs" >&2
+        return 1
+      fi
+    elif [ "$remote_name" = origin ]; then
+      echo "clean pre-push: cannot match the origin/main destination to a configured push URL" >&2
+      return 1
+    fi
+  fi
+}
+
 # ------------------------------------------------ OUTER: gate the pushed commit
 if [ -z "${CLEAN_PUSH_CHECKOUT:-}" ]; then
   ZERO=0000000000000000000000000000000000000000
   shas=""
+  resolve_ev3_main_update "$REPO_ROOT" "${1:-}" "${2:-}" || exit 1
   if [ -n "$PUSHED_REFS" ]; then
     while IFS=' ' read -r _lref lsha _rref _rsha; do
       [ -z "${lsha:-}" ] || [ "$lsha" = "$ZERO" ] && continue
@@ -271,7 +294,11 @@ PYLOCK
       if [ -n "$PUSHED_REFS" ]; then
         refs="$(awk -v s="$sha" '$2 == s' <<<"$PUSHED_REFS")"
       fi
+      ev3_published=""
+      if [ "$sha" = "$main_local" ]; then ev3_published="$main_prior"; fi
       ( cd "$checkout" && CLEAN_PUSH_CHECKOUT="$sha" \
+          CLEAN_EV3_SOURCE_ROOT="$REPO_ROOT" \
+          CLEAN_EV3_PUBLISHED_MAIN="$ev3_published" \
           CARGO_TARGET_DIR="$common/clean-pre-push-target" \
           bash "$HOOK_SELF" "$@" <<<"$refs" ) || rc=1
     done
@@ -294,6 +321,25 @@ if [ "$(git rev-parse HEAD 2>/dev/null)" != "$CLEAN_PUSH_CHECKOUT" ] \
   echo "  only in a checkout of it; this variable is set by the outer hook, not by hand." >&2
   exit 1
 fi
+
+# Recheck the raw Git rows here, including for a direct inner invocation.
+# The original worktree supplies its own origin configuration.
+ev3_source_root="${CLEAN_EV3_SOURCE_ROOT:-$REPO_ROOT}"
+if [ "$ev3_source_root" != "$REPO_ROOT" ]; then
+  ev3_source_git="$(git -C "$ev3_source_root" rev-parse --path-format=absolute --git-common-dir)" || exit 1
+  ev3_checkout_git="$(git rev-parse --path-format=absolute --git-common-dir)" || exit 1
+  if [ "$ev3_source_git" != "$ev3_checkout_git" ]; then
+    echo "clean pre-push: EV3 source and candidate must share a Git repository" >&2
+    exit 1
+  fi
+fi
+resolve_ev3_main_update "$ev3_source_root" "${1:-}" "${2:-}" || exit 1
+if { [ -n "$main_local" ] && [ "$main_local" != "$CLEAN_PUSH_CHECKOUT" ]; } \
+  || { [ "${CLEAN_EV3_PUBLISHED_MAIN+x}" ] && [ "$CLEAN_EV3_PUBLISHED_MAIN" != "$main_prior" ]; }; then
+  echo "clean pre-push: EV3 origin/main row differs from the checked-out push context" >&2
+  exit 1
+fi
+CLEAN_EV3_PUBLISHED_MAIN="$main_prior"
 
 if [ -n "$PUSHED_REFS" ]; then
   any_create_or_update=0
@@ -563,7 +609,73 @@ leg_lean_suite_conformance_ledger() {
 leg_silent_tactic_ratchet()             { "$PY" scripts/check_silent_tactic_ratchet.py; }
 leg_g_auto_static()                     { "$PY" scripts/tactic_parity/family_gate.py --family g_auto --static; }
 leg_g_simp_static()                     { "$PY" scripts/tactic_parity/family_gate.py --family g_simp --static; }
-leg_trustcore_evidence_staleness()      { "$PY" scripts/check_trustcore_evidence_staleness.py; }
+cached_clean_evidence() {
+  # The cache lives outside the pristine checkout. The key names its source and
+  # the artifact-selection contract used to place the executable there.
+  local common key cache target binary image staged
+  common="$(cd "$(git rev-parse --git-common-dir)" && pwd -P)" || return 1
+  key="$( { printf '%s\n' clean-evidence-artifact-v1
+    git --no-replace-objects rev-parse HEAD:crates/clean-evidence HEAD:Cargo.lock HEAD:Cargo.toml \
+      HEAD:rust-toolchain.toml HEAD:.cargo/config.toml
+  } | git hash-object --stdin)" || return 1
+  cache="$common/clean-pre-push-evidence"
+  target="$cache/target"
+  binary="$cache/bin/$key/clean-evidence"
+  if [ ! -x "$binary" ]; then
+    image="$(CARGO_TARGET_DIR="$target" targo --unverified build --locked -q -p clean-evidence \
+      --message-format=json-render-diagnostics | "$PY" -c '
+import hashlib
+import json
+import os
+from pathlib import Path
+import sys
+
+manifest = Path(sys.argv[1]).resolve() / "crates/clean-evidence/Cargo.toml"
+target = Path(sys.argv[2]).resolve()
+events = [json.loads(line) for line in sys.stdin if line.startswith("{")]
+finished = [row for row in events if row.get("reason") == "build-finished"]
+artifacts = [
+    row for row in events
+    if row.get("reason") == "compiler-artifact"
+    and row.get("manifest_path") == str(manifest)
+    and row.get("target", {}).get("name") == "clean-evidence"
+    and row.get("target", {}).get("kind") == ["bin"]
+    and row.get("profile", {}).get("test") is False
+]
+if len(finished) != 1 or finished[0].get("success") is not True or len(artifacts) != 1:
+    sys.exit("clean pre-push: expected one successful clean-evidence build artifact")
+row = artifacts[0]
+image = Path(row.get("executable") or "")
+if (not image.is_absolute() or "\n" in str(image) or image.is_symlink()
+        or not image.is_file() or not os.access(image, os.X_OK)
+        or not image.resolve().is_relative_to(target)):
+    sys.exit("clean pre-push: clean-evidence artifact is outside the build target or cannot run")
+if "trust_executable_sha256" in row:
+    with image.open("rb") as stream:
+        if hashlib.file_digest(stream, "sha256").hexdigest() != row["trust_executable_sha256"]:
+            sys.exit("clean pre-push: clean-evidence artifact digest differs from Targo")
+print(image)
+' "$PWD" "$target")" || return 1
+    mkdir -p "$cache/bin/$key" || return 1
+    staged="$binary.$$"
+    cp "$image" "$staged" && mv -f "$staged" "$binary" \
+      || { rm -f "$staged"; return 1; }
+  fi
+  printf '%s\n' "$binary"
+}
+leg_trustcore_evidence_staleness() {
+  local binary
+  binary="$(cached_clean_evidence)" || return 1
+  "$binary" check trustcore-staleness --repo-root "$PWD"
+}
+leg_python_minters_publication() {
+  [ -n "${CLEAN_EV3_PUBLISHED_MAIN:-}" ] || return 0
+  local binary
+  binary="$(cached_clean_evidence)" || return 1
+  git --no-replace-objects diff --cached --quiet "$CLEAN_PUSH_CHECKOUT" -- \
+    scripts data/gate_registry.json data/python_minters_baseline.json || return 1
+  "$binary" check python-minters --published "$CLEAN_EV3_PUBLISHED_MAIN" --repo-root "$PWD"
+}
 leg_crystal_revalidation_scope()        { "$PY" scripts/crystal_freshness_scope.py; }
 leg_crystal_enum_tag_pin()              { "$PY" scripts/check_enum_tag_pin.py; }
 leg_a0a6_probe_transcription()          { "$PY" scripts/check_a0a6_probe_transcription.py; }
@@ -639,6 +751,7 @@ silent-tactic-ratchet
 g-auto-static
 g-simp-static
 trustcore-evidence-staleness
+python-minters-publication
 crystal-revalidation-scope
 crystal-enum-tag-pin
 crystal-fixture-pins
@@ -778,8 +891,8 @@ fi
 if [ -z "$BLOCKING" ] && [ -z "$STALE_WAIVERS" ]; then
   echo
   echo "PRE-PUSH: GREEN in ${TOTAL}s (${PY}). Legs excluded on cost still run in"
-  echo "  scripts/local_gate.sh -- four of them in --fast too; each row's MODE"
-  echo "  column says which. See ${POLICY}."
+  echo "  scripts/local_gate.sh. Each row's MODE column says whether it also runs"
+  echo "  in --fast. See ${POLICY}."
   exit 0
 fi
 echo

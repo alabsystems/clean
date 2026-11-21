@@ -806,14 +806,16 @@ fn lean_compiled_each_call_cycle_as_one_mutual_group() {
 
 /// These are sampled depths, not a claim about every depth between them.
 /// Both lane sweeps execute every named program and read its minted outcome.
+/// The 10⁷ sample (X4) is measured, like the others, on the default 8 MiB
+/// main-thread stack (`scripts/x1_execution_evidence.py` sets it).
 #[test]
 fn head_loop_samples_are_pinned_on_both_lanes() {
     let pins = gaps();
     let samples = rows(&pins, "head_loop_samples");
-    assert_eq!(samples.len(), 3);
+    assert_eq!(samples.len(), 4);
     let base =
         std::fs::read_to_string(program("c27_r4_iv_head_loop_million")).expect("million probe");
-    for (sample, steps) in samples.iter().zip([10000_u64, 100000, 1000000]) {
+    for (sample, steps) in samples.iter().zip([10000_u64, 100000, 1000000, 10000000]) {
         assert_eq!(sample["steps"].as_u64(), Some(steps));
         let name = sample["program"].as_str().expect("sample program");
         let expected_source = base

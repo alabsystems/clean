@@ -73,6 +73,8 @@ use clean_kernel::{ConstantKind, Expr, Name};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
+pub mod resident;
+
 /// The domain-separation tag of a meaning digest.
 pub const DOMAIN: &str = "clean.self-proof.meaning-digest";
 

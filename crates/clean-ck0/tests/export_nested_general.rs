@@ -54,6 +54,23 @@ fn pinned_general_nested_exports_and_computation_proofs_accept() {
     }
 }
 #[test]
+fn nested_actual_parameters_supply_auxiliaries_after_substitution() {
+    let source = include_str!("fixtures/q2-part2/nested-containers.ndjson");
+    let report = run(source);
+    assert!(report.counts().1.is_empty(), "{report:?}");
+    for name in ["TwoHeads.rec_3", "SameHead.rec_2"] {
+        assert!(
+            report
+                .rows
+                .iter()
+                .find(|row| row.name.to_string() == name)
+                .is_some_and(|row| row.verdict.is_ok()),
+            "missing admitted recursor {name}"
+        );
+    }
+}
+
+#[test]
 fn zero_nested_counts_cannot_hide_occurrences_in_any_mutual_member() {
     let mut rs = rows();
     let block = mutual_nested(&mut rs);

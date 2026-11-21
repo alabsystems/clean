@@ -954,7 +954,7 @@ impl Environment {
                 level_params: vec![u.clone()],
                 type_: list_length_type,
                 value: list_length_value,
-                is_reducible: true,
+                is_reducible: false,
             })?;
         }
 
@@ -2442,6 +2442,227 @@ impl Environment {
         self.list_mapm_init = true;
         Ok(())
     }
+
+    /// Initialize `ByteArray` (`ByteArray.mk`, `ByteArray.data`, `ByteArray.size`,
+    /// `ByteArray.get!`) in the default source prelude, matching pinned Lean
+    /// v4.30.0-rc2 (`Init/Prelude.lean`) types and runtime behavior with zero
+    /// axioms.
+    ///
+    /// - `ByteArray.data` is defined via primitive structure projection
+    ///   (`Expr::proj("ByteArray", 0, bs)`), matching `native_string_layout_policy`
+    ///   and avoiding a cycle with `cases_byte_array_to_mono` (which lowers
+    ///   `ByteArray` case splits to `ByteArray.data`).
+    /// - `ByteArray.size` and `ByteArray.get!` carry Lean v4.30.0-rc2's
+    ///   `(@& ByteArray)` / `(@& Nat)` borrowed metadata in their declared types
+    ///   so `prelude_collision_census` records zero type-differing collisions.
+    /// - `ByteArray.get!` delegates to `Array.getD` with fallback `UInt8.ofNat 0`,
+    ///   matching `lean_byte_array_get`'s out-of-bounds return `0` (with empty
+    ///   stderr in Lean v4.30.0-rc2).
+    /// - Suppressed in `.olean` import mode (`suppress_lossy_structure_stubs`) so
+    ///   the genuine `Init` declarations import through the checked path.
+    pub(crate) fn init_byte_array(&mut self) -> Result<(), EnvError> {
+        use crate::expr::MDataValue;
+        if self.suppress_lossy_structure_stubs {
+            return Ok(());
+        }
+        if self.get_const(&Name::from_string("ByteArray")).is_some() {
+            return Ok(());
+        }
+
+        self.init_array()?;
+        self.init_uint8()?;
+        self.init_ofnat_uint8()?;
+
+        let type0 = Expr::from_kind(ExprKind::Sort(Level::succ(Level::zero())));
+        let byte_array_const = Expr::const_(Name::from_string("ByteArray"), vec![]);
+        let uint8_const = Expr::const_(Name::from_string("UInt8"), vec![]);
+        let nat_const = Expr::const_(Name::from_string("Nat"), vec![]);
+        let array_zero = Expr::const_(Name::from_string("Array"), vec![Level::zero()]);
+        let array_uint8 = Expr::app(array_zero, uint8_const.clone());
+
+        // ByteArray.mk : Array.{0} UInt8 → ByteArray
+        let ba_mk_type = Expr::pi(
+            BinderInfo::Default,
+            array_uint8.clone(),
+            byte_array_const.clone(),
+        );
+        self.add_inductive(InductiveDecl {
+            level_params: vec![],
+            num_params: 0,
+            types: vec![InductiveType {
+                name: Name::from_string("ByteArray"),
+                type_: type0,
+                constructors: vec![Constructor {
+                    name: Name::from_string("ByteArray.mk"),
+                    type_: ba_mk_type,
+                }],
+            }],
+        })?;
+        self.register_structure_fields(
+            Name::from_string("ByteArray"),
+            vec![Name::from_string("data")],
+        )?;
+
+        // ByteArray.data : ByteArray → Array.{0} UInt8 := fun self => self.1 (Proj)
+        let ba_data_type = Expr::pi(
+            BinderInfo::Default,
+            byte_array_const.clone(),
+            array_uint8.clone(),
+        );
+        let ba_data_value = Expr::lam(
+            BinderInfo::Default,
+            byte_array_const.clone(),
+            Expr::proj(Name::from_string("ByteArray"), 0, Expr::bvar(0)),
+        );
+        self.add_decl(Declaration::Definition {
+            name: Name::from_string("ByteArray.data"),
+            level_params: vec![],
+            type_: ba_data_type,
+            value: ba_data_value,
+            is_reducible: true,
+        })?;
+
+        let ba_data_const = Expr::const_(Name::from_string("ByteArray.data"), vec![]);
+        let borrowed = |ty: Expr| {
+            Expr::mdata(
+                vec![(Name::from_string("borrowed"), MDataValue::Bool(true))],
+                ty,
+            )
+        };
+
+        // ByteArray.size : (@& ByteArray) → Nat := fun bs => @Array.size.{0} UInt8 (ByteArray.data bs)
+        let array_size_zero = Expr::const_(Name::from_string("Array.size"), vec![Level::zero()]);
+        let ba_size_type = Expr::pi(
+            BinderInfo::Default,
+            borrowed(byte_array_const.clone()),
+            nat_const.clone(),
+        );
+        let ba_size_value = {
+            let mut b = EnvDeclBuilder::new();
+            let (bs_id, bs) = b.fresh_local(byte_array_const.clone());
+            let data = Expr::app(ba_data_const.clone(), bs);
+            let body = Expr::apps(array_size_zero, [uint8_const.clone(), data]);
+            let lam = b.mk_lam(bs_id, BinderInfo::Default, byte_array_const.clone(), body);
+            b.finish(lam)
+        };
+        self.add_decl(Declaration::Definition {
+            name: Name::from_string("ByteArray.size"),
+            level_params: vec![],
+            type_: ba_size_type,
+            value: ba_size_value,
+            is_reducible: false,
+        })?;
+
+        // ByteArray.get! : (@& ByteArray) → (@& Nat) → UInt8
+        //   := fun bs i => @Array.getD.{0} UInt8 (ByteArray.data bs) i (UInt8.ofNat 0)
+        let array_getd_zero = Expr::const_(Name::from_string("Array.getD"), vec![Level::zero()]);
+        let uint8_zero = Expr::app(
+            Expr::const_(Name::from_string("UInt8.ofNat"), vec![]),
+            Expr::nat_lit(0),
+        );
+        let ba_get_bang_type = Expr::pi(
+            BinderInfo::Default,
+            borrowed(byte_array_const.clone()),
+            Expr::pi(
+                BinderInfo::Default,
+                borrowed(nat_const.clone()),
+                uint8_const.clone(),
+            ),
+        );
+        let ba_get_bang_value = {
+            let mut b = EnvDeclBuilder::new();
+            let (bs_id, bs) = b.fresh_local(byte_array_const.clone());
+            let (i_id, i) = b.fresh_local(nat_const.clone());
+            let data = Expr::app(ba_data_const, bs);
+            let body = Expr::apps(array_getd_zero, [uint8_const.clone(), data, i, uint8_zero]);
+            let lam_i = b.mk_lam(i_id, BinderInfo::Default, nat_const, body);
+            let lam_bs = b.mk_lam(bs_id, BinderInfo::Default, byte_array_const, lam_i);
+            b.finish(lam_bs)
+        };
+        self.add_decl(Declaration::Definition {
+            name: Name::from_string("ByteArray.get!"),
+            level_params: vec![],
+            type_: ba_get_bang_type,
+            value: ba_get_bang_value,
+            is_reducible: true,
+        })?;
+
+        Ok(())
+    }
+
+    /// Initialize `List.forM.{u, v, w}` with Lean v4.30.0-rc2's exact three-universe
+    /// signature (`Init/Data/List/Control.lean`):
+    /// `{m : Type u → Type v} → [Monad.{u, v} m] → {α : Type w} → List.{w} α → (α → m PUnit.{u + 1}) → m PUnit.{u + 1}`.
+    ///
+    /// Constructively defined over `List.rec.{v + 1, w}` + `Pure.pure` / `Bind.bind`
+    /// with zero axioms and marked `is_reducible: true` so `native_monad_inline`
+    /// specializes closed-monad calls (`IO`, `Id`, `Option`, `Except`) to their
+    /// concrete monad operations before eager-IO rewriting. Suppressed in import
+    /// mode (`suppress_lossy_structure_stubs`) alongside `init_list_mapm`.
+    pub(crate) fn init_list_form(&mut self) -> Result<(), EnvError> {
+        use crate::env::data_monad_classes::monad_inst;
+        use crate::env::monad_term::{cst, lparam, monad_kind, type_at, Tele};
+        if self.suppress_lossy_structure_stubs {
+            return Ok(());
+        }
+        if self.get_const(&Name::from_string("List.forM")).is_some() {
+            return Ok(());
+        }
+        self.init_list()?;
+        self.init_punit()?;
+        self.init_monad_classes()?;
+
+        let (u, v, w) = (lparam("u"), lparam("v"), lparam("w"));
+        let list_w = |a: &Expr| Expr::app(cst("List", std::slice::from_ref(&w)), a.clone());
+        let punit_u = cst("PUnit", &[Level::succ(u.clone())]);
+        let punit_unit_u = cst("PUnit.unit", &[Level::succ(u.clone())]);
+
+        let mut t = Tele::new();
+        let m = t.imp(monad_kind(&u, &v));
+        let inst = t.inst(Expr::app(cst("Monad", &[u.clone(), v.clone()]), m.clone()));
+        let mi = monad_inst(&u, &v, &m, &inst);
+        let alpha = t.imp(type_at(&w));
+        let as_ = t.arg(list_w(&alpha));
+        let m_punit = mi.at(punit_u.clone());
+        let f = t.arg(Expr::arrow(alpha.clone(), m_punit.clone()));
+
+        let motive = {
+            let mut t2 = Tele::child(&t);
+            let _ = t2.arg(list_w(&alpha));
+            t2.lam(m_punit.clone())
+        };
+        let nil_case = mi.pure(punit_u.clone(), punit_unit_u);
+        let cons_case = {
+            let mut t2 = Tele::child(&t);
+            let hd = t2.arg(alpha.clone());
+            let _tl = t2.arg(list_w(&alpha));
+            let ih = t2.arg(m_punit.clone());
+            let cont = {
+                let mut t3 = Tele::child(&t2);
+                let _ = t3.arg(punit_u.clone());
+                t3.lam(ih)
+            };
+            t2.lam(mi.bind(punit_u.clone(), punit_u.clone(), Expr::app(f, hd), cont))
+        };
+        let body = Expr::apps(
+            cst("List.rec", &[Level::succ(v.clone()), w.clone()]),
+            [alpha, motive, nil_case, cons_case, as_],
+        );
+
+        self.add_decl(Declaration::Definition {
+            name: Name::from_string("List.forM"),
+            level_params: vec![
+                Name::from_string("u"),
+                Name::from_string("v"),
+                Name::from_string("w"),
+            ],
+            type_: t.pi(m_punit),
+            value: t.lam(body),
+            is_reducible: true,
+        })?;
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -3444,5 +3665,135 @@ mod list_mem_instance_tests {
             count, 1,
             "List.instMembership must be registered exactly once, got {count}"
         );
+    }
+}
+
+#[cfg(test)]
+mod bytearray_and_list_form_tests {
+    use super::*;
+    use crate::tc::TypeChecker;
+
+    #[test]
+    fn collection_size_definitions_take_the_height_of_their_checked_body() {
+        let env = Environment::with_prelude();
+        for name in ["List.length", "Array.size", "ByteArray.size"] {
+            let info = env.get_const(&Name::from_string(name)).expect(name);
+            let body = info.value.as_ref().expect("size definition body");
+            // These are ordinary SDK definitions. The bootstrap height must
+            // reflect our own checked term, including its actual dependencies.
+            assert_eq!(
+                info.reducibility,
+                crate::env::Reducibility::Regular(env.get_max_height(body) + 1),
+                "{name}",
+            );
+        }
+    }
+
+    #[test]
+    fn test_bytearray_and_list_form_in_default_prelude_with_zero_axioms() {
+        let env = Environment::with_prelude();
+        let tc = TypeChecker::new(&env);
+        for (name, expects_value) in [
+            ("ByteArray", false),
+            ("ByteArray.mk", false),
+            ("ByteArray.rec", false),
+            ("ByteArray.data", true),
+            ("ByteArray.size", true),
+            ("ByteArray.get!", true),
+            ("List.forM", true),
+        ] {
+            let n = Name::from_string(name);
+            let info = env
+                .get_const(&n)
+                .unwrap_or_else(|| panic!("{name} should be registered in with_prelude()"));
+            let _ = tc
+                .infer_sort(&info.type_)
+                .unwrap_or_else(|e| panic!("{name} type should infer a sort: {e:?}"));
+            match (&info.value, expects_value) {
+                (Some(val), true) => {
+                    tc.check_type(val, &info.type_).unwrap_or_else(|e| {
+                        panic!("{name} value should check against type: {e:?}")
+                    });
+                }
+                (None, false) => {}
+                (other, _) => panic!(
+                    "{name} value presence mismatch: expected has_value={expects_value}, got {}",
+                    other.is_some()
+                ),
+            }
+            let deps = env.axiom_deps(&n).expect("registered constant axiom_deps");
+            assert!(
+                deps.is_empty(),
+                "{name} must have empty non-foundational axiom_deps, got {deps:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_bytearray_and_list_form_withheld_in_import_prelude() {
+        let import_env = Environment::try_with_prelude_for_import().expect("import prelude");
+        for name in [
+            "ByteArray",
+            "ByteArray.mk",
+            "ByteArray.data",
+            "ByteArray.size",
+            "ByteArray.get!",
+            "List.forM",
+        ] {
+            assert!(
+                import_env.get_const(&Name::from_string(name)).is_none(),
+                "{name} must be withheld in import mode so genuine Init .oleans register"
+            );
+        }
+    }
+
+    #[test]
+    fn test_bytearray_size_and_get_bang_reduce_in_bounds_and_oob() {
+        let mut env = Environment::with_prelude();
+        env.init_byte_array().expect("idempotent init_byte_array");
+        env.init_list_form().expect("idempotent init_list_form");
+        let tc = TypeChecker::new(&env);
+
+        let u8_ty = Expr::const_(Name::from_string("UInt8"), vec![]);
+        let u8_of = |n: u64| {
+            Expr::app(
+                Expr::const_(Name::from_string("UInt8.ofNat"), vec![]),
+                Expr::nat_lit(n),
+            )
+        };
+        let nil = Expr::app(
+            Expr::const_(Name::from_string("List.nil"), vec![Level::zero()]),
+            u8_ty.clone(),
+        );
+        let cons = |h: Expr, t: Expr| {
+            Expr::apps(
+                Expr::const_(Name::from_string("List.cons"), vec![Level::zero()]),
+                [u8_ty.clone(), h, t],
+            )
+        };
+        let list = cons(u8_of(10), cons(u8_of(20), nil));
+        let arr = Expr::apps(
+            Expr::const_(Name::from_string("Array.mk"), vec![Level::zero()]),
+            [u8_ty, list],
+        );
+        let bs = Expr::app(Expr::const_(Name::from_string("ByteArray.mk"), vec![]), arr);
+
+        let sz = Expr::app(
+            Expr::const_(Name::from_string("ByteArray.size"), vec![]),
+            bs.clone(),
+        );
+        assert!(tc.is_def_eq(&sz, &Expr::nat_lit(2)));
+
+        let in_bounds = Expr::apps(
+            Expr::const_(Name::from_string("ByteArray.get!"), vec![]),
+            [bs.clone(), Expr::nat_lit(1)],
+        );
+        assert!(tc.is_def_eq(&in_bounds, &u8_of(20)));
+
+        let out_of_bounds = Expr::apps(
+            Expr::const_(Name::from_string("ByteArray.get!"), vec![]),
+            [bs, Expr::nat_lit(5)],
+        );
+        assert!(tc.is_def_eq(&out_of_bounds, &u8_of(0)));
     }
 }

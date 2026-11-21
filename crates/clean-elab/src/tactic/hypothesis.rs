@@ -305,30 +305,33 @@ pub fn clear_all_unused(state: &mut ProofState) -> TacticResult {
 
 /// Collect free variables from an expression.
 ///
-/// Uses the kernel's `ExprVisitor` trait for structural traversal over all
-/// ExprKind variants (including Cubical and ZFC extensions). Part of #2092.
-///
-/// Returns a `HashSet` for O(1) membership testing. Previous `Vec`-based
-/// implementation had O(n*f) cost due to linear `contains()` checks.
+/// An expression can share the same subtree through several binders. Its
+/// free-variable IDs are independent of binder depth. Visit each distinct
+/// open node once, using the kernel visitor for all expression variants.
 pub(crate) fn collect_fvars(expr: &Expr) -> HashSet<FVarId> {
-    struct FVarCollector<'a> {
-        fvars: &'a mut HashSet<FVarId>,
+    #[derive(Default)]
+    struct FVarCollector {
+        seen: HashSet<*const Expr>,
+        fvars: HashSet<FVarId>,
     }
 
-    impl ExprVisitor for FVarCollector<'_> {
+    impl ExprVisitor for FVarCollector {
         type Result = ();
 
         fn combine(&self, _a: (), _b: ()) {}
+
+        fn should_visit(&mut self, expr: &Expr) -> bool {
+            expr.has_fvar_quick() && self.seen.insert(std::ptr::from_ref(expr))
+        }
 
         fn visit_fvar(&mut self, id: FVarId) {
             self.fvars.insert(id);
         }
     }
 
-    let mut fvars = HashSet::new();
-    let mut visitor = FVarCollector { fvars: &mut fvars };
+    let mut visitor = FVarCollector::default();
     visitor.visit_expr(expr);
-    fvars
+    visitor.fvars
 }
 
 // ============================================================================

@@ -1,8 +1,8 @@
 {
   "_comment": "Digests of scripts/local_gate.sh, split at its GATE-FULL-ONLY markers (comments and blank lines stripped). BOTH halves are pinned: pinning only the fast half meant the single edit that changes a leg's mode -- moving it into a full-only region -- was also the edit that stopped watching its body. Refreshed only by `python3 scripts/check_hook_coverage.py --update`, and only when the leg tables already agree. A moved digest means a leg changed and its classification needs a human.",
-  "fast_region_sha256": "f6cec9d5eacfb03275b953c985bcb91fab09163171f9c76f81802fd45291abdb",
-  "full_region_sha256": "05cc879fe8aaadba4db508f79092af6d5eb6efdea709571c3378df93c432b573",
-  "hook_body_sha256": "ad5f0955dfa9652d21902d9b061704762c840d86b551d58da25aa33510b8eda5",
+  "fast_region_sha256": "fc72e783d1722e7e87fe9089ec56c398ae8c10d3db0c460d67b660be54a850b5",
+  "full_region_sha256": "1b07f09dc8c727bd2ac744c62186f5110a566222f302c2ce6d925db159caadf1",
+  "hook_body_sha256": "69b7e09521f986a4129ee599f614c05effc9ff993ae0b5311d408a3d5294c966",
   "fast_leg_ids": [
     "gate-registry",
     "cargo-test-selectors",
@@ -19,6 +19,7 @@
     "prelude-axiom-ratchet",
     "cli-feature-coverage",
     "cli-help-truth",
+    "reduction-bound-theorem",
     "help-surfaces",
     "ratchet-surfaces",
     "extend-constants-ratchet",
@@ -51,6 +52,7 @@
     "g-auto-static",
     "g-simp-static",
     "trustcore-evidence-staleness",
+    "python-minters-publication",
     "crystal-revalidation-scope",
     "crystal-enum-tag-pin",
     "lzb-activation-mint",
@@ -146,6 +148,7 @@
     "g-auto-static",
     "g-simp-static",
     "trustcore-evidence-staleness",
+    "python-minters-publication",
     "crystal-revalidation-scope",
     "crystal-enum-tag-pin",
     "crystal-fixture-pins",
@@ -165,5 +168,5 @@
     "trust-ir-axes-selftest",
     "upstream-lean-dropin"
   ],
-  "updated_utc_date": "2026-11-16"
+  "updated_utc_date": "2026-11-19"
 }

@@ -1,0 +1,1 @@
+def audit_collision_good_family : FreshDeclName env_freshness_first env_freshness_two := @Eq.refl Bool Bool.true

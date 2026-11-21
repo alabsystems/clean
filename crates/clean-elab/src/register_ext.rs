@@ -287,7 +287,7 @@ pub(crate) fn register_batch_with_hooks(
         stats.hooks_invoked += hook_count;
 
         match register_elab_result(&mut env_clone, result) {
-            Ok(()) => {
+            Ok(_) => {
                 stats.registered += 1;
                 let post_count = run_post_hooks(&hooks.post_hooks, &env_clone, result);
                 stats.hooks_invoked += post_count;
@@ -377,7 +377,7 @@ pub(crate) fn register_batch_full(
         stats.hooks_invoked += hook_count;
 
         match register_elab_result(&mut env_clone, result) {
-            Ok(()) => {
+            Ok(_) => {
                 stats.registered += 1;
                 if let Some(name) = result.declaration_name() {
                     registered_names.push(name.clone());

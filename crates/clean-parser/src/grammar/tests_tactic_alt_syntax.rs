@@ -303,6 +303,26 @@ fn test_alternative_binder_named_like_a_tactic_is_a_binder() {
 }
 
 #[test]
+fn induction_generalizing_keeps_tactic_spelled_locals_and_stops_at_the_next_tactic() {
+    let tactics = tactics_of(
+        "theorem t (n left right : Nat) : True := by\n  induction n generalizing left right\n  right\n",
+    );
+    let SurfaceTactic::Induction { generalizing, .. } = &tactics[0] else {
+        panic!("expected induction, got {:?}", tactics[0]);
+    };
+    assert_eq!(*generalizing, vec![name("left"), name("right")]);
+    assert_eq!(tactics.len(), 2);
+}
+
+#[test]
+fn induction_generalizing_requires_a_local_name() {
+    assert_refused(
+        "theorem t (n : Nat) : True := by\n  induction n generalizing with\n  | zero => trivial\n  | succ _ _ => trivial\n",
+        "empty generalizing clause",
+    );
+}
+
+#[test]
 fn test_alternative_binder_lean_keyword_is_refused() {
     // `at` is a Lean 4.8 keyword: never an `ident`.
     assert_refused(

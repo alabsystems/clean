@@ -50,6 +50,11 @@ pub(super) fn cases_to_mono_with_depth(
 ) -> Code {
     // Dispatch by type_name for type-specific elimination
     if cases.type_name == special_names::decidable_() {
+        // Newer SDKs represent Decidable as one constructor with a Bool
+        // field and an erased proof. Retain the binding for that Bool.
+        if let Some(info) = has_trivial_structure(&cases.type_name, env) {
+            return trivial_struct_to_mono(&info, cases, state, next_fvar, env, depth);
+        }
         return dec_to_mono(cases, state, next_fvar, env, depth);
     }
 

@@ -24,7 +24,7 @@
 //! 3. Closing the original goal with `Expr::let_named` that wraps the continuation
 
 use crate::unify::{MetaState, Unifier, UnifyResult};
-use clean_kernel::{Expr, ExprKind, FVarId};
+use clean_kernel::{Expr, FVarId};
 
 use super::core::{Goal, LocalDecl, ProofState, TacticError, TacticResult};
 
@@ -69,146 +69,92 @@ pub fn let_(
     ty: Expr,
     value: Option<Expr>,
 ) -> TacticResult {
-    let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
+    let_binding(state, name, ty, value, false)
+}
 
-    if let Some(val) = value {
-        // Verify the value has the expected type
-        let val_ty = state.infer_type(&goal, &val)?;
+/// Marker for a checked let whose RHS is substituted after the continuation is closed.
+pub(super) static INLINE_LET_MARKER: std::sync::LazyLock<clean_kernel::MDataMap> =
+    std::sync::LazyLock::new(|| {
+        vec![(
+            clean_kernel::Name::from_string("_clean.tactic.inlineLet"),
+            clean_kernel::MDataValue::Bool(true),
+        )]
+    });
+
+pub(super) fn let_binding(
+    state: &mut ProofState,
+    name: &clean_parser::SurfaceName,
+    ty: Expr,
+    value: Option<Expr>,
+    inline: bool,
+) -> TacticResult {
+    let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
+    if let Some(val) = &value {
+        let val_ty = state.infer_type(&goal, val)?;
         let ty_inst = state.metas.instantiate(&ty);
         let ctx = state.build_local_ctx(&goal);
-
-        let unify_result = {
-            let (metas, env) = state.metas_and_env();
-            Unifier::with_env(metas, env, ctx).unify(&val_ty, &ty_inst)
-        };
-        match unify_result {
-            UnifyResult::Success => {
-                // Value is valid - add to context as a let-binding with value retained.
-                // GOAL-DERIVED minting (see existential.rs by_cases): this local
-                // reaches the continuation subgoal's context and is bound by the
-                // `let` binder (depth 1) wrapping the continuation meta, so its
-                // id must sit exactly at the destination meta's binder base —
-                // the global cursor drifts past that base whenever anything
-                // minted since the goal's meta was created.
-                let fvar = {
-                    let base = state.goal_binder_base(&goal);
-                    state.next_fvar = state.next_fvar.max(base + 1);
-                    FVarId::new(base)
-                };
-
-                let local_decl = LocalDecl {
-                    binder_info: Default::default(),
-                    fvar,
-                    name: name.clone(),
-                    ty: ty.clone(),
-                    value: Some(val.clone()),
-                };
-
-                // Create new goal with extended context
-                let mut new_ctx = goal.local_ctx.clone();
-                new_ctx.push(local_decl);
-
-                // Create a new metavariable for the continuation
-                let new_meta_id = state.fresh_meta_in_context(goal.target.clone(), &new_ctx);
-                let new_meta_expr =
-                    Expr::from_kind(ExprKind::FVar(MetaState::to_fvar(new_meta_id)));
-
-                // The proof of the original goal is:
-                // let x : T := val in <continuation>
-                let proof_term = Expr::let_named(
-                    name.name().clone(),
-                    ty,
-                    val,
-                    new_meta_expr.abstract_fvar(fvar),
-                    false,
-                );
-
-                state.close_goal(&goal, proof_term)?;
-
-                // Add the new goal with x : T := val in context
-                let new_goal = Goal {
-                    meta_id: new_meta_id,
-                    target: goal.target.clone(),
-                    local_ctx: new_ctx,
-                    case_binders: goal.case_binders.clone(),
-                    tag: goal.tag.clone(),
-                };
-
-                state.goals.push_front(new_goal);
-                Ok(())
+        let (metas, env) = state.metas_and_env();
+        match Unifier::with_env(metas, env, ctx).unify(&val_ty, &ty_inst) {
+            UnifyResult::Success => {}
+            UnifyResult::Failure(msg) => {
+                return Err(TacticError::TypeMismatch {
+                    expected: format!("{ty_inst}"),
+                    actual: msg,
+                })
             }
-            UnifyResult::Failure(msg) => Err(TacticError::TypeMismatch {
-                expected: format!("{ty_inst}"),
-                actual: msg,
-            }),
-            UnifyResult::Stuck => Err(TacticError::UnificationFailed(
-                "unification stuck while checking let value type".to_string(),
-            )),
+            UnifyResult::Stuck => {
+                return Err(TacticError::UnificationFailed(
+                    "unification stuck while checking let value type".to_string(),
+                ))
+            }
         }
+    }
+
+    // A let adds exactly one binder in the destination goal. A sibling may have
+    // advanced the global cursor beyond that depth.
+    let base = state.goal_binder_base(&goal);
+    state.next_fvar = state.next_fvar.max(base + 1);
+    let fvar = FVarId::new(base);
+    let (value, obligation) = match value {
+        Some(val) => (val, None),
+        None => {
+            let id = state.fresh_meta(ty.clone());
+            (Expr::fvar(MetaState::to_fvar(id)), Some(id))
+        }
+    };
+    let mut new_ctx = goal.local_ctx.clone();
+    new_ctx.push(LocalDecl {
+        binder_info: Default::default(),
+        fvar,
+        name: name.clone(),
+        ty: ty.clone(),
+        value: Some(value.clone()),
+    });
+    let cont = state.fresh_meta_in_context(goal.target.clone(), &new_ctx);
+    let body = Expr::fvar(MetaState::to_fvar(cont)).abstract_fvar(fvar);
+    let proof = Expr::let_named(name.name().clone(), ty.clone(), value, body, false);
+    // Keep the binder around the unsolved continuation for the scope checker.
+    let proof = if inline {
+        Expr::mdata(INLINE_LET_MARKER.clone(), proof)
     } else {
-        // No value provided - create two goals:
-        // 1. Prove T (the value)
-        // 2. Continue original proof with x : T := <val> available
-
-        // GOAL-DERIVED minting (see existential.rs by_cases).
-        let fvar = {
-            let base = state.goal_binder_base(&goal);
-            state.next_fvar = state.next_fvar.max(base + 1);
-            FVarId::new(base)
-        };
-
-        // Create the value metavariable in the original context.
-        let val_meta_id = state.fresh_meta(ty.clone());
-        let val_meta_expr = Expr::from_kind(ExprKind::FVar(MetaState::to_fvar(val_meta_id)));
-
-        // The continuation can also use the transparent let local, so stamp
-        // its metavariable with the extended context.
-        let local_decl = LocalDecl {
-            binder_info: Default::default(),
-            fvar,
-            name: name.clone(),
-            ty: ty.clone(),
-            value: Some(val_meta_expr.clone()),
-        };
-        let mut new_ctx = goal.local_ctx.clone();
-        new_ctx.push(local_decl);
-        let cont_meta_id = state.fresh_meta_in_context(goal.target.clone(), &new_ctx);
-        let cont_meta_expr = Expr::from_kind(ExprKind::FVar(MetaState::to_fvar(cont_meta_id)));
-
-        // The proof of the original goal is:
-        // let x : T := <val_proof> in <continuation>
-        let proof_term = Expr::let_named(
-            name.name().clone(),
-            ty.clone(),
-            val_meta_expr.clone(),
-            cont_meta_expr.abstract_fvar(fvar),
-            false,
-        );
-
-        state.close_goal(&goal, proof_term)?;
-
-        // Goal 1: produce the value of type T
-        let val_goal = Goal {
-            meta_id: val_meta_id,
+        proof
+    };
+    state.close_goal(&goal, proof)?;
+    state.goals.push_front(Goal {
+        meta_id: cont,
+        target: goal.target,
+        local_ctx: new_ctx,
+        case_binders: goal.case_binders,
+        tag: goal.tag,
+    });
+    if let Some(id) = obligation {
+        state.goals.push_front(Goal {
+            meta_id: id,
             target: ty,
-            local_ctx: goal.local_ctx.clone(),
+            local_ctx: goal.local_ctx,
             case_binders: Vec::new(),
             tag: None,
-        };
-
-        // Goal 2: prove the original target with x : T := val available
-        let cont_goal = Goal {
-            meta_id: cont_meta_id,
-            target: goal.target.clone(),
-            local_ctx: new_ctx,
-            case_binders: goal.case_binders.clone(),
-            tag: goal.tag.clone(),
-        };
-
-        // Insert goals (value first, then continuation)
-        state.goals.push_front(cont_goal);
-        state.goals.push_front(val_goal);
-
-        Ok(())
+        });
     }
+    Ok(())
 }

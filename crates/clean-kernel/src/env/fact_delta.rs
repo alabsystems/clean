@@ -782,6 +782,21 @@ impl Environment {
             // environment only once it has decoded.
             self.reassemble_scalars(&delta.scalars)?;
         }
+        // A change only to operational transparency retains the source declaration.
+        for (name, before, after) in &delta.constants.changed {
+            if let Some(before) = before {
+                let same_declaration = after.as_ref().is_some_and(|after| {
+                    before.name == after.name
+                        && before.kind == after.kind
+                        && before.level_params == after.level_params
+                        && before.type_ == after.type_
+                        && before.value == after.value
+                });
+                if !same_declaration {
+                    self.extension_states.forget_declaration(name);
+                }
+            }
+        }
         apply_typed(self, delta);
         self.generation = moved[0];
         self.simp_registry_revision = moved[1];

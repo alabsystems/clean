@@ -264,8 +264,8 @@ fn genuine_heterogeneous_instance_still_resolves() {
 }
 
 /// Machine-word analogues: `UInt8` has its arithmetic, so the `if` is at
-/// `UInt8` and wraps (unchanged). `BitVec` and `USize` have none in the builtin
-/// prelude — Lean accepts both rows; Clean refuses them LOUDLY, never at `Nat`.
+/// `UInt8` and wraps. BitVec addition also wraps at its own carrier; false
+/// twins must be refused. USize still has no builtin arithmetic instance.
 #[test]
 fn machine_word_analogues() {
     let theorems =
@@ -273,6 +273,15 @@ fn machine_word_analogues() {
     let (_, ty) = &theorems[0];
     let carrier = ite_carrier(ty).expect("an `ite`");
     assert_eq!(head_name(&carrier).as_deref(), Some("UInt8"));
-    refused("theorem bv : (if True then (255 : BitVec 8) + 1 else 0) = 0 := by decide\n");
+    let theorems =
+        accepted("theorem bv : (if True then (255 : BitVec 8) + 1 else 0) = 0 := by decide\n");
+    let (_, ty) = &theorems[0];
+    let carrier = ite_carrier(ty).expect("a BitVec conditional");
+    assert_eq!(head_name(&carrier).as_deref(), Some("BitVec"));
+    assert_eq!(carrier.get_app_args().len(), 1);
+    assert_eq!(carrier.get_app_args()[0], &Expr::nat_lit(8));
+    accepted("theorem bv256 : (if True then (255 : BitVec 8) + 1 else 0) = 256 := by decide\n");
+    refused("theorem bv1 : (if True then (255 : BitVec 8) + 1 else 0) = 1 := by decide\n");
+    refused("theorem bvne : (if True then (255 : BitVec 8) + 1 else 0) ≠ 0 := by decide\n");
     refused("theorem us (x : USize) : (if True then x + 1 else 0) = x + 1 := rfl\n");
 }

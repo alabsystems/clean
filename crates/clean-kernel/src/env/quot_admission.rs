@@ -31,6 +31,7 @@ use super::Environment;
 use crate::expr::{Expr, ExprKind};
 use crate::level::Level;
 use crate::name::Name;
+use crate::quot::names as quotient_names;
 
 impl Environment {
     /// Install the quotient primitives after Lean's `check_eq_type`.
@@ -42,12 +43,27 @@ impl Environment {
     /// # Errors
     ///
     /// A message naming the first way the environment's `Eq` differs from the
-    /// one Lean's `add_quot` requires. Nothing is installed.
+    /// one Lean's `add_quot` requires, or an occupied primitive name. Nothing is installed.
     pub fn add_quot(&mut self) -> Result<(), String> {
         if self.has_quot() {
             return Ok(());
         }
         self.check_eq_for_quot()?;
+        // Installation replaces constant records. Check every name before any
+        // insertion so declarations checked against an earlier binding stay valid.
+        for name in [
+            &*quotient_names::QUOT,
+            &*quotient_names::QUOT_MK,
+            &*quotient_names::QUOT_LIFT,
+            &*quotient_names::QUOT_IND,
+            &*quotient_names::QUOT_SOUND,
+        ] {
+            if self.get_const(name).is_some() {
+                return Err(format!(
+                    "the quotient primitive name `{name}` is already declared"
+                ));
+            }
+        }
         self.init_quot();
         Ok(())
     }
@@ -132,6 +148,12 @@ impl Environment {
 }
 
 impl Environment {
+    /// Check the equality family and the constant records used to type a proof about it.
+    pub(crate) fn check_equality_premise(&self) -> Result<(), String> {
+        self.check_eq_for_quot()?;
+        self.check_premise_records(&Name::from_string("Eq"))
+    }
+
     /// What an Ax0 axiom's statement names must mean (R143). The kernel's
     /// canonical `propext`, `Classical.choice` and quotient primitives are
     /// compared by name and statement, but a statement names `Iff`, `Eq` and
@@ -152,14 +174,12 @@ impl Environment {
     /// shape.
     pub fn check_foundation_premises(&self, axiom: &Name) -> Result<(), String> {
         if super::axiom_audit::name_has_components(axiom, "propext") {
-            self.check_eq_for_quot()?;
-            self.check_premise_records(&Name::from_string("Eq"))?;
+            self.check_equality_premise()?;
             self.check_iff_for_propext()
         } else if super::axiom_audit::name_has_components(axiom, "Classical.choice") {
             self.check_nonempty_for_choice()
         } else if crate::quot::is_quot_name(axiom) {
-            self.check_eq_for_quot()?;
-            self.check_premise_records(&Name::from_string("Eq"))
+            self.check_equality_premise()
         } else {
             Ok(())
         }

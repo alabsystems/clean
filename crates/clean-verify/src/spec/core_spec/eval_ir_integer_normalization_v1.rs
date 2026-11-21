@@ -13,8 +13,8 @@ use crate::spec::{SpecError, Specification};
 #[path = "eval_ir_integer_normalization_v1_tests.rs"]
 mod tests;
 
-const PRODUCT_ROOT: &str = "ir_nat_mul_canonical_agrees_v1";
-const PRODUCT: &[(&str, &str)] = &[(
+pub(super) const PRODUCT_ROOT: &str = "ir_nat_mul_canonical_agrees_v1";
+pub(super) const PRODUCT: &[(&str, &str)] = &[(
     PRODUCT_ROOT,
     r"def ir_nat_mul_canonical_agrees_v1 (a b : Nat) :
 @Eq Nat (ir_nat_mul a b) (Nat.mul a b) :=

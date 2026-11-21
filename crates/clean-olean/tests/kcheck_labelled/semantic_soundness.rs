@@ -3,6 +3,16 @@
 //! Partial C3 branches: origin-module census, independent fresh replay, exact
 //! statement pins and an actual checked-proof/False pair for every own theorem.
 //! Smaller-fuel hypotheses on induction steps remain explicit obligations.
+//!
+//! Each own declaration `d` has two pins in
+//! `theories/kcheck_soundness/statement_pins.json`: `d`, its meaning digest
+//! (`support/meaning_digest.rs`) over the package of the fixture family
+//! `kcheck_soundness` (`cic_l`, `cic_l_model`, `kcheck_spec`,
+//! `kcheck_labelled`, `kcheck_soundness`), which moves when anything its
+//! statement or body reaches changes, the adopted checker included; and
+//! `d::declaration`, the digest of its whole kernel record, proof included,
+//! which these pins held before (so changing a theorem into a definition, or
+//! a proof, still moves a pin). Re-pin with the command of `kcheck_labelled.rs`.
 use super::*;
 use clean_kernel::env::ConstantKind;
 
@@ -125,7 +135,43 @@ fn partial_c3_branches_recheck_and_refuse_false() {
     .into_iter()
     .map(str::to_owned)
     .collect();
+    let package = Package::of_fixture(
+        &compiled,
+        "kcheck_soundness",
+        &[
+            "cic_l",
+            "cic_l_model",
+            "kcheck_spec",
+            "kcheck_labelled",
+            "kcheck_soundness",
+        ],
+    );
     let mut pins = BTreeMap::new();
+    {
+        let digests = MeaningDigests::new(kernel.environment(), &package);
+        for subject in &targets {
+            let declaration = loaded.get_const(subject).expect("own declaration");
+            let meaning = digests
+                .digest(subject)
+                .unwrap_or_else(|error| panic!("{subject}: {error}"));
+            assert!(pins.insert(subject.to_string(), meaning).is_none());
+            assert!(pins
+                .insert(format!("{subject}::declaration"), pin_constant(declaration))
+                .is_none());
+        }
+        let roots: Vec<Name> = targets.iter().cloned().collect();
+        eprintln!(
+            "{}",
+            digests
+                .describe(&package, &roots)
+                .unwrap_or_else(|error| panic!("{error}"))
+        );
+    }
+    assert_eq!(
+        pins.len(),
+        2 * targets.len(),
+        "two pins per own declaration"
+    );
     let mut proofs = 0;
     for subject in &targets {
         let declaration = loaded.get_const(subject).expect("own declaration");
@@ -144,7 +190,6 @@ fn partial_c3_branches_recheck_and_refuse_false() {
             observed.is_subset(&allowed),
             "nonfoundational closure for {subject}: {observed:?}"
         );
-        pins.insert(subject.to_string(), pin_constant(declaration));
         if declaration.kind != ConstantKind::Theorem {
             continue;
         }
@@ -185,8 +230,11 @@ fn partial_c3_branches_recheck_and_refuse_false() {
         "../../../../theories/kcheck_soundness/statement_pins.json"
     ))
     .expect("committed pins");
-    assert_eq!(
-        pins, expected,
-        "statement/body inventory changed; review actual proofs before minting"
-    );
+    if let Err(failure) = meaning_digest::check_pins(
+        &pins,
+        &expected,
+        "theories/kcheck_soundness/statement_pins.json",
+    ) {
+        panic!("statement/body inventory changed; review actual proofs before minting: {failure}");
+    }
 }

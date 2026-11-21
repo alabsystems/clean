@@ -187,10 +187,17 @@ pub fn ctor_app_to_mono(
 
 /// Transform a parameter to monomorphic form.
 pub fn param_to_mono(param: &Param, state: &mut ToMonoState) -> Param {
-    let ty = to_mono_type(&param.ty);
+    let erased_world = state.checked_void_layout && crate::world_token::is_void_type(&param.ty);
+    let ty = if erased_world {
+        // Retain the checked source type until IR lowering has assigned its
+        // logical Void slot. The ordinary applied-type monotype is lcAny.
+        param.ty.clone()
+    } else {
+        to_mono_type(&param.ty)
+    };
 
     // If param type is a type-former, track it for arg erasure
-    if is_type_former_type(&param.ty) {
+    if erased_world || is_type_former_type(&param.ty) {
         state.add_type_param(param.fvar_id);
     }
 

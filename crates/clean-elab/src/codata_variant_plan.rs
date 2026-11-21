@@ -653,6 +653,7 @@ fn collect_idents(expr: &SurfaceExpr, out: &mut Vec<SurfaceName>) {
         }
         SurfaceExpr::Paren(_, e)
         | SurfaceExpr::Explicit(_, e)
+        | SurfaceExpr::Borrowed(_, e)
         | SurfaceExpr::OutParam(_, e)
         | SurfaceExpr::SemiOutParam(_, e)
         | SurfaceExpr::Proj(_, e, _)
@@ -729,6 +730,7 @@ fn subst_idents(
         }
         SurfaceExpr::Paren(s, e) => SurfaceExpr::Paren(*s, Box::new(rec(e, shadowed)?)),
         SurfaceExpr::Explicit(s, e) => SurfaceExpr::Explicit(*s, Box::new(rec(e, shadowed)?)),
+        SurfaceExpr::Borrowed(s, e) => SurfaceExpr::Borrowed(*s, Box::new(rec(e, shadowed)?)),
         SurfaceExpr::OutParam(s, e) => SurfaceExpr::OutParam(*s, Box::new(rec(e, shadowed)?)),
         SurfaceExpr::SemiOutParam(s, e) => {
             SurfaceExpr::SemiOutParam(*s, Box::new(rec(e, shadowed)?))

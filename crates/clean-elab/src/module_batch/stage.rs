@@ -269,7 +269,7 @@ fn elaborate_header(env: &Environment, node: &Node) -> Result<DeclHeader, NoHead
     };
     // Header phase: a signature that names an unstaged sibling is reported
     // by the sibling's own refusal, so no list is threaded here either.
-    let mut ctx = super::exec::elab_ctx_for(env, node, &[]);
+    let mut ctx = super::exec::elab_ctx_for(env, node, &[]).map_err(classify_header_error)?;
     let (name, universe_params, ty) = ctx
         .elab_decl_header_inner(
             shape.name,

@@ -24,6 +24,15 @@ fn last_position_alias() -> SurfaceName {
     SurfaceName::unspellable("_eqn_last", 0)
 }
 
+impl SurfacePattern {
+    /// The single pending body of `intro ⟨…⟩` has the constructor fields
+    /// in its local context, just like `refine fun ⟨…⟩ => ?_`.
+    pub fn intro_refinement(&self, span: Span) -> SurfaceExpr {
+        let layer = Parser::pattern_binder_layer(self.clone(), &mut 0);
+        Parser::interleaved_pattern_lambda(span, vec![layer], SurfaceExpr::Hole(span))
+    }
+}
+
 impl Parser {
     /// Parse lambda body: x y z => e or (x : T) (y : U) => e
     /// Returns (`lambda_expr`, `is_pattern_matching`) where `is_pattern_matching`

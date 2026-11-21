@@ -13,20 +13,22 @@ fn cli_source_world_defaults_and_unknown_world_refusals_are_explicit() {
         panic!("check")
     };
     assert_eq!(args.lean_world, None);
-    let selected = Cli::try_parse_from([
-        "clean",
-        "check",
-        "--parse-only",
-        "--lean-world",
-        "v4.36.0-rc2",
-        "f.lean",
-    ])
-    .unwrap();
-    let Commands::Check(args) = selected.command else {
-        panic!("check")
-    };
-    assert_eq!(args.lean_world, Some(LeanWorld::Lean436Rc2));
-    for world in ["v4.31.0", "v4.36.0", "v4.99.0"] {
+    for world in [LeanWorld::Lean436Rc2, LeanWorld::Lean436] {
+        let selected = Cli::try_parse_from([
+            "clean",
+            "check",
+            "--parse-only",
+            "--lean-world",
+            world.tag(),
+            "f.lean",
+        ])
+        .unwrap();
+        let Commands::Check(args) = selected.command else {
+            panic!("check")
+        };
+        assert_eq!(args.lean_world, Some(world));
+    }
+    for world in ["v4.31.0", "v4.36.0-rc1", "v4.99.0"] {
         let Err(refusal) = Cli::try_parse_from(["clean", "check", "--lean-world", world, "f.lean"])
         else {
             panic!("unknown world {world} must be refused")
@@ -41,16 +43,18 @@ fn parse_only_selected_world_preserves_default_refusals_and_recovers_nothing() {
     let seed = clean_parser::NotationSeed::new();
     let old = parse_only_counts(source, &seed);
     assert_eq!(old.hard_error, 1);
-    let recent = parse_only_counts_in_world(source, &seed, LeanWorld::Lean436Rc2);
-    assert_eq!(
-        (
-            recent.parse_ok,
-            recent.rawdecl_recovered,
-            recent.hard_error,
-            recent.recovery_diagnostics
-        ),
-        (2, 0, 0, 0)
-    );
+    for world in [LeanWorld::Lean436Rc2, LeanWorld::Lean436] {
+        let recent = parse_only_counts_in_world(source, &seed, world);
+        assert_eq!(
+            (
+                recent.parse_ok,
+                recent.rawdecl_recovered,
+                recent.hard_error,
+                recent.recovery_diagnostics
+            ),
+            (2, 0, 0, 0)
+        );
+    }
 }
 
 #[test]
@@ -96,6 +100,7 @@ fn check_source_closure_inherits_the_explicit_entry_world() {
             clean_kernel::cli::DEFAULT_AUTOMATION_BUDGET,
             &[],
             explicit,
+            None,
         )
     };
     // Implicitly the entry's v4.99.0 world is refused. That refuses its Lean
@@ -120,4 +125,50 @@ fn check_source_closure_inherits_the_explicit_entry_world() {
     assert!(outcome.parser_diagnostics.is_empty(), "{outcome:?}");
     assert!(outcome.kernel_failures.is_empty(), "{outcome:?}");
     assert!(outcome.trust_failures.is_empty(), "{outcome:?}");
+}
+
+#[test]
+fn explicit_oracle_world_checks_against_shared_pinned_init_environment() {
+    std::thread::Builder::new()
+        .stack_size(128 << 20)
+        .spawn(|| {
+            let dir = tempfile::tempdir().unwrap();
+            let file = dir.path().join("PinnedOracleProbe.lean");
+            // `UInt16.not_neg_one` lives in genuine `Init.Data.UInt.Bitwise`,
+            // never in Clean's handwritten builtin prelude.
+            std::fs::write(
+                &file,
+                "theorem uses_full_pinned_init : ¬ ((-1 : UInt16) = 0) := by
+  exact fun h => absurd (Eq.trans UInt16.not_neg_one.symm (congrArg (· ^^^ -1) h)) (by decide)
+",
+            )
+            .unwrap();
+            let (outcome, _) = collect_check_outcome_in_world(
+                &file,
+                false,
+                false,
+                clean_kernel::cli::PreludeMode::Builtin,
+                false,
+                false,
+                clean_elab::ImportPolicy::FailClosed,
+                clean_kernel::cli::DEFAULT_DECL_BUDGET,
+                clean_kernel::cli::DEFAULT_AUTOMATION_BUDGET,
+                &[],
+                Some(LeanWorld::ORACLE),
+                None,
+            )
+            .unwrap();
+            assert_eq!(outcome.lean_world, LeanWorld::ORACLE);
+            assert_eq!(
+                outcome.environment_lean_world,
+                Some(LeanWorld::ORACLE.tag())
+            );
+            assert_eq!(outcome.success_count, 1, "{outcome:?}");
+            assert!(outcome.errors.is_empty(), "{outcome:?}");
+            assert!(outcome.kernel_failures.is_empty(), "{outcome:?}");
+            assert!(outcome.trust_failures.is_empty(), "{outcome:?}");
+        })
+        .unwrap()
+        .join()
+        .unwrap();
 }

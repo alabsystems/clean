@@ -453,12 +453,11 @@ fn test_replayed_context_tampered_import_and_foreign_axiom_still_fail_replay() {
         .unwrap()
         .clone();
     info.value = Some(Expr::sort(Level::zero()));
-    program.program.env.forget_decl(&info.name);
+    let env = Arc::make_mut(&mut program.program.env);
+    env.forget_decl(&info.name);
     // Test-only forged import: production exposes neither this environment
     // nor an API that installs caller-provided constant records.
-    assert!(program
-        .program
-        .env
+    assert!(env
         .extend_constants_structural(std::iter::once(info))
         .is_empty());
     let error = match program.replay_context(&roots()) {

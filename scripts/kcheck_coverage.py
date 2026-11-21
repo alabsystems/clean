@@ -121,9 +121,9 @@ class Stale(Exception):
 
 def verdicts(run):
     """`run`, with anything that is not a verdict turned into a refusal: a traceback is never an answer."""
-    def guarded(*args):
+    def guarded(*args, **kwargs):
         try:
-            return run(*args)
+            return run(*args, **kwargs)
         except (Refused, Stale):
             raise
         except Exception as err:  # noqa: BLE001 - fail closed on whatever was not foreseen
@@ -196,12 +196,13 @@ def blank_noncode_lean(text: str) -> str:
     return "".join(out)
 
 
-def required_sources() -> set[str]:
+def required_sources(root: Path | None = None) -> set[str]:
     """The files the executable is built from, found with no Lean toolchain: the import closure of
     BUILD_ROOTS over PACKAGES plus each package's build files. A module no package holds is the toolchain's."""
+    root = ROOT if root is None else root
     def locate(module: str) -> str | None:
         tail = module.replace(".", "/") + ".lean"
-        hits = [f"theories/{package}/{tail}" for package in PACKAGES if (ROOT / "theories" / package / tail).is_file()]
+        hits = [f"theories/{package}/{tail}" for package in PACKAGES if (root / "theories" / package / tail).is_file()]
         if len(hits) > 1:
             raise Refused(f"module {module} is in more than one package: {hits}")
         return hits[0] if hits else None
@@ -213,14 +214,14 @@ def required_sources() -> set[str]:
         if rel is None or rel in seen:
             continue
         seen.add(rel)
-        for module in IMPORT.findall(blank_noncode_lean((ROOT / rel).read_text(encoding="utf-8"))):
+        for module in IMPORT.findall(blank_noncode_lean((root / rel).read_text(encoding="utf-8"))):
             if not MODULE_NAME.fullmatch(module):
                 raise Refused(f"{rel} imports `{module}`, a name this reader does not follow")
             todo.append(module)
-    for root in BUILD_ROOTS:
-        if locate(root) not in seen:
-            raise Refused(f"theories/kcheck_run has no module {root}")
-    return seen | {f"theories/{package}/{name}" for package in PACKAGES for name in PACKAGE_FILES if (ROOT / "theories" / package / name).is_file()}
+    for module in BUILD_ROOTS:
+        if locate(module) not in seen:
+            raise Refused(f"theories/kcheck_run has no module {module}")
+    return seen | {f"theories/{package}/{name}" for package in PACKAGES for name in PACKAGE_FILES if (root / "theories" / package / name).is_file()}
 
 
 def sources_refusal(sources, required: set[str]) -> str | None:
@@ -244,20 +245,22 @@ def pinned_toolchain(root: Path) -> str:
     return (root / "theories" / "kcheck_run" / "lean-toolchain").read_text(encoding="utf-8").strip()
 
 
-def read_inputs() -> tuple[bytes, bytes, bytes]:
+def read_inputs(root: Path | None = None) -> tuple[bytes, bytes, bytes]:
     """The three tracked files a record names. A record that is there and names a file that is not is refused."""
+    root = ROOT if root is None else root
     for rel in (EXPORT, ADVICE, TRANSCRIPT):
-        if not (ROOT / rel).is_file():
+        if not (root / rel).is_file():
             raise Refused(f"{RECORD} names {rel}, which does not exist")
-    return (ROOT / EXPORT).read_bytes(), (ROOT / ADVICE).read_bytes(), (ROOT / TRANSCRIPT).read_bytes()
+    return (root / EXPORT).read_bytes(), (root / ADVICE).read_bytes(), (root / TRANSCRIPT).read_bytes()
 
 
 @verdicts
-def check() -> dict:
-    if not (ROOT / RECORD).is_file():
+def check(root: Path | None = None) -> dict:
+    root = ROOT if root is None else root
+    if not (root / RECORD).is_file():
         raise Stale(STALE_ABSENT)
     try:
-        text = (ROOT / RECORD).read_bytes().decode("utf-8")
+        text = (root / RECORD).read_bytes().decode("utf-8")
         record = json.loads(text)
         sources, run, origin = record["sources"], record["run"], record["advice"]["origin"]
     except (ValueError, KeyError, TypeError, RecursionError) as err:
@@ -274,27 +277,26 @@ def check() -> dict:
         raise Refused(f"{RECORD}'s run is not the four facts of a run: {', '.join(RUN_KEYS)}")
     if not SHA256.fullmatch(run["executable_sha256"]):
         raise Refused(f"{RECORD}'s run gives the executable no sha256")
-    if isinstance(sources, dict):
-        bad = next((rel for rel in sources if not isinstance(rel, str) or not rel.startswith("theories/") or ".." in rel.split("/")), None)
-        if bad is not None:
-            raise Refused(f"{RECORD}: `sources` names {bad!r}, which is not a path under theories/")
-    else:
+    if not isinstance(sources, dict):
         raise Refused(f"{RECORD}: `sources` is not a map")
-    export_gz, advice, transcript = read_inputs()
+    bad = next((rel for rel in sources if not isinstance(rel, str) or not rel.startswith("theories/") or ".." in rel.split("/")), None)
+    if bad is not None:
+        raise Refused(f"{RECORD}: `sources` names {bad!r}, which is not a path under theories/")
+    export_gz, advice, transcript = read_inputs(root)
     want = build_record(export_gz, advice, transcript, sources, run, origin)
     if text != serialize(want):
         differing = sorted(k for k in set(record) | set(want) if record.get(k) != want.get(k))
         what = f"in {differing}" if differing else "in its spelling (a repeated key, another number form or other formatting)"
         raise Refused(f"{RECORD} differs from a re-derivation {what}; re-mint with --write")
-    moved = sorted(rel for rel in sources if not (ROOT / rel).is_file() or sha((ROOT / rel).read_bytes()) != sources[rel])
+    moved = sorted(rel for rel in sources if not (root / rel).is_file() or sha((root / rel).read_bytes()) != sources[rel])
     if moved:
         raise Stale(STALE_MOVED, f"{len(moved)} moved, first {moved[0]}")
     # Only now: with every listed file unmoved, a list that is not the build's own is a doctored record, not a stale one.
-    wrong = sources_refusal(sources, required_sources())
+    wrong = sources_refusal(sources, required_sources(root))
     if wrong:
         raise Refused(f"{RECORD}: {wrong}")
-    if run["lean_toolchain"] != pinned_toolchain(ROOT):
-        raise Refused(f"{RECORD}'s run names toolchain {run['lean_toolchain']}; theories/kcheck_run pins {pinned_toolchain(ROOT)}")
+    if run["lean_toolchain"] != pinned_toolchain(root):
+        raise Refused(f"{RECORD}'s run names toolchain {run['lean_toolchain']}; theories/kcheck_run pins {pinned_toolchain(root)}")
     return record
 
 

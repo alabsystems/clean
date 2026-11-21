@@ -1633,14 +1633,19 @@ WORKSPACE_GATES = [
         "package": "__workspace__",
         "kind": "gate",
         "argv": ["scripts/kstar_recheck.sh", "--check-record",
-                 "reports/self-proof-q4-ck0-2026-11-16/replay/replay.json"],
+                 "reports/self-proof-q4-corrected-reference-2026-11-18/main-362fac/standing/replay.json"],
         "_extra_paths": ["scripts/kstar_recheck.sh", "scripts/kstar_recheck.py",
                          "scripts/kstar_selftest.py", "scripts/kstar_subjects.py",
+                         # The input rule, the lexer it reads Rust through and its build-read
+                         # declarations decide what --check-record calls fresh (docs/DECISIONS.md 2026-11-19).
+                         "scripts/kstar_inputs.py", "scripts/check_add_decl_ratchet.py", "data/kstar_build_reads.json",
                          "scripts/kstar_subjects_selftest.py",
                          "scripts/lean4lean_recheck.py", "scripts/lean4lean_selftest.py",
                          "scripts/nanoda_recheck.py", "scripts/lean_export_replay",
                          "data/lean4lean_q4_pin.json", "data/lean4lean_q4_arena_reasons.json",
-                         "theories/cic_l", "reports/self-proof-q4-ck0-2026-11-16/replay/replay.json"],
+                         "data/lean4lean_q4_patches",
+                         "reports/self-proof-q4-corrected-reference-2026-11-18/control-observation.json",
+                         "theories/cic_l", "reports/self-proof-q4-corrected-reference-2026-11-18/main-362fac/standing/replay.json"],
     },
     {
         "id": "gate::fence",
@@ -1856,7 +1861,7 @@ RELEASE_PROFILE_TARGETS: list[dict[str, Any]] = [
     },
     # The kernel's release-only lib tests (E3 fix-up, 2026-11-13). `infer_type`
     # takes the fast path in a release build and the certificate path in a
-    # debug one, so 26 lib tests of the fast path are
+    # debug one, so 27 lib tests of the fast path are
     # `#[cfg(not(debug_assertions))]` and the debug lib rows compile them out
     # (`lib_test_coverage` derives them; the parity target above is the same
     # split at the scale of a whole target).
@@ -1865,12 +1870,15 @@ RELEASE_PROFILE_TARGETS: list[dict[str, Any]] = [
         "package": "clean-kernel",
         "kind": "test",
         "profile": PROFILE_RELEASE,
-        # The six modules that hold the 26 (309 tests in a release build).
+        # Keep the existing module filters and explicitly select the retained
+        # certificate-memo control, which lives outside those six modules.
         "argv": ["targo", "--unverified", "test", "--locked", "--release",
                  "-p", "clean-kernel", "--lib", "--",
                  "env::tests::", "env::tests_constant_origin::",
                  "tc::cert::rebind::closed_memo::", "tc::infer_closed_data::tests::",
-                 "tc::sharing_invariance::tests::", "tc::tests::infer_fast_arc_memo::"],
+                 "tc::sharing_invariance::tests::", "tc::tests::infer_fast_arc_memo::",
+                 "tc::infer_arc_memo::certificate_tests::"
+                 "discarded_release_warm_weaker_memo_never_answers_retained_children"],
         "_must_pass": [
             "env::tests::test_add_decl_unchecked_overwrites_existing_in_release",
             "env::tests_constant_origin::test_g5_set_origins_refuses_unearned_kernel_checked_promotion",
@@ -1898,6 +1906,8 @@ RELEASE_PROFILE_TARGETS: list[dict[str, Any]] = [
             "tc::tests::infer_fast_arc_memo::fast_arc_memo_zero_fallback_and_single_entry_turnover",
             "tc::tests::infer_fast_arc_memo::fast_arc_windows_admit_and_reuse_nodes_after_initial_capacity",
             "tc::tests::infer_fast_arc_memo::retained_projection_reentry_keeps_real_sort_certificate",
+            "tc::infer_arc_memo::certificate_tests::"
+            "discarded_release_warm_weaker_memo_never_answers_retained_children",
         ],
         # Its build right after the row above, in the same target dir (every
         # dependency warm), peaked at 13.73 GB over 4 min 40 s (heavy_gate
@@ -2334,6 +2344,20 @@ TARGET_EXTRA_PATHS: dict[str, list[str]] = {
         "theories/kcheck_labelled/statement_pins.json",
         "theories/kcheck_soundness",
     ],
+    "clean-olean::test::kcheck_labelled_manifest": [
+        "lean-toolchain",
+        "theories/cic_l",
+        "theories/cic_l_model",
+        "theories/kcheck_spec",
+        "theories/kcheck_labelled",
+        "crates/clean-olean/tests/fixtures/lean/v4.30.0-rc2/kcheck_labelled",
+        "crates/clean-olean/src/meaning_digest",
+        "crates/clean-olean/src/meaning_digest.rs",
+        "crates/clean-olean/tests/kcheck_labelled.rs",
+        "scripts/kcheck_labelled_manifest_roster.lean",
+        "scripts/qualify_kcheck_labelled_manifest.py",
+        "data/kcheck_labelled_canonical_manifest.json",
+    ],
     "clean-olean::test::cic_l_base_bridge": [
         "lean-toolchain",
         "theories/cic_l",
@@ -2521,6 +2545,87 @@ TARGET_EXTRA_PATHS: dict[str, list[str]] = {
         "theories/kcheck_c7_p2",
         "theories/kcheck_capstone",
     ],
+    "clean-olean::test::c5_init_slice_gate": [
+        "data/c5_init_slice.json",
+        "lean-toolchain",
+        "theories/kcheck_init_slice",
+    ],
+    "clean-olean::test::kcheck_init_slice": [
+        "lean-toolchain",
+        "theories/cic_l",
+        "theories/cic_l_model",
+        "theories/kcheck_spec",
+        "theories/kcheck_labelled",
+        "theories/kcheck_loader",
+        "theories/kcheck_init_slice",
+    ],
+    "clean-olean::test::kcheck_s4_exists": [
+        "lean-toolchain",
+        "theories/cic_l",
+        "theories/cic_l_model",
+        "theories/kcheck_spec",
+        "theories/kcheck_labelled",
+        "theories/kcheck_s4_exists",
+    ],
+    "clean-olean::test::kcheck_s3_acc": [
+        "lean-toolchain",
+        "theories/cic_l",
+        "theories/cic_l_model",
+        "theories/kcheck_spec",
+        "theories/kcheck_labelled",
+        "theories/kcheck_s3_acc",
+    ],
+    "clean-olean::test::kcheck_s6_string_accel": [
+        "lean-toolchain",
+        "theories/cic_l",
+        "theories/cic_l_model",
+        "theories/kcheck_spec",
+        "theories/kcheck_labelled",
+        "theories/kcheck_s6_string_accel",
+    ],
+    "clean-olean::test::kcheck_s6_nat_arith": [
+        "lean-toolchain",
+        "theories/cic_l",
+        "theories/cic_l_model",
+        "theories/kcheck_spec",
+        "theories/kcheck_labelled",
+        "theories/kcheck_s6_string_accel",
+        "theories/kcheck_s6_nat_arith",
+    ],
+    "clean-olean::test::kcheck_s6_full_binops": [
+        "lean-toolchain",
+        "theories/cic_l",
+        "theories/cic_l_model",
+        "theories/kcheck_spec",
+        "theories/kcheck_labelled",
+        "theories/kcheck_s6_string_accel",
+        "theories/kcheck_s6_nat_arith",
+        "theories/kcheck_s6_full_binops",
+    ],
+    "clean-olean::test::kcheck_s1_interface": [
+        "lean-toolchain",
+        "theories/cic_l",
+        "theories/cic_l_model",
+        "theories/kcheck_spec",
+        "theories/kcheck_labelled",
+        "theories/kcheck_s1_interface",
+    ],
+    "clean-olean::test::kcheck_s2_bool_prod": [
+        "lean-toolchain",
+        "theories/cic_l",
+        "theories/cic_l_model",
+        "theories/kcheck_spec",
+        "theories/kcheck_labelled",
+        "theories/kcheck_s2_bool_prod",
+    ],
+    "clean-olean::test::kcheck_s5_quot": [
+        "lean-toolchain",
+        "theories/cic_l",
+        "theories/cic_l_model",
+        "theories/kcheck_spec",
+        "theories/kcheck_labelled",
+        "theories/kcheck_s5_quot",
+    ],
     # Bounded compiled-byte qualification of `theories/binding_not_review` across
     # pinned Lean, fenced Clean, and the hash-qualified stock ck0 binary.
     "clean-olean::test::binding_not_review": [
@@ -2544,6 +2649,17 @@ TARGET_EXTRA_PATHS: dict[str, list[str]] = {
         "lean-toolchain", "reports/2026-10-26-vf4-f1-corpus", "theories/chk_lia",
     ],
     "clean-olean::test::vf4_chk_lia_quorum": ["lean-toolchain", "theories/chk_lia"],
+    "clean-olean::test::kcheck_labelled_exec": [
+        "lean-toolchain",
+        "theories/cic_l",
+        "theories/cic_l_model",
+        "theories/kcheck_spec",
+        "theories/kcheck_labelled",
+    ],
+    "clean-olean::test::x1_r4_vi_fenced": [
+        "lean-toolchain",
+        "tests/fixtures/advice_replay_checker",
+    ],
     "clean-olean::test::vf5_f1_reference": ["lean-toolchain", "theories/chk_lia"],
 
     # C5's fresh proof-only package compiles the adopted checker and its full
@@ -2569,6 +2685,8 @@ TARGET_EXTRA_PATHS: dict[str, list[str]] = {
         "reports/local-function-headers-2026-11-06/sources/let_rec_equation_class.lean",
         "tests/lean4_compat/lean4_tests",
         "tests/matp_bench",
+        "theories/kcheck_labelled/KCheck/Kernel.lean",
+        "theories/kcheck_labelled/KCheckLabelledMain.lean",
     ],
     "clean-parser::test::module_system_b_e2e": [
         "lean-toolchain",
@@ -2936,29 +3054,10 @@ def closure_library_reads(meta: dict[str, Any], dirs: list[Path], own: str | Non
     return tuple(sorted(out))
 
 
-# A BUILD SCRIPT'S READS outside its crate are not derived (a `build.rs` reads
-# with `fs::read`, a path the module walk cannot see), so they stay declared by
-# hand, per package, and follow the same closure as the library's derived
-# reads: every row that compiles the package digests them (`build_inventory`).
-# `_check_olean_world_inputs` re-derives clean-olean's from the table its
-# build script reads. clean-kernel's `data/soundness_tcb.json`, the table's
-# first entry until 2026-11-13, is an `include_str!` and is derived now.
+# Build script reads outside the crate share the library's digest closure.
+# Declare fixed paths here. The Lean world table supplies its fixture paths.
 PACKAGE_EXTRA_PATHS: dict[str, list[str]] = {
-    # build.rs reads the workspace pin to generate the library's world table
-    # and pinned-toolchain identity, so this is not just a test fixture input.
-    "clean-olean": [
-        "lean-toolchain",
-        # build.rs also derives each world identity from these table fixtures.
-        "tests/fixtures/olean/v4.13.0/custom/Minimal.olean",
-        "tests/fixtures/olean/v4.13.0/stdlib/Init.olean",
-        "tests/fixtures/olean/v4.26.0/custom/StringCompat.olean",
-        "tests/fixtures/olean/v4.30.0/closure_cache/Init.olean",
-        "tests/fixtures/olean/v4.30.0/closure_cache/Target.olean",
-        "tests/fixtures/olean/v4.30.0/module-system/Sigma.olean",
-        "tests/fixtures/olean/v4.35.0/matcher-metadata/MatcherParity.olean",
-        "tests/fixtures/olean/v4.36.0-rc2/matcher-metadata/MatcherParity.olean",
-        "tests/fixtures/olean/v4.8.0/witness/FactLib.olean",
-    ],
+    "clean-olean": ["lean-toolchain"],
 }
 
 # The packages whose EVERY target is scanned with `RESOLVE_RELATIVE`: one
@@ -3068,6 +3167,16 @@ _FIXTURE_THEORY_FAMILIES = (
     "kcheck_eq_headers",
 )
 
+
+def _relative_theory_source_row(family: str) -> tuple[str, tuple[str, ...], str]:
+    """Scan repository-relative theory and Lean toolchain paths in this Rust test."""
+    return (
+        f"clean-olean::test::{family}",
+        (f"@reach:crates/clean-olean/tests/{family}.rs",),
+        r"(?:\.\./)+(theories/[A-Za-z0-9_./-]+|lean-toolchain)",
+    )
+
+
 _EXTRA_PATH_SOURCES: tuple[tuple[str, tuple[str, ...], str], ...] = (
     (
         "clean-verify::test::crystal_a1_lineage",
@@ -3136,11 +3245,7 @@ _EXTRA_PATH_SOURCES: tuple[tuple[str, tuple[str, ...], str], ...] = (
     # The kcheck qualification tests `include_str!` their package's ORDER, pins,
     # closures and (for the checkers) expected output.
     *(
-        (
-            f"clean-olean::test::{family}",
-            (f"@reach:crates/clean-olean/tests/{family}.rs",),
-            r"(?:\.\./)+(theories/[A-Za-z0-9_./-]+|lean-toolchain)",
-        )
+        _relative_theory_source_row(family)
         for family in (
             "kcheck_core",
             "kcheck_spec",
@@ -3172,31 +3277,25 @@ _EXTRA_PATH_SOURCES: tuple[tuple[str, tuple[str, ...], str], ...] = (
         ("@reach:crates/clean-olean/tests/level_bound_n_gate.rs",),
         r'root\.join\(\s*"([A-Za-z0-9_./-]+)"',
     ),
+    _relative_theory_source_row("kcheck_loader"),
+    _relative_theory_source_row("kcheck_eval"),
+    _relative_theory_source_row("kcheck_m5_m6"),
+    _relative_theory_source_row("kcheck_c7_p2"),
+    _relative_theory_source_row("kcheck_capstone"),
     (
-        "clean-olean::test::kcheck_loader",
-        ("@reach:crates/clean-olean/tests/kcheck_loader.rs",),
-        r"(?:\.\./)+(theories/[A-Za-z0-9_./-]+|lean-toolchain)",
+        "clean-olean::test::c5_init_slice_gate",
+        ("@reach:crates/clean-olean/tests/c5_init_slice_gate.rs",),
+        r'root\.join\(\s*"([A-Za-z0-9_./-]+)"',
     ),
-    (
-        "clean-olean::test::kcheck_eval",
-        ("@reach:crates/clean-olean/tests/kcheck_eval.rs",),
-        r"(?:\.\./)+(theories/[A-Za-z0-9_./-]+|lean-toolchain)",
-    ),
-    (
-        "clean-olean::test::kcheck_m5_m6",
-        ("@reach:crates/clean-olean/tests/kcheck_m5_m6.rs",),
-        r"(?:\.\./)+(theories/[A-Za-z0-9_./-]+|lean-toolchain)",
-    ),
-    (
-        "clean-olean::test::kcheck_c7_p2",
-        ("@reach:crates/clean-olean/tests/kcheck_c7_p2.rs",),
-        r"(?:\.\./)+(theories/[A-Za-z0-9_./-]+|lean-toolchain)",
-    ),
-    (
-        "clean-olean::test::kcheck_capstone",
-        ("@reach:crates/clean-olean/tests/kcheck_capstone.rs",),
-        r"(?:\.\./)+(theories/[A-Za-z0-9_./-]+|lean-toolchain)",
-    ),
+    _relative_theory_source_row("kcheck_init_slice"),
+    _relative_theory_source_row("kcheck_s4_exists"),
+    _relative_theory_source_row("kcheck_s3_acc"),
+    _relative_theory_source_row("kcheck_s6_string_accel"),
+    _relative_theory_source_row("kcheck_s6_nat_arith"),
+    _relative_theory_source_row("kcheck_s6_full_binops"),
+    _relative_theory_source_row("kcheck_s1_interface"),
+    _relative_theory_source_row("kcheck_s2_bool_prod"),
+    _relative_theory_source_row("kcheck_s5_quot"),
     (
         "clean-olean::test::binding_not_review",
         ("@reach:crates/clean-olean/tests/binding_not_review.rs",),
@@ -3208,10 +3307,16 @@ _EXTRA_PATH_SOURCES: tuple[tuple[str, tuple[str, ...], str], ...] = (
     ("clean-olean::test::vf4_chk_lia_quorum", ("@reach:crates/clean-olean/tests/vf4_chk_lia_quorum.rs",), RESOLVE_RELATIVE),
     ("clean-olean::test::vf5_f1_reference", ("@reach:crates/clean-olean/tests/vf5_f1_reference.rs",), RESOLVE_RELATIVE),
     (
-        "clean-olean::test::kcheck_framed_run",
-        ("@reach:crates/clean-olean/tests/kcheck_framed_run.rs",),
-        r"(?:\.\./)+(theories/[A-Za-z0-9_./-]+|lean-toolchain)",
+        "clean-olean::test::kcheck_labelled_exec",
+        ("@reach:crates/clean-olean/tests/kcheck_labelled_exec.rs",),
+        r'(?:repo_root\.join\(\s*"|format!\(")(theories/[A-Za-z0-9_]+|lean-toolchain)',
     ),
+    (
+        "clean-olean::test::x1_r4_vi_fenced",
+        ("@reach:crates/clean-olean/tests/x1_r4_vi_fenced.rs",),
+        r"(?:\.\./)+(tests/fixtures/[A-Za-z0-9_./-]+|lean-toolchain)",
+    ),
+    _relative_theory_source_row("kcheck_framed_run"),
 )
 
 
@@ -3631,20 +3736,14 @@ def _selftest_crystal_digest_coverage() -> None:
         )
 
 
-def _check_olean_world_inputs(root: Path | None = None) -> list[str]:
-    """Every repository fixture read by the world-table build is a library input.
-
-    The table is itself under the crate's source digest. This check keeps a new
-    fixture in that table from being compiled while omitted from the digest.
-    External installed toolchain bytes remain outside this repository check.
-    """
+def _olean_world_inputs(root: Path | None = None) -> tuple[list[str], list[str]]:
+    """Return the world-table build's repository fixture inputs and path errors."""
     base = (root or REPO_ROOT).resolve()
     table = base / "crates/clean-olean/lean_worlds.tsv"
     try:
         lines = table.read_text().splitlines()
     except OSError as exc:
-        return [f"cannot read olean world input table {table}: {exc}"]
-    declared = set(PACKAGE_EXTRA_PATHS.get("clean-olean", ()))
+        return [], [f"cannot read olean world input table {table}: {exc}"]
     problems: list[str] = []
     fixtures: set[str] = set()
     for number, line in enumerate(lines, 1):
@@ -3654,7 +3753,7 @@ def _check_olean_world_inputs(root: Path | None = None) -> list[str]:
         if len(columns) != 4 or not columns[3].strip():
             problems.append(f"lean_worlds.tsv:{number}: expected four columns and fixtures")
             continue
-        for fixture in columns[3].split():
+        for fixture in filter(None, columns[3].split(" ")):
             path = Path(fixture)
             if path.is_absolute() or ".." in path.parts or "\\" in fixture:
                 problems.append(f"lean_worlds.tsv:{number}: non-repository fixture {fixture}")
@@ -3663,15 +3762,13 @@ def _check_olean_world_inputs(root: Path | None = None) -> list[str]:
             if not candidate.resolve().is_relative_to(base):
                 problems.append(f"lean_worlds.tsv:{number}: external fixture {fixture}")
                 continue
-            if fixture not in declared:
-                problems.append(f"clean-olean world fixture {fixture} is missing from PACKAGE_EXTRA_PATHS")
             if not candidate.is_file():
                 problems.append(f"clean-olean world fixture is missing: {fixture}")
             else:
                 fixtures.add(fixture)
     for fixture in sorted(fixtures - _git_visible(base, fixtures)):
         problems.append(f"clean-olean world fixture is not git-visible to the digest: {fixture}")
-    return problems
+    return sorted(fixtures), problems
 
 
 def check_crystal_extra_paths(root: Path | None = None) -> list[str]:
@@ -3683,7 +3780,7 @@ def check_crystal_extra_paths(root: Path | None = None) -> list[str]:
     other direction can turn a stale green fresh, and only that is refused.
     """
     _selftest_crystal_digest_coverage()
-    problems = _check_olean_world_inputs(root)
+    problems: list[str] = []
     base = (root or REPO_ROOT).resolve()
     library_of: dict[tuple[str, bool], set[str]] = {}
 
@@ -3766,6 +3863,12 @@ def build_inventory(packages: list[str], with_gates: bool = True) -> list[dict[s
             "TARGET_EXTRA_PATHS:\n  " + "\n  ".join(problems)
         )
     meta = cargo_metadata()
+    package_extra_paths = PACKAGE_EXTRA_PATHS.copy()
+    if any(pkg["name"] == "clean-olean" for pkg in meta["packages"]):
+        fixtures, problems = _olean_world_inputs()
+        if problems:
+            raise SystemExit("verify_runner: invalid Lean world inputs:\n  " + "\n  ".join(problems))
+        package_extra_paths["clean-olean"] = PACKAGE_EXTRA_PATHS.get("clean-olean", []) + fixtures
     inv: list[dict[str, Any]] = []
     if with_gates:
         inv.extend(WORKSPACE_GATES)
@@ -3827,7 +3930,7 @@ def build_inventory(packages: list[str], with_gates: bool = True) -> list[dict[s
                 _builds_own_lib_tests(entry)) + tuple(
                 path for package in meta["packages"]
                 if Path(package["manifest_path"]).parent in bdirs
-                for path in PACKAGE_EXTRA_PATHS.get(package["name"], ()))
+                for path in package_extra_paths.get(package["name"], ()))
             entry["_build_dirs"] = sorted(bdirs) + [
                 REPO_ROOT / r for r in dict.fromkeys(build_reads)]
         # A gate whose verdict depends on files outside every crate dir declares
@@ -3850,7 +3953,7 @@ def build_inventory(packages: list[str], with_gates: bool = True) -> list[dict[s
         inherited = tuple(
             path for package in meta["packages"]
             if Path(package["manifest_path"]).parent in source_dirs
-            for path in PACKAGE_EXTRA_PATHS.get(package["name"], ())
+            for path in package_extra_paths.get(package["name"], ())
         )
         extra = (
             tuple(entry.get("_extra_paths") or ())
@@ -3859,7 +3962,7 @@ def build_inventory(packages: list[str], with_gates: bool = True) -> list[dict[s
             + (tuple(TARGET_EXTRA_PATHS.get(
                 f"{entry['package']}::test::{entry['_replaces_debug_target']}", ()))
                if entry.get("_replaces_debug_target") else ())
-            + tuple(PACKAGE_EXTRA_PATHS.get(entry["package"], ()))
+            + tuple(package_extra_paths.get(entry["package"], ()))
             + inherited
             + library
             + row_target_reads(meta, entry)

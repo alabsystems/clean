@@ -19,7 +19,7 @@ use clean_kernel::sorry::{reset_sorry_counter, sorry_count};
 use clean_kernel::{Environment, Name, TypeChecker};
 use clean_parser::{parse_expr, Span, SurfaceBinder, SurfaceDecl, SurfaceName};
 use serde::Serialize;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fmt::Write as FmtWrite;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -41,6 +41,8 @@ use std::time::{Duration, Instant};
 /// unchanged.
 const CHECK_REPORT_SCHEMA_VERSION: &str = "Clean-check-report-v2";
 
+mod check_export;
+use check_export::CheckedExport;
 mod check_observer;
 #[cfg(test)]
 #[path = "cmd_core_world_tests.rs"]
@@ -103,6 +105,7 @@ pub(crate) fn check_file_with_json_with_imports(
         automation_budget,
         options,
         None,
+        None,
     )
 }
 
@@ -119,6 +122,7 @@ pub(crate) fn check_file_with_json_with_imports_in_world(
     automation_budget: u64,
     options: &[clean_elab::command_line_options::CommandLineOption],
     explicit_world: Option<clean_kernel::lean_world::LeanWorld>,
+    export_ndjson: Option<&Path>,
 ) -> anyhow::Result<()> {
     let (outcome, elapsed) = collect_check_outcome_in_world(
         path,
@@ -132,6 +136,7 @@ pub(crate) fn check_file_with_json_with_imports_in_world(
         automation_budget,
         options,
         explicit_world,
+        export_ndjson,
     )
     .map_err(|error| {
         let message = format!("check failed: {error}");
@@ -190,6 +195,7 @@ pub(crate) fn collect_check_outcome(
         automation_budget,
         options,
         None,
+        None,
     )
 }
 
@@ -206,11 +212,12 @@ pub(crate) fn collect_check_outcome_in_world(
     automation_budget: u64,
     options: &[clean_elab::command_line_options::CommandLineOption],
     explicit_world: Option<clean_kernel::lean_world::LeanWorld>,
+    export_ndjson: Option<&Path>,
 ) -> anyhow::Result<(FileCheckOutcome, Duration)> {
     let decision = clean_olean::source_world_for_file(path, explicit_world)?;
     let source_identity = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
     let source_input = std::fs::read_to_string(path)?;
-    let header = clean_parser::Parser::parse_header(&source_input)?;
+    let header = clean_parser::Parser::parse_header_in_world(&source_input, decision.world())?;
     let _guard = check_file_lock();
     let _trust_counter_scope = TrustCounterScope::enter();
     let start = Instant::now();
@@ -220,20 +227,26 @@ pub(crate) fn collect_check_outcome_in_world(
     // `module_environment` for the import prelude under
     // `--imports-prefer-olean`, the per-prelude `List` monad policy (B07), and
     // the IO / `ULift` registrations).
-    let environment_setup = clean_elab::module_driver::EnvironmentSetup {
-        prelude: match prelude {
-            clean_kernel::cli::PreludeMode::Builtin => {
-                clean_elab::module_driver::PreludeFlavor::Builtin
-            }
-            clean_kernel::cli::PreludeMode::Lean4Core => {
-                clean_elab::module_driver::PreludeFlavor::Lean4Core
-            }
-        },
-        imports: if imports_prefer_olean {
-            clean_elab::module_driver::ImportArtifacts::PreferOlean
-        } else {
-            clean_elab::module_driver::ImportArtifacts::Source
-        },
+    let explicit_pinned_init = matches!(prelude, clean_kernel::cli::PreludeMode::Builtin)
+        && explicit_world == Some(clean_kernel::lean_world::LeanWorld::ORACLE);
+    let environment_setup = if explicit_pinned_init {
+        clean_elab::module_driver::EnvironmentSetup::PINNED_INIT
+    } else {
+        clean_elab::module_driver::EnvironmentSetup {
+            prelude: match prelude {
+                clean_kernel::cli::PreludeMode::Builtin => {
+                    clean_elab::module_driver::PreludeFlavor::Builtin
+                }
+                clean_kernel::cli::PreludeMode::Lean4Core => {
+                    clean_elab::module_driver::PreludeFlavor::Lean4Core
+                }
+            },
+            imports: if imports_prefer_olean {
+                clean_elab::module_driver::ImportArtifacts::PreferOlean
+            } else {
+                clean_elab::module_driver::ImportArtifacts::Source
+            },
+        }
     };
     let mut source_setup = if !imports_prefer_olean
         && clean_elab::module_driver::source_closure_needs_world_setup(path, &decision)?
@@ -282,6 +295,7 @@ pub(crate) fn collect_check_outcome_in_world(
         source_setup,
         source_entry,
         source_inputs,
+        export_targets: export_ndjson.map(|_| BTreeSet::new()),
         imports_prefer_olean,
         import_policy,
         command_line_options: options.to_vec(),
@@ -364,6 +378,13 @@ pub(crate) fn collect_check_outcome_in_world(
     outcome.kernel_check_failures =
         kernel_check_failure_count().saturating_sub(state.nested_kernel_check_failures);
 
+    if let (Some(destination), Some(targets)) = (export_ndjson, state.export_targets) {
+        outcome.export = Some(Box::new(CheckedExport {
+            destination: destination.to_owned(),
+            env,
+            targets,
+        }));
+    }
     Ok((outcome, start.elapsed()))
 }
 
@@ -676,6 +697,8 @@ pub(crate) fn parse_only_check_in_world(
 #[derive(Default)]
 struct ImportCheckState {
     graph: ImportGraph,
+    /// Newly registered constants of the entry file, only for a requested export.
+    export_targets: Option<BTreeSet<Name>>,
     /// Fresh source headers require independent body/outcome comparisons.
     source_setup: Option<clean_elab::module_driver::SourceModuleSetup>,
     /// Exact bytes retained when independently re-elaborating source modules.
@@ -765,6 +788,7 @@ struct ImportCheckState {
 /// are also annotated with the originating module so the user sees the chain.
 #[derive(Debug, Default)]
 pub(crate) struct FileCheckOutcome {
+    export: Option<Box<CheckedExport>>,
     lean_world: clean_kernel::lean_world::LeanWorld,
     environment_lean_world: Option<&'static str>,
     module: String,
@@ -1136,7 +1160,11 @@ fn faithful_import_environment(
         .map(clean_elab::module_driver::SourceModuleSetup::isolated);
     if let Some(setup) = &mut source_setup {
         let input = state.source_inputs.get(canonical)?;
-        let header = clean_parser::Parser::parse_header(input).ok()?;
+        let world = match &state.import_world {
+            Some(imports) => clean_olean::source_world_of(imports).ok()?,
+            None => clean_olean::source_world_for_file(path, None).ok()?.world(),
+        };
+        let header = clean_parser::Parser::parse_header_in_world(input, world).ok()?;
         nested_env = setup.initial_environment(&header).ok()?;
     }
     let mut nested = ImportCheckState {
@@ -1503,11 +1531,16 @@ fn check_file_body(
         outcome.imported_decl_count += counted_leaf_decls;
     }
 
+    let before = body_environment.as_ref().unwrap_or(&env_before_own);
+    let effect = env.effect_since(before);
+    if is_entry_file && state.export_targets.is_some() {
+        state.export_targets = Some(check_export::entry_constants(before, env, &effect));
+    }
     let own = OwnElaboration {
         // Source-mode imports (including artifacts) are the working closure.
         // Keep every body effect, without comparing a cumulative imported
         // extension state against an unrelated sibling's larger closure.
-        effect: env.effect_since(body_environment.as_ref().unwrap_or(&env_before_own)),
+        effect,
         outcomes: elab_outcomes,
     };
     state.own_elaborations.insert(
@@ -1931,6 +1964,7 @@ fn finalize_check_run(
     json: bool,
 ) -> anyhow::Result<()> {
     let FileCheckOutcome {
+        export,
         lean_world,
         environment_lean_world,
         module,
@@ -1969,6 +2003,10 @@ fn finalize_check_run(
         (0, _) => "diverged",
         _ => "fail",
     };
+
+    if let ("pass", Some(export)) = (status, export) {
+        export.publish(path, lean_world)?;
+    }
 
     if json {
         let report = CheckReport {
@@ -2553,9 +2591,9 @@ pub(crate) fn surface_decl_name(decl: &SurfaceDecl) -> Option<String> {
         | SurfaceDecl::Namespace { name, .. } => Some(surface_name_label(name)),
         SurfaceDecl::Instance { name, .. } => name.as_ref().map(surface_name_label),
         SurfaceDecl::Section { name, .. } => name.as_ref().map(surface_name_label),
-        SurfaceDecl::Print { name, .. } | SurfaceDecl::PrintAxioms { name, .. } => {
-            Some(surface_name_label(name))
-        }
+        SurfaceDecl::Print { name, .. }
+        | SurfaceDecl::PrintAxioms { name, .. }
+        | SurfaceDecl::PrintEquations { name, .. } => Some(surface_name_label(name)),
         SurfaceDecl::DeclareSyntaxCat { name, .. } => Some(surface_name_label(name)),
         SurfaceDecl::Syntax { name, .. } | SurfaceDecl::MacroRules { name, .. } => {
             name.as_ref().map(surface_name_label)
@@ -2601,6 +2639,7 @@ pub(crate) fn surface_decl_span(decl: &SurfaceDecl) -> Option<Span> {
         | SurfaceDecl::Reduce { span, .. }
         | SurfaceDecl::Print { span, .. }
         | SurfaceDecl::PrintAxioms { span, .. }
+        | SurfaceDecl::PrintEquations { span, .. }
         | SurfaceDecl::Guard { span, .. }
         | SurfaceDecl::GuardMsgs { span, .. }
         | SurfaceDecl::Mutual { span, .. }

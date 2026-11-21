@@ -60,7 +60,8 @@ pub(super) fn destruct_parsed_pattern(
 /// ENSURES: Existing compound entries with those names are replaced.
 pub(crate) fn register_phase3d_elab_tactics(registry: &mut TacticRegistry) {
     registry.register_compound(compound_have());
-    registry.register_compound(compound_let());
+    registry.register_compound(compound_let("let"));
+    registry.register_compound(compound_let("letI"));
     registry.register_compound(compound_suffices());
     registry.register_compound(super::builtins_replace::compound_replace());
     registry.register_compound(compound_obtain());
@@ -194,30 +195,65 @@ fn compound_have() -> CompoundTacticEntry {
 ///
 /// Elaborates the optional type annotation and value. If no type annotation,
 /// infers the type from the value expression.
-fn compound_let() -> CompoundTacticEntry {
+fn compound_let(keyword: &'static str) -> CompoundTacticEntry {
     CompoundTacticEntry {
-        name: "let".into(),
-        handler: Arc::new(|eval, ps, tac| {
-            let SurfaceTactic::Let(_, name, ty, val) = tac else {
-                return Err(TacticError::InvalidTarget {
-                    tactic: "let".into(),
-                    detail: "unexpected syntax variant".into(),
-                });
+        name: keyword.into(),
+        handler: Arc::new(move |eval, ps, tac| {
+            let (name, annotation, rhs) = match tac {
+                SurfaceTactic::Let(_, name, ty, val) => (name, ty, val),
+                SurfaceTactic::LetI(_, name, ty, val) => {
+                    return lifted_let(eval, ps, name, ty.as_deref(), val);
+                }
+                _ => {
+                    return Err(TacticError::InvalidTarget {
+                        tactic: keyword.into(),
+                        detail: "unexpected syntax variant".into(),
+                    })
+                }
             };
-            let ty_expr = ty.as_ref().map(|t| eval.elaborate(t)).transpose()?;
-            let val_expr = eval.elaborate(val)?;
-            let let_ty = match ty_expr {
-                Some(t) => t,
-                None => eval.infer_type(&val_expr)?,
+            let (ty, value) = match annotation {
+                Some(t) => {
+                    let ty = eval.elaborate_no_expected(t)?;
+                    let value = eval.elaborate_expected(rhs, &ty)?;
+                    (ty, value)
+                }
+                None => {
+                    let value = eval.elaborate_no_expected(rhs)?;
+                    (eval.infer_type(&value)?, value)
+                }
             };
-            // `let x : T := val` introduces a *local definition* whose value is
-            // retained (body-visible / zeta-reducible), unlike `have` which
-            // forgets the value and yields an opaque hypothesis. Route to
-            // `let_` so the assembled proof term is `let x : T := val; <rest>`
-            // and `x` is definitionally equal to `val`. See `have_let::let_`.
-            super::let_(ps, name, let_ty, Some(val_expr))
+            super::let_(ps, name, ty, Some(value))
         }),
     }
+}
+
+/// Lean's `refine_lift` focuses the continuation before the RHS goals.
+fn lifted_let(
+    eval: &mut dyn TacticEval,
+    ps: &mut ProofState,
+    name: &SurfaceName,
+    annotation: Option<&SurfaceExpr>,
+    rhs: &SurfaceExpr,
+) -> Result<(), TacticError> {
+    let annotation = annotation
+        .map(|ty| eval.elaborate_no_expected(ty))
+        .transpose()?;
+    let value = eval.elaborate_lifted(ps, rhs, annotation.as_ref())?;
+    let (value, pending) =
+        super::term_close::import_lifted_term(ps, value.term, eval.metas(), &value.pending_goals)?;
+    let ty = match annotation {
+        Some(ty) => eval
+            .metas()
+            .instantiate_levels(&eval.metas().instantiate(&ty)),
+        None => ps.infer_type(ps.current_goal().ok_or(TacticError::NoGoals)?, &value)?,
+    };
+    super::let_i(ps, name, ty, value)?;
+    // Preserve sibling goals and each lifted goal's original context. The
+    // declared name is in scope only in the new continuation, never in its RHS.
+    for goal in pending.into_iter().rev() {
+        ps.goals.insert(1, goal);
+    }
+    Ok(())
 }
 
 /// `suffices h : T by tacs` (and `suffices h : T from e`) — backward reasoning
@@ -617,7 +653,7 @@ mod tests {
             ..stub_eval()
         };
         let mut state = ProofState::new(Environment::new(), Expr::prop());
-        let handler = compound_let();
+        let handler = compound_let("let");
         let tactic = SurfaceTactic::Let(
             Span::dummy(),
             SurfaceName::generated_path("x"),

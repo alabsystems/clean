@@ -32,13 +32,11 @@
 //! resource-bounded acceptance or solution-choice guarantee. These probes
 //! precede WHNF: differing function parts of an App/App pair,
 //! and argument pairs that are either flex-against-anything or applications of
-//! the same constant. A bare metavariable against a reducible argument keeps
-//! its historical reduced solution (no measured row needs that changed, and
-//! the adversarial review measured `simp` matches that depend on it — `¬¬?a`
-//! against `¬(Q → False)` through `Not`, whose heads differ and so never take
-//! this route).
+//! the same constant. Bare metavariables also retain a constant-headed
+//! argument as written. The reduced comparison remains available for other
+//! shapes, including `¬¬?a` against `¬(Q → False)` through `Not`.
 
-use clean_kernel::{ConstantKind, Expr, ExprKind, Reducibility};
+use clean_kernel::{ConstantKind, Expr, ExprKind, Name, Reducibility};
 
 use super::{Unifier, UnifyResult};
 
@@ -122,6 +120,17 @@ impl Unifier<'_> {
         // Do not normalize a large computation merely to decide whether this
         // same-head/flex structural attempt should run. A failed probe rolls
         // back its assignments before the unchanged WHNF fallback below.
+        // A lambda application can hide the same rigid head as the other
+        // argument. Contract just that redex before delta-reducing definitions
+        // whose bodies discard an argument needed to solve a metavariable.
+        let is_redex = |e: &Expr| e.is_app() && matches!(e.get_app_fn().kind(), ExprKind::Lam(..));
+        if (is_redex(a1) || is_redex(a2)) && self.unreduced_attempt_allowed(a1, a2) {
+            let left = crate::tactic::op_projection::head_beta(a1);
+            let right = crate::tactic::op_projection::head_beta(a2);
+            if same_constant_head(&left, &right) && self.unify_argument_unreduced(&left, &right) {
+                return UnifyResult::Success;
+            }
+        }
         if self.unify_argument_unreduced(a1, a2) {
             return UnifyResult::Success;
         }
@@ -165,18 +174,16 @@ impl Unifier<'_> {
     /// then evaluates; probed, it descended into `Nat.mod`'s unfolded body for
     /// a 128-bit `x` (`proof_irrel_tests`' multilimb row) and never returned.
     fn same_regular_definition_head(&self, left: &Expr, right: &Expr) -> bool {
-        let ExprKind::Const(name, _) = left.get_app_fn().kind() else {
+        let Some(name) = shared_constant_application_head(left, right) else {
             return false;
         };
-        same_constant_head(left, right)
-            && self
-                .env
-                .and_then(|env| env.get_const(name))
-                .is_some_and(|info| {
-                    info.kind == ConstantKind::Definition
-                        && !info.is_reducible
-                        && matches!(info.reducibility, Reducibility::Regular(_))
-                })
+        self.env
+            .and_then(|env| env.get_const(name))
+            .is_some_and(|info| {
+                info.kind == ConstantKind::Definition
+                    && !info.is_reducible
+                    && matches!(info.reducibility, Reducibility::Regular(_))
+            })
     }
 
     /// Run `attempt` in a rollback scope: committed and `true` when it
@@ -223,13 +230,13 @@ impl Unifier<'_> {
         (self.is_flex_app(a1)
             || self.is_flex_app(a2)
             || same_constant_head(a1, a2)
-            || self.bare_meta_against_const_app(a1, a2))
+            || self.bare_meta_against_constant_head(a1, a2))
             && self.unreduced_attempt_allowed(a1, a2)
             && self.attempt_unreduced(|u| matches!(u.unify_core(a1, a2), UnifyResult::Success))
     }
 
     /// One side is a BARE assignable metavariable and the other a
-    /// CONSTANT-headed application — Lean's `isDefEqQuickOther`
+    /// named definition or constant-headed application — Lean's `isDefEqQuickOther`
     /// (`Lean/Meta/ExprDefEq.lean:1797`) hands the term to
     /// `processAssignment'` AS WRITTEN, with no `whnf` anywhere on that path.
     ///
@@ -249,24 +256,67 @@ impl Unifier<'_> {
     /// (`unify_expr.rs`, the `congrArg`/FiniteModel projection-vs-imitation
     /// split), where the reduced solution is tried FIRST and is the one the
     /// LRAT `List.rec`/`congrArg` corpus relies on.
-    fn bare_meta_against_const_app(&self, a1: &Expr, a2: &Expr) -> bool {
-        let const_app =
-            |e: &Expr| e.is_app() && matches!(e.get_app_fn().kind(), ExprKind::Const(_, _));
-        (self.as_meta(a1).is_some() && const_app(a2))
-            || (self.as_meta(a2).is_some() && const_app(a1))
+    /// During elaboration of a cast equation, an implicit endpoint can also
+    /// be a definition with no arguments, as in `h.symm ▸ x` for `h : two = 2`.
+    fn bare_meta_against_constant_head(&self, a1: &Expr, a2: &Expr) -> bool {
+        let can_keep = |meta, term: &Expr| {
+            let Some(id) = self.as_meta(meta) else {
+                return false;
+            };
+            match term.kind() {
+                ExprKind::App(..) => matches!(term.get_app_fn().kind(), ExprKind::Const(..)),
+                ExprKind::Const(name, _)
+                    if self.metas.preserve_cast_endpoints && !self.metas.is_assigned(id) =>
+                {
+                    self.env
+                        .and_then(|env| env.get_const(name))
+                        .is_some_and(|decl| {
+                            decl.kind == ConstantKind::Definition && decl.value.is_some()
+                        })
+                }
+                _ => false,
+            }
+        };
+        can_keep(a1, a2) || can_keep(a2, a1)
     }
 }
 
 /// Whether `a1` and `a2` are applications of the same constant to the same
 /// number of arguments (Lean's `isDefEqApp` / `sameHeadSymbol` shape).
 fn same_constant_head(a1: &Expr, a2: &Expr) -> bool {
-    let (ExprKind::Const(n1, _), ExprKind::Const(n2, _)) =
-        (a1.get_app_fn().kind(), a2.get_app_fn().kind())
-    else {
-        return false;
-    };
-    n1 == n2 && a1.is_app() && a1.get_app_num_args() == a2.get_app_num_args()
+    shared_constant_application_head(a1, a2).is_some()
 }
+
+/// Inspect each immutable spine once. This is only the existing syntactic
+/// probe guard: argument values and universe instantiations are still checked
+/// by unification, and no assignment or equality result is cached here.
+fn shared_constant_application_head<'a>(left: &'a Expr, right: &Expr) -> Option<&'a Name> {
+    if !left.is_app() || !right.is_app() {
+        return None;
+    }
+    let (left_head, left_arity) = application_head_and_arity(left);
+    let ExprKind::Const(left_name, _) = left_head.kind() else {
+        return None;
+    };
+    let (right_head, right_arity) = application_head_and_arity(right);
+    let ExprKind::Const(right_name, _) = right_head.kind() else {
+        return None;
+    };
+    (left_name == right_name && left_arity == right_arity).then_some(left_name)
+}
+
+fn application_head_and_arity(mut expression: &Expr) -> (&Expr, usize) {
+    let mut arity = 0;
+    while let ExprKind::App(function, _) = expression.kind() {
+        expression = function;
+        arity += 1;
+    }
+    (expression, arity)
+}
+
+#[cfg(test)]
+#[path = "app_heads_shape_tests.rs"]
+mod shape_tests;
 
 #[cfg(test)]
 #[path = "app_heads_structural_first_tests.rs"]

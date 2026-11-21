@@ -519,3 +519,285 @@ fn source_init_retains_nat_recursor_compiler_replacement() {
         "the imported replacement must have a real body"
     );
 }
+
+#[test]
+fn macro_inline_defers_unused_bodies_but_checks_real_runtime_calls() {
+    for isolation in [FailureIsolation::Keep, FailureIsolation::Rollback] {
+        for (source, called) in [
+            (include_str!("../../../reports/recursor-eligibility-2026-11-13/replacement-controls/deferred-axiom-unused.lean"), false),
+            (include_str!("../../../reports/recursor-eligibility-2026-11-13/replacement-controls/deferred-axiom-called.lean"), true),
+        ] {
+            let (report, env) = check(source, isolation);
+            let failures: Vec<_> = report.verdicts.iter().filter(|v| v.kind.is_failure()).collect();
+            assert_eq!(failures.len(), usize::from(called), "{report:#?}");
+            if called {
+                assert_eq!(failures[0].name, "probe");
+                assert_eq!(failures[0].kind, VerdictKind::SourceError);
+                assert!(failures[0].detail.as_deref().is_some_and(|s| s.contains("missing")));
+            }
+            let helper = env.get_const(&Name::from_string("deferred")).expect("registered helper");
+            let value = helper.value.as_ref().expect("original logical body");
+            assert_eq!(value, &Expr::const_str("missing"));
+            TypeChecker::new(&env).check_type(value, &helper.type_).expect("kernel value remains valid");
+            assert!(!env.is_noncomputable(&Name::from_string("deferred")));
+        }
+    }
+}
+
+#[test]
+fn macro_inline_nested_arguments_and_discarded_runtime_arguments_remain_accepted() {
+    for source in [
+        "@[macro_inline] def identity (n : Nat) : Nat := n\ndef probe : Nat := identity (identity 0)\n",
+        "axiom missing : Nat\n@[macro_inline] def ignore (_ : Nat) : Nat := 0\ndef probe : Nat := ignore missing\n",
+        "@[macro_inline] def inner (n : Nat) : Nat := n\n@[macro_inline] def outer (n : Nat) : Nat := inner n\ndef probe : Nat := outer (outer 0)\n",
+    ] {
+        let (report, env) = check(source, FailureIsolation::Keep);
+        assert!(!report.verdicts.is_empty());
+        assert!(report.verdicts.iter().all(|v| !v.kind.is_failure()), "{source}\n{report:#?}");
+        let probe = env.get_const(&Name::from_string("probe")).expect("registered probe");
+        TypeChecker::new(&env).check_type(probe.value.as_ref().expect("real body"), &probe.type_)
+            .expect("temporary compiler expansion does not replace the kernel value");
+    }
+}
+
+#[test]
+fn macro_inline_partial_caller_functions_preserve_argument_context() {
+    for isolation in [FailureIsolation::Keep, FailureIsolation::Rollback] {
+        for (source, unavailable) in [
+            (include_str!("../../../reports/recursor-eligibility-2026-11-13/macro-partial-controls/partial-function-argument.lean"), false),
+            (include_str!("../../../reports/recursor-eligibility-2026-11-13/macro-partial-controls/partial-function-discarded-axiom.lean"), false),
+            (include_str!("../../../reports/recursor-eligibility-2026-11-13/macro-partial-controls/partial-function-used-axiom.lean"), true),
+        ] {
+            let (report, env) = check(source, isolation);
+            let failures: Vec<_> = report.verdicts.iter().filter(|v| v.kind.is_failure()).collect();
+            assert_eq!(failures.len(), usize::from(unavailable), "{source}\n{report:#?}");
+            if unavailable {
+                assert_eq!(failures[0].name, "probe", "{report:#?}");
+                assert_eq!(failures[0].kind, VerdictKind::SourceError, "{report:#?}");
+                assert!(failures[0].detail.as_deref().is_some_and(|message| message.contains("missing") && !message.contains("cyclic")), "{report:#?}");
+            } else {
+                let probe = env.get_const(&Name::from_string("probe")).expect("registered probe");
+                TypeChecker::new(&env).check_type(probe.value.as_ref().expect("logical body"), &probe.type_)
+                    .expect("compiler expansion preserves the checked logical value");
+            }
+        }
+    }
+}
+
+#[test]
+fn macro_inline_and_assumed_csimp_cycles_refuse_without_unbounded_expansion() {
+    let source = "def base (n : Nat) : Nat := n\n@[macro_inline] def helper (n : Nat) : Nat := base (n + 1)\n@[csimp] axiom base_eq_helper : base = helper\ndef probe : Nat := helper 0\n";
+    let (report, env) = check(source, FailureIsolation::Keep);
+    let probe = report
+        .verdicts
+        .iter()
+        .find(|v| v.name == "probe")
+        .expect("probe verdict");
+    assert_eq!(probe.kind, VerdictKind::SourceError, "{report:#?}");
+    assert!(
+        probe
+            .detail
+            .as_deref()
+            .is_some_and(|s| s.contains("cyclic macro_inline")),
+        "{report:#?}"
+    );
+    assert!(env
+        .get_const(&Name::from_string("probe"))
+        .and_then(|info| info.value.as_ref())
+        .is_some());
+}
+
+#[test]
+fn macro_inline_rejects_opaque_declarations_at_registration() {
+    for isolation in [FailureIsolation::Keep, FailureIsolation::Rollback] {
+        for source in [
+            "@[macro_inline] opaque hidden : Nat := 0\n",
+            "opaque hidden : Nat := 0\nattribute [macro_inline] hidden\n",
+        ] {
+            let (report, _) = check(source, isolation);
+            assert!(
+                report.verdicts.iter().any(|v| v.kind.is_failure()
+                    && v.kind != VerdictKind::Diverged
+                    && v.detail
+                        .as_deref()
+                        .is_some_and(|message| message.contains("macro_inline"))),
+                "opaque macro-inline must refuse: {source}\n{report:#?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn macro_inline_manual_recursor_definition_remains_valid() {
+    let source = include_str!("../../../reports/recursor-eligibility-2026-11-13/validation-controls/manual-recursor-helper.lean");
+    for isolation in [FailureIsolation::Keep, FailureIsolation::Rollback] {
+        let (report, env) = check(source, isolation);
+        assert!(!report.verdicts.is_empty());
+        assert!(
+            report
+                .verdicts
+                .iter()
+                .all(|v| v.kind == VerdictKind::Passed),
+            "{report:#?}"
+        );
+        assert!(env.is_macro_inline(&Name::from_string("manual")));
+    }
+}
+
+#[test]
+fn macro_inline_attribute_lists_preserve_written_order() {
+    for isolation in [FailureIsolation::Keep, FailureIsolation::Rollback] {
+        for (source, macro_enabled) in [
+            (include_str!("../../../reports/inline-source-order-2026-11-13/fixtures/list-macro-noinline.lean"), false),
+            (include_str!("../../../reports/inline-source-order-2026-11-13/fixtures/list-noinline-macro.lean"), true),
+        ] {
+            let (report, env) = check(source, isolation);
+            let probe = report.verdicts.iter().find(|v| v.name == "probe").expect("probe verdict");
+            assert_eq!(probe.kind == VerdictKind::Passed, macro_enabled, "{source}\n{report:#?}");
+            assert_eq!(env.is_macro_inline(&Name::from_string("ignore")), macro_enabled);
+            assert_eq!(env.is_noinline(&Name::from_string("ignore")), !macro_enabled);
+            assert!(report.verdicts.iter().all(|v| v.kind != VerdictKind::Diverged));
+        }
+    }
+}
+
+#[test]
+fn macro_inline_caller_time_and_later_mode_override_remain_distinct() {
+    for isolation in [FailureIsolation::Keep, FailureIsolation::Rollback] {
+        for (source, early_passes) in [
+            (
+                include_str!(
+                    "../../../reports/inline-source-order-2026-11-13/fixtures/caller-time.lean"
+                ),
+                false,
+            ),
+            (
+                include_str!(
+                    "../../../reports/inline-source-order-2026-11-13/fixtures/mode-override.lean"
+                ),
+                true,
+            ),
+        ] {
+            let (report, env) = check(source, isolation);
+            for (name, passes) in [("early", early_passes), ("late", !early_passes)] {
+                let verdict = report
+                    .verdicts
+                    .iter()
+                    .find(|v| v.name == name)
+                    .expect("caller verdict");
+                assert_eq!(
+                    verdict.kind == VerdictKind::Passed,
+                    passes,
+                    "{source}\n{report:#?}"
+                );
+                assert_eq!(
+                    clean_kernel::env::csimp::inline_mode_at(
+                        &env,
+                        Some(&Name::from_string(name)),
+                        &Name::from_string("ignore")
+                    ) == Some(clean_kernel::env::csimp::InlineMode::MacroInline),
+                    passes
+                );
+            }
+            assert!(report
+                .verdicts
+                .iter()
+                .all(|v| v.kind != VerdictKind::Diverged));
+        }
+    }
+}
+
+#[test]
+fn macro_inline_enum_attributes_refuse_local_and_scoped_kinds() {
+    for isolation in [FailureIsolation::Keep, FailureIsolation::Rollback] {
+        for source in [
+            include_str!(
+                "../../../reports/inline-source-order-2026-11-13/fixtures/local-macro.lean"
+            ),
+            include_str!(
+                "../../../reports/inline-source-order-2026-11-13/fixtures/scoped-macro.lean"
+            ),
+            include_str!(
+                "../../../reports/inline-source-order-2026-11-13/fixtures/local-noinline.lean"
+            ),
+        ] {
+            let (report, env) = check(source, isolation);
+            assert!(
+                report.verdicts.iter().any(|v| v.kind.is_failure()
+                    && v.kind != VerdictKind::Diverged
+                    && v.detail
+                        .as_deref()
+                        .is_some_and(|message| message.contains("must be global"))),
+                "{source}\n{report:#?}"
+            );
+            assert!(!env.is_macro_inline(&Name::from_string("ignore")));
+            assert!(!env.is_macro_inline(&Name::from_string("N.ignore")));
+        }
+    }
+}
+
+#[test]
+fn macro_inline_enum_attributes_refuse_declarations_of_another_source_run() {
+    let _lock = module_elaboration_lock();
+    for isolation in [FailureIsolation::Keep, FailureIsolation::Rollback] {
+        for attribute in [
+            "inline",
+            "noinline",
+            "always_inline",
+            "macro_inline",
+            "inline_if_reduce",
+        ] {
+            let mut env =
+                module_environment(EnvironmentSetup::default()).expect("source environment");
+            let run = |env: &mut Environment, path: &Path, source: &str| {
+                let parsed = parse_module(path, source).1.expect("source parses");
+                assert!(parsed.diagnostics.is_empty());
+                elaborate_decls(
+                    env,
+                    &parsed.decls,
+                    source,
+                    &mut module_file_context(path),
+                    DriverOptions {
+                        lean_front_door: true,
+                        isolation,
+                        ..DriverOptions::default()
+                    },
+                    &mut (),
+                )
+            };
+            let library = run(
+                &mut env,
+                Path::new("InlineLib.lean"),
+                include_str!(
+                    "../../../reports/inline-source-order-2026-11-13/fixtures/InlineLib.lean"
+                ),
+            );
+            assert!(
+                library
+                    .verdicts
+                    .iter()
+                    .all(|v| v.kind == VerdictKind::Passed),
+                "{library:#?}"
+            );
+            let report = run(
+                &mut env,
+                Path::new("ImportedInline.lean"),
+                &format!("attribute [{attribute}] InlineLib.ignore\n"),
+            );
+            assert!(
+                report.verdicts.iter().any(|v| v.kind.is_failure()
+                    && v.kind != VerdictKind::Diverged
+                    && v.detail
+                        .as_deref()
+                        .is_some_and(|message| message.contains("imported module"))),
+                "{attribute}: {report:#?}"
+            );
+            let name = Name::from_string("InlineLib.ignore");
+            assert!(!env.is_inline(&name));
+            assert!(!env.is_noinline(&name));
+            assert!(!env.is_always_inline(&name));
+            assert!(!env.is_macro_inline(&name));
+            assert!(!env.is_inline_if_reduce(&name));
+        }
+    }
+}

@@ -122,14 +122,14 @@ clean_obj* l_HAdd_hAdd(clean_obj* a, clean_obj* b, clean_obj* g, clean_obj* inst
 clean_obj* l_HMul_mk(clean_obj* a, clean_obj* b, clean_obj* g, clean_obj* mulFn) { (void)a; (void)b; (void)g; return mulFn; }
 clean_obj* l_HMul_hMul(clean_obj* a, clean_obj* b, clean_obj* g, clean_obj* inst, clean_obj* x, clean_obj* y) { (void)a; (void)b; (void)g; return clean_apply_2(inst, x, y); }
 clean_obj* l_UInt64_ofNat(clean_obj* n) {
-  unsigned __int128 v = clean_nat_to_u128(n);
+  uint64_t v = clean_nat_low_u64(n);
   clean_dec(n);
-  return clean_nat_of_u64((uint64_t)(v & 0xFFFFFFFFFFFFFFFFull));
+  return clean_nat_of_u64(v);
 }
 clean_obj* l_UInt64_toNat(clean_obj* v) {
-  unsigned __int128 x = clean_nat_to_u128(v);
+  uint64_t x = clean_unbox_uint64(v);
   clean_dec(v);
-  return clean_nat_of_u64((uint64_t)(x & 0xFFFFFFFFFFFFFFFFull));
+  return clean_nat_of_u64(x);
 }
 "#;
 

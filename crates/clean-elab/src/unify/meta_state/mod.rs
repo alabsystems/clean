@@ -68,6 +68,9 @@ pub(super) struct MetaScopeMarker {
 /// ```
 #[derive(Debug, Clone)]
 pub struct MetaState {
+    /// Keep named definition arguments folded while inferring a cast's equality proof,
+    /// so its endpoints can be found in the motive. Scoped by `try_elab_subst`.
+    pub(crate) preserve_cast_endpoints: bool,
     /// All metavariables
     pub(super) metas: HashMap<MetaId, MetaVar>,
     /// Every FVarId ever captured in ANY metavariable's `locals` — a
@@ -168,6 +171,7 @@ impl MetaState {
 
     pub fn new() -> Self {
         Self {
+            preserve_cast_endpoints: false,
             metas: HashMap::new(),
             historical_local_fvars: std::collections::HashSet::new(),
             next_id: 0,
@@ -543,7 +547,9 @@ impl MetaState {
 
         impl ExprFolderOpt for InstantiateMetas<'_> {
             fn should_descend(&self, expr: &Expr) -> bool {
-                expr.has_fvar_quick()
+                // Source and tactic locals below the reserved tag cannot be
+                // substituted. The range check retains unknown payloads.
+                expr.may_contain_fvar_at_or_above(FVarId::new(MetaState::META_FVAR_TAG))
             }
 
             fn fold_fvar_opt(&mut self, id: FVarId) -> Option<Expr> {

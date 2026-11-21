@@ -9,11 +9,11 @@ use std::collections::BTreeSet;
 fn composition_preflights_every_existing_source_name_before_returning_an_owner() {
     crate::test_utils::run_with_stack(|| {
         let base = crate::eval_ir::build_byte_prelude_spec_v1_with_stack().unwrap();
-        assert_eq!(rows().count(), 85);
-        assert_eq!(roots().count(), 21);
+        assert_eq!(rows().count(), 128);
+        assert_eq!(roots().count(), 42);
         assert_eq!(
             rows().map(|(name, _)| name).collect::<BTreeSet<_>>().len(),
-            85
+            128
         );
         // Capture a separate real registration. Production elaboration may
         // retain OfNat applications: its stored Nat zero is not required to
@@ -84,7 +84,7 @@ fn composition_preflights_every_existing_source_name_before_returning_an_owner()
             );
         }
         let owned = base.clone().into_canonical_arithmetic_byte_v1().unwrap();
-        assert_eq!(owned.definitions().len(), base.definitions().len() + 85);
+        assert_eq!(owned.definitions().len(), base.definitions().len() + 128);
         for root in roots() {
             let key = Name::from_string(root);
             assert!(owned.env().axiom_deps(&key).unwrap().is_empty());
@@ -97,8 +97,8 @@ fn composition_preflights_every_existing_source_name_before_returning_an_owner()
 fn composition_actual_last_false_source_refuses_and_original_owner_remains_retryable() {
     crate::test_utils::run_with_stack(|| {
         let base = crate::eval_ir::build_byte_prelude_spec_v1_with_stack().unwrap();
-        const LAST: &str = "ir_byte_icmp_int_uge_canonical_v1";
-        const FALSE: &str = "def ir_byte_icmp_int_uge_canonical_v1 : @Eq Bool Bool.true Bool.false := @Eq.refl Bool Bool.false";
+        const LAST: &str = "ir_byte_shl_uint_canonical_v1";
+        const FALSE: &str = "def ir_byte_shl_uint_canonical_v1 : @Eq Bool Bool.true Bool.false := @Eq.refl Bool Bool.false";
         assert_eq!(rows().last().unwrap().0, LAST);
         let declarations =
             rows().map(|(name, source)| (name, if name == LAST { FALSE } else { source }));
@@ -117,7 +117,7 @@ fn composition_actual_last_false_source_refuses_and_original_owner_remains_retry
             assert!(base.env().get_const(&Name::from_string(name)).is_none());
         }
         let owned: Specification = base.clone().into_canonical_arithmetic_byte_v1().unwrap();
-        assert_eq!(owned.definitions().len(), base.definitions().len() + 85);
+        assert_eq!(owned.definitions().len(), base.definitions().len() + 128);
         owned.verify_definition(LAST).unwrap();
         assert!(owned
             .env()

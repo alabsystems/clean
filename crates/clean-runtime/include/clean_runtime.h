@@ -52,6 +52,7 @@ extern "C" {
 #define CLEAN_OBJ_KIND_THUNK    4  /* Lazy thunk */
 #define CLEAN_OBJ_KIND_TASK     5  /* Task (for concurrency) */
 #define CLEAN_OBJ_KIND_EXTERNAL 6  /* External (FFI) */
+#define CLEAN_OBJ_KIND_WIDE_NAT 7  /* Native C Nat with at least three limbs */
 
 /* Object header — must match Rust ObjHeader layout exactly (8 bytes, #[repr(C)]). */
 typedef struct clean_obj_header {
@@ -128,6 +129,11 @@ clean_obj* clean_box_uint64(uint64_t n);
 clean_obj* clean_box_uint32(uint32_t n);
 clean_obj* clean_box_float(double f);
 
+/* Read the low limb of a Nat, including a wide heap Nat, without consuming it. */
+uint64_t clean_nat_low_u64(clean_obj* o);
+/* Convert a proof-checked Unicode scalar, consuming the boxed call arguments. */
+clean_obj* clean_char_from_valid_nat_owned(clean_obj* n, clean_obj* proof);
+
 /* Unbox uint64 (handles both tagged and heap-allocated).
  * Mirrors clean_unbox_uint32's tagged-or-heap dispatch: a small value is the
  * tagged immediate (v<<1)|1 (Nat's universal representation on this runtime,
@@ -139,6 +145,9 @@ static inline uint64_t clean_unbox_uint64(clean_obj* o) {
     if (clean_is_scalar(o)) {
         return (uint64_t)clean_unbox(o);
     }
+    if (o->header.kind == CLEAN_OBJ_KIND_WIDE_NAT) {
+        return clean_nat_low_u64(o);
+    }
     return *(uint64_t*)(o->fields);
 }
 
@@ -146,6 +155,9 @@ static inline uint64_t clean_unbox_uint64(clean_obj* o) {
 static inline uint32_t clean_unbox_uint32(clean_obj* o) {
     if (clean_is_scalar(o)) {
         return (uint32_t)clean_unbox(o);
+    }
+    if (o->header.kind == CLEAN_OBJ_KIND_WIDE_NAT) {
+        return (uint32_t)clean_nat_low_u64(o);
     }
     return *(uint32_t*)(o->fields);
 }
@@ -156,59 +168,43 @@ static inline double clean_unbox_float(clean_obj* o) {
 }
 
 /* ============================================================================
- * Heap Nat (values >= 2^63) — RUNG B
+ * Native Nat
  * ============================================================================
  *
- * This runtime's `Nat` is the tagged immediate `(v << 1) | 1` for `v < 2^63`
- * (`clean_box` / `clean_unbox`). A value the tag bit cannot hold — `[2^63,
- * 2^128)` — is boxed as a HEAP Nat: a Ctor cell (`kind == CTOR`, `num_objs 0`)
- * whose inline scalar payload holds the value as two little-endian `uint64_t`
- * limbs `[lo, hi]` (`scalar_sz == 16`). Because both limbs are 8-byte aligned
- * (`o->fields` sits at header offset 8), the read never needs 16-byte
- * `__int128` alignment.
- *
- * Consumers dispatch on representation, never on a producer assumption:
- *   - tagged (LSB=1)         -> value is `clean_unbox(o)`            (< 2^63)
- *   - heap, scalar_sz >= 16  -> two-limb `[lo, hi]` u128             (>= 2^63)
- *   - heap, scalar_sz == 8   -> single `uint64_t` limb              (a UInt64-
- *     carried Nat boxed by `clean_box_uint64`, i.e. `[2^32, 2^64)`)
- *
- * FAIL-CLOSED: a value that does not fit `u128` (`>= 2^128`) stops the
- * program via `clean_panic` rather than truncating — never a wrong value. Every
- * `UInt64`/`USize`-derived Nat is `<= 2^64`, well inside `u128`.
+ * Values fitting a tagged integer remain immediate. The established one-
+ * and two-limb constructor representations remain readable. Wider Nats
+ * are C-runtime leaf objects with a host-size count and a flexible array
+ * of little-endian uint64_t limbs in the same allocation.
  */
 #define CLEAN_NAT_HEAP_SCALAR_SZ 16
 
-/* Build a Nat from a 128-bit value: tagged immediate if `< 2^63`, else a heap
- * two-limb cell. */
 clean_obj* clean_nat_of_u128(unsigned __int128 v);
-
-/* Build a Nat from a 64-bit value (the `UInt64.toNat` / `USize.toNat` /
- * scalar-carrier re-box producer). External symbol (NOT `static inline`) so the
- * trust-ir `ExternCalls` backend can name it as a link-time import. */
 clean_obj* clean_nat_of_u64(uint64_t v);
-
-/* Build a Nat from a big literal given as two little-endian u64 limbs
- * `lo + hi*2^64` (a `Nat` literal `>= 2^64` — e.g. `UInt64.size = 2^64`). The
- * value is `< 2^128` by construction (the emitter fails closed above two
- * limbs), so it is always representable. Tagged if it somehow fits below 2^63
- * (`hi == 0 && lo < 2^63`), else a heap two-limb cell. */
 clean_obj* clean_nat_big(uint64_t lo, uint64_t hi);
+clean_obj* clean_nat_limb_step(clean_obj* hi, uint64_t lo);
 
-/* Read a Nat value as `u128`, dispatching tagged / heap-two-limb / legacy-u64.
- * Does NOT consume `o`. */
+/* Copy an arbitrary-length little-endian limb sequence into a canonical Nat. */
+clean_obj* clean_nat_from_limbs(const uint64_t* limbs, size_t count);
+
+/* Copy the same limb sequence from little-endian bytes. Count must be a
+ * multiple of sizeof(uint64_t), and the source need not be aligned. */
+clean_obj* clean_nat_from_le_bytes(const uint8_t* bytes, size_t byte_count);
+
+/* Exact bounded read. Panics if the value exceeds u128. Borrows o. */
 unsigned __int128 clean_nat_to_u128(clean_obj* o);
 
-/* Heap-aware `Nat` shims. Each CONSUMES (dec's) both arguments per the Perceus
- * all-owned ABI (reading their values first), so a heap Nat operand is freed
- * exactly once. Arithmetic follows Lean 4 `Nat` semantics: truncated
- * subtraction (floored at 0), `n / 0 = 0`, `n % 0 = n`. `dec_eq` / `ble` / `blt`
- * / `beq` return a tagged `0`/`1` (a `Decidable` / `Bool` scrutinee, never a
- * Nat). A result exceeding `u128` fails closed (`clean_panic`). These back the
- * `l_Nat_*` prelude shims. */
+/* Produce a decimal String and consume the input Nat. */
+clean_obj* clean_nat_repr(clean_obj* o);
+/* Consumes an owned boxed target word. */
+clean_obj* clean_usize_repr_owned(clean_obj* word);
+
+/* Nat shims consume both arguments after reading them. Arithmetic includes
+ * truncated subtraction, n / 0 = 0, and n % 0 = n. Comparisons return a
+ * tagged Bool or Decidable result. */
 clean_obj* clean_nat_add(clean_obj* a, clean_obj* b);
 clean_obj* clean_nat_sub(clean_obj* a, clean_obj* b);
 clean_obj* clean_nat_mul(clean_obj* a, clean_obj* b);
+clean_obj* clean_nat_pow(clean_obj* base, clean_obj* exponent);
 clean_obj* clean_nat_div(clean_obj* a, clean_obj* b);
 clean_obj* clean_nat_mod(clean_obj* a, clean_obj* b);
 clean_obj* clean_nat_dec_eq(clean_obj* a, clean_obj* b);
@@ -216,30 +212,15 @@ clean_obj* clean_nat_ble(clean_obj* a, clean_obj* b);
 clean_obj* clean_nat_blt(clean_obj* a, clean_obj* b);
 clean_obj* clean_nat_beq(clean_obj* a, clean_obj* b);
 
-/* Heap-aware `Int` decision shims. `Int` is a two-ctor cell (tag 0 `ofNat n` =
- * `+n`, tag 1 `negSucc n` = `-(n+1)`) with the `Nat` payload in field 0; the
- * magnitude is decoded via the heap-aware `clean_nat_to_u128`, and the compare
- * splits on sign so no signed overflow is possible. Each CONSUMES both `Int`
- * arguments and returns a tagged `0`/`1` `Decidable` scrutinee (isFalse/isTrue).
- * These back the `l_Int_decLt` / `l_Int_decLe` / `l_Int_decEq` prelude shims. */
+/* Int comparisons use exact Nat magnitudes and consume both Int inputs. */
 clean_obj* clean_int_dec_lt(clean_obj* a, clean_obj* b);
 clean_obj* clean_int_dec_le(clean_obj* a, clean_obj* b);
 clean_obj* clean_int_dec_eq(clean_obj* a, clean_obj* b);
 
-/* `Nat.shiftRight n k = n >>> k` (Lean 4 arbitrary-precision Nat). Heap-aware +
- * arg-consuming like the ops above; a shift count >= 128 yields 0. Backs the
- * `l_Nat_shiftRight` prelude shim (instHShiftRightNat). */
+/* Nat shifts. Right shift returns zero when every limb is shifted out. */
 clean_obj* clean_nat_shift_right(clean_obj* a, clean_obj* b);
+clean_obj* clean_nat_shift_left(clean_obj* a, clean_obj* b);
 
-/* `Nat.land` / `Nat.lor` / `Nat.xor` (Lean 4 `&&&` / `|||` / `^^^` on Nat).
- * Heap-aware + arg-consuming like the ops above: both operands are read
- * through `clean_nat_to_u128` and the result is built by `clean_nat_of_u128`
- * (tagged below 2^63, heap above). Every runtime Nat is < 2^128, so the result
- * of a bitwise op on two of them is too: nothing truncates. Back the
- * `l_Nat_land` / `l_Nat_lor` / `l_Nat_xor` prelude shims, which keep the
- * prelude's proof-oriented `Nat.bitwise` body (unary fuel `m + n`, one
- * recursion level per unit — a stack overflow at any heap input) from ever
- * being compiled for execution (WS6.3, F-105). */
 clean_obj* clean_nat_land(clean_obj* a, clean_obj* b);
 clean_obj* clean_nat_lor(clean_obj* a, clean_obj* b);
 clean_obj* clean_nat_xor(clean_obj* a, clean_obj* b);
@@ -524,7 +505,7 @@ static inline void clean_ctor_set_float32(clean_obj* o, unsigned offset, float v
 /* Reset object for potential reuse.
  * Only Ctor, Closure, and Str kinds are reusable — their children live in
  * header.fields[] or closure.args[] and can be dec'd generically.
- * Array/Thunk/Task/External have per-kind internal structure that requires
+ * Array/Thunk/Task/External/WideNat have per-kind internal structure that requires
  * specialized teardown — decline reuse and dec the whole object.
  * Matches Rust lean_reset (string_reset.rs). Part of #2019, #1944. */
 static inline clean_obj* clean_reset(clean_obj* o) {
@@ -535,7 +516,8 @@ static inline clean_obj* clean_reset(clean_obj* o) {
          * num_child_fields returns 0 for Thunk/Task/External (Part of #2019),
          * and Array has a separate buffer. Dec whole object instead. */
         if (kind == CLEAN_OBJ_KIND_ARRAY || kind == CLEAN_OBJ_KIND_THUNK ||
-            kind == CLEAN_OBJ_KIND_TASK || kind == CLEAN_OBJ_KIND_EXTERNAL) {
+            kind == CLEAN_OBJ_KIND_TASK || kind == CLEAN_OBJ_KIND_EXTERNAL ||
+            kind == CLEAN_OBJ_KIND_WIDE_NAT) {
             clean_dec(o);
             return NULL;
         }
@@ -582,6 +564,13 @@ const char* clean_string_data(clean_obj* s);
 
 /* Get string length in bytes */
 size_t clean_string_len(clean_obj* s);
+
+/* s must be a live String in Clean's object layout. The first entry borrows s;
+ * the adapter consumes one owned reference for the compiler's all-owned boxed
+ * calling convention.
+ * Both return a boxed/tagged Nat, not an unboxed size_t. */
+clean_obj* clean_string_utf8_byte_size(clean_obj* s);
+clean_obj* clean_string_utf8_byte_size_owned(clean_obj* s);
 
 /* ============================================================================
  * Panic / Error Handling

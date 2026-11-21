@@ -1,0 +1,1 @@
+def audit_collision_bad_self_family : FreshCtorDecls KEnv.empty Nat.zero (env_freshness_ctors Nat.zero) := @Eq.refl Bool Bool.true

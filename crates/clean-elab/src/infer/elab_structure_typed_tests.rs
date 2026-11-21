@@ -234,3 +234,52 @@ fn class_output_dependency_refusal_restores_the_typed_local_scope() {
     assert_eq!(ctx.locals.len(), 1);
     assert_eq!(ctx.locals[0].1, kept);
 }
+
+#[test]
+fn section_family_pruning_balances_zero_and_multiple_projection_scopes() {
+    let env = Environment::with_prelude();
+    let nat = Expr::const_(Name::from_string("Nat"), vec![]);
+    let kept = SurfaceName::generated_path("kept");
+    let unused = SurfaceName::generated_path("unused");
+    for source in [
+        "variable (unused : Nat)\nstructure ScopeEmpty where\naxiom Later : kept = kept\n",
+        "variable (unused : Nat)\nstructure ScopePair where\n  left : Nat\n  right : Nat\naxiom Later : kept = kept\n",
+    ] {
+        let mut ctx = ElabCtx::new(&env);
+        let outer = ctx.push_local(kept.clone(), nat.clone());
+        let mut file = FileContext::new();
+        let ds = clean_parser::parse_file(source).expect("parse structures and sibling");
+        let _ = crate::preprocess_decl_with_context(&ds[0], &mut file);
+        let family = crate::preprocess_decl_with_context(&ds[1], &mut file);
+        ctx.elab_decl(&family).expect("elaborate structure");
+        assert_eq!(ctx.locals.len(), 1, "surrounding context after structure");
+        assert_eq!(ctx.lookup_local(&kept).map(|(id, _)| id), Some(outer));
+        assert!(ctx.lookup_local(&unused).is_none());
+        ctx.elab_decl(&ds[2]).expect("following declaration can still use kept");
+    }
+}
+
+#[test]
+fn section_family_refusal_restores_ambient_locals_and_instances() {
+    let env = Environment::with_prelude();
+    for invalid in [
+        "structure Bad where\n  bad : Nat 0",
+        "inductive Bad where\n  | mk (bad : Nat 0) : Bad",
+    ] {
+        let code = format!(
+            "variable {{α : Type}} [inst : Inhabited α]\n{invalid}\naxiom Later : kept = kept\n"
+        );
+        let ds = clean_parser::parse_file(&code).expect("parse ill-typed field");
+        let mut ctx = ElabCtx::new(&env);
+        let kept = SurfaceName::generated_path("kept");
+        let id = ctx.push_local(kept.clone(), Expr::const_(Name::from_string("Nat"), vec![]));
+        let mut file = FileContext::new();
+        let _ = crate::preprocess_decl_with_context(&ds[0], &mut file);
+        let family = crate::preprocess_decl_with_context(&ds[1], &mut file);
+        assert!(ctx.elab_decl(&family).is_err());
+        assert_eq!(ctx.locals.len(), 1);
+        assert_eq!(ctx.lookup_local(&kept).map(|(i, _)| i), Some(id));
+        assert!(ctx.local_instances.is_empty());
+        ctx.elab_decl(&ds[2]).expect("unaffected sibling");
+    }
+}

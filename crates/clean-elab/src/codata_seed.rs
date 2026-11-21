@@ -201,20 +201,21 @@ fn inject_section(env: &mut Environment, src: &str, what: &str) -> Result<(), El
                 ),
             }
         })?;
-        fn first_failure(result: &crate::ElabResult) -> Option<&ElabError> {
+        fn first_failure(result: &crate::ElabResult) -> Option<(Option<&str>, &ElabError)> {
             match result {
-                crate::ElabResult::Failed { error, .. } => Some(error),
+                crate::ElabResult::Failed { name, error, .. } => Some((Some(name.as_str()), error)),
                 crate::ElabResult::Diagnosed { diagnostics, .. } => {
-                    diagnostics.first().map(|d| &d.error)
+                    diagnostics.first().map(|d| (None, &d.error))
                 }
                 crate::ElabResult::Multiple(results) => results.iter().find_map(first_failure),
                 _ => None,
             }
         }
-        if let Some(error) = first_failure(&result) {
+        if let Some((member, error)) = first_failure(&result) {
+            let member = member.map_or_else(String::new, |name| format!(", member `{name}`"));
             return Err(ElabError::Unsupported {
                 feature: format!(
-                    "codata seed ({what}): declaration {i} contains a failed declaration \
+                    "codata seed ({what}): declaration {i}{member} contains a failed declaration \
                      (env left untouched): {error}"
                 ),
             });
@@ -337,6 +338,26 @@ mod tests {
         assert!(env
             .get_const(&Name::from_string("Codata.sibling"))
             .is_none());
+    }
+
+    #[test]
+    fn failed_namespace_member_does_not_commit_a_partial_seed() {
+        let mut env = Environment::with_prelude();
+        let before = env.constants().count();
+        let error = inject_section(
+            &mut env,
+            "namespace SeedFailureControl\n\
+             def good : Nat := 1\n\
+             def bad : Nat := True.intro\n\
+             end SeedFailureControl\n",
+            "transaction control",
+        )
+        .expect_err("a failed namespace leaf must abort the entire seed transaction");
+        assert!(format!("{error}").contains("SeedFailureControl.bad"));
+        assert_eq!(env.constants().count(), before);
+        for name in ["SeedFailureControl.good", "SeedFailureControl.bad"] {
+            assert!(env.get_const(&Name::from_string(name)).is_none());
+        }
     }
 
     /// The default elaboration path must not grow the env: seeds are lazy.

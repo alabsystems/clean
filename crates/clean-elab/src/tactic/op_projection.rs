@@ -174,7 +174,6 @@ pub(crate) fn reduce_op_projection_head(
 /// The same field selection, with the existing bounded instance reduction.
 /// Unlike WHNF of an entire application, this preserves the stored operation
 /// head even when its operands are concrete or its projection is semireducible.
-#[cfg(any(feature = "ay-smt", test))]
 pub(crate) fn reduce_op_projection_head_instances(
     state: &ProofState,
     goal: &Goal,

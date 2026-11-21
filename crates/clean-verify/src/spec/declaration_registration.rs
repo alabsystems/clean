@@ -13,6 +13,10 @@ use std::collections::HashSet;
 use super::source_admission_trace;
 use super::{decl_budget, AxiomCategory, ProofStatus, SpecDefinition, SpecError, Specification};
 
+#[cfg(test)]
+#[path = "declaration_registration_tests.rs"]
+mod tests;
+
 impl Specification {
     /// Add an inductive type definition using the elaborator
     ///
@@ -365,32 +369,48 @@ impl Specification {
         let observation = source_admission_trace::begin(&self.env, "def", source);
         decl_budget::begin_declaration();
         let outcome = self.add_recursive_def_inner(source, description);
-        let outcome = decl_budget::finish_declaration(description, outcome);
+        let outcome = decl_budget::finish_declaration(description, outcome).map(
+            |(candidate, definition)| {
+                self.env = candidate;
+                self.definitions.insert(definition.name.clone(), definition);
+            },
+        );
         #[cfg(test)]
         source_admission_trace::finish(observation, self, &outcome);
         outcome
     }
 
     fn add_recursive_def_inner(
-        &mut self,
+        &self,
         source: &str,
         description: &str,
-    ) -> Result<(), SpecError> {
+    ) -> Result<(clean_kernel::Environment, SpecDefinition), SpecError> {
         let decl = parse_decl_exact(source).map_err(|e| SpecError::ParseError(e.to_string()))?;
 
-        let result = elaborate_decl_and_register(&mut self.env, &decl).map_err(|e| {
+        // Source diagnostics can accompany an already registered declaration.
+        // Keep both the checked environment and tracking unchanged on any
+        // source error, kernel refusal or unexpected result shape.
+        let mut candidate = self.env.clone();
+        let result = elaborate_decl_and_register(&mut candidate, &decl).map_err(|e| {
             #[cfg(test)]
             source_admission_trace::elaborator_error(&e);
             SpecError::ElabError(format!("Failed to elaborate def ({description}): {e}"))
         })?;
         #[cfg(test)]
         source_admission_trace::elaborator_result(&result);
+        if let Some(message) = result.source_error_message() {
+            return Err(SpecError::ElabError(message));
+        }
+        let mut result = result;
+        while let ElabResult::Diagnosed { result: inner, .. } = result {
+            result = *inner;
+        }
 
-        // Track the definition.
+        // Prepare the existing tracking record without publishing it yet.
         match result {
             ElabResult::Definition { name, ty, val, .. } => {
-                self.definitions.insert(
-                    name.to_string(),
+                Ok((
+                    candidate,
                     SpecDefinition {
                         name: name.to_string(),
                         type_src: source.to_string(),
@@ -407,15 +427,14 @@ impl Specification {
                         dependencies: None,
                         axiom_deps: HashSet::new(),
                     },
-                );
-                Ok(())
+                ))
             }
             ElabResult::Theorem {
                 name, ty, proof, ..
             } => {
                 // Some defs elaborate as theorems (when Prop result type).
-                self.definitions.insert(
-                    name.to_string(),
+                Ok((
+                    candidate,
                     SpecDefinition {
                         name: name.to_string(),
                         type_src: source.to_string(),
@@ -432,8 +451,7 @@ impl Specification {
                         dependencies: None,
                         axiom_deps: HashSet::new(),
                     },
-                );
-                Ok(())
+                ))
             }
             _ => Err(SpecError::TypeError(format!(
                 "Expected Definition result, got: {:?}",

@@ -44,6 +44,7 @@ use std::collections::BTreeSet;
 use std::io::BufRead;
 
 use clean_kernel::name::Name;
+use clean_kernel::ReferenceKernel;
 use serde::Serialize;
 
 use super::load::load_export;
@@ -106,17 +107,47 @@ pub fn reference_check_export_reader<R: BufRead>(
     reader: R,
     permitted: &[&str],
 ) -> ExportReferenceReport {
+    match reference_kernel_from_export(reader, permitted) {
+        Ok((_, report)) => report,
+        Err(report) => *report,
+    }
+}
+
+/// Return the fenced kernel which rechecked the complete export, with its
+/// original verdict. A caller may then check a fresh closed term over this
+/// exact environment. Every refusal, including an unpermitted foundational
+/// axiom, withholds the kernel. An application using a fixed semantic model
+/// must independently bind the export's identity and rebuild its expected goal.
+///
+/// # Errors
+///
+/// The original reference report identifies the reader, declaration or
+/// foundational-policy refusal.
+pub fn reference_kernel_from_export<R: BufRead>(
+    reader: R,
+    permitted: &[&str],
+) -> Result<(ReferenceKernel, ExportReferenceReport), Box<ExportReferenceReport>> {
     let reader_refusal = |error: &super::error::NdjsonError| ReaderRefusal {
         rule: error.rule(),
         message: error.to_string(),
     };
     let source = match NdjsonSource::as_written(reader) {
         Ok(source) => source,
-        Err(error) => return ExportReferenceReport::refused(None, reader_refusal(&error)),
+        Err(error) => {
+            return Err(Box::new(ExportReferenceReport::refused(
+                None,
+                reader_refusal(&error),
+            )))
+        }
     };
     let loaded = match load_export(source) {
         Ok(loaded) => loaded,
-        Err(error) => return ExportReferenceReport::refused(None, reader_refusal(&error)),
+        Err(error) => {
+            return Err(Box::new(ExportReferenceReport::refused(
+                None,
+                reader_refusal(&error),
+            )))
+        }
     };
 
     let mut refusals: Vec<String> = Vec::new();
@@ -140,36 +171,50 @@ pub fn reference_check_export_reader<R: BufRead>(
     let targets: BTreeSet<Name> = loaded.declared.iter().map(|d| d.name.clone()).collect();
     let mut axioms: Vec<String> = Vec::new();
     let mut admitted = 0usize;
-    match reference_base_closed(&loaded.env, &targets, &ClosedRecheckOptions::default()) {
-        Ok(base) => {
-            for refusal in &base.report.refusals {
-                refusals.push(format!("{}: {refusal:?}", refusal.subject()));
-            }
-            for (unit, refusal) in &base.entry_refusals {
-                refusals.push(format!("{unit}: reference entry: {refusal}"));
-            }
-            if !base.report.extension_bindings_pinned {
-                refusals
-                    .push("the replay's extension bindings were not the pinned table".to_owned());
-            }
-            // The entry's environment holds exactly what the entry admitted
-            // (the quotient primitives through `add_quot_checked`, which the
-            // replay compares and does not count among its admissions).
-            let entry = base.kernel().environment();
-            for name in &targets {
-                if entry.get_const(name).is_some() {
-                    admitted += 1;
-                } else {
-                    refusals.push(format!(
-                        "{}: declared by the export and not in the entry's environment",
-                        loaded.shown(name)
-                    ));
+    let kernel =
+        match reference_base_closed(&loaded.env, &targets, &ClosedRecheckOptions::default()) {
+            Ok(base) => {
+                for refusal in &base.report.refusals {
+                    refusals.push(format!("{}: {refusal:?}", refusal.subject()));
+                }
+                for (unit, refusal) in &base.entry_refusals {
+                    refusals.push(format!("{unit}: reference entry: {refusal}"));
+                }
+                if !base.report.extension_bindings_pinned {
+                    refusals.push(
+                        "the replay's extension bindings were not the pinned table".to_owned(),
+                    );
+                }
+                // The entry's environment holds exactly what the entry admitted
+                // (the quotient primitives through `add_quot_checked`, which the
+                // replay compares and does not count among its admissions).
+                let entry = base.kernel().environment();
+                for name in &targets {
+                    if entry.get_const(name).is_some() {
+                        admitted += 1;
+                    } else {
+                        refusals.push(format!(
+                            "{}: declared by the export and not in the entry's environment",
+                            loaded.shown(name)
+                        ));
+                    }
+                }
+                axioms.clone_from(&base.report.axioms_admitted);
+                match base.into_kernel() {
+                    Ok(kernel) => Some(kernel),
+                    Err(report) => {
+                        if refusals.is_empty() {
+                            refusals.push(report.verdict_sentence());
+                        }
+                        None
+                    }
                 }
             }
-            axioms.clone_from(&base.report.axioms_admitted);
-        }
-        Err(refusal) => refusals.push(format!("the reference entry could not start: {refusal}")),
-    }
+            Err(refusal) => {
+                refusals.push(format!("the reference entry could not start: {refusal}"));
+                None
+            }
+        };
     let unpermitted_axioms: Vec<String> = axioms
         .iter()
         .filter(|axiom| !permitted.contains(&axiom.as_str()))
@@ -177,8 +222,8 @@ pub fn reference_check_export_reader<R: BufRead>(
         .collect();
     refusals.sort();
     refusals.dedup();
-    ExportReferenceReport {
-        accepted: refusals.is_empty() && unpermitted_axioms.is_empty(),
+    let report = ExportReferenceReport {
+        accepted: kernel.is_some() && refusals.is_empty() && unpermitted_axioms.is_empty(),
         meta: Some(loaded.meta),
         reader_error: None,
         declarations: targets.len(),
@@ -186,5 +231,9 @@ pub fn reference_check_export_reader<R: BufRead>(
         axioms,
         unpermitted_axioms,
         refusals,
+    };
+    match kernel {
+        Some(kernel) if report.accepted => Ok((kernel, report)),
+        _ => Err(Box::new(report)),
     }
 }

@@ -41,6 +41,13 @@ pub(super) fn module_name_to_rel_path(module: &str) -> Option<PathBuf> {
 /// path append, and `.olean` is appended, never substituted for a quoted dot.
 /// Numeric Name constructors are ill-formed module imports in upstream Lean.
 pub fn typed_module_rel_path(module: &Name) -> Result<PathBuf, ImportError> {
+    typed_module_path(module, "olean").map(|(_, path)| path)
+}
+
+fn typed_module_path<'a>(
+    module: &'a Name,
+    extension: &str,
+) -> Result<(&'a str, PathBuf), ImportError> {
     let mut components = Vec::new();
     let mut current = module;
     loop {
@@ -58,18 +65,19 @@ pub fn typed_module_rel_path(module: &Name) -> Result<PathBuf, ImportError> {
             }
         }
     }
-    if components.is_empty() {
+    let Some(&package) = components.last() else {
         return Err(ImportError::UnsupportedModule {
             module: format!("{module:?}"),
             reason: "anonymous module has no import path".into(),
         });
-    }
+    };
     let mut path = PathBuf::new();
     for component in components.into_iter().rev() {
         path.push(component);
     }
-    path.as_mut_os_string().push(".olean");
-    Ok(path)
+    path.as_mut_os_string().push(".");
+    path.as_mut_os_string().push(extension);
+    Ok((package, path))
 }
 
 /// Resolve an exact typed module identity in caller-supplied search order.
@@ -77,7 +85,54 @@ pub fn resolve_typed_module_path(
     module: &Name,
     search_paths: &[PathBuf],
 ) -> Result<PathBuf, ImportError> {
-    resolve_typed_module_file(module, search_paths).map(|(_, path)| path)
+    resolve_typed_module_path_in_world(module, search_paths, None)
+}
+
+/// Resolve a typed artifact using the selected release's search order.
+/// The default Lean 4.30.0-rc2 and stable 4.36 select the first package root,
+/// which may name a child that does not exist.
+///
+/// # Errors
+/// Rejects malformed names and modules without a matching search root.
+pub fn resolve_typed_module_path_in_world(
+    module: &Name,
+    search_paths: &[PathBuf],
+    world: Option<&str>,
+) -> Result<PathBuf, ImportError> {
+    resolve_typed_module_file(module, search_paths, world).map(|(_, path)| path)
+}
+
+/// The path modern Lean lists once a package has selected its search root.
+/// `extension` is the requested file kind (`lean` or `olean`).
+///
+/// # Errors
+/// Numeric or anonymous module names have no structural file path.
+pub fn lean_package_module_path(
+    module: &Name,
+    search_paths: &[PathBuf],
+    extension: &str,
+) -> Result<Option<PathBuf>, ImportError> {
+    let (package, relative) = typed_module_path(module, extension)?;
+    Ok(package_root(search_paths, package, extension).map(|(_, root)| root.join(relative)))
+}
+
+fn uses_package_roots(world: Option<&str>) -> bool {
+    world.is_none_or(|world| {
+        world == clean_kernel::LeanWorld::Lean430Rc2.tag()
+            || world == clean_kernel::LeanWorld::Lean436.tag()
+    })
+}
+
+fn package_root<'a>(
+    roots: &'a [PathBuf],
+    package: &str,
+    extension: &str,
+) -> Option<(usize, &'a PathBuf)> {
+    let package_file = format!("{package}.{extension}");
+    roots
+        .iter()
+        .enumerate()
+        .find(|(_, root)| root.join(package).is_dir() || root.join(&package_file).exists())
 }
 
 /// [`resolve_typed_module_path`], with the index in `search_paths` of the
@@ -85,8 +140,20 @@ pub fn resolve_typed_module_path(
 pub(crate) fn resolve_typed_module_file(
     module: &Name,
     search_paths: &[PathBuf],
+    world: Option<&str>,
 ) -> Result<(usize, PathBuf), ImportError> {
-    let relative = typed_module_rel_path(module)?;
+    let (package, relative) = typed_module_path(module, "olean")?;
+    if uses_package_roots(world) {
+        return package_root(search_paths, package, "olean")
+            .map(|(index, root)| (index, root.join(&relative)))
+            .ok_or_else(|| ImportError::ModuleNotFound {
+                module: format!("{module:?}"),
+                searched: search_paths
+                    .iter()
+                    .map(|root| root.join(&relative))
+                    .collect(),
+            });
+    }
     let mut searched = Vec::new();
     for (index, root) in search_paths.iter().enumerate() {
         let candidate = root.join(&relative);
@@ -400,6 +467,25 @@ fn is_stdlib_search_path(path: &Path) -> bool {
 /// imports are loaded from prebuilt `.olean`s rather than re-elaborated).
 #[must_use]
 pub fn find_module_olean(module: &str, search_paths: &[PathBuf]) -> Option<PathBuf> {
+    find_module_olean_in_world(module, search_paths, None).filter(|path| path.exists())
+}
+
+/// Select the compiled artifact for a legacy dotted module selector in a
+/// declared world. Package ownership can select a path whose file is missing.
+#[must_use]
+pub fn find_module_olean_in_world(
+    module: &str,
+    search_paths: &[PathBuf],
+    world: Option<&str>,
+) -> Option<PathBuf> {
+    if uses_package_roots(world) {
+        return resolve_typed_module_path_in_world(
+            &legacy_module_name(module).ok()?,
+            search_paths,
+            world,
+        )
+        .ok();
+    }
     resolve_module_path(module, search_paths).ok()
 }
 

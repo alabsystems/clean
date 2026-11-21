@@ -31,7 +31,7 @@ edition = "2021"
 publish = false
 
 [dependencies]
-trust-ir = { git = "https://github.com/alabsystems/trust-ir.git", rev = "8bae728257b123d6394b2dc049b3573ad885049f", default-features = false, features = ["binary", "fmt"] }
+trust-ir = { git = "https://github.com/alabsystems/trust-ir.git", rev = "899d46e7a303fad2b706a88a7a8eda41ec47dcfe", default-features = false, features = ["binary", "fmt"] }
 sha2 = { version = "0.10", default-features = false }
 
 [[bin]]

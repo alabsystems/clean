@@ -886,6 +886,12 @@ impl<'env> TypeChecker<'env> {
     /// `Environment::add_decl`, which need to validate proposition-like
     /// declaration types such as `Squash(Prop)`.
     pub fn infer_sort(&self, e: &Expr) -> Result<Level, TypeError> {
+        self.infer_sort_with_formation(e).map(|(level, _)| level)
+    }
+
+    /// Also report whether the inferred type reduces directly to a Sort.
+    /// Only that case supplies the ordinary Pi/LET formation premise.
+    pub(crate) fn infer_sort_with_formation(&self, e: &Expr) -> Result<(Level, bool), TypeError> {
         let _metered = self.metered_scope();
         // Set infer_only=false for full checking (validation entry point).
         let prev = self.infer_only.get();
@@ -915,7 +921,7 @@ impl<'env> TypeChecker<'env> {
     /// For well-typed expressions this always terminates (each `infer_type`
     /// call reduces structural complexity), but the depth limit provides a
     /// clean error instead of heartbeat exhaustion. Part of #3304.
-    fn infer_sort_inner(&self, e: &Expr, depth: u32) -> Result<Level, TypeError> {
+    fn infer_sort_inner(&self, e: &Expr, depth: u32) -> Result<(Level, bool), TypeError> {
         // Note: no tick_heartbeat() here — infer_type already decrements the heartbeat
         // counter. Adding a tick here would double-count and could exhaust the heartbeat
         // budget prematurely for complex types with many Pi domains (e.g., nn_verify
@@ -923,8 +929,8 @@ impl<'env> TypeChecker<'env> {
         let ty = self.infer_type(e)?;
         let ty_whnf = self.whnf(&ty);
         match &ty_whnf.kind {
-            ExprKind::Sort(l) => Ok(l.clone()),
-            ExprKind::SProp => Ok(Level::zero()),
+            ExprKind::Sort(l) => Ok((l.clone(), true)),
+            ExprKind::SProp => Ok((Level::zero(), false)),
             ExprKind::Pi(bd, arg_type, body) => {
                 if depth >= Self::INFER_SORT_MAX_DEPTH {
                     // SOUNDNESS: if Pi-nesting exceeds the depth cap we CANNOT
@@ -936,14 +942,14 @@ impl<'env> TypeChecker<'env> {
                     // deep; if one ever does, raise the cap rather than collapse.
                     return Err(TypeError::SortDepthExceeded { depth });
                 }
-                let arg_level = stack_safe(|| self.infer_sort_inner(arg_type, depth + 1))?;
+                let (arg_level, _) = stack_safe(|| self.infer_sort_inner(arg_type, depth + 1))?;
                 let fvar_id = self.ctx_push(Name::anon(), arg_type.as_ref().clone(), *bd);
                 let body_with_fvar = self.open_bvar(body, fvar_id);
                 let body_level_result =
                     stack_safe(|| self.infer_sort_inner(&body_with_fvar, depth + 1));
                 self.ctx_pop();
-                let body_level = body_level_result?;
-                Ok(self.level_imax(arg_level, body_level))
+                let (body_level, _) = body_level_result?;
+                Ok((self.level_imax(arg_level, body_level), false))
             }
             _ => Err(TypeError::ExpectedSort {
                 ty: Box::new(ty),
@@ -978,7 +984,7 @@ impl<'env> TypeChecker<'env> {
         self.ctor_field_sorts_with(ctor_type, num_params, |tc, e| {
             let prev = tc.infer_only.get();
             tc.infer_only.set(true);
-            let result = stack_safe(|| tc.infer_sort_inner(e, 0));
+            let result = stack_safe(|| tc.infer_sort_inner(e, 0)).map(|(level, _)| level);
             tc.infer_only.set(prev);
             result
         })

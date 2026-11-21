@@ -21,6 +21,7 @@ pub(crate) mod congr;
 mod ctor_eq;
 mod ctor_inj;
 mod declared_equations;
+pub(crate) use declared_equations::collect as collect_declared_equations;
 mod discharge;
 #[cfg(test)]
 mod discharge_tests;
@@ -43,6 +44,7 @@ mod matcher;
 mod pattern;
 mod perm;
 mod proj_reduce;
+pub(super) use proj_reduce::reduce_proj;
 mod proof;
 mod prop_lemmas;
 mod rec_equations;
@@ -76,6 +78,7 @@ pub(crate) use budget::SimpBudget;
 #[cfg(test)]
 pub(crate) use cache::cacheable_rebuild_count;
 pub(crate) use cache::collect_simp_lemmas_cached;
+pub(crate) use ctor_inj::simple_constructor_injectivity;
 pub(crate) use expr::{make_eq_expr, simp_expr};
 pub(crate) use hyp_false::{close_goal_by_proof_of_false, simp_at_closed_goal};
 #[cfg(test)]
@@ -267,7 +270,7 @@ fn simp_impl(
 
                 // Try to rewrite current_lhs using simp lemmas (with proof terms)
                 let match_target = MatchTarget::new(state, &goal, &current_lhs);
-                for lemma in simp_lemmas.candidates(state, &goal, &current_lhs) {
+                for lemma in simp_lemmas.candidates_for_target(state, &goal, &match_target) {
                     if let Some((new_lhs, lhs_proof)) = try_apply_simp_lemma_with_proof(
                         state,
                         &goal,
@@ -288,7 +291,10 @@ fn simp_impl(
                                 lemma.name
                             );
                         }
-                        if !budget.admit(&new_lhs) {
+                        if !budget.admit(
+                            &new_lhs,
+                            format_args!("rewriting the left-hand side with {}", lemma.name),
+                        ) {
                             // Same growth budget as the main loop: a lemma
                             // that balloons the LHS ends the search. `admit`
                             // trips the budget, and the post-loop check turns

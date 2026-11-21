@@ -337,8 +337,8 @@ impl Environment {
     ///       (@ite Nat (@LE.le Nat instLENat n m) (Nat.decLe n m) n m)`
     ///
     /// Lean's statement, exactly (pinned v4.30.0-rc2). The proof eliminates
-    /// `instDecidableNatLe a b` — the instance `if a ≤ b` elaborates to here,
-    /// which δ-unfolds to Lean's `Nat.decLe a b` — over the bare `Nat.min`.
+    /// the checked alias `instDecidableNatLe a b`, which unfolds to the
+    /// registered `Nat.decLe a b` instance, over the bare `Nat.min`.
     fn register_nat_min_def(&mut self, c: &FloorConsts, m: &MinConsts) -> Result<(), EnvError> {
         let name = Name::from_string("Nat.min_def");
         if self.get_const(&name).is_some() {

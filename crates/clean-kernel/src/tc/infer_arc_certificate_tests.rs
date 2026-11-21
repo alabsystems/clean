@@ -811,7 +811,7 @@ fn discarded_debug_full_scope_preserves_refusals_and_restores_after_errors() {
         ),
     ] {
         let checker = TypeChecker::new(&env);
-        checker
+        let _warmup_type = checker
             .infer_type_full(&diamond(3))
             .expect("strict full warmup");
         assert!(matches!(

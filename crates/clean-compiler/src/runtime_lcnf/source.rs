@@ -92,7 +92,10 @@ struct HashWriter {
 impl Write for HashWriter {
     fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
         if bytes.len() > self.limit.saturating_sub(self.bytes) {
-            return Err(io::Error::other("source observation byte limit exceeded"));
+            return Err(io::Error::other(format!(
+                "source observation byte limit exceeded: limit={}, encoded_prefix={}, next_write={}",
+                self.limit, self.bytes, bytes.len()
+            )));
         }
         self.hash.update(bytes);
         self.bytes += bytes.len();
@@ -147,6 +150,14 @@ pub struct RuntimeEnvironmentCapture {
     pub errors: Vec<String>,
 }
 
+/// The fixed-LE bytes already streamed for one admitted row. The length
+/// lets scoped callers charge additional fields without encoding the row again.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) struct RowBinding {
+    pub(super) digest: [u8; 32],
+    pub(super) encoded_bytes: usize,
+}
+
 fn snapshot(
     env: &Environment,
     limits: RuntimeSourceCaptureLimits,
@@ -156,7 +167,7 @@ fn snapshot(
     failures: &mut Vec<RuntimeEnvironmentRowFailure>,
 ) -> (
     Vec<RuntimeEnvironmentRow>,
-    BTreeMap<Name, [u8; 32]>,
+    BTreeMap<Name, RowBinding>,
     RuntimeEnvironmentPopulation,
 ) {
     let mut population = RuntimeEnvironmentPopulation {
@@ -201,7 +212,7 @@ pub(super) fn snapshot_names(
     remaining: &mut usize,
     errors: &mut Vec<String>,
     failures: &mut Vec<RuntimeEnvironmentRowFailure>,
-) -> (Vec<RuntimeEnvironmentRow>, BTreeMap<Name, [u8; 32]>) {
+) -> (Vec<RuntimeEnvironmentRow>, BTreeMap<Name, RowBinding>) {
     let eager_constants: BTreeSet<_> = env
         .constants()
         .filter(|r| names.contains(&r.name))
@@ -291,13 +302,22 @@ pub(super) fn snapshot_names(
                 failures.push(RuntimeEnvironmentRowFailure {
                     phase: label,
                     name,
-                    reason: error,
+                    reason: format!(
+                        "{error} (row_limit={}, remaining_total={})",
+                        limits.row_bytes, *remaining
+                    ),
                 });
                 continue;
             }
         };
         *remaining -= bytes;
-        hashes.insert(name.clone(), hash);
+        hashes.insert(
+            name.clone(),
+            RowBinding {
+                digest: hash,
+                encoded_bytes: bytes,
+            },
+        );
         rows.push(RuntimeEnvironmentRow {
             name,
             constant: constant.cloned(),
@@ -323,7 +343,10 @@ pub(super) fn snapshot_names(
 }
 
 impl RuntimeEnvironmentCapture {
-    pub(super) fn capture(
+    /// Observe the eager rows, sources and exact delta under the supplied limits.
+    /// No lowering catalog is constructed. A caller-supplied pair of environments
+    /// or source records does not establish frontend custody or a replay verdict.
+    pub fn capture(
         before: &Environment,
         after: &Environment,
         sources: Vec<RuntimeSourceRecord>,

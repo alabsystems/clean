@@ -362,9 +362,33 @@ fn solve_elim(
     let (binders, _) = telescope(&elim_const.type_);
     let mut sol = ElimSolution::default();
 
+    // Matching application arguments before exposing an abbreviation can bind
+    // the wrong telescope slot. Compare reducible heads first when the two
+    // named carriers differ, and keep the original representation on a miss.
+    let mut match_major = |pattern: &Expr, depth| {
+        if let (ExprKind::Const(want, _), ExprKind::Const(have, _)) =
+            (pattern.get_app_fn().kind(), hyp_ty.get_app_fn().kind())
+        {
+            if want != have
+                && (crate::instance_alias::is_reducible_definition(&state.env, have)
+                    || crate::instance_alias::is_reducible_definition(&state.env, want))
+            {
+                let declared = state.whnf_indexing(goal, pattern);
+                let actual = state.whnf_indexing(goal, hyp_ty);
+                if matches!((declared.get_app_fn().kind(), actual.get_app_fn().kind()),
+                    (ExprKind::Const(left, _), ExprKind::Const(right, _)) if left == right)
+                {
+                    match_pattern(&declared, &actual, depth, params, &mut sol);
+                    return;
+                }
+            }
+        }
+        match_pattern(pattern, hyp_ty, depth, params, &mut sol);
+    };
+
     // (1) target binder type ≟ actual hypothesis type
     if let Some((_, target_ty)) = binders.get(target_pos) {
-        match_pattern(target_ty, hyp_ty, target_pos, params, &mut sol);
+        match_major(target_ty, target_pos);
     }
 
     // (2) motive telescope: parameter type ≟ hypothesis type, result sort ≟ goal sort.
@@ -376,7 +400,7 @@ fn solve_elim(
         let (motive_params, motive_result) = telescope(motive_ty);
         if motive_param == 0 {
             if let Some((_, motive_dom)) = motive_params.first() {
-                match_pattern(motive_dom, hyp_ty, info.motive_pos, params, &mut sol);
+                match_major(motive_dom, info.motive_pos);
             }
         }
         if let ExprKind::Sort(level_pattern) = motive_result.strip_mdata().kind() {

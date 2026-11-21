@@ -1,0 +1,46 @@
+{
+  "schema": 1,
+  "rule": "scripts/kstar_inputs.py admits a build script that names a file-system, process or link capability, or has build-dependencies, only through a row here whose `closure` equals the sha256 the rule computes over the script's module closure (each file's path and bytes) and its build-dependencies tables. Each `reads` path is a source input; each `data` path is one too, and every repository path its text names is an input in turn (one level). `outside` names what the script reads that the rule does not hash. A script whose package reads env!(\"CARGO_MANIFEST_DIR\") or env!(\"OUT_DIR\") in an include needs a row too, even when it names no such capability: `rustc_env` lists every key it can print as cargo:rustc-env (an include through a key listed there refuses), and `out_dir` the files it writes into OUT_DIR that an include! may read, each one reviewed to hold no include. A row is a reviewed declaration, not a measurement: when the closure moves, the record is not knowable until someone reads the new closure and updates the row. docs/DECISIONS.md, 2026-11-19, \"Q4 source inputs: evaluate an include or refuse\", and its corrections of the same day.",
+  "scripts": {
+    "crates/clean-cli/build.rs": {
+      "closure": "19b3fa3d29c50756dbf22d370945c0c3e11498486036f61f670efa77a44dc88f",
+      "reads": [],
+      "data": [],
+      "outside": "git: `git -C <manifest dir> ls-files`, `rev-parse` and `cat-file` (build_support/provenance.rs) read the repository metadata under .git and the git configuration, and `head_watch_paths` tests which .git paths exist. The environment variables SOURCE_DATE_EPOCH, CARGO_MANIFEST_DIR and CARGO_PKG_VERSION.",
+      "review": "2026-11-19: build.rs and build_support/provenance.rs (include!) read no repository file but through git; every path they form is a .git path from `git rev-parse --git-path`."
+    },
+    "crates/clean-elab/build.rs": {
+      "closure": "278632c1adc28d101d812f7bc200905c461747b017795967f661294480e4b447",
+      "reads": [],
+      "data": [],
+      "rustc_env": [],
+      "out_dir": [],
+      "outside": "the environment variable CFG_TRUST_ORACLE_HOST.",
+      "review": "2026-11-19 (second correction): build.rs reads no file and prints three literal directives only: rerun-if-env-changed=CFG_TRUST_ORACLE_HOST, rustc-check-cfg=cfg(clean_runtime_oracle_host) and rustc-cfg=clean_runtime_oracle_host; it prints no cargo:rustc-env and writes nothing into OUT_DIR. The row exists because clean-elab reads env!(\"CARGO_MANIFEST_DIR\") in includes."
+    },
+    "crates/clean-mathverse/build.rs": {
+      "closure": "46fe977f6e7ea74bfd7247aedbad6e8a21f0243795a84b2dbba4232dc9582e14",
+      "reads": [],
+      "data": [],
+      "outside": "the compiler named by RUSTC (default `trustc`), run with --version.",
+      "review": "2026-11-19: build.rs runs `$RUSTC --version` and reads no file."
+    },
+    "crates/clean-olean/build.rs": {
+      "closure": "2861662293a2557a496a6f5badb5e04896c71d2c1681c52db5623cd4ff58cdbf",
+      "reads": ["lean-toolchain", "crates/clean-olean/lean_worlds.tsv"],
+      "data": ["crates/clean-olean/lean_worlds.tsv"],
+      "rustc_env": ["CLEAN_OLEAN_PINNED_LEAN_LIB", "CLEAN_OLEAN_PINNED_LEAN_TOOLCHAIN"],
+      "out_dir": ["lean_worlds.rs", "pinned_toolchain_manifest.rs"],
+      "outside": "the installed Lean toolchain library: CLEAN_OLEAN_PINNED_LEAN_LIB when set, else <root>/toolchains/<pin>/lib/lean for each root ELAN_HOME, $HOME/.elan and $USERPROFILE/.elan (lean_toolchain.rs); every .olean part under it (read_dir) and, per row of lean_worlds.tsv, an installed toolchain's Init/Prelude.olean.",
+      "review": "2026-11-19: build.rs and lean_toolchain.rs (#[path]) read <workspace>/lean-toolchain (manifest_dir.parent().parent()), lean_worlds.tsv, and each fixture its fourth column names, joined to the workspace root: the data rule names those. Every other read is under a toolchain directory the environment chooses. 2026-11-19 (second correction): its only cargo:rustc-env lines are the two in main(), whose keys are lean_toolchain.rs's PINNED_LEAN_LIB_ENV and PINNED_LEAN_TOOLCHAIN_ENV (the values are paths and names the environment chooses); it writes OUT_DIR/lean_worlds.rs and OUT_DIR/pinned_toolchain_manifest.rs, whose text is const items built from fixed strings, numbers and {:?} of strings (state_variant maps the TSV state column to fixed names), so neither holds an include."
+    },
+    "crates/clean-sys/build.rs": {
+      "closure": "64883729a5e96db3e39388e66d4e371d1f96de8af007867a620b477339989153",
+      "reads": ["crates/clean-sys/cbindgen.toml", "crates/clean-sys/include/clean.h", "crates/clean-sys/Cargo.toml",
+                "crates/clean-sys/src/lib.rs", "Cargo.toml", "Cargo.lock"],
+      "data": [],
+      "outside": "cbindgen's `cargo metadata` run (the cargo on PATH and its configuration), and CLEAN_GENERATE_HEADERS.",
+      "review": "2026-11-19: build.rs tests whether include/clean.h exists; when it does not, or CLEAN_GENERATE_HEADERS is set, cbindgen (parse_deps off in cbindgen.toml) reads cbindgen.toml, the crate's manifest and module tree (src/lib.rs, which declares no module) and the workspace's manifests and lock through `cargo metadata`, and writes include/clean.h."
+    }
+  }
+}

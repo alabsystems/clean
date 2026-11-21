@@ -61,10 +61,12 @@ mod fields;
 pub(crate) mod json;
 mod levels;
 mod load;
+pub mod meaning;
 mod names;
 mod natval;
 mod quot;
 mod records;
+mod original_guard;
 mod reference;
 mod replay;
 mod source;
@@ -82,8 +84,10 @@ use source::NdjsonSource;
 
 pub use error::ExitClass;
 pub use natval::MAX_NAT_LITERAL_DIGITS;
+pub use original_guard::check_trust_ir_r01_source_model;
 pub use reference::{
-    reference_check_export_reader, ExportReferenceReport, LEAN_FOUNDATIONAL_AXIOMS,
+    reference_check_export_reader, reference_kernel_from_export, ExportReferenceReport,
+    LEAN_FOUNDATIONAL_AXIOMS,
 };
 pub use replay::{
     DeclarationRecord, DeclarationVerdict, ExportCheckOptions, ExportReport, FirstRefusal,

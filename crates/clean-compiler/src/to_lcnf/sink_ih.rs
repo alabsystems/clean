@@ -7,10 +7,14 @@
 //!
 //! # Why this exists
 //!
-//! [`super::lower::build_rec_arm_body`] materializes each recursive field's
-//! induction hypothesis as a `let ih := go(.., field)` at the TOP of the arm,
-//! before the minor premise's body is lowered — the recursor's own reading, in
-//! which the minor receives the IH as an already-computed *value*.
+//! Its one caller is the mutual kernel recursor lowering
+//! ([`super::mutual_rec`], `num_motives > 1`), which materializes each
+//! recursive field's induction hypothesis as a `let ih := go(.., field)` at
+//! the TOP of the arm, before the minor premise's body is lowered — the
+//! recursor's own reading, in which the minor receives the IH as an
+//! already-computed *value*. Single-motive recursors no longer bind an IH at
+//! arm entry: since X4 an IH there is a call of `go` where it occurs
+//! ([`super::rec_ih`]), so this pass does not run on them.
 //!
 //! That reading is sound for a lazy or world-token `IO`. It is NOT sound for
 //! this compiler's `IO`, whose effects fire when the emitted C function is

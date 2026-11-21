@@ -12,9 +12,12 @@
 
 mod auto_implicit;
 mod auto_implicit_section;
+mod public_param_infos;
+pub(crate) use public_param_infos::PublicParamInfos;
 #[cfg(test)]
 mod auto_implicit_section_tests;
 mod certification;
+pub(crate) mod codata_call_typing;
 mod coercion;
 mod course_of_values;
 mod decl_site_namespace;
@@ -54,6 +57,11 @@ mod elab_pattern_lambda;
 mod elab_pattern_lambda_dep;
 mod elab_subst;
 mod elab_universe_inst;
+#[cfg(test)]
+mod expected_result_assignment_tests;
+mod list_course_of_values;
+#[cfg(test)]
+mod public_param_infos_tests;
 mod recursion_site;
 mod recursive_call;
 mod recursive_dot_call;
@@ -71,14 +79,19 @@ mod elab_do_match_ctor_order;
 mod elab_do_match_q_pattern;
 mod elab_do_match_term;
 mod elab_do_try;
+mod elab_eliminator_motive;
 mod elab_expected;
 mod elab_implicit_lambda;
 mod elab_inductive;
 mod elab_init;
 mod elab_instance;
 mod elab_let_postpone;
+mod family_section_parameters;
 use elab_let_postpone::LetValueOrder;
 mod elab_match;
+/// Distinguishes a field test belonging to the enclosing source pattern from a
+/// separate match in the arm's result. The kernel erases motive metadata.
+pub(crate) const NESTED_PATTERN_MOTIVE: &str = "Clean.match.nestedPattern";
 #[cfg(any(test, debug_assertions))]
 pub use elab_match::take_join_outcomes;
 pub use elab_match::JoinOutcome;
@@ -99,6 +112,8 @@ mod elab_mutual;
 mod elab_mutual_measures;
 mod elab_proj;
 mod elab_proj_lval;
+mod elab_proj_named_args;
+use elab_proj_named_args::{DotHeadCapture, NamedDotReceiver};
 mod elab_proj_waiting;
 mod elab_single_theorem;
 mod elab_struct_default;
@@ -134,6 +149,7 @@ mod opaque_inhabitant;
 mod q_pattern;
 mod quotation;
 mod structural;
+pub(crate) use structural::simple_size_of;
 mod synth_order;
 mod tactic_scope_instance;
 mod tactic_trace;
@@ -263,6 +279,8 @@ pub struct ElabCtx<'a> {
     /// Lifting of `where` / `let rec` helpers to top-level auxiliary
     /// declarations (`parent.go`), as Lean does. See [`let_rec_lift`].
     let_rec_lift: let_rec_lift::LetRecLiftState,
+    /// Exact public header names, handed to registration after elaboration.
+    public_param_infos: Vec<PublicParamInfos>,
     /// Registry entries of the `mutual` members lifted onto a shared recursor
     /// (see [`mutual_lift`]), registered after the members themselves.
     mutual_lift_entries: Vec<mutual_lift::MutualLiftEntry>,
@@ -509,6 +527,8 @@ pub struct ElabCtx<'a> {
     /// elaboration operations. Uses RefCell for interior mutability since
     /// whnf/is_def_eq take &self.
     tc_caches: RefCell<TcCaches>,
+    /// Local/meta state and pending level facts owning the retained answers.
+    tc_cache_state: RefCell<Option<elab_ctx::CheckerCacheState>>,
     /// Memoised kernel `LocalContext` keyed by the `locals` and `metas`
     /// generations; see `local_ctx_cache` for the measurement behind it.
     local_ctx_cache: RefCell<Option<local_ctx_cache::LocalCtxCache>>,
@@ -539,6 +559,10 @@ pub struct ElabCtx<'a> {
     /// the call-site arguments are bound to the pattern variables, substituted
     /// into the body, and the body is re-elaborated through the normal pipeline.
     user_term_elabs: HashMap<String, user_term::UserTermElab>,
+    pub(crate) imported_term_syntax:
+        Option<std::sync::Arc<crate::module_driver::imported_syntax::ImportedTermSyntax>>,
+    pub(crate) imported_runtime:
+        Option<std::sync::Arc<crate::module_driver::imported_runtime::ImportedRuntime>>,
     /// Metaprogram value channel: bound names mapped to already-elaborated kernel
     /// `Expr` values. Populated while a value-channel term-elaborator body (e.g.
     /// `let t := inferType e; t`) is being interpreted, and consulted by
@@ -558,23 +582,25 @@ pub struct ElabCtx<'a> {
     collected_scoped_csimp: Vec<(Name, Name)>,
     /// Collected reducibility attributes (name, level)
     collected_reducibility: Vec<(Name, Reducibility)>,
+    pub(crate) collected_matchers: Vec<(Name, clean_kernel::env::MatcherInfo)>,
     /// Collected extern bindings (decl_name, extern_name, where written)
-    collected_extern: Vec<(Name, String, crate::declared_here::AttributeSite)>,
+    collected_extern: Vec<(
+        Name,
+        clean_kernel::env::CompilerExternMetadata,
+        crate::declared_here::AttributeSite,
+    )>,
     /// Collected export bindings (decl_name, export_name)
     collected_export: Vec<(Name, String)>,
     /// Collected deprecations (name, message)
     collected_deprecated: Vec<(Name, Option<String>)>,
-    /// Collected inline hints
-    collected_inline: Vec<Name>,
-    /// Collected noinline hints
-    collected_noinline: Vec<Name>,
-    /// Collected always_inline hints
-    collected_always_inline: Vec<Name>,
+    /// Compiler enum attributes in original parser order.
+    collected_inline_attributes: Vec<crate::decl_attributes::InlineAttributeUse>,
     /// Collected specialize hints
     collected_specialize: Vec<Name>,
     /// Collected csimp lemmas
     collected_csimp: Vec<Name>,
     collected_definition_attrs: Vec<crate::definition_attrs::NamedAttribute>,
+    pub(crate) simple_equation_sources: Vec<Name>,
     /// Collected congr lemmas
     collected_congr: Vec<Name>,
     /// Collected ext lemmas
@@ -585,10 +611,6 @@ pub struct ElabCtx<'a> {
     collected_refl: Vec<Name>,
     /// Collected symm lemmas
     collected_symm: Vec<Name>,
-    /// Collected macro_inline hints
-    collected_macro_inline: Vec<Name>,
-    /// Collected inline_if_reduce hints
-    collected_inline_if_reduce: Vec<Name>,
     /// Collected nospecialize hints
     collected_nospecialize: Vec<Name>,
     /// Collected @[implemented_by] uses, resolved when applied.
@@ -763,9 +785,9 @@ pub struct ElabCtx<'a> {
     /// elaborated (`expandDeclNamespace?`, `expandMutualNamespace`), as a
     /// full name: `current ++ pre` for a declaration written `pre.d`, `None`
     /// for one written `_root_.pre.d` or with one component, and for a
-    /// `mutual` block the common prefix of its members' namespaces. An
-    /// `@[implemented_by]` argument written on the declaration resolves
-    /// inside it. Set and restored by `elab_decl_inner`.
+    /// `mutual` block the common prefix of its members' namespaces. Term references
+    /// and declaration-site attributes resolve here. Set and restored by
+    /// `elab_decl_inner`.
     decl_site_namespace: Option<Name>,
     /// Local option overrides for section-scoped `set_option` commands.
     ///
@@ -1015,19 +1037,46 @@ impl<'a> ElabCtx<'a> {
     /// - Macros are expanded before elaboration
     /// - Type inference inserts implicit arguments
     pub fn elaborate(&mut self, surface: &SurfaceExpr) -> Result<Expr, ElabError> {
+        self.elaborate_with_projection_capture(surface, None)
+    }
+
+    fn elaborate_with_projection_capture(
+        &mut self,
+        surface: &SurfaceExpr,
+        projection: Option<&mut DotHeadCapture>,
+    ) -> Result<Expr, ElabError> {
         if self.term_info_capture.is_some() {
             self.elaborate_capturing_term(surface, self.current_expected_type.clone(), |ctx| {
-                ctx.elaborate_core(surface)
+                ctx.elaborate_core(surface, projection)
             })
         } else {
-            self.elaborate_core(surface)
+            self.elaborate_core(surface, projection)
         }
     }
 
-    fn elaborate_core(&mut self, surface: &SurfaceExpr) -> Result<Expr, ElabError> {
+    fn elaborate_core(
+        &mut self,
+        surface: &SurfaceExpr,
+        projection: Option<&mut DotHeadCapture>,
+    ) -> Result<Expr, ElabError> {
         // Commit any pending level assignments from previous kernel callbacks
         // before starting a new elaboration step.
         self.commit_pending_level_assigns();
+
+        if let SurfaceExpr::App(_, head, args) = surface {
+            if let SurfaceExpr::Ident(span, name) = head.as_ref() {
+                if let Some(kind) = name.imported_term_kind() {
+                    let syntax = self.imported_term_syntax.as_ref().ok_or_else(|| {
+                        ElabError::NotImplemented(format!(
+                            "term syntax `{kind}` requires its captured import"
+                        ))
+                    })?;
+                    let expr = syntax.elaborate(self.env, kind, *span, args)?;
+                    self.infer_type(&expr)?;
+                    return Ok(expr);
+                }
+            }
+        }
 
         // Unwrap a parenthesized control-flow / binder node *before* the
         // macro-expansion-bypass checks below. Parentheses are pure syntactic
@@ -1281,7 +1330,7 @@ impl<'a> ElabCtx<'a> {
             ..
         } = surface
         {
-            return self.elab_open_in(paths, *scoped, body);
+            return self.elab_open_in(paths, *scoped, body, self.current_expected_type.clone());
         }
 
         // Bypass whole-expression macro expansion for a type ascription
@@ -1700,7 +1749,7 @@ impl<'a> ElabCtx<'a> {
         // actually retry-sensitive, so ordinary projections are unaffected.
         if let SurfaceExpr::Proj(_, base, proj) = surface {
             if Self::contains_retry_sensitive_surface(base) {
-                return self.elab_proj(base, proj);
+                return self.elab_proj(base, proj, projection);
             }
         }
 
@@ -1789,7 +1838,7 @@ impl<'a> ElabCtx<'a> {
             }
         }
 
-        let result = stack_safe(|| self.elaborate_surface_inner(&expanded));
+        let result = stack_safe(|| self.elaborate_surface_inner(&expanded, projection));
 
         // Commit level assignments discovered during this elaboration step
         self.commit_pending_level_assigns();
@@ -1819,7 +1868,11 @@ impl<'a> ElabCtx<'a> {
         }
     }
 
-    fn elaborate_surface_inner(&mut self, expanded: &SurfaceExpr) -> Result<Expr, ElabError> {
+    fn elaborate_surface_inner(
+        &mut self,
+        expanded: &SurfaceExpr,
+        projection: Option<&mut DotHeadCapture>,
+    ) -> Result<Expr, ElabError> {
         match expanded {
             SurfaceExpr::Ident(_, name) if name.is_unescaped_component("sorry") => {
                 self.elab_explicit_sorry()
@@ -2499,6 +2552,17 @@ impl<'a> ElabCtx<'a> {
                 self.elab_match(hyp.as_ref(), scrutinee, arms)
             }
 
+            // `@& T` is syntax for metadata on this actual type expression,
+            // not an identifier or a native implementation binding.
+            SurfaceExpr::Borrowed(_, inner) => {
+                let ty = self.elaborate(inner)?;
+                let (ty, _) = self.ensure_type_coerced(ty)?;
+                Ok(Expr::mdata(
+                    vec![(Name::from_string("borrowed"), clean_kernel::MDataValue::Bool(true))],
+                    ty,
+                ))
+            }
+
             // `outParam e` / `semiOutParam e` mark a type-class parameter and
             // elaborate to `e` (Lean: `@[reducible] def outParam (α) := α`).
             // The parser builds the wrapper by SPELLING, so the marker holds
@@ -2512,7 +2576,7 @@ impl<'a> ElabCtx<'a> {
                 self.elab_out_param_marker(*sp, "semiOutParam", inner)
             }
 
-            SurfaceExpr::Proj(_, expr, proj) => self.elab_proj(expr, proj),
+            SurfaceExpr::Proj(_, expr, proj) => self.elab_proj(expr, proj, projection),
 
             SurfaceExpr::UniverseInst(_, expr, levels) => self.elab_universe_inst(expr, levels),
 
@@ -2584,7 +2648,7 @@ impl<'a> ElabCtx<'a> {
                 scoped,
                 body,
                 ..
-            } => self.elab_open_in(paths, *scoped, body),
+            } => self.elab_open_in(paths, *scoped, body, self.current_expected_type.clone()),
         }
     }
 
@@ -2609,6 +2673,7 @@ impl<'a> ElabCtx<'a> {
         paths: &[clean_parser::OpenPath],
         scoped: bool,
         body: &SurfaceExpr,
+        expected: Option<Expr>,
     ) -> Result<Expr, ElabError> {
         self.namespace_state.push_scope();
         let before = self.namespace_state.activated_scopes().to_vec();
@@ -2639,7 +2704,6 @@ impl<'a> ElabCtx<'a> {
         // the first matching olean `Decidable` instance it scanned (a spurious
         // Bool-deceq garbage), producing a wrong-typed term. Threading the expected
         // type pins `a`/`b` before instance synthesis runs.
-        let expected = self.current_expected_type.clone();
         let result = open_result.and_then(|()| self.elaborate_with_expected_type(body, expected));
         self.restore_instance_state(saved);
         self.namespace_state.pop_scope();
@@ -2670,6 +2734,7 @@ pub(crate) fn surface_expr_kind_name(expr: &SurfaceExpr) -> &'static str {
         SurfaceExpr::Hole(..) => "hole",
         SurfaceExpr::NamedHole(..) => "hole",
         SurfaceExpr::Ascription(..) => "ascription",
+        SurfaceExpr::Borrowed(..) => "borrowedType",
         SurfaceExpr::OutParam(..) => "outParam",
         SurfaceExpr::SemiOutParam(..) => "semiOutParam",
         SurfaceExpr::If(..) => "if",

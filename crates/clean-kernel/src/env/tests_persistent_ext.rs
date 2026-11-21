@@ -366,6 +366,12 @@ impl PersistentExtState for TestState {
         self.names.push(entry.name.clone());
     }
 
+    fn forget_declaration(&mut self, name: &Name) -> bool {
+        let length = self.names.len();
+        self.names.retain(|entry| entry != name);
+        self.names.len() != length
+    }
+
     fn export_entries(&self) -> Vec<EnvExtensionEntry> {
         self.names
             .iter()
@@ -525,4 +531,95 @@ fn test_extension_fold_all_imported() {
     let state = states.get_state::<TestState>(idx).unwrap();
     assert_eq!(state.names.len(), 3);
     assert!(states.is_initialized(idx));
+}
+
+#[test]
+fn declaration_lifetime_preserves_clones_and_transparency_but_retires_replaced_records() {
+    use super::{ConstantInfo, Declaration, Reducibility};
+    use crate::expr::Expr;
+    use crate::level::Level;
+
+    let idx = register_persistent_ext::<TestState>(Name::from_string("test.declarationLifetime"));
+    let name = Name::from_string("D");
+    let ty = Expr::sort(Level::succ(Level::zero()));
+    let declaration = Declaration::Definition {
+        name: name.clone(),
+        level_params: Vec::new(),
+        type_: ty.clone(),
+        value: Expr::prop(),
+        is_reducible: true,
+    };
+    let mut env = Environment::default();
+    env.add_decl(declaration.clone())
+        .expect("initial definition");
+    let mark = |env: &mut Environment| {
+        env.add_ext_entry::<TestState>(idx, &TestEntry { name: name.clone() })
+    };
+    let marked = |env: &Environment| {
+        env.get_ext_state::<TestState>(idx)
+            .expect("materialized")
+            .names
+            .contains(&name)
+    };
+    mark(&mut env);
+    let initial = env.clone();
+    assert!(env.set_reducibility(&name, Reducibility::Irreducible));
+    assert!(env.add_decl(declaration.clone()).is_err());
+    assert!(marked(&env));
+
+    // A replacement can have exactly the old syntax and a different origin.
+    let replacement = ConstantInfo::new(name.clone(), Vec::new(), ty, Some(Expr::prop()), true);
+    assert!(env
+        .extend_constants_structural(std::iter::once(replacement))
+        .is_empty());
+    assert!(!marked(&env));
+    assert!(marked(&initial));
+    mark(&mut env);
+    assert!(env.forget_value(&name));
+    assert!(!marked(&env));
+    mark(&mut env);
+    assert!(env.forget_decl(&name));
+    env.add_decl(declaration)
+        .expect("fresh definition with the same name");
+    assert!(!marked(&env));
+}
+
+#[test]
+fn declaration_lifetime_keeps_a_refused_stub_and_retires_a_completed_one() {
+    use super::Declaration;
+    use crate::expr::Expr;
+    use crate::level::Level;
+
+    let idx = register_persistent_ext::<TestState>(Name::from_string("test.stubLifetime"));
+    let name = Name::from_string("Stub");
+    let ty = Expr::sort(Level::succ(Level::zero()));
+    let mut env = Environment::default();
+    env.add_decl(Declaration::Axiom {
+        name: name.clone(),
+        level_params: Vec::new(),
+        type_: ty.clone(),
+    })
+    .expect("resident stub");
+    env.add_ext_entry::<TestState>(idx, &TestEntry { name: name.clone() });
+    let completion = |value| Declaration::Definition {
+        name: name.clone(),
+        level_params: Vec::new(),
+        type_: ty.clone(),
+        value,
+        is_reducible: true,
+    };
+    assert!(env
+        .upgrade_axiom_to_checked_decl(completion(ty.clone()))
+        .is_err());
+    assert_eq!(
+        env.get_ext_state::<TestState>(idx).expect("retained").names,
+        vec![name.clone()]
+    );
+    env.upgrade_axiom_to_checked_decl(completion(Expr::prop()))
+        .expect("checked completion");
+    assert!(env
+        .get_ext_state::<TestState>(idx)
+        .expect("retained")
+        .names
+        .is_empty());
 }

@@ -42,6 +42,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 HOOK = ROOT / "scripts/githooks/pre-push"
 ZERO = "0" * 40
+PEER = ("peer", "https://example.invalid/peer.git")
 
 STUB = """#!/usr/bin/env python3
 import os, subprocess, sys
@@ -49,6 +50,7 @@ head = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=Tr
 ranges = os.environ.get("CLEAN_PUSH_RANGES", "").strip()
 print(f"STUB ran in {os.path.realpath(os.getcwd())} at {head} "
       f"checkout={os.environ.get('CLEAN_PUSH_CHECKOUT', '')} ranges=[{ranges}]")
+print(f"STUB EV3 head={head} published=[{os.environ.get('CLEAN_EV3_PUBLISHED_MAIN', '<unset>')}]")
 print("STUB verdict: BAD is in the pushed tree" if os.path.exists("BAD") else "STUB verdict: clean")
 print("STUB corpus: " + (open("theories/Required.lean").read().strip()
       if os.path.exists("theories/Required.lean") else "ABSENT"))
@@ -62,7 +64,9 @@ _GIT_LOCATION = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR",
 
 def _env() -> dict[str, str]:
     env = {k: v for k, v in os.environ.items()
-           if k not in _GIT_LOCATION and k not in ("CLEAN_PUSH_CHECKOUT", "CLEAN_PUSH_RANGES")}
+           if k not in _GIT_LOCATION and k not in (
+               "CLEAN_PUSH_CHECKOUT", "CLEAN_PUSH_RANGES", "CLEAN_EV3_PUBLISHED_MAIN",
+               "CLEAN_EV3_SOURCE_ROOT")}
     env.update(GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t", GIT_COMMITTER_NAME="t",
                GIT_COMMITTER_EMAIL="t@t")
     return env
@@ -79,10 +83,11 @@ def commit(repo: Path, msg: str) -> str:
     return git(repo, "rev-parse", "HEAD")
 
 
-def hook(repo: Path, stdin: str, extra_env: dict[str, str] | None = None) -> tuple[int, str]:
+def hook(repo: Path, stdin: str, extra_env: dict[str, str] | None = None, *,
+         destination: tuple[str, str] = PEER) -> tuple[int, str]:
     env = _env()
     env.update(extra_env or {})
-    proc = subprocess.run(["bash", str(HOOK), "origin", "https://example.invalid/x.git"],
+    proc = subprocess.run(["bash", str(HOOK), *destination],
                           cwd=repo, env=env, input=stdin, capture_output=True, text=True,
                           timeout=120)
     return proc.returncode, proc.stdout + proc.stderr
@@ -207,7 +212,7 @@ def arms(tmp: Path) -> list[str]:
     #     holder could both proceed in one checkout.
     holder = os.open(repo / ".git" / "clean-pre-push.flock", os.O_RDWR | os.O_CREAT, 0o644)
     fcntl.flock(holder, fcntl.LOCK_EX)
-    proc = subprocess.Popen(["bash", str(HOOK), "origin", "https://example.invalid/x.git"],
+    proc = subprocess.Popen(["bash", str(HOOK), *PEER],
                             cwd=repo, env=_env(), stdin=subprocess.PIPE,
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     assert proc.stdin is not None
@@ -277,7 +282,7 @@ def arms(tmp: Path) -> list[str]:
         common13 = repo13 / common13
     holder = os.open(common13 / "clean-pre-push.flock", os.O_RDWR | os.O_CREAT, 0o644)
     fcntl.flock(holder, fcntl.LOCK_EX)
-    proc = subprocess.Popen(["bash", str(HOOK), "origin", "https://example.invalid/x.git"],
+    proc = subprocess.Popen(["bash", str(HOOK), *PEER],
                             cwd=repo13, env=_env(), stdin=subprocess.PIPE,
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     assert proc.stdin
@@ -301,13 +306,97 @@ def arms(tmp: Path) -> list[str]:
     rc, out = hook(repo18, line(good18), {"CLEAN_PUSH_CHECKOUT": good18})
     require("18 direct inner invocation refuses skipped tracked entries",
             rc != 0 and "not a full tracked tree" in out and "STUB ran" not in out, out)
+
+    # The stub reports the parent selected by the real hook in the pristine
+    # checkout of each pushed tip. The fixture uses only Git's local config and
+    # the supplied ref tuples.
+    ev3, published, candidate = build(tmp / "a19")
+    fetch_url = "https://example.invalid/origin-fetch.git"
+    push_url = "ssh://example.invalid/origin-push.git"
+    second_push_url = "ssh://example.invalid/origin-mirror.git"
+    git(ev3, "remote", "add", "origin", fetch_url)
+    for url in (push_url, second_push_url):
+        git(ev3, "config", "--add", "remote.origin.pushurl", url)
+    git(ev3, "update-ref", "refs/remotes/origin/main", candidate)
+    inherited = {"CLEAN_EV3_PUBLISHED_MAIN": candidate}
+    main_update = f"refs/heads/feature {candidate} refs/heads/main {published}\n"
+
+    def observation(head: str, prior: str = "") -> str:
+        return f"STUB EV3 head={head} published=[{prior}]"
+
+    rc, out = hook(ev3, line(published, "refs/heads/topic") + main_update,
+                   inherited, destination=("origin", push_url))
+    require("19 only the origin main tip inherits its advertised parent across mixed tips",
+            rc != 0 and out.count("STUB EV3") == 2
+            and observation(published) in out and observation(candidate, published) in out, out)
+
+    rc, out = hook(ev3, main_update + line(candidate, "refs/heads/topic"), inherited,
+                   destination=(second_push_url, second_push_url))
+    require("20 a second configured push URL binds one origin main update when both refs share a tip",
+            rc != 0 and out.count("STUB EV3") == 1
+            and observation(candidate, published) in out, out)
+
+    for name, refs, destination in (
+        ("21 an origin branch push clears inherited EV3 context",
+         line(candidate, "refs/heads/topic"), ("origin", push_url)),
+        ("22 another remote's main push clears inherited EV3 context", line(candidate), PEER),
+        ("23 a manual invocation clears inherited EV3 context", "", ("origin", push_url)),
+    ):
+        rc, out = hook(ev3, refs, inherited, destination=destination)
+        require(name, rc != 0 and out.count("STUB EV3") == 1
+                and observation(candidate) in out, out)
+
+    rc, out = hook(ev3, main_update, destination=("origin", fetch_url))
+    require("24 origin main refuses a destination outside the configured push URLs",
+            rc == 1 and "cannot match the origin/main destination" in out
+            and "gating " not in out and "STUB ran" not in out, out)
+
+    def require_origin_refusal(name: str, ref_inputs: tuple[str, ...]) -> None:
+        results = [hook(ev3, refs, destination=("origin", push_url)) for refs in ref_inputs]
+        require(name, all(rc == 1 and "EV3 requires one origin/main update" in out
+                          and "gating " not in out and "STUB ran" not in out
+                          for rc, out in results),
+                "\n".join(out for _, out in results))
+
+    require_origin_refusal("25 origin main refuses malformed or trailing ref fields", (
+        f"refs/heads/feature {candidate} refs/heads/main malformed\n",
+        f"refs/heads/feature malformed refs/heads/main {published}\n",
+        main_update.rstrip("\n") + " unexpected\n",
+    ))
+    require_origin_refusal("26 origin main refuses duplicate update rows", (main_update * 2,))
+    require_origin_refusal("27 origin main refuses both creation and deletion tuples", (
+        line(candidate),
+        f"(delete) {ZERO} refs/heads/main {published}\n",
+    ))
+
+    # The reused inner checkout gets this push URL only from the original
+    # worktree. The same raw row must still govern its advertised parent.
+    checkout19 = ev3.parent / f".{ev3.name}.pre-push"
+    worktree_push_url = "ssh://example.invalid/worktree-origin.git"
+    git(ev3, "config", "extensions.worktreeConfig", "true")
+    git(ev3, "config", "--worktree", "--add", "remote.origin.pushurl", worktree_push_url)
+    inner = {"CLEAN_PUSH_CHECKOUT": candidate, "CLEAN_EV3_SOURCE_ROOT": str(ev3)}
+    worktree_destination = ("origin", worktree_push_url)
+    forged_rc, forged_out = hook(checkout19, main_update, {**inner, **inherited},
+                                 destination=worktree_destination)
+    rc, out = hook(checkout19, main_update, {**inner, "CLEAN_EV3_PUBLISHED_MAIN": published},
+                   destination=worktree_destination)
+    require("28 direct inner rejects a forged parent and accepts the corresponding raw row context",
+            forged_rc == 1 and "origin/main row differs from the checked-out push context" in forged_out
+            and "STUB ran" not in forged_out and rc == 1 and observation(candidate, published) in out,
+            forged_out + out)
+
+    rc, out = hook(ev3, main_update, destination=("origin", push_url + "\nunconfigured"))
+    require("29 a newline in the destination cannot match one configured URL",
+            rc == 1 and "cannot match the origin/main destination" in out
+            and "gating " not in out and "STUB ran" not in out, out)
     return problems
 
 
 def main() -> int:
     with tempfile.TemporaryDirectory(prefix="pre-push-checkout-") as td:
         problems = arms(Path(td).resolve())
-    print(f"PRE_PUSH_CHECKOUT_SELFTEST arms=18 failed={len(problems)}")
+    print(f"PRE_PUSH_CHECKOUT_SELFTEST arms=29 failed={len(problems)}")
     for p in problems:
         print(p, file=sys.stderr)
     return 1 if problems else 0

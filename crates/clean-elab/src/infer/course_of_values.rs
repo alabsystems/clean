@@ -46,19 +46,18 @@ use clean_parser::{
     SurfaceName, SurfacePattern,
 };
 
-/// The two declarations the pair-threading transform produces from one
-/// course-of-values `def`: the single-step pair-threading auxiliary and the
-/// projecting wrapper that keeps the original surface name.
+/// The ordinary recursive auxiliary carrying prior results, and the
+/// projection that retains the original declaration's public type and name.
 pub(super) struct PairThreaded {
-    /// Auxiliary identity (`f` followed by a separate `cov` component).
+    /// Auxiliary identity nested under the public declaration.
     pub aux_name: SurfaceName,
-    /// Auxiliary type: `Nat → R × R`.
+    /// Auxiliary type, returning a product of results at smaller inputs.
     pub aux_ty: SurfaceExpr,
-    /// Auxiliary value: the single-step pair-threading `PatternMatchLambda`.
+    /// The auxiliary equations recur on an immediate constructor field.
     pub aux_val: SurfaceExpr,
-    /// Wrapper return type `R` (the codomain of the original `Nat → R`).
-    pub wrapper_ret_ty: SurfaceExpr,
-    /// Wrapper value: `fun (n : Nat) => Prod.fst (<aux_name> n)`.
+    /// The complete public function type, including the decreasing argument.
+    pub wrapper_ty: SurfaceExpr,
+    /// The wrapper projects the public result from the auxiliary.
     pub wrapper_val: SurfaceExpr,
 }
 
@@ -232,7 +231,7 @@ pub(super) fn try_pair_thread(
         aux_name: aux_name_of(name),
         aux_ty,
         aux_val,
-        wrapper_ret_ty: ret_ty,
+        wrapper_ty: SurfaceExpr::Arrow(Span::dummy(), Box::new(nat_ident()), Box::new(ret_ty)),
         wrapper_val,
     })
 }

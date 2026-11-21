@@ -204,7 +204,11 @@ fn source_prelude_and_recent_world_never_select_bootstrap_snapshot() {
         .expect("source takes precedence over artifact");
     assert!(!clean_format_source_closure(&path, &choice(&path)).expect("prelude source"));
     std::fs::remove_file(dir.path().join("Library.lean")).expect("restore artifact-only closure");
-    for world in [LeanWorld::Lean435, LeanWorld::Lean436Rc2] {
+    for world in [
+        LeanWorld::Lean435,
+        LeanWorld::Lean436Rc2,
+        LeanWorld::Lean436,
+    ] {
         match clean_olean::source_world_for_file(&path, Some(world)) {
             Ok(decision) => {
                 let setup =

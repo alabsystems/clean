@@ -32,9 +32,9 @@
     "checker_file_sha256": "aa7567a1719230664007e19e708ec91ba955497ff2a4d4c684fe1cda98e403de",
     "run": ".lake/build/bin/lean4lean --import \"$IN\""
   },
-  "binary_sha256": "6d2a0998bf2d2bf91a6db08bc4fd8ed4b35211cd57d2a9734aa21a9ffac87dd7",
+  "binary_sha256": "0dd916fd48fe6ce5fe0b618b85af0b14327d263af7894d97fc08f601420d7ebe",
   "binary_linkage": "static Lean runtime; links only /usr/lib/libc++.dylib and /usr/lib/libSystem.B.dylib",
-  "build_command": "lake build lean4lean, outside this repository in a clone at the commit above, with the Lean toolchain named explicitly (elan's leanprover--lean4---v4.33.0-rc2) on an env -i PATH; heavy_gate.sh run 6 q4u-lean4lean-build",
+  "build_command": "lake build lean4lean, outside this repository at the pinned upstream source plus the declared patches, using genuine official v4.33.0-rc2/d8b18978 in a private verified prefix, env -i PATH and LEAN_NUM_THREADS from build-slot; recorded in reports/self-proof-q4-corrected-reference-2026-11-18.",
   "binary_store": "~/.cache/clean-lean4lean/sha256/<binary_sha256>/lean4lean",
   "runtime_environment": "PATH=/usr/bin:/bin, HOME=TMPDIR=<scratch>, LEAN_ABORT_ON_PANIC=1, under sandbox-exec with network and /Users reads denied",
   "ax0_statement_sha256": {
@@ -43,5 +43,35 @@
     "propext": "a7e79b053038945b52aea815954028ccddb6bf174abb1aabe40e25cc01297d77"
   },
   "ax0_statement_source": "scripts/lean4lean_recheck.py model() over the pinned Lean v4.30.0-rc2 Init export, sha256 2d6910ddbb751d79c7b5688878e5e9ffcadee9299f60ec80f738d567454742f4 (types up to binder names, binder annotations and mdata; universe parameters by position)",
-  "untrusted": "External program built outside this workspace from a public commit; data to the quorum, never vendored; no proof claim"
+  "untrusted": "External program built outside this workspace from a public commit; data to the quorum, never vendored; no proof claim",
+  "patches": [
+    {
+      "file": "data/lean4lean_q4_patches/0001-strict-isProp-structure-reduction.patch",
+      "sha256": "155a722e87a9130b0e4a6448941ebe5e8f07c4088a3c8af385e3dced5027d6ac",
+      "touches": "Lean4Lean/Inductive/Reduce.lean",
+      "path": "Strict proposition classification before structure eta expansion, threaded callback.",
+      "mirrors": "Official Lean v4.34.0 293d5d0c0c3f3dded4688b3ccd6a33939ac5102b; see the corrected-reference report and source comparison."
+    },
+    {
+      "file": "data/lean4lean_q4_patches/0002-pass-strict-isProp-to-recursors.patch",
+      "sha256": "aabdd2fea4ca91078a0d4c2fb194f868ac0d1d466dbfa58ce4296222af06ecb9",
+      "touches": "Lean4Lean/TypeChecker.lean",
+      "path": "Pass existing strict Inner.isProp to inductive recursor reduction.",
+      "mirrors": "Official Lean v4.34.0 293d5d0c0c3f3dded4688b3ccd6a33939ac5102b; see the corrected-reference report and source comparison."
+    },
+    {
+      "file": "data/lean4lean_q4_patches/0003-mapEnvM-declTypeMismatch-maps-env.patch",
+      "sha256": "c64d3b0b9863d6c0fdc0d56b5d1b2ce866ca007139432dff89d24d19fecf041d",
+      "touches": "Lean4Lean/Replay.lean",
+      "path": "Map the declaration-type-mismatch environment after a kernel rejection.",
+      "mirrors": "Official Lean v4.34.0 293d5d0c0c3f3dded4688b3ccd6a33939ac5102b; see the corrected-reference report and source comparison."
+    }
+  ],
+  "reference": {
+    "lean_version": "4.34.0",
+    "lean_githash": "293d5d0c0c3f3dded4688b3ccd6a33939ac5102b",
+    "official_entrypoint_binary_sha256": "928c3d73b723a7427251994186579799c70181edada40b242483fb7bb61b4263",
+    "control_sha256": "fa498cf880a5390e65c3990e8361829a5012de4fae133dbfcd6a81af26f74ca8",
+    "observation": "reports/self-proof-q4-corrected-reference-2026-11-18/control-observation.json"
+  }
 }

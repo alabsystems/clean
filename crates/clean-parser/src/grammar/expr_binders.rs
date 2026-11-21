@@ -19,6 +19,19 @@ fn is_lifted_eliminator_attr(name: &str) -> bool {
     matches!(name, "induction_eliminator" | "cases_eliminator")
 }
 
+/// The names of one bracketed binder group, each with its span, and the
+/// group's optional type.
+type BinderGroupContents = (Vec<(Span, SurfaceName)>, Option<Box<SurfaceExpr>>);
+
+/// Preserve the modifier on compiler enum attributes so the elaborator can
+/// enforce their global-only contract instead of silently dropping the name.
+fn is_lifted_inline_attr(name: &str) -> bool {
+    matches!(
+        name,
+        "inline" | "noinline" | "always_inline" | "macro_inline" | "inline_if_reduce"
+    )
+}
+
 impl Parser {
     /// Parse one or more binders
     pub(super) fn binders(&mut self) -> Result<Vec<SurfaceBinder>, ParseError> {
@@ -195,9 +208,31 @@ impl Parser {
 
     /// Parse explicit binders: (x y z : T) or (x y z) without type
     /// Also supports underscore binders: (_ : T)
+    ///
+    /// Lean's `explicitBinder` is `"(" >> withoutPosition (many1 binderIdent
+    /// >> binderType >> optional (binderTactic <|> binderDefault)) >> ")"`
+    /// (`Lean/Parser/Term/Basic.lean:205-206`, v4.30.0-rc2): inside the
+    /// parentheses no enclosing block's column applies, so `f : ∀ (α : Sort`
+    /// ⏎ `u), …` in a field block reads `u` as the level wherever it sits.
+    /// The closer is matched inside the group here; `expect` checks no
+    /// column, so that is the same parse.
     pub(super) fn explicit_binders(&mut self) -> Result<Vec<SurfaceBinder>, ParseError> {
-        self.expect(&TokenKind::LParen)?;
+        self.explicit_binders_with_tuple_patterns(true)
+    }
 
+    pub(super) fn explicit_binders_with_tuple_patterns(
+        &mut self,
+        allow_tuple_patterns: bool,
+    ) -> Result<Vec<SurfaceBinder>, ParseError> {
+        self.expect(&TokenKind::LParen)?;
+        self.without_position(|parser| parser.explicit_binder_group(allow_tuple_patterns))
+    }
+
+    /// The contents and closer of an explicit binder group, after its `(`.
+    fn explicit_binder_group(
+        &mut self,
+        allow_tuple_patterns: bool,
+    ) -> Result<Vec<SurfaceBinder>, ParseError> {
         let mut names = Vec::new();
         loop {
             match self.current_kind() {
@@ -223,7 +258,7 @@ impl Parser {
 
         // Comma-separated names: (a, b, c) — tuple destructuring pattern
         // Treat as separate binders for parse compatibility
-        if self.check(&TokenKind::Comma) && !names.is_empty() {
+        if allow_tuple_patterns && self.check(&TokenKind::Comma) {
             while self.eat(&TokenKind::Comma) {
                 match self.current_kind() {
                     TokenKind::Ident(name) => {
@@ -327,12 +362,53 @@ impl Parser {
 
     /// Parse implicit binders: {x y z : T} or strict implicit: {{x y z : T}}
     /// Also supports underscore binders: {_ : T}
+    ///
+    /// Lean's `implicitBinder` is `"{" >> withoutPosition (many1 binderIdent
+    /// >> binderType) >> "}"` (`Lean/Parser/Term/Basic.lean:216-217`), so its
+    /// contents have no saved position. Its `strictImplicitBinder` — `{{…}}`
+    /// here, `⦃…⦄` in [`Self::strict_implicit_binders`] — has NO
+    /// `withoutPosition` (`:233-235`) and keeps the enclosing one: Lean
+    /// 4.30.0-rc2 refuses `f : ∀ {{α : Sort` ⏎ `u}}, …` with `u` at or left
+    /// of the field column ("unexpected identifier; expected '}' or '⦄'").
     pub(super) fn implicit_binders(&mut self) -> Result<Vec<SurfaceBinder>, ParseError> {
         self.expect(&TokenKind::LBrace)?;
 
         // Check for strict implicit: {{...}}
         let is_strict = self.eat(&TokenKind::LBrace);
 
+        let (names, ty) = if is_strict {
+            self.implicit_binder_contents()?
+        } else {
+            self.without_position(Self::implicit_binder_contents)?
+        };
+        self.expect(&TokenKind::RBrace)?;
+
+        // For strict implicit, expect closing }}
+        if is_strict {
+            self.expect(&TokenKind::RBrace)?;
+        }
+
+        let binder_info = if is_strict {
+            SurfaceBinderInfo::StrictImplicit
+        } else {
+            SurfaceBinderInfo::Implicit
+        };
+
+        Ok(names
+            .into_iter()
+            .map(|(s, name)| SurfaceBinder {
+                span: s,
+                name,
+                ty: ty.clone(),
+                default: None,
+                info: binder_info,
+            })
+            .collect())
+    }
+
+    /// The names and optional type of an implicit binder group, between its
+    /// brackets.
+    fn implicit_binder_contents(&mut self) -> Result<BinderGroupContents, ParseError> {
         let mut names = Vec::new();
         loop {
             match self.current_kind() {
@@ -362,35 +438,17 @@ impl Parser {
         } else {
             None // Implicit binders without explicit type: {α β}
         };
-        self.expect(&TokenKind::RBrace)?;
-
-        // For strict implicit, expect closing }}
-        if is_strict {
-            self.expect(&TokenKind::RBrace)?;
-        }
-
-        let binder_info = if is_strict {
-            SurfaceBinderInfo::StrictImplicit
-        } else {
-            SurfaceBinderInfo::Implicit
-        };
-
-        Ok(names
-            .into_iter()
-            .map(|(s, name)| SurfaceBinder {
-                span: s,
-                name,
-                ty: ty.clone(),
-                default: None,
-                info: binder_info,
-            })
-            .collect())
+        Ok((names, ty))
     }
 
     /// Parse a unicode strict-implicit binder group `⦃x y : T⦄` (Lean
     /// `BinderInfo.strictImplicit`; the ASCII `{{x : T}}` form is handled by
     /// [`Self::implicit_binders`]). The type annotation is optional (untyped
     /// `⦃x⦄` is legal and elaborates to a metavariable type).
+    ///
+    /// Unlike the other bracketed binders this group keeps the enclosing
+    /// saved position: Lean's `strictImplicitBinder` has no
+    /// `withoutPosition` (`Lean/Parser/Term/Basic.lean:233-235`).
     pub(super) fn strict_implicit_binders(&mut self) -> Result<Vec<SurfaceBinder>, ParseError> {
         self.expect(&TokenKind::StrictLBrace)?;
         let mut names = Vec::new();
@@ -433,8 +491,17 @@ impl Parser {
     }
 
     /// Parse instance binders: `[x : T]` or anonymous `[T]` or `[Ord A]`
+    ///
+    /// Lean's `instBinder` is `"[" >> withoutPosition (optIdent >>
+    /// termParser) >> "]"` (`Lean/Parser/Term/Basic.lean:247-248`), so its
+    /// contents have no saved position.
     pub(super) fn instance_binders(&mut self) -> Result<Vec<SurfaceBinder>, ParseError> {
         self.expect(&TokenKind::LBracket)?;
+        self.without_position(Self::instance_binder_group)
+    }
+
+    /// The contents and closer of an instance binder group, after its `[`.
+    fn instance_binder_group(&mut self) -> Result<Vec<SurfaceBinder>, ParseError> {
         // Token position right after `[`, to re-parse an ANONYMOUS binder's
         // type with the general expression parser (below).
         let type_start = self.pos;
@@ -805,7 +872,7 @@ impl Parser {
                 // refuse this scope rather than silently dropping the whole use.
                 if name == "local"
                     && !self.current().ident_escaped
-                    && (matches!(self.peek_kind(1), Some(TokenKind::Ident(next)) if next == "simp" || next == "csimp" || next == "class" || is_lifted_eliminator_attr(next))
+                    && (matches!(self.peek_kind(1), Some(TokenKind::Ident(next)) if next == "simp" || next == "csimp" || next == "class" || is_lifted_eliminator_attr(next) || is_lifted_inline_attr(next))
                         || matches!(
                             self.peek_kind(1),
                             Some(TokenKind::Instance | TokenKind::Class)
@@ -908,12 +975,7 @@ impl Parser {
                     }
 
                     // === FFI/extern attributes ===
-                    "extern" => {
-                        // @[extern "c_name"]
-                        let c_name = self.parse_optional_string_arg();
-                        self.skip_attribute_args();
-                        Ok(Attribute::Extern(c_name.unwrap_or_default()))
-                    }
+                    "extern" => self.extern_attribute(),
                     "export" => {
                         // @[export name]
                         let export_name = self.parse_optional_ident_arg();
@@ -1011,7 +1073,7 @@ impl Parser {
                 if matches!(
                     self.peek_kind(1),
                     Some(TokenKind::Instance | TokenKind::Class)
-                ) || matches!(self.peek_kind(1), Some(TokenKind::Ident(name)) if name == "csimp" || name == "class" || is_lifted_eliminator_attr(name)) =>
+                ) || matches!(self.peek_kind(1), Some(TokenKind::Ident(name)) if name == "csimp" || name == "class" || is_lifted_eliminator_attr(name) || is_lifted_inline_attr(name)) =>
             {
                 self.advance();
                 let inner = self.single_attribute()?;

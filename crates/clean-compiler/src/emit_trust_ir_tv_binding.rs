@@ -35,44 +35,6 @@
 
 use super::*;
 
-/// [`certify_backend_translation`], minting BOUND certificates (roadmap
-/// WS6.7(b)): every certificate carries a [`CertificateBinding`] that names
-///
-/// * `environment_digest` — [`kernel_environment_digest`] of the anchor
-///   environment the kernel judged the equation in
-///   ([`tv_anchor_environment`], BEFORE the theorem is declared);
-/// * `statement_digest` — [`clean_cic_statement_digest`] of the statement the
-///   kernel checked;
-/// * `source` — `source_of(name)`: the source declaration and the closure
-///   digest (`clean_kernel::Environment::closure_digest`) of the environment
-///   its comparand (`originals[name]`) was read from. It is asked ON DEMAND,
-///   only for a decl the kernel has just certified, so no closure is digested
-///   for a decl that is skipped or refused first; `None` means no identity was
-///   supplied and `Some(Err)` names why it cannot be stated;
-/// * `callees` — the name-sorted callee link symbols the statement quantifies
-///   over; `origin_module = None` (minted in the module that carries it).
-///
-/// Its lineage is the symbol-keyed v8 form
-/// ([`clean_cic_lineage_digest_v8`]), which folds the binding in and survives
-/// id renumbering. A decl whose binding cannot be populated — no source
-/// identity, an `Err` one, or a digest that cannot be stated — is still JUDGED
-/// (a miscompile is REFUSED, exactly as on the unbound path) and then SKIPPED
-/// with the reason: never a partial binding, never an unbound certificate on
-/// this path, and never a `Gated` body without its certificate and evidence.
-///
-/// The shipping default ([`crate::emit_trust_ir::TrustIrConfig::bind_certificates`]):
-/// the pinned trust-ir writes a binding in every format, the binary one at
-/// its certificate-binding version (v61).
-#[cfg(test)]
-#[must_use]
-pub(crate) fn certify_backend_translation_bound(
-    module: &mut Module,
-    originals: &[(String, Expr)],
-    source_of: &dyn Fn(&str) -> Option<Result<SourceDefinitionRef, String>>,
-) -> TvMintReport {
-    certify_with(module, originals, Some(source_of), None)
-}
-
 /// Bound mint using the same original environment as its source identity.
 pub(crate) fn certify_backend_translation_bound_in_environment(
     module: &mut Module,
@@ -140,6 +102,45 @@ pub(super) fn bound_binding(
     binding.source = Some(source);
     binding.callees = callees.iter().map(|(callee, _)| callee.clone()).collect();
     Ok(binding)
+}
+
+// Keep test-only items after production for the structural license audit.
+/// [`certify_backend_translation`], minting BOUND certificates (roadmap
+/// WS6.7(b)): every certificate carries a [`CertificateBinding`] that names
+///
+/// * `environment_digest` — [`kernel_environment_digest`] of the anchor
+///   environment the kernel judged the equation in
+///   ([`tv_anchor_environment`], BEFORE the theorem is declared);
+/// * `statement_digest` — [`clean_cic_statement_digest`] of the statement the
+///   kernel checked;
+/// * `source` — `source_of(name)`: the source declaration and the closure
+///   digest (`clean_kernel::Environment::closure_digest`) of the environment
+///   its comparand (`originals[name]`) was read from. It is asked ON DEMAND,
+///   only for a decl the kernel has just certified, so no closure is digested
+///   for a decl that is skipped or refused first; `None` means no identity was
+///   supplied and `Some(Err)` names why it cannot be stated;
+/// * `callees` — the name-sorted callee link symbols the statement quantifies
+///   over; `origin_module = None` (minted in the module that carries it).
+///
+/// Its lineage is the symbol-keyed v8 form
+/// ([`clean_cic_lineage_digest_v8`]), which folds the binding in and survives
+/// id renumbering. A decl whose binding cannot be populated — no source
+/// identity, an `Err` one, or a digest that cannot be stated — is still JUDGED
+/// (a miscompile is REFUSED, exactly as on the unbound path) and then SKIPPED
+/// with the reason: never a partial binding, never an unbound certificate on
+/// this path, and never a `Gated` body without its certificate and evidence.
+///
+/// The shipping default ([`crate::emit_trust_ir::TrustIrConfig::bind_certificates`]):
+/// the pinned trust-ir writes a binding in every format, the binary one at
+/// its certificate-binding version (v61).
+#[cfg(test)]
+#[must_use]
+pub(crate) fn certify_backend_translation_bound(
+    module: &mut Module,
+    originals: &[(String, Expr)],
+    source_of: &dyn Fn(&str) -> Option<Result<SourceDefinitionRef, String>>,
+) -> TvMintReport {
+    certify_with(module, originals, Some(source_of), None)
 }
 
 /// TEST ORACLE: the license this minter stamps on `fid` once it certified it

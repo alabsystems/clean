@@ -7,6 +7,165 @@ use super::*;
 use crate::import::typed_imports::typed_import_count;
 
 #[test]
+fn bootstrap_and_authored_roots_replay_each_shared_capture_once() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    write(root, "Init", "Bootstrap.a", &[("Shared", false)]);
+    write(root, "Shared", "Shared.a", &[]);
+    write(root, "Authored", "Authored.a", &[("Shared", false)]);
+    let paths = [root.to_path_buf()];
+    let roots = [Name::from_string("Authored")];
+    let init = Name::from_string("Init");
+
+    let load = |env: &mut Environment, max_modules, check: &mut BytesGuard<'_>| {
+        load_captured_graph(
+            env,
+            &roots,
+            Some(&init),
+            &paths,
+            &ModuleCache::new(),
+            false,
+            None,
+            Some(check),
+            true,
+            Some(ModuleCaptureLimits::new(
+                usize::MAX,
+                usize::MAX,
+                max_modules,
+                1,
+            )),
+            None,
+        )
+    };
+
+    for max_modules in [1, 2] {
+        let mut env = Environment::default();
+        let mut checked = Vec::new();
+        let result = load(&mut env, max_modules, &mut |name, _, _| {
+            checked.push(name.to_string());
+            Ok(())
+        });
+        if max_modules == 1 {
+            assert!(matches!(result, Err(ImportError::ResourceLimit { .. })));
+            assert_eq!(checked, ["Authored"]);
+            assert_eq!(env.num_constants(), 0);
+        } else {
+            let order: Vec<_> = result
+                .unwrap()
+                .into_iter()
+                .map(|row| row.module_name.unwrap())
+                .collect();
+            assert_eq!(order, ["Shared", "Init", "Authored"]);
+            assert_eq!(checked, ["Authored", "Shared"]);
+            for name in ["Shared.a", "Bootstrap.a", "Authored.a"] {
+                assert!(env.get_const(&Name::from_string(name)).is_some());
+            }
+        }
+    }
+
+    write(root, "Init", "Bootstrap.a", &[("OnlyBootstrap", false)]);
+    let mut env = Environment::default();
+    let result = load(&mut env, 2, &mut |_, _, _| Ok(()));
+    assert!(matches!(result, Err(ImportError::Bootstrap(source))
+        if source.to_string().contains("OnlyBootstrap")));
+    assert_eq!(env.num_constants(), 0);
+
+    // A good explicit graph cannot stand in for the implicit Init root.
+    std::fs::remove_file(root.join("Init.olean")).unwrap();
+    let mut env = Environment::default();
+    let result = load(&mut env, 2, &mut |_, _, _| Ok(()));
+    assert!(matches!(result, Err(ImportError::Bootstrap(source))
+        if matches!(*source, ImportError::ModuleNotFound { .. }) && source.to_string().contains("Init")));
+    assert_eq!(env.num_constants(), 0);
+}
+
+#[test]
+fn bootstrap_and_authored_roots_keep_the_same_bytes_after_a_shared_guard_callback() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    write(root, "Init", "Bootstrap.a", &[("Shared", false), ("InitOnly", false)]);
+    write(root, "Shared", "Shared.a", &[]);
+    write(root, "InitOnly", "InitOnly.a", &[]);
+    write(root, "Authored", "Authored.a", &[("Shared", false)]);
+    std::fs::create_dir(root.join("InitOnly.ir")).unwrap();
+    let shared_path = root.join("Shared.olean");
+    let original = std::fs::read(&shared_path).unwrap();
+    let mut checked = Vec::new();
+    let mut env = Environment::default();
+
+    load_captured_graph(
+        &mut env,
+        &[Name::from_string("Authored")],
+        Some(&Name::from_string("Init")),
+        &[root.to_path_buf()],
+        &ModuleCache::new(),
+        false,
+        None,
+        Some(&mut |name, _, captured| {
+            checked.push(name.to_string());
+            if name.to_string() == "Shared" {
+                assert_eq!(captured.base, original.as_slice());
+                std::fs::write(&shared_path, b"the bootstrap must reuse the captured bytes").unwrap();
+            }
+            Ok(())
+        }),
+        true,
+        Some(ModuleCaptureLimits::new(usize::MAX, usize::MAX, 2, 1)),
+        None,
+    )
+    .unwrap();
+
+    assert_eq!(checked, ["Authored", "Shared"]);
+    for name in ["Bootstrap.a", "Shared.a", "InitOnly.a", "Authored.a"] {
+        assert!(env.get_const(&Name::from_string(name)).is_some(), "{name}");
+    }
+}
+
+#[test]
+fn explicitly_reached_bootstrap_artifacts_keep_their_format_errors_but_not_authored_policy_errors()
+{
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    let init = Name::from_string("Init");
+    let roots = [init.clone()];
+    let paths = [root.to_path_buf()];
+    let load = |limits, check: &mut BytesGuard<'_>| {
+        let mut env = Environment::default();
+        let result = load_captured_graph(
+            &mut env,
+            &roots,
+            Some(&init),
+            &paths,
+            &ModuleCache::new(),
+            false,
+            None,
+            Some(check),
+            true,
+            Some(limits),
+            None,
+        );
+        assert_eq!(env.num_constants(), 0);
+        result.unwrap_err()
+    };
+    let limits = ModuleCaptureLimits::new(usize::MAX, usize::MAX, 3, 2);
+    for invalid in ["Init", "Shared", "Leaf"] {
+        write(root, "Init", "Init.a", &[("Shared", false)]);
+        write(root, "Shared", "Shared.a", &[("Leaf", false)]);
+        write(root, "Leaf", "Leaf.a", &[]);
+        std::fs::write(root.join(format!("{invalid}.olean")), b"garbage\n").unwrap();
+        assert!(matches!(load(limits, &mut |_, _, _| Ok(())),
+            ImportError::Bootstrap(err) if matches!(*err, ImportError::Parse(_))));
+    }
+    let refusal = load(limits, &mut |_, _, _| Err(ImportError::Interrupted));
+    assert!(matches!(refusal, ImportError::Interrupted));
+    let limit = ModuleCaptureLimits::new(1, usize::MAX, 3, 2);
+    assert!(matches!(
+        load(limit, &mut |_, _, _| Ok(())),
+        ImportError::ResourceLimit { .. }
+    ));
+}
+
+#[test]
 fn explicit_limits_preserve_the_ordinary_checked_population_and_order() {
     let dir = tempfile::tempdir().unwrap();
     write(dir.path(), "Root", "Root.a", &[("Child", false)]);
@@ -88,8 +247,8 @@ fn total_bytes_are_shared_by_roots_and_dependencies_before_registration() {
         },
     );
     assert!(
-        matches!(result, Err(ImportError::FileUnreadable { path, source })
-        if path.ends_with("Child.olean") && source.kind() == std::io::ErrorKind::InvalidData)
+        matches!(result, Err(ImportError::ResourceLimit { reason, .. })
+        if reason.contains("Child.olean") && reason.contains("remaining graph capture budget"))
     );
     assert_eq!(captured, [Name::from_string("Root")]);
     assert_eq!(env.constants().count(), 0);
@@ -390,8 +549,8 @@ fn a_file_grown_after_the_path_guard_is_bounded_by_the_actual_descriptor() {
         },
     );
     assert!(
-        matches!(result, Err(ImportError::FileUnreadable { path: failed, source })
-        if failed == path && source.kind() == std::io::ErrorKind::InvalidData)
+        matches!(result, Err(ImportError::ResourceLimit { reason, .. })
+        if reason.contains(&*path.to_string_lossy()) && reason.contains("per-part"))
     );
     assert_eq!(checked, 0);
     assert_eq!(env.constants().count(), 0);
@@ -420,7 +579,7 @@ fn optional_ir_spends_the_same_budget_and_preserves_absence_and_empty() {
         },
     );
     assert!(
-        matches!(result, Err(ImportError::FileUnreadable { path: failed, .. }) if failed == ir)
+        matches!(result, Err(ImportError::ResourceLimit { reason, .. }) if reason.contains(&*ir.to_string_lossy()))
     );
     assert_eq!(checked, 0);
     assert_eq!(env.constants().count(), 0);
@@ -450,6 +609,50 @@ fn optional_ir_spends_the_same_budget_and_preserves_absence_and_empty() {
 }
 
 #[test]
+fn checked_ir_signature_is_bounded_and_part_of_cache_identity() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("Root.olean");
+    let root = bytes("Root.a", &[]);
+    std::fs::write(&path, &root).unwrap();
+    let signature = path.with_extension("ir.sig");
+    std::fs::write(&signature, b"first").unwrap();
+
+    // The actual checked loader must spend the remaining budget before the
+    // callback can see or approve any portion of this module.
+    let mut env = Environment::default();
+    let refused = load_modules_with_deps_checked_with_limits(
+        &mut env,
+        &["Root".into()],
+        &[dir.path().into()],
+        ModuleCaptureLimits::new(root.len(), root.len(), 1, 0),
+        &mut |_, _, _| Ok(()),
+        &mut |_, _, _| panic!("signature bytes must be charged before the callback"),
+    );
+    assert!(matches!(
+        refused,
+        Err(ImportError::ResourceLimit { operation, reason })
+            if operation == "capturing the module graph" && reason == format!(
+                "`{}` has 5 bytes, exceeding the remaining graph capture budget ({} used, {} limit)",
+                signature.display(), root.len(), root.len()
+            )
+    ));
+    assert_eq!(env.constants().count(), 0);
+
+    let capture = || {
+        CapturedModule::read(&path)
+            .unwrap()
+            .capture_ir(&path)
+            .unwrap()
+    };
+    let first = capture();
+    let cache = ModuleCache::new();
+    cache.insert_direct(first.path.clone(), first.parse().unwrap());
+    assert!(cache.get_direct(&capture()).is_some());
+    std::fs::write(&signature, b"other").unwrap();
+    assert!(cache.get_direct(&capture()).is_none());
+}
+
+#[test]
 fn a_real_checked_cache_hit_cannot_bypass_a_stricter_capture_budget() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("Root.olean");
@@ -462,12 +665,14 @@ fn a_real_checked_cache_hit_cannot_bypass_a_stricter_capture_budget() {
     load_captured_graph(
         &mut original,
         &roots,
+        None,
         &paths,
         &cache,
         false,
         Some(&mut |_, _, _| Ok(())),
         Some(&mut |_, _, _| Ok(())),
         true,
+        None,
         None,
     )
     .unwrap();
@@ -484,6 +689,7 @@ fn a_real_checked_cache_hit_cannot_bypass_a_stricter_capture_budget() {
     let result = load_captured_graph(
         &mut fresh,
         &roots,
+        None,
         &paths,
         &cache,
         false,
@@ -494,8 +700,9 @@ fn a_real_checked_cache_hit_cannot_bypass_a_stricter_capture_budget() {
         }),
         true,
         Some(ModuleCaptureLimits::new(root.len() - 1, root.len(), 1, 0)),
+        None,
     );
-    assert!(matches!(result, Err(ImportError::FileUnreadable { .. })));
+    assert!(matches!(result, Err(ImportError::ResourceLimit { .. })));
     assert_eq!(checked, 0);
     assert_eq!(fresh.constants().count(), 0);
 }

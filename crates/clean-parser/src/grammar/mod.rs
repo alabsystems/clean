@@ -143,8 +143,9 @@ pub struct Parser {
     /// precedence than an application argument). Without this, `show True by
     /// trivial` would parse the type as the application `True (by trivial)`.
     stop_app_at_by: bool,
-    /// When true, `Type` does NOT consume a following token as its universe
-    /// level — it parses as the bare sort.
+    /// When true, `Type` / `Sort` do NOT consume a following token as their
+    /// universe level — they parse as the bare sort (Lean's `checkPrec
+    /// leadPrec` on the level; see `Parser::sort_level_follows`).
     ///
     /// Lean parses an application ARGUMENT at max precedence, where `Type` is
     /// atomic: `@Eq.rec Type Y motive rfl Z h` passes `Type` and `Y` as two
@@ -168,6 +169,8 @@ pub struct Parser {
     /// identifier tokens to the lexer, so without this the target parse absorbs
     /// them (and `r`/`x`) as arguments, yielding `TacticFailed(UnknownIdent)`.
     stop_app_at_generalizing_using: bool,
+    /// Stop a tactic's term just before its `at` location.
+    stop_app_at_location: bool,
     /// When true, identifiers immediately followed by `:=` are not considered
     /// atom starts. Used by `struct_field_value_expr` so that full-expression
     /// parsing of a struct-literal field value stops at the next field's name
@@ -266,10 +269,14 @@ pub struct Parser {
     /// declares no operators — in which case `custom_op_expr` is a transparent
     /// pass-through to `app_expr`.
     custom_operators: Vec<custom_notation::CustomOperator>,
+    /// Fast path for files that never register a postfix below the arithmetic band.
+    /// Scope resolution still checks each declaration when this is true.
+    has_low_postfix: bool,
     /// User-declared CLOSED multi-hole `notation` patterns (leading + trailing
     /// literal, e.g. `notation:max "⟪" a ", " b "⟫" => …`). Registered and
     /// consumed alongside `custom_operators`; see `custom_notation.rs`.
     custom_mixfixes: Vec<custom_notation::CustomMixfix>,
+    imported_term_prefixes: crate::ImportedTermPrefixes,
     /// The Lean precedence of the operand slot currently being parsed — the
     /// context a user-declared operator must bind at least as tightly as to be
     /// consumed. Set by every builtin right-operand parse in the operator
@@ -277,6 +284,8 @@ pub struct Parser {
     /// full-expression entry (`expr()`), and only read when the file declared
     /// custom notation. See `custom_notation.rs` (B100).
     custom_min_prec: u32,
+    /// Compound delimiter atoms that end an operand currently being parsed.
+    mixfix_operand_ends: Vec<Vec<TokenKind>>,
     /// Which Lean precedence level the current full-expression slot opens.
     ///
     /// `↔` is `infix:20` — LOOSER than `→` (`infixr:25`) — so a `↔` met inside
@@ -389,6 +398,7 @@ impl Parser {
                 &entry.pattern,
                 entry.expansion.clone(),
                 entry.scope_ns.clone(),
+                false, // Imported notation survived its defining module.
                 // The harvester reads no `set_option hygiene false`: an
                 // imported template it records is hygienic.
                 true,
@@ -417,6 +427,7 @@ impl Parser {
             stop_app_at_by: false,
             type_atomic_in_arg: false,
             stop_app_at_generalizing_using: false,
+            stop_app_at_location: false,
             in_where_block: false,
             in_struct_field: false,
             in_struct_pattern_field: false,
@@ -434,8 +445,11 @@ impl Parser {
             tactic_patterns,
             expr_depth: 0,
             custom_operators: Vec::new(),
+            has_low_postfix: false,
             custom_mixfixes: Vec::new(),
+            imported_term_prefixes: crate::ImportedTermPrefixes::default(),
             custom_min_prec: custom_notation::CUSTOM_PREC_FLOOR,
+            mixfix_operand_ends: Vec::new(),
             expr_slot: expr_operators::ExprSlot::Term,
             pending_binder_guards: Vec::new(),
             notation_ns_stack: Vec::new(),
@@ -527,16 +541,20 @@ fn associate_docs(decls: &[SurfaceDecl], raw_docs: Vec<DocComment>) -> Vec<DocCo
         if let Some(last) = result.last_mut() {
             let last: &mut DocComment = last;
             if last.span == decl_span {
-                last.text = doc.text;
+                *last = doc;
+                last.span = decl_span;
                 continue;
             }
         }
-        result.push(DocComment::new(decl_span, doc.text));
+        let mut attached = doc;
+        attached.span = decl_span;
+        result.push(attached);
     }
     result
 }
 
 mod custom_notation;
+mod imported_terms;
 pub(crate) use custom_notation::hygienic_expansion;
 mod decl;
 mod entry_points;
@@ -551,6 +569,7 @@ mod expr_lambda_let;
 mod expr_match;
 mod expr_mul;
 mod expr_operators;
+mod extern_attr;
 mod helpers;
 mod macros;
 mod qq;
@@ -568,6 +587,8 @@ mod class_attribute_scope_tests;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
+mod tests_application_spans;
+#[cfg(test)]
 mod tests_cmp_arrow;
 #[cfg(test)]
 mod tests_do;
@@ -581,6 +602,8 @@ mod tests_exact;
 mod tests_interpolation;
 #[cfg(test)]
 mod tests_name_strategy;
+#[cfg(test)]
+mod tests_sort_level;
 #[cfg(test)]
 mod tests_tactic;
 #[cfg(test)]

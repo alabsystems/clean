@@ -141,8 +141,8 @@ impl OriginBuilder {
         let span = expr.span();
         let ids = self.by_span.get(&(span.start, span.end))?;
         // Repeated successful attempts can describe the very same source
-        // subtree. Requiring agreement with the whole graph excludes a leaf
-        // sharing the deliberately narrow legacy application span.
+        // subtree. A matching range alone does not establish agreement with
+        // the whole supported surface graph and its metadata.
         ids.iter()
             .rev()
             .copied()
@@ -185,8 +185,7 @@ impl OriginBuilder {
                 | TokenKind::StringLit(_),
             ) if tokens.len() == 1 => Core::Lit(value.clone()),
             (SurfaceExpr::Hole(_), TokenKind::Underscore) if tokens.len() == 1 => Core::Hole,
-            (SurfaceExpr::Hole(_), TokenKind::Question) if tokens.len() <= 2 => Core::Hole,
-            (SurfaceExpr::NamedHole(_, name), TokenKind::Question) if tokens.len() == 2 => {
+            (SurfaceExpr::NamedHole(_, name), TokenKind::Question) if tokens.len() <= 2 => {
                 Core::NamedHole(name.clone())
             }
             (SurfaceExpr::Paren(_, inner), TokenKind::LParen)

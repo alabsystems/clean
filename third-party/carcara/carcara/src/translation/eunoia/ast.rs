@@ -1,3 +1,4 @@
+// Modified in Clean: typed array-lambda dialect and explicit lambda export refusal.
 //! AST representation of a fragment of Eunoia required to mechanize Alethe proofs.
 use crate::translation::Symbol;
 
@@ -107,6 +108,10 @@ pub enum EunoiaLitCategory {
 // NOTE: a more expressive grammar, to enforce compositional semantics
 #[derive(Debug, Eq, PartialEq, Clone, Hash)]
 pub enum EunoiaTerm {
+    /// DATA recording an unsupported source binder. The fallible printer
+    /// refuses this recursively; it is never encoded as a different formula.
+    UnsupportedLambda,
+
     // TODO: it is not clear how to includes Types and Kinds
     Type(EunoiaType),
 

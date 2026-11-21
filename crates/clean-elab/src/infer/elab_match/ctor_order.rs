@@ -750,7 +750,7 @@ impl<'a> ElabCtx<'a> {
                     &full_ctor,
                     &normalized,
                 )
-                .map(Some)
+                .map(|fields| Some(fields.into_owned()))
             }
             SurfacePattern::Lit(SurfaceLit::Nat(k)) if *k > 0 => {
                 if ctor_surface != type_name.append(&SurfaceName::generated_path("succ")) {
@@ -987,18 +987,17 @@ impl<'a> ElabCtx<'a> {
     /// exhaustive shapes produce a sorry-free term the kernel accepts; a
     /// non-exhaustive column falls through to an explicit elaboration error.
     ///
-    /// Returns `Ok(None)` (defer to the legacy chain) whenever the arm shapes
-    /// fall outside the conservative envelope handled here, so working single-
-    /// arm / wildcard-catch-all shapes keep their existing lowering byte-for-byte.
+    /// Returns `Ok(None)` to defer unsupported shapes to the existing chain.
     ///
-    /// `alts[i]` is the source index of the alternative `rows[i]` came from.
+    /// `alts[i]` is the source index of a constructor-specific alternative;
+    /// a global wildcard may also match another outer constructor.
     /// `Err(ElabError::RedundantAlternative)` when the field tree never selects
     /// some row: Lean refuses that match, so the caller must not fall back.
     fn compile_ctor_field_column_split(
         &mut self,
         ctor_name: &Name,
         rows: &[(Vec<SurfacePattern>, SurfaceExpr)],
-        alts: &[usize],
+        alts: &[Option<usize>],
         scrutinee_ty: &Expr,
         branch_ty: &Expr,
         extra_param_info: &[ExtraParamBinding],
@@ -1023,7 +1022,7 @@ impl<'a> ElabCtx<'a> {
         &mut self,
         ctor_name: &Name,
         rows: &[(Vec<SurfacePattern>, SurfaceExpr)],
-        alts: &[usize],
+        alts: &[Option<usize>],
         scrutinee_ty: &Expr,
         branch_ty: &Expr,
         extra_param_info: &[ExtraParamBinding],
@@ -1114,12 +1113,16 @@ impl<'a> ElabCtx<'a> {
             else {
                 return Ok(None);
             };
-            // Every row here names `ctor_name` at the top, so one the field
-            // tree never selects is selected by no value at all.
             if let Some(row) = reach.first_unreached() {
+                // A wildcard that is unreachable for this constructor may be
+                // the only matching arm of another one. Let the enclosing
+                // dispatch chain handle that arm’s reachability.
+                let Some(alt) = alts[row] else {
+                    return Ok(None);
+                };
                 return Err(redundant_alternative(
                     &format!("the match on `{}`", ctor_info.inductive_name),
-                    alts.get(row).copied().unwrap_or(row),
+                    alt,
                 ));
             }
             let saved_expected = self.current_expected_type.clone();
@@ -1170,13 +1173,12 @@ impl<'a> ElabCtx<'a> {
     /// `column_tys`). Used by [`Self::compile_ctor_field_column_split`]; the
     /// produced surface tree is elaborated + kernel-checked by the caller.
     ///
-    /// Each row carries the remaining column patterns, a list of *pending `let`
-    /// bindings* `(user_var, column_ident)` — a column consumed by a binder
-    /// sub-pattern binds the user's variable to that column's fresh field local
-    /// so the body still sees it — and the body.
+    /// Each row carries its remaining column patterns, pending variable patterns
+    /// `(user_var, column_ident)` and body. A variable pattern exposes the field
+    /// under its source name in the leaf's dependent result type.
     ///
     /// * Base case (`field_names` empty): the first (earliest source) row wins;
-    ///   its body is wrapped in its pending `let` bindings.
+    ///   its body is wrapped in its pending variable patterns.
     /// * Otherwise split on the first field. Rows are grouped, in first-seen
     ///   order, by the head of their first sub-pattern (constructors — including
     ///   `Nat` literals, `n + k` numeral-adds normalized to `Nat.succ`/
@@ -1186,7 +1188,7 @@ impl<'a> ElabCtx<'a> {
     ///   and recurses with those field columns (and their types) prepended to the
     ///   remaining columns. A genuine binder (`Var` naming no constructor, or
     ///   `_`) is a catch-all that joins every constructor group AND forms a
-    ///   trailing default arm; a named binder records a pending `let`. An
+    ///   trailing default arm; a named binder records a pending binding. An
     ///   as-pattern records its alias for the original column and classifies
     ///   its inner pattern, so the alias does not change constructor coverage.
     ///
@@ -1208,14 +1210,23 @@ impl<'a> ElabCtx<'a> {
 
         let Some((col, rest_fields)) = field_names.split_first() else {
             // No columns left: the first (earliest source) row wins; wrap its
-            // body in the pending `let` bindings (outermost binding first).
+            // body in its variable patterns (outermost binding first).
             let Some((_, binds, body, origin)) = rows.first() else {
                 return Ok(None);
             };
             reach.reach(*origin);
             let mut result = body.clone();
             for (name, value_ident) in binds.iter().rev() {
-                result = typed_let(name.clone(), typed_ident(value_ident.clone()), result);
+                result = SurfaceExpr::Match(
+                    Span::dummy(),
+                    None,
+                    Box::new(typed_ident(value_ident.clone())),
+                    vec![SurfaceMatchArm {
+                        span: Span::dummy(),
+                        pattern: SurfacePattern::Var(name.clone()),
+                        body: result,
+                    }],
+                );
             }
             return Ok(Some(result));
         };
@@ -1248,6 +1259,20 @@ impl<'a> ElabCtx<'a> {
                     }
                 }
                 SurfacePattern::Ctor(name, subs) => {
+                    if name.same_syntax(&SurfaceName::generated_path("Prod.mk")) {
+                        let owner = col_type_name.as_ref()?;
+                        this.check_imported_private_anon_pattern(owner.name(), name)
+                            .ok()?;
+                        if let Some((ctor, fields)) =
+                            this.remap_anon_tuple_to_structure(owner, subs)
+                        {
+                            return Some(Head::Ctor(ctor, fields));
+                        }
+                        if let Some(ctor) = this.remap_anonymous_tuple_ctor(owner, name, subs.len())
+                        {
+                            return Some(Head::Ctor(ctor, subs.clone()));
+                        }
+                    }
                     // Resolve the (possibly short) constructor name against the
                     // column type, exactly as the `Var` branch above does — a
                     // nested arm writes `some (some n)` with the short `some`,
@@ -1280,7 +1305,7 @@ impl<'a> ElabCtx<'a> {
         };
 
         // A row after its first column has been consumed. `binds` carries any new
-        // pending `let` from a binder column (a named binder binds `col`).
+        // pending name from a binder column (a named binder binds `col`).
         type SplitRow = ColumnSplitRow;
 
         // Classify every row's first sub-pattern ONCE, preserving source order.
@@ -1344,7 +1369,7 @@ impl<'a> ElabCtx<'a> {
             }
         }
 
-        // Extend a binder row's pending `let`s with this column's binding (a
+        // Extend a binder row's pending names with this column's binding (a
         // named binder binds `col`; a wildcard binds nothing).
         let binder_row_binds =
             |name: &Option<SurfaceName>, binds: &[(SurfaceName, SurfaceName)]| {
@@ -1385,7 +1410,7 @@ impl<'a> ElabCtx<'a> {
             // Specialize the matrix for this constructor IN SOURCE ORDER
             // (B05, see above): a row naming this constructor contributes its
             // field sub-patterns; a binder row also matches it and contributes
-            // all-wildcard fields (plus its pending `let`); a row naming a
+            // all-wildcard fields (plus its pending binding); a row naming a
             // DIFFERENT constructor is irrelevant to this group and is
             // dropped. Relative row order is preserved throughout, so the
             // recursion's "first row wins" base case is Lean's first-row
@@ -1440,7 +1465,7 @@ impl<'a> ElabCtx<'a> {
         // into the default: when a column carries only binders (e.g. the head of
         // a `cons` pattern), the remaining columns must still discriminate every
         // row, so the whole catch-all matrix is threaded forward in source order.
-        // Each row's binder for `col` was already recorded as a pending `let`.
+        // Each row's binder for `col` was already recorded as a pending binding.
         //
         // Not when the groups already name EVERY constructor of the column's
         // type (a complete signature, `super::signature`): no value reaches
@@ -1565,9 +1590,9 @@ impl<'a> ElabCtx<'a> {
         // explicit failure). We try this *before* the chain so an exhaustive
         // concrete cover is compiled as one total field match.
         //
-        // Gated to the case the chain gets wrong: an all-concrete-constructor
-        // cover (no wildcard catch-all — that path already has a real body) with
-        // at least one field sub-pattern that itself selects a constructor.
+        // Try constructor-specific rows and dependent rows with a default.
+        // A nested field that occurs in an annotated discriminant's equation
+        // must be refined at every column before elaborating the witness.
         // Tactic `Hole` bodies are valid here too: the refine bridge preserves
         // common captured-field identities across the resulting leaf goals, so
         // each hole remains attached to the binders surrounding the match term.
@@ -1580,13 +1605,21 @@ impl<'a> ElabCtx<'a> {
             .iter()
             .map(|(_, arm, _)| arm.body.clone())
             .collect();
-        let relevant_alts: Vec<usize> = relevant.iter().map(|(idx, _, _)| *idx).collect();
-        if !has_catch_all {
+        let relevant_alts: Vec<_> = relevant
+            .iter()
+            .map(|(idx, _, catch_all)| (!*catch_all).then_some(*idx))
+            .collect();
+        if !has_catch_all || self.match_dependent_motive.is_some() {
             let mut split_rows = Some(Vec::with_capacity(relevant_patterns.len()));
             for (pat, body) in relevant_patterns.iter().zip(relevant_bodies.iter()) {
-                let Some(sub_pats) =
+                let fields = if matches!(pat, SurfacePattern::Wildcard) {
+                    self.env
+                        .get_constructor(ctor_name)
+                        .map(|ctor| vec![SurfacePattern::Wildcard; ctor.num_fields as usize])
+                } else {
                     self.ctor_dispatch_arm_field_pats(ctor_name, pat, type_name)?
-                else {
+                };
+                let Some(sub_pats) = fields else {
                     split_rows = None;
                     break;
                 };

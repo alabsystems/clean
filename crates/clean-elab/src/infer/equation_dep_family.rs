@@ -222,6 +222,36 @@ fn check_leaf_for(env: &Environment, refined: &Name, leaf: &SurfacePattern) -> O
     Some(())
 }
 
+/// The possible first-column heads in a dependent match on an enumeration.
+pub(super) fn enum_constructors<'env>(env: &'env Environment, name: &Name) -> Option<&'env [Name]> {
+    let family = env.get_inductive(name)?;
+    (family.num_indices == 0
+        && family.constructor_names.iter().all(|name| {
+            env.get_constructor(name)
+                .is_some_and(|ctor| ctor.num_fields == 0)
+        }))
+    .then_some(&family.constructor_names)
+}
+
+/// A named, nonrecursive two-column family can also have an applied result
+/// like `And P Q`. When its first column consists only of enum constructors,
+/// the typed pattern-lambda path specializes the full domain in each branch.
+pub(super) fn has_dependent_enum_patterns(
+    env: &Environment,
+    domains: &[(SurfaceExpr, Option<SurfaceName>, SurfaceBinderInfo)],
+    arm_leaves: &[Vec<SurfacePattern>],
+) -> bool {
+    let Some(dep) = detect_dependent_domain(env, domains) else {
+        return false;
+    };
+    enum_constructors(env, dep.col0_ind.name()).is_some()
+        && arm_leaves.iter().any(|row| is_structural_pattern(&row[1]))
+        && arm_leaves.iter().all(|row| {
+            matches!(&row[0], SurfacePattern::Ctor(ctor, fields)
+                if fields.is_empty() && resolve_nullary_ctor(env, &dep.col0_ind, ctor).is_some())
+        })
+}
+
 /// The Brick-88 lowering. All-or-nothing: `None` leaves the caller's state
 /// untouched and the def on today's path byte-identically.
 pub(super) fn try_emit_dependent_family(

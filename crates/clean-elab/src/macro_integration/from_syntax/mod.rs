@@ -246,6 +246,17 @@ pub fn syntax_to_surface(syntax: &Syntax) -> Option<SurfaceExpr> {
                     };
                     Some(SurfaceExpr::Hole(span))
                 }
+                "syntheticHole" => {
+                    let name = match node.children.as_slice() {
+                        [] => clean_parser::SurfaceName::default(),
+                        [tag] => tag.as_ident()?.clone(),
+                        _ => return None,
+                    };
+                    Some(SurfaceExpr::NamedHole(
+                        Span::new(node.info.start, node.info.end),
+                        name,
+                    ))
+                }
 
                 "syntheticSorry" => Some(SurfaceExpr::SyntheticSorry(Span::dummy())),
 
@@ -311,6 +322,14 @@ pub fn syntax_to_surface(syntax: &Syntax) -> Option<SurfaceExpr> {
                     let name = node.children[0].as_ident()?.clone();
                     let expr = syntax_to_surface(&node.children[1])?;
                     Some(SurfaceExpr::NamedArg(Span::dummy(), name, Box::new(expr)))
+                }
+
+                "borrowedType" => {
+                    if node.children.len() != 1 {
+                        return None;
+                    }
+                    let inner = syntax_to_surface(node.children.first()?)?;
+                    Some(SurfaceExpr::Borrowed(Span::dummy(), Box::new(inner)))
                 }
 
                 "outParam" => {

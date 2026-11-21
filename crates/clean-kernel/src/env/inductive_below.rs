@@ -5,7 +5,7 @@
 //! `.below` and `.brecOn` generation for recursive inductive types.
 //! Reference: `lean4/src/Lean/Meta/Constructions/BRecOn.lean`
 
-use crate::expr::{BinderInfo, Expr, ExprKind};
+use crate::expr::{BinderInfo, Expr, ExprKind, FVarId};
 use crate::inductive::{InductiveDecl, InductiveType};
 use crate::level::Level;
 use crate::name::Name;
@@ -13,7 +13,8 @@ use crate::name::Name;
 use super::decl_builder::EnvDeclBuilder;
 use super::inductive_below_minors::{
     bind_params, build_below_minor, build_brec_on_minor, build_f_type, build_ind_app,
-    get_ind_universe, get_nth_pi_domain, make_below_levels, make_ind_levels, mk_pprod,
+    get_ind_universe, get_nth_pi_domain, instantiate_ctor_field_type, make_below_levels,
+    make_ind_levels, mk_pprod,
 };
 use super::inductive_fixed_indices::CtorInfo;
 use super::types::{Declaration, EnvError};
@@ -31,19 +32,37 @@ impl Environment {
         if !self.should_generate_below(ind_type) {
             return;
         }
-        if let Ok(below_decl) = self.build_below(ind_type, decl, ctor_infos) {
-            // Silently skip on either failure, matching Lean 4 behavior.
-            if self.add_decl(below_decl).is_ok() {
-                let _ = self
-                    .build_brec_on(ind_type, decl, ctor_infos)
-                    .and_then(|decl| self.add_decl(decl));
+        let Ok(below) = self.build_below(ind_type, decl, ctor_infos) else {
+            return;
+        };
+        if self.add_decl(below).is_err() {
+            return;
+        }
+        let Ok(brec_on) = self.build_brec_on(ind_type, decl, ctor_infos) else {
+            return;
+        };
+        // The checked below family is independently useful. Do not publish a
+        // prefix of the recursion wrapper group if a member is rejected.
+        let mut staged = self.clone();
+        for member in brec_on {
+            if staged.add_decl(member).is_err() {
+                return;
             }
         }
+        *self = staged;
     }
 
     /// Check whether `.below`/`.brecOn` should be generated.
     fn should_generate_below(&self, ind_type: &InductiveType) -> bool {
-        if !self.has_punit() || !self.has_pprod() {
+        // An artifact import provides the checked families without running
+        // Clean's synthetic PUnit/PProd initialization routines.
+        let imported_products = self
+            .get_constructor(&Name::from_string("PUnit.unit"))
+            .is_some()
+            && self
+                .get_constructor(&Name::from_string("PProd.mk"))
+                .is_some();
+        if !(imported_products || self.has_punit() && self.has_pprod()) {
             return false;
         }
         let ind_val = match self.inductives.get(&ind_type.name) {
@@ -118,9 +137,8 @@ impl Environment {
         ind_type: &InductiveType,
         decl: &InductiveDecl,
         ctor_infos: &[CtorInfo],
-    ) -> Result<Declaration, EnvError> {
+    ) -> Result<Vec<Declaration>, EnvError> {
         let ind_name = &ind_type.name;
-        let below_name = ind_name.clone().str("below");
         let rec_name = ind_name.clone().str("rec");
 
         let rec_val = self
@@ -132,37 +150,24 @@ impl Environment {
         let motive_univ_name = &brec_level_params[0];
         let motive_level = Level::param(motive_univ_name.clone());
         let ind_levels = make_ind_levels(decl);
-        let below_levels = make_below_levels(motive_univ_name, &ind_levels);
         let ind_univ = get_ind_universe(self, &ind_type.type_);
-
-        let brec_type = build_brec_on_type(
-            ind_type,
-            decl,
-            ind_name,
-            &ind_levels,
-            &motive_level,
-            &below_name,
-            &below_levels,
-        );
-        let value = build_brec_on_value(
+        let cases_name = ind_name.clone().str("casesOn");
+        let equation = decl.num_params == 0
+            && decl.types.len() == 1
+            && rec_val.num_indices == 0
+            && rec_val.num_motives == 1
+            && self.get_const(&cases_name).is_some()
+            && self.get_const(&Name::from_string("Eq.refl")).is_some();
+        Ok(build_brec_on_decls(
             ind_type,
             decl,
             ctor_infos,
-            ind_name,
             &ind_univ,
             &ind_levels,
             &motive_level,
-            &below_name,
-            &below_levels,
-        );
-
-        Ok(Declaration::Definition {
-            name: ind_name.clone().str("brecOn"),
-            level_params: brec_level_params,
-            type_: brec_type,
-            value,
-            is_reducible: true,
-        })
+            &brec_level_params,
+            equation.then_some(cases_name),
+        ))
     }
 }
 
@@ -255,59 +260,22 @@ fn build_below_type(
     b2.finish(below_type)
 }
 
-/// Build the type expression for `.brecOn`.
-fn build_brec_on_type(
-    ind_type: &InductiveType,
-    decl: &InductiveDecl,
-    ind_name: &Name,
-    ind_levels: &[Level],
-    motive_level: &Level,
-    below_name: &Name,
-    below_levels: &[Level],
-) -> Expr {
-    let mut b2 = EnvDeclBuilder::new();
-    let (p2_ids, p2_fvs) = bind_params(&mut b2, &ind_type.type_, decl.num_params);
-    let ind_app2 = build_ind_app(ind_name, ind_levels, &p2_fvs);
-    let motive_ty2 = Expr::arrow(
-        ind_app2.clone(),
-        Expr::from_kind(ExprKind::Sort(motive_level.clone())),
-    );
-    let (motive_id2, motive_fv2) = b2.fresh_local(motive_ty2.clone());
-    let (major_id2, major_fv2) = b2.fresh_local(ind_app2.clone());
-
-    let mut below_app2 = Expr::const_(below_name.clone(), below_levels.to_vec());
-    for fv in &p2_fvs {
-        below_app2 = Expr::app(below_app2, fv.clone());
-    }
-    below_app2 = Expr::app(below_app2, motive_fv2.clone());
-
-    let f_type2 = build_f_type(&b2, &ind_app2, &below_app2, &motive_fv2);
-    let (f_id2, _) = b2.fresh_local(f_type2.clone());
-
-    let result_ty = Expr::app(motive_fv2.clone(), major_fv2);
-    let mut brec_type = result_ty;
-    brec_type = b2.mk_pi(f_id2, BinderInfo::Default, f_type2, brec_type);
-    brec_type = b2.mk_pi(major_id2, BinderInfo::Default, ind_app2.clone(), brec_type);
-    brec_type = b2.mk_pi(motive_id2, BinderInfo::Implicit, motive_ty2, brec_type);
-    for i in (0..p2_ids.len()).rev() {
-        let pty = get_nth_pi_domain(&ind_type.type_, i);
-        brec_type = b2.mk_pi(p2_ids[i], BinderInfo::Implicit, pty, brec_type);
-    }
-    b2.finish(brec_type)
-}
-
-/// Build the value expression for `.brecOn`: `fun {motive} t F => F t (below t)`.
-fn build_brec_on_value(
+/// The `go` definition builds the dependent pair. The public recursion
+/// wrapper projects its first field and its equation exposes the second.
+fn build_brec_on_decls(
     ind_type: &InductiveType,
     decl: &InductiveDecl,
     ctor_infos: &[CtorInfo],
-    ind_name: &Name,
     ind_univ: &Level,
     ind_levels: &[Level],
     motive_level: &Level,
-    below_name: &Name,
-    below_levels: &[Level],
-) -> Expr {
+    level_params: &[Name],
+    cases_name: Option<Name>,
+) -> Vec<Declaration> {
+    let ind_name = &ind_type.name;
+    let brec_name = ind_name.clone().str("brecOn");
+    let below_levels = make_below_levels(&level_params[0], ind_levels);
+    let go_name = brec_name.clone().str("go");
     let mut b = EnvDeclBuilder::new();
     let (param_ids, param_fvars) = bind_params(&mut b, &ind_type.type_, decl.num_params);
     let ind_app = build_ind_app(ind_name, ind_levels, &param_fvars);
@@ -316,7 +284,7 @@ fn build_brec_on_value(
     let (motive_id, motive_fv) = b.fresh_local(motive_ty.clone());
     let (major_id, major_fv) = b.fresh_local(ind_app.clone());
 
-    let mut below_app = Expr::const_(below_name.clone(), below_levels.to_vec());
+    let mut below_app = Expr::const_(ind_name.clone().str("below"), below_levels.clone());
     for fv in &param_fvars {
         below_app = Expr::app(below_app, fv.clone());
     }
@@ -365,16 +333,143 @@ fn build_brec_on_value(
         );
         rec_app = Expr::app(rec_app, minor);
     }
-    rec_app = Expr::app(rec_app, major_fv.clone());
-    let value_body = Expr::proj(Name::from_string("PProd"), 0, rec_app);
-
-    let mut value = value_body;
-    value = b.mk_lam(f_id, BinderInfo::Default, f_type, value);
-    value = b.mk_lam(major_id, BinderInfo::Default, ind_app.clone(), value);
-    value = b.mk_lam(motive_id, BinderInfo::Implicit, motive_ty, value);
-    for i in (0..param_ids.len()).rev() {
-        let pty = get_nth_pi_domain(&ind_type.type_, i);
-        value = b.mk_lam(param_ids[i], BinderInfo::Implicit, pty, value);
+    let result_ty = Expr::app(motive_fv.clone(), major_fv.clone());
+    let go_ty = mk_pprod(
+        result_ty.clone(),
+        Expr::app(below_app, major_fv.clone()),
+        motive_level,
+        &rlvl,
+    );
+    let go_app = Expr::apps(
+        Expr::const_(go_name.clone(), below_levels.clone()),
+        param_fvars
+            .iter()
+            .cloned()
+            .chain([motive_fv.clone(), major_fv.clone(), f_fv.clone()]),
+    );
+    let mut binders: Vec<_> = param_ids
+        .into_iter()
+        .enumerate()
+        .map(|(index, id)| {
+            (
+                id,
+                BinderInfo::Implicit,
+                get_nth_pi_domain(&ind_type.type_, index),
+            )
+        })
+        .collect();
+    binders.extend([
+        (motive_id, BinderInfo::Implicit, motive_ty),
+        (major_id, BinderInfo::Default, ind_app.clone()),
+        (f_id, BinderInfo::Default, f_type),
+    ]);
+    let pi = |expr| close_brec_binders(&b, &binders, expr, EnvDeclBuilder::mk_pi);
+    let lam = |expr| close_brec_binders(&b, &binders, expr, EnvDeclBuilder::mk_lam);
+    let mut declarations = vec![
+        Declaration::Definition {
+            name: go_name.clone(),
+            level_params: level_params.to_vec(),
+            type_: pi(go_ty),
+            value: lam(Expr::app(rec_app, major_fv.clone())),
+            is_reducible: true,
+        },
+        Declaration::Definition {
+            name: brec_name.clone(),
+            level_params: level_params.to_vec(),
+            type_: pi(result_ty),
+            value: lam(Expr::proj(Name::from_string("PProd"), 0, go_app)),
+            is_reducible: true,
+        },
+    ];
+    if let Some(cases_name) = cases_name {
+        let equation = |major: Expr| {
+            let args = [motive_fv.clone(), major.clone(), f_fv.clone()];
+            let lhs = Expr::apps(
+                Expr::const_(brec_name.clone(), below_levels.clone()),
+                args.clone(),
+            );
+            let go = Expr::apps(Expr::const_(go_name.clone(), below_levels.clone()), args);
+            let ty = Expr::app(motive_fv.clone(), major.clone());
+            let rhs = Expr::apps(
+                f_fv.clone(),
+                [major, Expr::proj(Name::from_string("PProd"), 1, go)],
+            );
+            (ty, lhs, rhs)
+        };
+        let eq = |major| {
+            let (ty, lhs, rhs) = equation(major);
+            Expr::apps(
+                Expr::const_(Name::from_string("Eq"), vec![motive_level.clone()]),
+                [ty, lhs, rhs],
+            )
+        };
+        let mut motive = EnvDeclBuilder::child_of(&b);
+        let (id, fv) = motive.fresh_local(ind_app.clone());
+        let branches = ctor_infos.iter().map(|(name, _, _, field_types, _)| {
+            let mut branch = EnvDeclBuilder::child_of(&b);
+            let mut args = Vec::with_capacity(field_types.len());
+            let mut fields = Vec::with_capacity(field_types.len());
+            for ty in field_types {
+                let ty = instantiate_ctor_field_type(ty, &[], &args);
+                let (id, var) = branch.fresh_local(ty.clone());
+                fields.push((id, BinderInfo::Default, ty));
+                args.push(var);
+            }
+            let ctor = Expr::apps(Expr::const_(name.clone(), ind_levels.to_vec()), args);
+            let (ty, lhs, _) = equation(ctor);
+            let refl = Expr::apps(
+                Expr::const_(Name::from_string("Eq.refl"), vec![motive_level.clone()]),
+                [ty, lhs],
+            );
+            branch.finish_child(bind_brec_binders(
+                &branch,
+                &fields,
+                refl,
+                EnvDeclBuilder::mk_lam,
+            ))
+        });
+        let cases = Expr::apps(
+            Expr::const_(
+                cases_name,
+                std::iter::once(Level::zero())
+                    .chain(ind_levels.iter().cloned())
+                    .collect::<Vec<_>>(),
+            ),
+            [
+                motive.finish_child(motive.mk_lam(id, BinderInfo::Default, ind_app, eq(fv))),
+                major_fv.clone(),
+            ]
+            .into_iter()
+            .chain(branches),
+        );
+        let type_ = pi(eq(major_fv));
+        declarations.push(Declaration::Theorem {
+            name: brec_name.str("eq"),
+            level_params: level_params.to_vec(),
+            type_,
+            value: lam(cases),
+        });
     }
-    b.finish(value)
+    declarations
+}
+
+fn bind_brec_binders(
+    builder: &EnvDeclBuilder,
+    binders: &[(FVarId, BinderInfo, Expr)],
+    mut expr: Expr,
+    close: fn(&EnvDeclBuilder, FVarId, BinderInfo, Expr, Expr) -> Expr,
+) -> Expr {
+    for (id, binder, ty) in binders.iter().rev() {
+        expr = close(builder, *id, *binder, ty.clone(), expr);
+    }
+    expr
+}
+
+fn close_brec_binders(
+    builder: &EnvDeclBuilder,
+    binders: &[(FVarId, BinderInfo, Expr)],
+    expr: Expr,
+    close: fn(&EnvDeclBuilder, FVarId, BinderInfo, Expr, Expr) -> Expr,
+) -> Expr {
+    builder.finish(bind_brec_binders(builder, binders, expr, close))
 }

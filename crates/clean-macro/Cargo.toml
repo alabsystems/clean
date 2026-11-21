@@ -13,6 +13,7 @@ workspace = true
 [dependencies]
 clean-kernel = { path = "../clean-kernel" }
 clean-parser.workspace = true
+num-bigint.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]

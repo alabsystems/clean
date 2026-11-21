@@ -157,7 +157,7 @@ pub(super) fn elaborate_bodies(
             for name in &introduces {
                 staging.discharge_staged_header(name);
             }
-            if let Err(error) = publication.mirror_into(staging) {
+            if let Err(error) = publication.mirror_into(staging, publish, &node.decl, &introduces) {
                 // The same declaration was just accepted by the authoritative
                 // kernel check, so this can only be a staging-side bookkeeping
                 // failure. Report it rather than continue with a staging

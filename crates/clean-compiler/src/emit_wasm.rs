@@ -313,7 +313,7 @@ const fn literal_form(lit: &IRLiteral) -> &'static str {
         IRLiteral::UInt32(_) => "UInt32",
         IRLiteral::UInt64(_) => "UInt64",
         IRLiteral::USize(_) => "USize",
-        IRLiteral::NatBig(_) => "Nat (>= 2^64)",
+        IRLiteral::NatBig(_) | IRLiteral::NatLimbs(_) => "Nat (>= 2^64)",
         IRLiteral::Float32(_) => "Float32",
         IRLiteral::Float64(_) => "Float64",
     }

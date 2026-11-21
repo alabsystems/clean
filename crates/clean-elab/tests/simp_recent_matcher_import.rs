@@ -87,3 +87,8 @@ fn recent_matchers_435_preserve_imported_branch_selection_and_proofs() {
 fn recent_matchers_436rc2_preserve_imported_branch_selection_and_proofs() {
     check_recent_matchers("v4.36.0-rc2");
 }
+
+#[test]
+fn recent_matchers_436_preserve_imported_branch_selection_and_proofs() {
+    check_recent_matchers("v4.36.0");
+}

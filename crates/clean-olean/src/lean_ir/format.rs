@@ -13,6 +13,34 @@
 use clean_kernel::name::NameInner;
 use clean_kernel::Name;
 
+/// Decimal `Nat.repr` for little-endian 64-bit limbs.
+#[must_use]
+pub fn nat_to_string(limbs: &[u64]) -> String {
+    let mut limbs = limbs.to_vec();
+    if limbs.len() == 1 {
+        return limbs[0].to_string();
+    }
+    // Repeated division by 10^19 over little-endian limbs.
+    const CHUNK: u64 = 10_000_000_000_000_000_000;
+    let mut chunks = Vec::new();
+    while limbs.iter().any(|&l| l != 0) {
+        let mut rem: u128 = 0;
+        for limb in limbs.iter_mut().rev() {
+            let cur = (rem << 64) | u128::from(*limb);
+            *limb = u64::try_from(cur / u128::from(CHUNK)).unwrap_or(u64::MAX);
+            rem = cur % u128::from(CHUNK);
+        }
+        chunks.push(u64::try_from(rem).unwrap_or(0));
+    }
+    let mut out = chunks
+        .pop()
+        .map_or_else(|| "0".to_owned(), |c| c.to_string());
+    for chunk in chunks.iter().rev() {
+        out.push_str(&format!("{chunk:019}"));
+    }
+    out
+}
+
 // --- Name.toString -----------------------------------------------------------
 
 /// `isLetterLike` (`Init/Meta/Defs.lean`).

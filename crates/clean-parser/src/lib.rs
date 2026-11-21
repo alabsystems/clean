@@ -9,6 +9,7 @@
 use serde::{Deserialize, Serialize};
 
 pub mod grammar;
+mod imported_term_prefixes;
 pub mod interpolation;
 pub mod lean_keywords;
 pub mod lexer;
@@ -38,6 +39,7 @@ mod syntax_boundary_regressions;
 
 pub use clean_kernel::lean_world::{LeanWorld, UnknownLeanWorld};
 pub use grammar::Parser;
+pub use imported_term_prefixes::{ImportedTermPrefixError, ImportedTermPrefixes};
 pub use interpolation::InterpolationPart;
 pub use lexer::InterpolatedStringKind;
 pub use notation_seed::{NotationSeed, SeededNotation};
@@ -283,6 +285,27 @@ pub fn parse_file_seeded_in_world(
     Parser::parse_file_seeded_in_world(input, patterns, seed, world)
 }
 
+/// Parse a file using imported numeral-prefix syntax validated for this input.
+///
+/// # Errors
+/// Returns a parse error for a matched prefix at an invalid precedence or
+/// without its required numeral, under ordinary file recovery rules.
+pub fn parse_file_seeded_in_world_with_imported_terms(
+    input: &str,
+    patterns: &TacticPatterns,
+    seed: &NotationSeed,
+    world: LeanWorld,
+    imported_terms: &ImportedTermPrefixes,
+) -> Result<ParseReport, ParseError> {
+    Parser::parse_file_seeded_in_world_with_imported_terms(
+        input,
+        patterns,
+        seed,
+        world,
+        Some(imported_terms),
+    )
+}
+
 /// Source location for parser recovery diagnostics.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -350,6 +373,8 @@ pub struct ParseReport {
     pub decls: Vec<SurfaceDecl>,
     /// Recovery events observed while parsing.
     pub diagnostics: Vec<ParserRecoveryDiagnostic>,
+    /// Whether the lexer captured any declaration or module documentation comments.
+    pub has_doc_comments: bool,
     /// The file's header: whether it is a module, and its header imports.
     /// The header's imports are ALSO in `decls`, as the `SurfaceDecl::Import`
     /// nodes they always were, in the same order.
@@ -584,7 +609,7 @@ enum OriginCore {
     },
 }
 
-/// A genuine source span, with the old semantic AST span retained separately.
+/// A genuine source span, with the parser AST span retained for exact pass-through.
 #[derive(Debug, Clone)]
 pub struct OriginNode {
     span: Span,
@@ -605,6 +630,7 @@ impl OriginNode {
             OriginCore::Ident(_) => OriginKind::Identifier,
             OriginCore::Lit(_) => OriginKind::Literal,
             OriginCore::Hole => OriginKind::Hole,
+            OriginCore::NamedHole(ref name) if name.name().is_anon() => OriginKind::Hole,
             OriginCore::NamedHole(_) => OriginKind::NamedHole,
             OriginCore::Paren(_) => OriginKind::Parentheses,
             OriginCore::App { .. } => OriginKind::Application,

@@ -18,7 +18,9 @@
 
 mod artifact;
 mod artifact_ledger;
+pub use artifact_ledger::{is_authoritative_lean_axiom, lean_declaration_artifact};
 mod clean_payload_requirement;
+pub(crate) mod export_fields;
 pub use clean_payload_requirement::{
     clean_payload_imports_required, require_clean_payload_imports,
 };
@@ -33,10 +35,13 @@ mod convert_direct;
 mod convert_expr;
 mod convert_expr_direct;
 mod deadline;
+mod exported_numeral_prefix;
+pub use exported_numeral_prefix::{read_exported_numeral_prefixes, ExportedNumeralPrefix};
 mod default_fn_binders;
 mod load;
 mod load_parse;
 pub use default_fn_binders::{default_fn_binder_idx, DefaultFnBinderState};
+pub(crate) use load_parse::{assemble_load_part, read_typed_name_array};
 mod type_binder_names;
 pub use type_binder_names::{type_binder_name_idx, type_binder_names, TypeBinderNameState};
 mod late_binding;
@@ -59,7 +64,7 @@ mod typed_imports;
 mod world_gate;
 pub use world_gate::LeanWorldScope;
 pub(crate) use world_gate::{
-    bind_restored as bind_restored_world, declare as declare_world,
+    bind_restored as bind_restored_world, check_part_world, declare as declare_world,
     environment_world as bound_world, part_world, validate_level_profile,
 };
 
@@ -98,6 +103,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 
 // Re-export public API
+pub(crate) use artifact::read_artifact_observing_parts;
 pub use artifact::{
     read_artifact, ArtifactDeclaration, ArtifactDeclarationOrigin, ArtifactDepth,
     ArtifactInventory, ArtifactInventoryError, ArtifactInventoryLimits, ArtifactRead,
@@ -113,9 +119,12 @@ pub use load::{
     load_module_with_deps_shared_with_policy, load_module_with_deps_with_import_policy,
     load_modules_with_deps, load_modules_with_deps_checked,
     load_modules_with_deps_checked_with_limits, load_modules_with_deps_with_import_policy,
-    load_olean_file, load_olean_file_with_import_policy, load_typed_module_with_deps_bounded,
+    load_modules_with_term_providers, load_modules_with_visible_term_syntax,
+    load_modules_with_visible_term_syntax_after_bootstrap, load_olean_file,
+    load_olean_file_with_import_policy, load_typed_module_with_deps_bounded,
     load_typed_module_with_deps_bounded_shared, load_typed_module_with_deps_cached,
-    load_typed_module_with_deps_parallel, CapturedModuleBytes, ModuleCaptureLimits,
+    load_typed_module_with_deps_parallel, load_typed_modules_with_deps_checked_with_limits,
+    CapturedModuleBytes, ModuleCaptureLimits,
 };
 pub(crate) use load_register::register_front_end_constants;
 pub use load_register::{
@@ -132,9 +141,12 @@ pub use parse::{
 };
 #[cfg(any(test, feature = "cli"))]
 pub(crate) use path::legacy_module_name;
+mod parser_tokens;
+pub use parser_tokens::{stable_imported_parser_tokens, ParserToken};
 pub use path::{
     active_stdlib_toolchain, alias_resolvable_toolchain_versions, default_search_paths,
-    default_toolchain_versions, find_module_olean, resolve_typed_module_path,
+    default_toolchain_versions, find_module_olean, find_module_olean_in_world,
+    lean_package_module_path, resolve_typed_module_path, resolve_typed_module_path_in_world,
     toolchain_versions_from_search_paths, typed_module_rel_path, ActiveStdlibToolchain,
     SearchPathBuilder,
 };
@@ -163,9 +175,9 @@ pub(crate) use convert_expr::convert_expr;
 pub use convert_expr::hash_str;
 #[cfg(test)]
 pub(crate) use convert_expr_direct::read_and_convert_expr;
+pub(crate) use convert_expr_direct::{read_and_convert_expr_with_memo, RegionPtrCache};
 #[cfg(any(feature = "cli", test))]
 pub(crate) use load::stored_constant_names;
-#[cfg(test)]
 pub(crate) use load_parse::parse_load_module;
 #[cfg(test)]
 #[cfg(test)]
@@ -180,6 +192,9 @@ pub(crate) use path::{
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum ImportError {
+    /// Failure in the implicit bootstrap closure of a combined source import.
+    #[error("implicit bootstrap import failed: {0}")]
+    Bootstrap(#[source] Box<ImportError>),
     /// An early recursor could not be bound to its complete artifact's checked
     /// authoritative record. This is a whole-artifact failure in every policy.
     #[error(
@@ -395,6 +410,17 @@ pub enum ImportError {
         name: String,
         /// The module whose declaration was loaded first.
         first: String,
+    },
+    /// A payload's native recursor would replace an ordinary resident
+    /// declaration: the constant table already owns its name, while the
+    /// recursor side table has no corresponding entry to deduplicate.
+    #[error(
+        "inconsistent artifact: native recursor `{name}` conflicts with a resident declaration \
+         without matching recursor metadata; the import is refused"
+    )]
+    ResidentRecursorConflict {
+        /// The resident name the payload must not replace.
+        name: String,
     },
     /// Two parts of one artifact — a module's `.olean`, `.olean.server` and
     /// `.olean.private`, or the Clean payloads they carry — state one
@@ -614,6 +640,7 @@ impl ImportError {
             Self::InconsistentStructureTable { .. }
                 | Self::DuplicateDeclaration { .. }
                 | Self::ConflictingDeclaration { .. }
+                | Self::ResidentRecursorConflict { .. }
                 | Self::PartsDisagree { .. }
                 | Self::PartsDisagreeOnEntry { .. }
                 | Self::PartsDisagreeOnHeader { .. }
@@ -644,6 +671,7 @@ impl ImportError {
             | Self::DuplicateDeclaration { name, .. }
             | Self::LossyParsedPayloadName { name, .. }
             | Self::ConflictingDeclaration { name, .. }
+            | Self::ResidentRecursorConflict { name }
             | Self::PartsDisagree { name, .. }
             | Self::ForwardReference { name, .. }
             | Self::MisplacedDeclaration { name, .. }

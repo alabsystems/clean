@@ -120,6 +120,23 @@ fn re_entering_a_namespace_re_activates_its_scoped_instances() {
     assert!(accepted(&verdicts, "outside_four"), "{verdicts:?}");
 }
 
+#[test]
+fn qualified_declarations_activate_scoped_instances_until_the_declaration_ends() {
+    let verdicts = run_file(&format!(
+        "{B}namespace N\nscoped instance i3 : C := ⟨3⟩\nend N\n\
+         instance i4 : C := ⟨4⟩\n\
+         theorem N.chosen : C.v = 3 := rfl\n\
+         theorem N.Nested.inherited : C.v = 3 := rfl\n\
+         theorem N.wrong : C.v = 4 := rfl\n\
+         theorem _root_.N.escaped : C.v = 4 := rfl\n\
+         theorem afterDecl : C.v = 4 := rfl\n"
+    ));
+    for name in ["N.chosen", "N.Nested.inherited", "N.escaped", "afterDecl"] {
+        assert!(accepted(&verdicts, name), "{verdicts:?}");
+    }
+    assert!(!accepted(&verdicts, "N.wrong"), "{verdicts:?}");
+}
+
 /// `open N hiding x` activates `N`'s scoped instances; `open N (x)` and
 /// `open N renaming x → z` do not (Lean: 3, 4, 4).
 #[test]

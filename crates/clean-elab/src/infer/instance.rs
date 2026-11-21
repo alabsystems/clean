@@ -1241,7 +1241,8 @@ impl<'a> ElabCtx<'a> {
         // 1` stays folded and `Decidable (P 1)` fails to synthesize (pinned
         // v4.30.0-rc2), an `abbrev` unfolds to the equation (DECISIONS R127).
         let mut dec_eq_bridged = false;
-        if class_name.to_string() == "Decidable" && goal_args.len() == 1 {
+        let is_decidable = class_name == Name::from_string("Decidable");
+        if is_decidable && goal_args.len() == 1 {
             let eq_app = self.whnf_instances(&self.metas.instantiate(&goal_args[0]));
             let eq_fn = eq_app.get_app_fn();
             if let ExprKind::Const(eq_name, eq_levels) = eq_fn.kind() {
@@ -1756,7 +1757,14 @@ impl<'a> ElabCtx<'a> {
                         // Non-out-parameter: must unify — at Lean's
                         // `.instances` transparency (G47), so a semireducible
                         // `def` in the goal is not seen through.
-                        if !self.try_unify_instances(inst_arg, goal_arg) {
+                        let matches =
+                            if is_decidable && self.different_order_index(inst_arg, goal_arg) {
+                                false
+                            } else {
+                                is_decidable && self.match_decision_operands(inst_arg, goal_arg)
+                                    || self.try_unify_instances(inst_arg, goal_arg)
+                            };
+                        if !matches {
                             failed_pair = Some((inst_arg.clone(), goal_arg.clone()));
                             unified = false;
                             break;
@@ -2201,6 +2209,75 @@ impl<'a> ElabCtx<'a> {
             crate::error_render::term(&e1_inst),
             crate::error_render::term(&e2_inst)
         )
+    }
+
+    /// Lean indexes Nat and carrier decisions by the written order relation
+    /// and its carrier. Unfolding `UInt32.lt` to a Nat comparison, or `Nat.lt`
+    /// to `Nat.le` on a successor, does not make an instance for that other
+    /// index a candidate here. Flexible carriers and reducible aliases still
+    /// reach ordinary instance unification.
+    fn different_order_index(&self, pattern: &Expr, goal: &Expr) -> bool {
+        let (ExprKind::Const(left_relation, _), ExprKind::Const(right_relation, _)) =
+            (pattern.get_app_fn().kind(), goal.get_app_fn().kind())
+        else {
+            return false;
+        };
+        let order_relation =
+            |name: &Name| name == &Name::interned("LE.le") || name == &Name::interned("LT.lt");
+        if !order_relation(left_relation) || !order_relation(right_relation) {
+            return false;
+        }
+        let pattern_args = pattern.get_app_args();
+        let goal_args = goal.get_app_args();
+        let ([pattern_ty, _, _, _], [goal_ty, _, _, _]) =
+            (pattern_args.as_slice(), goal_args.as_slice())
+        else {
+            return false;
+        };
+        if left_relation != right_relation {
+            return true;
+        }
+        let (ExprKind::Const(left, _), ExprKind::Const(right, _)) =
+            (pattern_ty.get_app_fn().kind(), goal_ty.get_app_fn().kind())
+        else {
+            return false;
+        };
+        left != right
+            && self.env.get_inductive(left).is_some()
+            && self.env.get_inductive(right).is_some()
+    }
+
+    /// If the candidate names the very same proposition head with fresh
+    /// placeholders for its operands, solve those placeholders before reducing
+    /// the proposition. Unfolding `LT.lt` first can assign the unfolded form of
+    /// `bytes.size` to the first operand of `Nat.decLt`. Such an assignment
+    /// leaks Clean's internal Array representation into an ordinary source term.
+    fn match_decision_operands(&mut self, pattern: &Expr, goal: &Expr) -> bool {
+        if !matches!(pattern.get_app_fn().kind(), ExprKind::Const(_, _))
+            || pattern.get_app_fn() != goal.get_app_fn()
+        {
+            return false;
+        }
+        let pattern_args = pattern.get_app_args();
+        let goal_args = goal.get_app_args();
+        if pattern_args.is_empty() || pattern_args.len() != goal_args.len() {
+            return false;
+        }
+        let mut pairs = pattern_args.iter().zip(&goal_args);
+        if !pairs
+            .clone()
+            .all(|(p, g)| p == g || bare_unassigned_meta(&self.metas, p).is_some())
+        {
+            return false;
+        }
+        self.metas.push_scope();
+        if pairs.all(|(p, g)| p == g || self.try_unify_instances(p, g)) {
+            self.metas.commit();
+            true
+        } else {
+            self.metas.pop_scope();
+            false
+        }
     }
 
     /// [`Self::try_unify`] at Lean's `.instances` transparency

@@ -372,3 +372,44 @@ theorem i_none : I none = 0 := rfl
         "theorem i_bad_five : I (some 5) = 0 := rfl",
     );
 }
+
+#[test]
+fn do_match_collects_all_nested_nullary_constructor_alternatives() {
+    let mut env = Environment::with_prelude();
+    elaborate_all(
+        &mut env,
+        r#"
+def choose (condition : Option Bool) (left right : Nat) : Option Nat := do
+  let _ ← some true
+  match condition with
+  | some true => pure left
+  | some false => pure right
+  | none => none
+
+theorem choose_true (left right : Nat) : choose (some true) left right = some left := rfl
+theorem choose_false (left right : Nat) : choose (some false) left right = some right := rfl
+theorem choose_none (left right : Nat) : choose none left right = none := rfl
+"#,
+    );
+    assert_all_rfl(&env, &["choose_true", "choose_false", "choose_none"]);
+    assert_rejected(
+        &mut env,
+        "wrong_left",
+        "theorem wrong_left : choose (some true) 2 3 = some 3 := rfl",
+    );
+    assert_rejected(
+        &mut env,
+        "wrong_right",
+        "theorem wrong_right : choose (some false) 2 3 = some 2 := rfl",
+    );
+    assert_rejected(
+        &mut env,
+        "incomplete",
+        r#"
+def incomplete (v : Option Bool) : Option Nat := do
+  match v with
+  | some true => pure 1
+  | none => none
+"#,
+    );
+}

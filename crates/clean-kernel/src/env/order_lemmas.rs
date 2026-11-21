@@ -1090,7 +1090,7 @@ impl Environment {
     /// ENSURES: On success, `Nat.lt_of_le_of_lt` is a `Declaration::Theorem`
     ///          with `proof_quality == Constructive`.
     /// ENSURES: Idempotent — a no-op if the constant is already registered.
-    fn register_nat_lt_of_le_of_lt_proof(&mut self) -> Result<(), EnvError> {
+    pub(crate) fn register_nat_lt_of_le_of_lt_proof(&mut self) -> Result<(), EnvError> {
         let name = Name::from_string("Nat.lt_of_le_of_lt");
         if self.get_const(&name).is_some() {
             return Ok(());

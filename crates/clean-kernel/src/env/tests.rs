@@ -11,6 +11,26 @@ use crate::quot::QuotKind;
 use crate::tc::TypeChecker;
 
 #[test]
+fn test_core_class_carriers_are_explicit_and_constructor_parameters_implicit() {
+    let env = Environment::with_prelude();
+    for spelling in ["Neg", "Repr", "Ord", "ToString", "Min", "Max"] {
+        let name = Name::from_string(spelling);
+        let class = env.get_const(&name).expect("initialized core class");
+        let ExprKind::Pi(carrier, _, _) = class.type_.kind() else {
+            panic!("core class carrier: {spelling}");
+        };
+        assert_eq!(carrier.info, BinderInfo::Default, "{spelling}");
+        let ctor = env
+            .get_constructor(&name.str("mk"))
+            .expect("initialized core class constructor");
+        let ExprKind::Pi(carrier, _, _) = ctor.type_.kind() else {
+            panic!("constructor carrier: {spelling}");
+        };
+        assert_eq!(carrier.info, BinderInfo::Implicit, "{spelling}.mk");
+    }
+}
+
+#[test]
 fn test_add_inductive_nat() {
     let mut env = Environment::new();
 

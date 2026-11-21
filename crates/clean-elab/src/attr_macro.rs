@@ -72,6 +72,10 @@ pub enum AttrMacroResult {
     SetSpecialize(SpecializeKind),
     /// Register an external (FFI) binding.
     RegisterExtern { extern_name: String },
+    /// A represented source descriptor, still subject to all compiler refusals.
+    RegisterExternMetadata {
+        metadata: clean_kernel::env::CompilerExternMetadata,
+    },
     /// Register a C-export binding.
     RegisterExport { export_name: String },
     /// Register an implementation override.
@@ -306,7 +310,7 @@ pub(crate) fn attr_name(attr: &Attribute) -> &str {
         Attribute::InlineIfReduce => "inline_if_reduce",
         Attribute::Specialize => "specialize",
         Attribute::Nospecialize => "nospecialize",
-        Attribute::Extern(_) => "extern",
+        Attribute::Extern(_) | Attribute::ExternMetadata(_) => "extern",
         Attribute::Export(_) => "export",
         Attribute::ImplementedBy(_) => "implementedBy",
         Attribute::Deprecated(_) => "deprecated",

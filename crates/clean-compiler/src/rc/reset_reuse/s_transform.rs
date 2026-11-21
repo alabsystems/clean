@@ -192,6 +192,7 @@ struct CtorLayout {
 /// constructor is not found in the environment.
 fn get_ctor_layout(name: &Name, env: &Environment) -> Option<CtorLayout> {
     let ctor_val = env.get_constructor(name)?;
+    let checked_void_layout = crate::world_token::has_checked_void_layout(env);
     let after_params = clean_kernel::inductive::strip_pi(&ctor_val.type_, ctor_val.num_params);
     let mut num_objects: u32 = 0;
     let mut scalar_size: u32 = 0;
@@ -201,7 +202,7 @@ fn get_ctor_layout(name: &Name, env: &Environment) -> Option<CtorLayout> {
             ExprKind::Pi(_, domain, body) => {
                 // The constructor-field classification `build_ctor_env` uses,
                 // so a reuse decision reads the layout the producer built.
-                let ir_type = ctor_field_ir_type(domain).ok()?;
+                let ir_type = ctor_field_ir_type(domain, checked_void_layout).ok()?;
                 if ir_type.is_scalar() {
                     scalar_size += ir_type.scalar_byte_size();
                 } else if ir_type.is_object() {

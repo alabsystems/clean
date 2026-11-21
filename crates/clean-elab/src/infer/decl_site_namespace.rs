@@ -80,6 +80,19 @@ fn common_prefix(a: &Name, b: &Name) -> Name {
 }
 
 impl ElabCtx<'_> {
+    /// Namespace for looking up a written term or pattern. Template references
+    /// retain their definition site. A qualified declaration enters its
+    /// written namespace for its signature and body.
+    pub(super) fn term_lookup_namespace(&self, name: &SurfaceName) -> SurfaceName {
+        if let Some(origin) = name.template_origin() {
+            return SurfaceName::from_name(origin.namespace.clone());
+        }
+        match &self.decl_site_namespace {
+            Some(namespace) => SurfaceName::from_name(namespace.clone()),
+            None => self.namespace_prefix.clone(),
+        }
+    }
+
     /// The full namespace pinned Lean opens around `decl` (module doc), or
     /// `None` when it opens none.
     pub(super) fn lean_decl_namespace(&self, decl: &SurfaceDecl) -> Option<Name> {
@@ -130,6 +143,37 @@ mod tests {
         assert_eq!(written_namespace(&written("d")), None);
         assert_eq!(written_namespace(&written("_root_.N.d")), None);
         assert_eq!(written_namespace(&written("_root_.d")), None);
+    }
+
+    #[test]
+    fn qualified_declaration_resolves_terms_and_constructor_patterns_at_its_site() {
+        use crate::test_support::file_verdicts::{
+            assert_all_accepted, run_modules_env_messages, verdict_of,
+        };
+
+        let family = "inductive Tree where\n  | leaf\n  | node (child : Tree)\n";
+        let accepted = format!(
+            "{family}{}",
+            r#"
+def Tree.tag (tree : Tree) : Nat :=
+  match tree with
+  | leaf => 12
+  | node _ => 35
+def Tree.byName : Tree := leaf
+def Tree.throughLocal (leaf : Nat) := leaf
+theorem firstTag : Tree.tag Tree.byName = 12 := rfl
+theorem secondTag : Tree.tag (.node .leaf) = 35 := rfl
+theorem localWins : Tree.throughLocal 81 = 81 := rfl
+"#
+        );
+        let (_, results) = run_modules_env_messages(&[&accepted]);
+        assert_all_accepted(&results, &accepted);
+
+        // A root escape suppresses the implicit namespace even though both
+        // spellings define constants under Tree in the environment.
+        let escaped = format!("{family}def _root_.Tree.byName : Tree := leaf\n");
+        let (_, results) = run_modules_env_messages(&[&escaped]);
+        assert!(verdict_of(&results, "Tree.byName").is_err(), "{results:?}");
     }
 
     #[test]

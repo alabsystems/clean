@@ -37,11 +37,13 @@ import importlib.util
 import json
 import re
 import sys
+from functools import partial
 from pathlib import Path
 
 ANSWERS_PINNED_INPUTS = True
 
-ROOT = Path(__file__).resolve().parent.parent
+CODE_ROOT = Path(__file__).resolve().parent.parent
+ROOT = CODE_ROOT
 RECORD = ROOT / "data" / "self_proof_scoreboard.json"
 
 P3_CLEAN = "reports/self-proof-p3-2026-11-12/patched_kernel_control.json"
@@ -62,8 +64,8 @@ class Absent(Exception):
     """An artifact a figure is read from is missing or has another shape."""
 
 
-def load(rel: str) -> dict:
-    path = ROOT / rel
+def load(rel: str, root: Path | None = None) -> dict:
+    path = (ROOT if root is None else root) / rel
     if not path.is_file():
         raise Absent(f"{rel} does not exist")
     try:
@@ -95,12 +97,8 @@ def blank_noncode_lean(text: str) -> str:
         two = text[i : i + 2]
         ch = text[i]
         if depth:
-            if two == "/-":
-                depth += 1
-                out.append("  ")
-                i += 2
-            elif two == "-/":
-                depth -= 1
+            if two in ("/-", "-/"):
+                depth += 1 if two == "/-" else -1
                 out.append("  ")
                 i += 2
             else:
@@ -111,8 +109,7 @@ def blank_noncode_lean(text: str) -> str:
                 out.append("  ")
                 i += 2
             else:
-                if ch == '"':
-                    in_string = False
+                in_string = ch != '"'
                 out.append("\n" if ch == "\n" else " ")
                 i += 1
         elif two == "/-":
@@ -123,12 +120,9 @@ def blank_noncode_lean(text: str) -> str:
             while i < n and text[i] != "\n":
                 out.append(" ")
                 i += 1
-        elif ch == '"':
-            in_string = True
-            out.append(" ")
-            i += 1
         else:
-            out.append(ch)
+            in_string = ch == '"'
+            out.append(" " if in_string else ch)
             i += 1
     return "".join(out)
 
@@ -153,16 +147,16 @@ def headline_theorems(source: str) -> list[str]:
     return [m.group("name") for m in HEADLINE.finditer(code)]
 
 
-def figure(read):
+def figure(read, *args):
     """Run one reader; an absent artifact becomes a stated absence."""
     try:
-        return read()
+        return read(*args)
     except Absent as err:
         return {"absent": str(err).encode("utf-8", "backslashreplace").decode("utf-8")}
 
 
-def planted_false_clean() -> dict:
-    record = load(P3_CLEAN)
+def planted_false_clean(root: Path | None = None) -> dict:
+    record = load(P3_CLEAN, root)
     summary = field(record, "summary", P3_CLEAN)
     return {
         "sites": field(summary, "sites", P3_CLEAN),
@@ -172,8 +166,8 @@ def planted_false_clean() -> dict:
     }
 
 
-def planted_false_trust() -> dict:
-    return trust_pins_figure(load(P3_TRUST))
+def planted_false_trust(root: Path | None = None) -> dict:
+    return trust_pins_figure(load(P3_TRUST, root))
 
 
 def trust_pins_figure(record: dict) -> dict:
@@ -196,34 +190,34 @@ def trust_pins_figure(record: dict) -> dict:
     }
 
 
-def selftest_module():
-    """The self-test's arms live beside this script and take it as an argument."""
-    spec = importlib.util.spec_from_file_location("self_proof_scoreboard_selftest", ROOT / SELFTEST_SCRIPT)
+def script_module(path: Path):
+    spec = importlib.util.spec_from_file_location(path.stem, path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
 
 
+def selftest_module():
+    return script_module(CODE_ROOT / SELFTEST_SCRIPT)
+
+
 def coverage_module():
-    """scripts/kcheck_coverage.py, loaded by path; a script that is gone or does not load is an absence."""
-    path = ROOT / COVERAGE_SCRIPT
+    """Load the coverage reader from this script's checkout."""
+    path = CODE_ROOT / COVERAGE_SCRIPT
     if not path.is_file():
         raise Absent(f"{COVERAGE_SCRIPT} does not exist")
     try:
-        spec = importlib.util.spec_from_file_location("kcheck_coverage", path)
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
+        return script_module(path)
     except Exception as err:  # noqa: BLE001 - whatever stops the reader, the figure is absent, never a number
         raise Absent(f"{COVERAGE_SCRIPT} does not load ({type(err).__name__})") from err
-    return module
 
 
-def checked_coverage(module=None) -> dict:
+def checked_coverage(module=None, *, root: Path | None = None) -> dict:
     """The coverage record, as its --check accepts it. A stale record is reported by its `reason`, one of two
     fixed texts, so that this board does not change each time another source file of the run moves."""
     module = module or coverage_module()
     try:
-        return module.check()
+        return module.check() if root is None else module.check(root)
     except module.Stale as err:
         raise Absent(f"stale or absent: {err.reason}") from err
     except module.Refused as err:
@@ -255,8 +249,8 @@ def accepted_by_kcheck(coverage=checked_coverage) -> dict:
     }
 
 
-def clean_elaborates() -> dict:
-    record = load(ELAB)
+def clean_elaborates(root: Path | None = None) -> dict:
+    record = load(ELAB, root)
     modules = field(record, "modules", ELAB)
     by_package: dict[str, dict[str, int]] = {}
     for module in modules:
@@ -273,8 +267,8 @@ def clean_elaborates() -> dict:
     }
 
 
-def rule_families() -> dict:
-    rows = [r for r in field(load(RULES), "rows", RULES) if r.get("kind") == "rule"]
+def rule_families(root: Path | None = None) -> dict:
+    rows = [r for r in field(load(RULES, root), "rows", RULES) if r.get("kind") == "rule"]
     count = {"specified": 0, "partial": 0, "unspecified": 0}
     for row in rows:
         status = row.get("status")
@@ -284,16 +278,18 @@ def rule_families() -> dict:
     return {"families": len(rows), **count, "source": RULES}
 
 
-def checker_soundness() -> dict:
-    root = ROOT / CHECKER_SOURCES
-    if not root.is_dir():
+def checker_soundness(root: Path | None = None) -> dict:
+    root = ROOT if root is None else root
+    sources = root / CHECKER_SOURCES
+    if not sources.is_dir():
         raise Absent(f"{CHECKER_SOURCES} does not exist")
     found = []
-    for path in sorted(root.rglob("*.lean")):
-        if ".lake" in path.parts:
+    for path in sorted(sources.rglob("*.lean")):
+        relative = path.relative_to(root)
+        if ".lake" in relative.parts:
             continue
         for name in headline_theorems(path.read_text(encoding="utf-8")):
-            found.append({"theorem": name, "file": str(path.relative_to(ROOT))})
+            found.append({"theorem": name, "file": str(relative)})
     return {
         "headline_theorems_in_source": found,
         "reading": (
@@ -304,8 +300,8 @@ def checker_soundness() -> dict:
     }
 
 
-def island_gaps() -> dict:
-    gaps = field(load(ISLAND_GAPS), "gaps", ISLAND_GAPS)
+def island_gaps(root: Path | None = None) -> dict:
+    gaps = field(load(ISLAND_GAPS, root), "gaps", ISLAND_GAPS)
     # The plan's exit for W2: every row is closed or pinned by name.
     count = {"open": 0, "closed": 0, "pinned": 0}
     for gap in gaps:
@@ -316,7 +312,9 @@ def island_gaps() -> dict:
     return {"rows": len(gaps), "open": count["open"], "source": ISLAND_GAPS}
 
 
-def derive() -> dict:
+def derive(root: Path | None = None) -> dict:
+    root = ROOT if root is None else root
+    coverage = partial(checked_coverage, root=root)
     return {
         "schema": "clean.self_proof_scoreboard.v1",
         "what_this_is": (
@@ -326,16 +324,16 @@ def derive() -> dict:
             "this file measures nothing."
         ),
         "headline": {
-            "planted_false_mints_clean": figure(planted_false_clean),
-            "planted_false_mints_trust": figure(planted_false_trust),
-            "decided_by_compiled_kcheck": figure(decided_by_kcheck),
+            "planted_false_mints_clean": figure(planted_false_clean, root),
+            "planted_false_mints_trust": figure(planted_false_trust, root),
+            "decided_by_compiled_kcheck": figure(decided_by_kcheck, coverage),
         },
         "route": {
-            "accepted_by_kcheck_no_site": figure(accepted_by_kcheck),
-            "checker_soundness": figure(checker_soundness),
-            "clean_elaborates_theories": figure(clean_elaborates),
-            "island_gaps": figure(island_gaps),
-            "lean_kernel_rule_families": figure(rule_families),
+            "accepted_by_kcheck_no_site": figure(accepted_by_kcheck, coverage),
+            "checker_soundness": figure(checker_soundness, root),
+            "clean_elaborates_theories": figure(clean_elaborates, root),
+            "island_gaps": figure(island_gaps, root),
+            "lean_kernel_rule_families": figure(rule_families, root),
         },
     }
 

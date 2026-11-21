@@ -328,8 +328,8 @@ impl ProofState {
             ));
         }
 
-        // Allocate a fresh metavariable for the new target
-        let new_meta_id = self.fresh_meta(new_target.clone());
+        // Preserve the parent scope across a target change inside a case split.
+        let new_meta_id = self.fresh_case_meta(new_target.clone(), &goal, &goal.local_ctx);
         let new_meta_expr = Expr::fvar(MetaState::to_fvar(new_meta_id));
 
         // Close the old goal with the fresh meta expression. close_goal

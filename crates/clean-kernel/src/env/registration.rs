@@ -60,9 +60,9 @@ impl Environment {
             return overlay;
         }
 
-        overlay
-            .constants
-            .retain(|name, _| !shadowed_names.contains(name));
+        for name in shadowed_names {
+            overlay.remove_resident_constant(name);
+        }
         overlay
             .constant_origins
             .retain(|name, _| !shadowed_names.contains(name));
@@ -813,7 +813,7 @@ impl Environment {
             "register_inductive_unchecked duplicate inductive: {}",
             ind_name
         );
-        self.constants.insert(
+        self.install_resident_constant(
             ind_name.clone(),
             ConstantInfo::new(
                 ind_name.clone(),
@@ -876,7 +876,7 @@ impl Environment {
             "register_constructor_unchecked duplicate constructor: {}",
             ctor_name
         );
-        self.constants.insert(
+        self.install_resident_constant(
             ctor_name.clone(),
             ConstantInfo::new(
                 ctor_name.clone(),
@@ -939,7 +939,7 @@ impl Environment {
             "register_recursor_unchecked duplicate recursor: {}",
             rec_name
         );
-        self.constants.insert(
+        self.install_resident_constant(
             rec_name.clone(),
             ConstantInfo::new(
                 rec_name.clone(),
@@ -983,8 +983,7 @@ impl Environment {
             .iter()
             .map(|constant| constant.name.clone())
             .collect();
-        self.constants
-            .extend(constants.into_iter().map(|c| (c.name.clone(), c)));
+        self.extend_resident_constants(constants.into_iter().map(|c| (c.name.clone(), c)));
         for name in names {
             self.declaration_verification
                 .insert(name, super::DeclarationVerification::Unchecked);
@@ -1224,8 +1223,7 @@ impl Environment {
         // evidence but is not a full kernel check, and it must overwrite any
         // stale stamp left by a same-name payload replacement.
         let valid_names: Vec<Name> = valid.iter().map(|info| info.name.clone()).collect();
-        self.constants
-            .extend(valid.into_iter().map(|c| (c.name.clone(), c)));
+        self.extend_resident_constants(valid.into_iter().map(|c| (c.name.clone(), c)));
         for name in valid_names {
             self.declaration_verification
                 .insert(name, super::DeclarationVerification::StructuralOnly);
@@ -1265,7 +1263,7 @@ impl Environment {
             if let Some(existing) = self.constants.get(&ci.name) {
                 if existing.value.is_none() && ci.value.is_some() {
                     let name = ci.name.clone();
-                    self.constants.insert(name.clone(), ci);
+                    self.install_resident_constant(name.clone(), ci);
                     self.declaration_verification
                         .insert(name, super::DeclarationVerification::Unchecked);
                     upgraded += 1;
@@ -1381,7 +1379,7 @@ impl Environment {
                 StubVerdict::Install => {
                     // The swap: install the checked record; stamp per the G4 lane.
                     let name = ci.name.clone();
-                    self.constants.insert(name.clone(), ci);
+                    self.install_resident_constant(name.clone(), ci);
                     self.declaration_verification
                         .insert(name, super::DeclarationVerification::Unchecked);
                     upgraded += 1;
@@ -1641,7 +1639,7 @@ impl Environment {
         }
         // Add to constants map
         let names: Vec<Name> = inductives.iter().map(|ind| ind.name.clone()).collect();
-        self.constants.extend(inductives.iter().map(|ind| {
+        self.extend_resident_constants(inductives.iter().map(|ind| {
             (
                 ind.name.clone(),
                 ConstantInfo::new(
@@ -1694,7 +1692,7 @@ impl Environment {
         }
         // Add to constants map
         let names: Vec<Name> = constructors.iter().map(|ctor| ctor.name.clone()).collect();
-        self.constants.extend(constructors.iter().map(|ctor| {
+        self.extend_resident_constants(constructors.iter().map(|ctor| {
             (
                 ctor.name.clone(),
                 ConstantInfo::new(
@@ -1750,7 +1748,7 @@ impl Environment {
         }
         // Add to constants map
         let names: Vec<Name> = recursors.iter().map(|rec| rec.name.clone()).collect();
-        self.constants.extend(recursors.iter().map(|rec| {
+        self.extend_resident_constants(recursors.iter().map(|rec| {
             (
                 rec.name.clone(),
                 ConstantInfo::new(

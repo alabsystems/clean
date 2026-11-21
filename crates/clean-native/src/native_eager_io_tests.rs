@@ -187,6 +187,29 @@ fn test_native_for_in_over_io_prints_each_element() {
     assert_eq!(status, 3);
 }
 
+#[test]
+fn test_native_for_in_uses_the_selected_closed_instance() {
+    let (out, status) = run_main(
+        "local instance (priority := 20000) skipAll : ForIn IO (List String) String where\n  \
+         forIn _ initial _ := pure initial\n\n\
+         def main (args : List String) : IO UInt32 := do\n  \
+         for a in args do\n    IO.println a\n  return 3\n",
+        &["a", "b"],
+    );
+    assert!(out.is_empty(), "{out}");
+    assert_eq!(status, 3);
+}
+
+/// The two iterator dictionaries are definitionally equal. Only the compiled
+/// replacement calls the overridden value, making the runtime choice visible.
+#[test]
+fn test_native_for_in_preserves_the_selected_dictionary_for_csimp() {
+    let source = include_str!("../tests/fixtures/for_in_csimp.lean");
+    assert_eq!(run_main(source, &[]), ("7\n".to_string(), 0));
+    let without_rule = source.replace("@[csimp] theorem", "theorem");
+    assert_eq!(run_main(&without_rule, &[]), ("0\n".to_string(), 0));
+}
+
 /// The constructor-layout face of the same fault, at exit 0: `((PUnit.unit,
 /// 5)).2` printed `1` (Lean: `5`) because the producer dropped the erased
 /// field while `.2` read the declared slot.

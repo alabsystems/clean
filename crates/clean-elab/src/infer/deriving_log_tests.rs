@@ -391,7 +391,10 @@ fn test_derive_rollback_restores_state_a_failed_handler_changed() {
         .insert(SurfaceName::from_name(Name::from_string("α")), leaked);
     ctx.postponed_open_carrier_instances
         .push((nat.clone(), nat.clone()));
-    ctx.collected_inline.push(Name::from_string("leak"));
+    ctx.collect_attributes(
+        &Name::from_string("leak"),
+        &[clean_parser::Attribute::Inline],
+    );
     ctx.collected_simp_attrs.push((
         Name::from_string("leak"),
         clean_kernel::env::SimpPriority::default(),
@@ -410,7 +413,7 @@ fn test_derive_rollback_restores_state_a_failed_handler_changed() {
     assert!(ctx.auto_implicits.is_empty());
     assert!(ctx.auto_implicit_lookup.is_empty());
     assert!(ctx.postponed_open_carrier_instances.is_empty());
-    assert!(ctx.collected_inline.is_empty());
+    assert!(ctx.collected_inline_attributes.is_empty());
     assert!(ctx.collected_simp_attrs.is_empty());
     let ExprKind::FVar(meta_fvar) = meta.kind() else {
         panic!("a fresh metavariable is an fvar: {meta}");

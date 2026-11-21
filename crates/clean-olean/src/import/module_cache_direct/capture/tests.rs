@@ -24,8 +24,12 @@ fn regular_bytes_absence_and_present_empty_remain_distinct() {
     assert_eq!(optional(&path, &mut limited(0, 0)).unwrap(), Some(vec![]));
     std::fs::write(&path, b"abcdefgh").unwrap();
     assert_eq!(required(&path, &mut limited(8, 8)).unwrap(), b"abcdefgh");
-    invalid_data(required(&path, &mut limited(7, 8)));
-    invalid_data(required(&path, &mut limited(8, 7)));
+    for (mut budget, why) in [(limited(7, 8), "per-part"), (limited(8, 7), "graph")] {
+        assert!(
+            matches!(required(&path, &mut budget), Err(ImportError::ResourceLimit { reason, .. })
+            if reason.contains("Part.olean") && reason.contains(why))
+        );
+    }
     // A caller's stricter policy is not installed on ordinary imports.
     assert_eq!(
         required(&path, &mut CaptureBudget::default()).unwrap(),
@@ -42,7 +46,10 @@ fn sparse_oversize_refuses_before_reading_or_spending_the_budget() {
         .set_len(16 * 1024 * 1024)
         .unwrap();
     let mut budget = limited(8, 8);
-    invalid_data(required(&path, &mut budget));
+    assert!(matches!(
+        required(&path, &mut budget),
+        Err(ImportError::ResourceLimit { .. })
+    ));
     assert_eq!(budget.bytes, 0);
     assert_eq!(std::fs::metadata(&path).unwrap().len(), 16 * 1024 * 1024);
 }
@@ -63,8 +70,8 @@ fn the_whole_graph_budget_counts_each_present_part() {
     }
     assert_eq!(budget.bytes, 6);
     assert!(matches!(optional(&ir, &mut budget),
-        Err(ImportError::FileUnreadable { source, .. })
-        if source.kind() == io::ErrorKind::InvalidData));
+        Err(ImportError::ResourceLimit { reason, .. })
+        if reason.contains("Root.ir") && reason.contains("6 used, 7 limit")));
     assert_eq!(budget.bytes, 6);
     std::fs::remove_file(&ir).unwrap();
     assert!(optional(&ir, &mut budget).unwrap().is_none());
@@ -77,7 +84,7 @@ fn growing_and_shrinking_after_open_are_unreadable_not_truncated_inputs() {
     for replacement in [b"short".as_slice(), b"a longer replacement".as_slice()] {
         std::fs::write(&path, b"original").unwrap();
         let mut budget = limited(64, 64);
-        let opened = OpenedPart::from_file(open(&path).unwrap(), &path, &budget).unwrap();
+        let opened = OpenedPart::from_file(open(&path).unwrap(), &path).unwrap();
         std::fs::write(&path, replacement).unwrap();
         invalid_data(opened.read(&mut budget));
         assert_eq!(budget.bytes, 0);
@@ -91,7 +98,7 @@ fn restoring_mtime_does_not_hide_an_in_place_rewrite() {
     let path = dir.path().join("Rewrite.olean");
     std::fs::write(&path, b"original").unwrap();
     let mut budget = limited(8, 8);
-    let opened = OpenedPart::from_file(open(&path).unwrap(), &path, &budget).unwrap();
+    let opened = OpenedPart::from_file(open(&path).unwrap(), &path).unwrap();
     let modified = std::fs::metadata(&path).unwrap().modified().unwrap();
     std::fs::write(&path, b"replaced").unwrap();
     File::options()
@@ -116,7 +123,7 @@ fn regular_symlink_aliases_bind_the_open_descriptor() {
     std::fs::write(&second, b"replaced").unwrap();
     symlink(&first, &alias).unwrap();
     let mut budget = limited(8, 8);
-    let opened = OpenedPart::from_file(open(&alias).unwrap(), &alias, &budget).unwrap();
+    let opened = OpenedPart::from_file(open(&alias).unwrap(), &alias).unwrap();
     std::fs::remove_file(&alias).unwrap();
     symlink(&second, &alias).unwrap();
     assert_eq!(opened.read(&mut budget).unwrap(), b"original");

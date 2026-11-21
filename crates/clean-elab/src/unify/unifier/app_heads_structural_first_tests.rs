@@ -27,6 +27,9 @@ fn register(env: &mut Environment, source_input: &str) {
 
 fn environment() -> Environment {
     let mut env = Environment::with_prelude();
+    // These fixtures exercise checked kernel conversion. Generic Bool/custom
+    // recursors have no Lean code generator implementation, so keep the actual
+    // noncomputable source form rather than claiming native compilation.
     for source in [
         "def structural_first_pos (n : Nat) : Bool := @Nat.rec (fun (_ : Nat) => Bool) Bool.false (fun (_ : Nat) (_ : Bool) => Bool.true) n",
         "def structural_first_sub_ltb (a b : Nat) : Bool := structural_first_pos (Nat.sub b a)",
@@ -34,9 +37,9 @@ fn environment() -> Environment {
         "def structural_first_div_go (fuel a b : Nat) : Nat := @Nat.rec (fun (_ : Nat) => Nat -> Nat) (fun (_ : Nat) => 0) (fun (_ : Nat) (ih : Nat -> Nat) => fun (x : Nat) => @Bool.rec (fun (_ : Bool) => Nat) (Nat.succ (ih (Nat.sub x b))) 0 (structural_first_ltb x b)) fuel a",
         // Same forcing context as arithmetic shift's closed sign fill. A plain
         // quotient exposes one Nat.succ in WHNF; subtraction needs its numeral.
-        "def structural_first_slow (dividend divisor : Nat) : Nat := Nat.sub 18446744073709551616 (structural_first_div_go dividend dividend divisor)",
-        "def structural_first_second (ignored result : Nat) : Nat := result",
-        "def structural_first_folded (n : Nat) : Nat := Nat.succ n",
+        "noncomputable def structural_first_slow (dividend divisor : Nat) : Nat := Nat.sub 18446744073709551616 (structural_first_div_go dividend dividend divisor)",
+        "noncomputable def structural_first_second (ignored result : Nat) : Nat := result",
+        "noncomputable def structural_first_folded (n : Nat) : Nat := Nat.succ n",
         "inductive StructuralFirstBox : Type where | mk (n : Nat) : StructuralFirstBox",
     ] {
         register(&mut env, source);

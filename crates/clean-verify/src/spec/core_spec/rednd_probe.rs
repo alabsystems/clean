@@ -109,7 +109,7 @@ impl Specification {
         let blind = "fun (e : KExpr) => whnf_acc e";
         format!(
             "def RedNd (T : KExpr) : KExpr -> Type := \
-             KExpr.rec (fun (_ : KExpr) => KExpr -> Type) \
+             @KExpr.rec (fun (_ : KExpr) => KExpr -> Type) \
              (fun (n : Level) => {blind}) \
              (fun (i : Nat) => {blind}) \
              (fun (f : KExpr) (a : KExpr) (ihf : KExpr -> Type) (iha : KExpr -> Type) => {blind}) \
@@ -147,7 +147,7 @@ impl Specification {
         let id_arm = "fun (e : KExpr) (h : whnf_acc e) => h";
         format!(
             "def rednd_cr1 (T : KExpr) (e : KExpr) (h : RedNd T e) : whnf_acc e := \
-             KExpr.rec (fun (T0 : KExpr) => forall (x : KExpr), RedNd T0 x -> whnf_acc x) \
+             @KExpr.rec (fun (T0 : KExpr) => forall (x : KExpr), RedNd T0 x -> whnf_acc x) \
              (fun (n : Level) => {id_arm}) \
              (fun (i : Nat) => {id_arm}) \
              (fun (ff : KExpr) (aa : KExpr) \
@@ -189,10 +189,10 @@ impl Specification {
     pub(super) fn rednd_pi_elim_nondep_src() -> String {
         "def rednd_pi_elim_nondep (A : KExpr) (B : KExpr) (f : KExpr) (a : KExpr) \
          (hf : RedNd (KExpr.pi A B) f) (ha : RedNd A a) \
-         (hnd : Eq KExpr (instantiate B a) B) : \
+         (hnd : @Eq KExpr (instantiate B a) B) : \
          RedNd (instantiate B a) (KExpr.app f a) := \
          Eq.substType KExpr (fun (z : KExpr) => RedNd z (KExpr.app f a)) \
-         B (instantiate B a) (Eq.symm KExpr (instantiate B a) B hnd) \
+         B (instantiate B a) (@Eq.symm KExpr (instantiate B a) B hnd) \
          (AndType.right (whnf_acc f) \
          (forall (x : KExpr), RedNd A x -> RedNd B (KExpr.app f x)) hf a ha)"
             .to_string()
@@ -234,7 +234,7 @@ impl Specification {
             "(fun (ty : KExpr) (b : KExpr) (ihty : {ihty}) (ihb : {ihb}) => \
              fun (g : KExpr) (g2 : KExpr) (hg : RedNd (KExpr.pi ty b) g) \
              (sg : whnf_step g g2) => \
-             AndType.intro (whnf_acc g2) \
+             @AndType.intro (whnf_acc g2) \
              (forall (x : KExpr), RedNd ty x -> RedNd b (KExpr.app g2 x)) \
              (whnf_acc_step g g2 \
              (AndType.left (whnf_acc g) \
@@ -250,7 +250,7 @@ impl Specification {
         format!(
             "def rednd_cr2 (T : KExpr) (e : KExpr) (e2 : KExpr) (h : RedNd T e) \
              (st : whnf_step e e2) : RedNd T e2 := \
-             KExpr.rec (fun (T0 : KExpr) => \
+             @KExpr.rec (fun (T0 : KExpr) => \
              forall (x : KExpr) (y : KExpr), RedNd T0 x -> whnf_step x y -> RedNd T0 y) \
              {sort} {bvar} {app} {lam} {pi_arm} {konst} {let_} {proj} {mvar} \
              T e e2 h st",

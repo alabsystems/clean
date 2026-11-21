@@ -364,3 +364,20 @@ A0 is measured on the SHIPPED kernel (tests/fixtures/strict_monads.lineage.json)
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod source_syntax_tests {
+    use super::SRC_IR_SM_WRITES_FIELD83;
+    use clean_parser::parse_decl_exact;
+
+    #[test]
+    fn actual_symbolic_heap_write_proof_parses_exactly() {
+        parse_decl_exact(SRC_IR_SM_WRITES_FIELD83)
+            .expect("the complete symbolic heap-write declaration must parse");
+        assert!(parse_decl_exact(&format!("{SRC_IR_SM_WRITES_FIELD83})")).is_err());
+        let missing_close = SRC_IR_SM_WRITES_FIELD83
+            .strip_suffix(')')
+            .expect("proof application ends with its required close");
+        assert!(parse_decl_exact(missing_close).is_err());
+    }
+}

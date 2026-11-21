@@ -233,6 +233,7 @@ fn scoped_calls(
         SurfaceExpr::Paren(_, inner)
         | SurfaceExpr::Explicit(_, inner)
         | SurfaceExpr::NamedArg(_, _, inner)
+        | SurfaceExpr::Borrowed(_, inner)
         | SurfaceExpr::OutParam(_, inner)
         | SurfaceExpr::SemiOutParam(_, inner)
         | SurfaceExpr::UniverseInst(_, inner, _)
@@ -602,7 +603,9 @@ fn find_recursive_calls(
             find_recursive_calls(func_name, expr, calls, shadowed_short, shadowed_base);
         }
 
-        SurfaceExpr::OutParam(_, inner) | SurfaceExpr::SemiOutParam(_, inner) => {
+        SurfaceExpr::Borrowed(_, inner)
+        | SurfaceExpr::OutParam(_, inner)
+        | SurfaceExpr::SemiOutParam(_, inner) => {
             find_recursive_calls(func_name, inner, calls, shadowed_short, shadowed_base);
         }
 
@@ -836,6 +839,9 @@ fn is_recursive_call(
         SurfaceExpr::UniverseInst(_, inner, _) => {
             is_recursive_call(func_name, inner, shadowed_short, shadowed_base)
         }
+        SurfaceExpr::Borrowed(_, inner) => {
+            is_recursive_call(func_name, inner, shadowed_short, shadowed_base)
+        }
         SurfaceExpr::OutParam(_, inner) => {
             is_recursive_call(func_name, inner, shadowed_short, shadowed_base)
         }
@@ -889,12 +895,11 @@ pub(super) fn find_decreasing_arg(
         return None;
     }
 
+    // A recursive function can be partially applied to its trailing
+    // parameters. Its structural argument still has to be present in every
+    // call. The IH elaborator checks the actual decreasing constructor field
+    // and applies precisely the trailing arguments each call supplied.
     let min_args = calls.iter().map(|c| c.args.len()).min().unwrap_or(0);
-    let max_args = calls.iter().map(|c| c.args.len()).max().unwrap_or(0);
-
-    if min_args != max_args {
-        return None;
-    }
 
     // Whole-body match-scrutinee preference (shadowed-rebind support): when the
     // body scrutinizes parameter `preferred` and every recursive call passes a

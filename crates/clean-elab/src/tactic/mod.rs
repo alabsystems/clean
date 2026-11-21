@@ -111,6 +111,7 @@ pub(crate) mod congr_obtain;
 pub(crate) mod connective;
 #[cfg(test)]
 mod connective_and_intros_tests;
+pub(crate) mod connective_split_at;
 #[cfg(test)]
 mod connective_split_ite_tests;
 pub(crate) mod contradiction;

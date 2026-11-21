@@ -268,6 +268,14 @@ pub trait ExprVisitor {
         self.visit_expr(expr)
     }
 
+    /// Whether this visit should inspect the node and its children. Skipped
+    /// visits still pay their work-meter charge and return the default result.
+    /// A visitor that depends on binder depth must include that depth when
+    /// deciding whether a previous visit can supply the same result.
+    fn should_visit(&mut self, _expr: &Expr) -> bool {
+        true
+    }
+
     // ════════════════════════════════════════════════════════════════════
     // Main dispatch — rarely overridden
     // ════════════════════════════════════════════════════════════════════
@@ -275,6 +283,9 @@ pub trait ExprVisitor {
     fn visit_expr(&mut self, expr: &Expr) -> Self::Result {
         // One unit of kernel work per node visited (`crate::work_meter`).
         crate::work_meter::charge(crate::work_meter::Walk::Fold, 1);
+        if !self.should_visit(expr) {
+            return Self::Result::default();
+        }
         stack_safe(|| match expr.kind() {
             ExprKind::BVar(idx) => self.visit_bvar(*idx),
             ExprKind::FVar(id) => self.visit_fvar(*id),

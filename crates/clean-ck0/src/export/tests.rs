@@ -4,6 +4,36 @@ use crate::term::TermKind;
 use crate::{RawExpr, RawLevel};
 
 #[test]
+fn checked_constructor_named_below_replays_and_keeps_reference_guards() {
+    // Pinned Lean export of `inductive Tag where | below`. Its own recursor
+    // type refers to Tag.below before the block is published to later declarations.
+    let (report, env) = replay_environment(
+        include_bytes!("../../tests/fixtures/below-constructor.ndjson").as_slice(),
+        Dialect::Lean4Export31,
+    )
+    .unwrap();
+    assert_eq!(report.rows.len(), 3);
+    assert_eq!(report.counts().0, 3, "{report:?}");
+
+    let tag = Name::from_dotted("Record109.ErasureFixture.Tag");
+    let constructor = tag.str("below");
+    let raw = RawExpr::Const(constructor.clone(), vec![]);
+    assert!(Term::validate_closed(&env, &raw).is_ok());
+    let wrong_arity = RawExpr::Const(constructor.clone(), vec![RawLevel::Zero]);
+    assert!(matches!(
+        Term::validate_closed(&env, &wrong_arity),
+        Err(crate::ValidateError::Ref(crate::TermError::LevelArity {
+            name, got: 1, expected: 0
+        })) if name == constructor
+    ));
+    let recursor = tag.str("rec");
+    assert!(matches!(
+        Term::validate_closed(&env, &RawExpr::Const(recursor.clone(), vec![RawLevel::Zero])),
+        Err(crate::ValidateError::RecursorAsConst { name }) if name == recursor
+    ));
+}
+
+#[test]
 fn pinned_mutual_prop_recursor_does_not_k_reduce_in_either_conversion_path() {
     let (report, env) = replay_environment(
         include_str!("../../tests/fixtures/q2-part2/mutual-k.ndjson").as_bytes(),

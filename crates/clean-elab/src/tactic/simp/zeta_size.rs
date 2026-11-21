@@ -37,13 +37,30 @@ const STEPS_PER_NODE: u64 = 4;
 /// tree), or counting it took [`STEPS_PER_NODE`] steps per node of `limit`
 /// (fail-closed: the caller declines).
 pub(super) fn beta_zeta_size_reaches(expr: &Expr, limit: u64) -> bool {
+    beta_zeta_limit(expr, limit).is_some()
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(super) enum BetaZetaLimit {
+    Nodes(u64),
+    Steps(u64),
+}
+
+/// Keep the same refusal predicate as the bounded count, with its actual cause.
+pub(super) fn beta_zeta_limit(expr: &Expr, limit: u64) -> Option<BetaZetaLimit> {
     let mut eval = SizeEval {
         steps: 0,
         step_limit: limit.saturating_mul(STEPS_PER_NODE),
         limit,
     };
     let value = eval.eval(expr, &Env::Empty);
-    eval.size_of(&value) >= limit
+    if eval.size_of(&value) < limit {
+        None
+    } else if eval.spent() {
+        Some(BetaZetaLimit::Steps(eval.step_limit))
+    } else {
+        Some(BetaZetaLimit::Nodes(limit))
+    }
 }
 
 /// What a variable stands for.

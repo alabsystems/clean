@@ -81,6 +81,7 @@ fn opaque_with_value(name: &str) -> ParsedConstant {
         recursor_val: None,
         hints: None,
         definition_safety: None,
+        mutual_declarations: None,
         quot_kind: None,
     }
 }

@@ -20,46 +20,33 @@
     }
   },
   "measured_with": {
-    "date": "2026-11-14 X1 re-check fixes; final affected tests and six detailed controls over the recorded source context",
+    "date": "2026-11-15 X4 head-loop repair (re-measured 2026-11-19 on e373457898: the landing merge 669b3c24f6 with origin/main 18992dd243, plus a clean-native test fix): every program on both lanes through scripts/x1_execution_evidence.py at the default 8 MiB main-thread stack",
     "host": "aarch64-macos (Darwin 27.2.0)",
     "cc": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
     "trust_cg": {
       "version": "trust-cg 0.7.0",
-      "source": "atpkg store build 10290 (the trust-cg `aterm pkg which trust-cg` names on the measuring box)",
-      "sha256": "01bb9a7d515af822cd1e40702dc349f1db82ceff104bb3daa5c0b7d2aed93230"
+      "source": "atpkg store build 11616 (what the `aterm/pkg/bin/trust-cg` shim execs on the measuring box); the X4 before-run used build 10290 (sha256 01bb9a7d…), see the X4 report",
+      "sha256": "507744a7cbdf52107d88c572f80f862465f2e893c715816fbac09cb9d6d1da93"
     },
-    "note": "All 40 native fixtures and every recovery-aware R4 elaborator pin passed in the latest full 61-test suite (race4-tests.log), rebuilt after the C4 compiled-tracing change. Fresh six-control/compiled-stack captures share that exact source and binary identity. Five structural parity forms and five Lean-rejected hint controls pass; the pre-existing bare-constructor false acceptance remains owned below. The original c36 acceptance was invalid because three clauses were recovered away; current c36 has nine declarations and zero recovery. Both Clean compiled lanes still overflow as recorded against pinned Lean compiled binaries. Earlier snapshots and explicitly scoped unchanged-input reuse are retained in commands.json. The audit owns compiler repair. No full workspace, formal proof, semantic soundness, quorum or release claim.",
-    "clean": "debug binary built with trust-ir-backend, both backends measured with that binary; the default-feature dispatch regression is a separate test",
-    "clean_sha256": "ee390afe4e3376ad74f3c312fc4f4af1fcad04a583e56423740b8da4c15ecc32",
+    "note": "The execution report is reports/x4-head-loop-2026-11-15/x1-execution.json (every program, both lanes, and `clean check`); the X4 report compares each lane with pinned Lean's compiled binaries in both directions. Earlier measurements stay in reports/x1-fixup and reports/x1-recheck, with their own identities. No full workspace, formal proof, semantic soundness, quorum or release claim.",
+    "clean": "debug binary built with trust-ir-backend, both backends measured with that binary",
+    "clean_sha256": "16fbead2398dd501f7a23a6b6d0bee57247fa6a2b08ab226f1cc3ebdbd9d8695",
     "production_source_context": {
       "scope": "crates/**/*.{rs,c,h,toml,lock}; root Cargo.toml, Cargo.lock, .cargo/config.toml, rust-toolchain.toml",
-      "files": 9393,
-      "sha256": "6d8d3fc4d9bea13475200efe55d6102c920367253284f0d9e6444a7c22ce493a"
+      "files": 9878,
+      "sha256": "df11ee1b924627339aac63532e97cc58c25a5d0df11fcca0b7f564373bb31bdd"
     },
-    "raw_capture_scope": [
-      "c27_r4_iv_head_loop_million",
-      "c34_r4_i_call_cycle_shared_counter",
-      "c35_r4_ix_walk_call_cycle",
-      "c36_r4_x_report_call_cycle",
-      "c37_head_loop_10000",
-      "c37_head_loop_100000"
-    ],
-    "native_rows_live_test_log": "reports/x1-recheck/race4-tests.log",
-    "full_40_program_detail_snapshot": "reports/x1-fixup/execution-full-f9.json",
-    "native_suite_source_context": {
-      "scope": "crates/**/*.{rs,c,h,toml,lock}; root Cargo.toml, Cargo.lock, .cargo/config.toml, rust-toolchain.toml",
-      "files": 9393,
-      "sha256": "6d8d3fc4d9bea13475200efe55d6102c920367253284f0d9e6444a7c22ce493a"
-    }
+    "execution_report": "reports/x4-head-loop-2026-11-15/x1-execution.json",
+    "stack_kb": 8176
   },
   "summary": {
-    "programs": 40,
+    "programs": 41,
     "checker": "advice_replay: BYTE_EQUAL on both lanes. Its mutant advice_replay_no_compare: BYTE_EQUAL on both lanes, which is Lean's bytes for the mutant, accepting three corrupted cases.",
-    "probes": 38,
-    "probes_byte_equal_on_both_lanes": 27,
-    "probes_not_byte_equal_on_either_lane": 11,
-    "open_gaps": 7,
-    "r4_items": "The current primary probes include true call cycles c34/c35/c36 for (i)/(ix)/(x); pinned Lean accepts all ten and every cycle member uses every _f auxiliary with Nat.brecOn. The original capture had only eight recovery-free acceptances because c36 dropped three structural clauses. After the 2026-11-14 parser and explicit-major fixes, all ten are rechecked recovery-aware: nine accepted, vii refused for absent ByteArray. See reports/x1-recheck/README.md; the original nine-pass claim was invalid. Both backends: i, ii, iii, vi, ix byte-equal; iv and x SIGSEGV; v and viii refused at lowering; vii refused at elaboration. The old c24/c32/c33 remain acyclic controls. The fenced ReferenceKernel re-check for vi remains unmeasured."
+    "probes": 39,
+    "probes_byte_equal_on_both_lanes": 39,
+    "probes_not_byte_equal_on_either_lane": 0,
+    "open_gaps": 0,
+    "r4_items": "All ten R4 primary probes (including true call cycles c34/c35/c36 for i/ix/x) are accepted recovery-free by `clean check`. Both backends: i, ii, iii, v, vi, vii, viii, ix are BYTE_EQUAL; iv and x, CRASHED until X4 (SIGSEGV on 10^6 recursive frames, gap `head-loop-is-not-a-loop`), print Lean's bytes since X4 (reports/x4-head-loop-2026-11-15/README.md) at the default 8 MiB stack. The old c24/c32/c33 remain acyclic controls."
   },
   "programs": [
     {
@@ -123,10 +110,12 @@
       "construct": "nested and overlapping constructor patterns, first match wins",
       "c_lane": {
         "outcome": "BYTE_EQUAL",
+        "refusal": "",
         "gaps": []
       },
       "trust_cg_lane": {
         "outcome": "BYTE_EQUAL",
+        "refusal": "",
         "gaps": []
       }
     },
@@ -204,18 +193,14 @@
       "name": "c09_list_form_io",
       "construct": "`List.forM` in IO",
       "c_lane": {
-        "outcome": "REFUSED_BUILD",
-        "refusal": "Unknown identifier: List.forM",
-        "gaps": [
-          "list-form-absent-from-builtin-prelude"
-        ]
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
       },
       "trust_cg_lane": {
-        "outcome": "EMIT_TRUSTIR_REFUSED",
-        "refusal": "Unknown identifier: List.forM",
-        "gaps": [
-          "list-form-absent-from-builtin-prelude"
-        ]
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
       }
     },
     {
@@ -306,36 +291,28 @@
       "name": "c16_nat_mul_reaching_128_bits",
       "construct": "Nat multiplication whose result reaches 2^128",
       "c_lane": {
-        "outcome": "REFUSED_RUNTIME",
-        "refusal": "clean panic: clean_nat_mul: Nat result >= 2^128 (fail-closed)",
-        "gaps": [
-          "runtime-nat-stops-at-128-bits"
-        ]
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
       },
       "trust_cg_lane": {
-        "outcome": "REFUSED_RUNTIME",
-        "refusal": "clean panic: clean_nat_mul: Nat result >= 2^128 (fail-closed)",
-        "gaps": [
-          "runtime-nat-stops-at-128-bits"
-        ]
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
       }
     },
     {
       "name": "c17_nat_add_reaching_128_bits",
       "construct": "Nat addition whose result reaches 2^128",
       "c_lane": {
-        "outcome": "REFUSED_RUNTIME",
-        "refusal": "clean panic: clean_nat_add: Nat result >= 2^128 (fail-closed)",
-        "gaps": [
-          "runtime-nat-stops-at-128-bits"
-        ]
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
       },
       "trust_cg_lane": {
-        "outcome": "REFUSED_RUNTIME",
-        "refusal": "clean panic: clean_nat_add: Nat result >= 2^128 (fail-closed)",
-        "gaps": [
-          "runtime-nat-stops-at-128-bits"
-        ]
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
       }
     },
     {
@@ -412,18 +389,14 @@
       "name": "c23_nat_literal_of_129_bits",
       "construct": "a Nat literal of 129 bits",
       "c_lane": {
-        "outcome": "REFUSED_BUILD",
-        "refusal": "Error: cannot compile source dependency `two128` of `main`: unsupported literal lowering for Nat",
-        "gaps": [
-          "nat-literal-wider-than-128-bits"
-        ]
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
       },
       "trust_cg_lane": {
-        "outcome": "EMIT_TRUSTIR_REFUSED",
-        "refusal": "front-end: cannot compile source dependency `two128` of `main`: unsupported literal lowering for Nat",
-        "gaps": [
-          "nat-literal-wider-than-128-bits"
-        ]
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
       }
     },
     {
@@ -487,18 +460,14 @@
       "name": "c27_r4_iv_head_loop_million",
       "construct": "R4 (iv): a head loop of 10^6 self tail calls, structurally recursive on the counter",
       "c_lane": {
-        "outcome": "CRASHED",
-        "refusal": "clean run: program terminated by signal 11 (SIGSEGV)",
-        "gaps": [
-          "head-loop-is-not-a-loop"
-        ]
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
       },
       "trust_cg_lane": {
-        "outcome": "CRASHED",
-        "refusal": "clean run: program terminated by signal 11 (SIGSEGV)",
-        "gaps": [
-          "head-loop-is-not-a-loop"
-        ]
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
       },
       "elaborator": {
         "outcome": "ACCEPTED",
@@ -510,18 +479,14 @@
       "name": "c28_r4_v_one_function_over_requests",
       "construct": "R4 (v): the item (i) block as one function over a request sum type, structurally recursive on the counter",
       "c_lane": {
-        "outcome": "REFUSED_BUILD",
-        "refusal": "Error: cannot lower source dependency `run` of `main`: unsupported expression: Expression form: Lam(",
-        "gaps": [
-          "match-join-point-lambda-in-value-position"
-        ]
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
       },
       "trust_cg_lane": {
-        "outcome": "EMIT_TRUSTIR_REFUSED",
-        "refusal": "front-end: cannot lower source dependency `run` of `main`: unsupported expression: Expression form: Lam(",
-        "gaps": [
-          "match-join-point-lambda-in-value-position"
-        ]
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
       },
       "elaborator": {
         "outcome": "ACCEPTED",
@@ -552,45 +517,33 @@
       "name": "c30_r4_vii_tokens_from_bytearray",
       "construct": "R4 (vii): advice tokens decoded from a `ByteArray` by index, structurally recursive on a counter",
       "c_lane": {
-        "outcome": "REFUSED_BUILD",
-        "refusal": "Unknown identifier: size; dot notation `.size`",
-        "gaps": [
-          "bytearray-absent-from-builtin-prelude"
-        ]
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
       },
       "trust_cg_lane": {
-        "outcome": "EMIT_TRUSTIR_REFUSED",
-        "refusal": "Unknown identifier: size; dot notation `.size`",
-        "gaps": [
-          "bytearray-absent-from-builtin-prelude"
-        ]
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
       },
       "elaborator": {
-        "outcome": "REFUSED",
-        "refusal": "✗ decode: elaboration error at line 28: Unknown identifier: size",
-        "gaps": [
-          "bytearray-absent-from-builtin-prelude"
-        ]
+        "outcome": "ACCEPTED",
+        "refusal": "",
+        "gaps": []
       }
     },
     {
       "name": "c31_r4_viii_advice_tree_with_certificates",
       "construct": "R4 (viii), formulation (B): mutually inductive advice types in which a head step carries a list of certificates, three functions mutually and structurally recursive on them, bytes decoded to that tree first, and item (vi) repeated for it",
       "c_lane": {
-        "outcome": "REFUSED_BUILD",
-        "refusal": "Error: cannot compile source dependency `conv` of `main`: unsupported expression: declaration `conv` references kernel recursor `Cert.rec`, which has no runtime value and no runtime shim (nothing can ever provide its symbol); the declaration must stay an extern boundary",
-        "gaps": [
-          "nested-mutual-recursor-has-no-runtime-value",
-          "match-join-point-lambda-in-value-position"
-        ]
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
       },
       "trust_cg_lane": {
-        "outcome": "EMIT_TRUSTIR_REFUSED",
-        "refusal": "front-end: cannot compile source dependency `conv` of `main`: unsupported expression: declaration `conv` references kernel recursor `Cert.rec`, which has no runtime value and no runtime shim (nothing can ever provide its symbol); the declaration must stay an extern boundary",
-        "gaps": [
-          "nested-mutual-recursor-has-no-runtime-value",
-          "match-join-point-lambda-in-value-position"
-        ]
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
       },
       "elaborator": {
         "outcome": "ACCEPTED",
@@ -621,18 +574,14 @@
       "name": "c33_r4_x_report_accumulator",
       "construct": "Historical acyclic control, split by Lean (not a mutual group): R4 (x): a report accumulator threaded through every member's `Except` result, with the head loop carrying it through 10^6 self tail calls",
       "c_lane": {
-        "outcome": "CRASHED",
-        "refusal": "clean run: program terminated by signal 11 (SIGSEGV)",
-        "gaps": [
-          "head-loop-is-not-a-loop"
-        ]
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
       },
       "trust_cg_lane": {
-        "outcome": "CRASHED",
-        "refusal": "clean run: program terminated by signal 11 (SIGSEGV)",
-        "gaps": [
-          "head-loop-is-not-a-loop"
-        ]
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
       },
       "elaborator": {
         "outcome": "ACCEPTED",
@@ -682,18 +631,14 @@
       "name": "c36_r4_x_report_call_cycle",
       "construct": "a report accumulator threaded through every member's `Except` result, with (iv)'s head loop carrying it and still compiled as a loop",
       "c_lane": {
-        "outcome": "CRASHED",
-        "refusal": "clean run: program terminated by signal 11 (SIGSEGV)",
-        "gaps": [
-          "head-loop-is-not-a-loop"
-        ]
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
       },
       "trust_cg_lane": {
-        "outcome": "CRASHED",
-        "refusal": "clean run: program terminated by signal 11 (SIGSEGV)",
-        "gaps": [
-          "head-loop-is-not-a-loop"
-        ]
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
       },
       "elaborator": {
         "outcome": "ACCEPTED",
@@ -725,18 +670,33 @@
       "name": "c37_head_loop_100000",
       "construct": "head-loop sample at 100000 steps (c27 with only the counter changed)",
       "c_lane": {
-        "outcome": "CRASHED",
-        "refusal": "clean run: program terminated by signal 11 (SIGSEGV)",
-        "gaps": [
-          "head-loop-is-not-a-loop"
-        ]
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
       },
       "trust_cg_lane": {
-        "outcome": "CRASHED",
-        "refusal": "clean run: program terminated by signal 11 (SIGSEGV)",
-        "gaps": [
-          "head-loop-is-not-a-loop"
-        ]
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      },
+      "elaborator": {
+        "outcome": "ACCEPTED",
+        "refusal": "",
+        "gaps": []
+      }
+    },
+    {
+      "name": "c37_head_loop_10000000",
+      "construct": "head-loop sample at 10000000 steps (c27 with only the counter changed; added by X4)",
+      "c_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      },
+      "trust_cg_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
       },
       "elaborator": {
         "outcome": "ACCEPTED",
@@ -745,172 +705,7 @@
       }
     }
   ],
-  "gaps": [
-    {
-      "id": "list-form-absent-from-builtin-prelude",
-      "construct": "`List.forM` (the checker's `main` uses `for … in`, which both lanes run)",
-      "needed_for": "convenience only; a driver can use `for … in`",
-      "lanes": [
-        "c",
-        "trust_cg"
-      ],
-      "stage": "front end: the builtin prelude has `List.mapM` and no `List.forM`",
-      "refusal": "Unknown identifier: List.forM",
-      "site": {
-        "file": "crates/clean-elab/src/infer/elab_core.rs",
-        "line": 3041,
-        "needle": "pub(super) fn unknown_ident_error(&self, name: &SurfaceName) -> ElabError {"
-      },
-      "more_sites": [
-        {
-          "file": "crates/clean-kernel/src/env/data_types_collections.rs",
-          "line": 2435,
-          "needle": "name: Name::from_string(\"List.mapM\"),"
-        }
-      ],
-      "fix_scope": "not local: builtin-prelude definitions are hand-built kernel terms. Whether to grow that prelude or to compile against real Init is a choice for the units that compile the real checker (X2, X4), not for this probe."
-    },
-    {
-      "id": "runtime-nat-stops-at-128-bits",
-      "construct": "`Nat` addition or multiplication whose result reaches 2^128",
-      "needed_for": "Lean's `Nat` is unbounded and a kernel checker computes on `Nat` literals; a checker compiled on this runtime stops itself on a larger result. It stops by name and never wraps.",
-      "lanes": [
-        "c",
-        "trust_cg"
-      ],
-      "stage": "the embedded C runtime (both lanes link it): `Nat` is an unsigned __int128",
-      "refusal": "clean panic: clean_nat_add: Nat result >= 2^128 (fail-closed)",
-      "site": {
-        "file": "crates/clean-runtime/src/clean_runtime.c",
-        "line": 289,
-        "needle": "clean_panic(\"clean_nat_add: Nat result >= 2^128 (fail-closed)\");"
-      },
-      "more_sites": [
-        {
-          "file": "crates/clean-runtime/src/clean_runtime.c",
-          "line": 310,
-          "needle": "clean_panic(\"clean_nat_mul: Nat result >= 2^128 (fail-closed)\");"
-        }
-      ],
-      "fix_scope": "not local: an arbitrary-precision `Nat` in the runtime (and, by the plan, a runtime that is not C)"
-    },
-    {
-      "id": "nat-literal-wider-than-128-bits",
-      "construct": "a `Nat` literal of more than 128 bits in a compiled definition",
-      "needed_for": "a checker holds `Nat` literals of any size",
-      "lanes": [
-        "c",
-        "trust_cg"
-      ],
-      "stage": "clean-compiler, literal lowering to L5IR (shared by both lanes)",
-      "refusal": "unsupported literal lowering for Nat",
-      "refusal_seen_with": "clean compile <program> --decl two128 --emit c (`clean run` now preserves this original cause at the source dependency closure)",
-      "site": {
-        "file": "crates/clean-compiler/src/to_ir/lower.rs",
-        "line": 38,
-        "needle": "Err(CompilerError::UnsupportedLiteral { kind: \"Nat\" })"
-      },
-      "fix_scope": "not local: follows runtime-nat-stops-at-128-bits"
-    },
-    {
-      "id": "head-loop-is-not-a-loop",
-      "construct": "a self tail call on Nat compiled as recursive closure applications rather than a loop, overflowing the compiled program stack",
-      "needed_for": "Design 3.2 and R4 (iv), (x): a self tail call must compile to a loop on both lanes for kcheck depth-counter recursion. At 8 MiB, both Clean lanes print Lean bytes at 10,000 steps and SIGSEGV at 100,000 and 1,000,000. Both lanes print the full expected 100,000-step bytes at 65,520 KiB; the million-step c27 and c36 still overflow there. Pinned Lean compiled binaries of all three exit 0 at 8 MiB, byte-equal to lean --run, with self tail calls emitted as goto _start. This identifies a compiled-program stack overflow in Clean, not an upstream Lean overflow or an exact crash threshold.",
-      "lanes": [
-        "c",
-        "trust_cg"
-      ],
-      "stage": "clean-compiler, the lowering of `Nat.rec` (structural recursion) to a synthesized local recursive function: it returns a closure per step (`_rec_0(pred)`) that the caller applies with `clean_apply_n` and then releases its arguments, so the recursive call is neither a direct call nor in tail position",
-      "refusal": "clean run: program terminated by signal 11 (SIGSEGV)",
-      "refusal_seen_with": "clean run <program> --decl main (both lanes; the program prints nothing before the crash). The emitted C is `clean compile <program> --decl headLoop --emit c -o <file>`.",
-      "site": {
-        "file": "crates/clean-compiler/src/to_lcnf/lower.rs",
-        "line": 2560,
-        "needle": "pub(super) fn lower_rec_apply("
-      },
-      "more_sites": [
-        {
-          "file": "crates/clean-compiler/src/to_lcnf/lower.rs",
-          "line": 2272,
-          "needle": "pub(super) fn rec_apply_parts(env: &Environment, expr: &Expr) -> Option<RecApplyParts> {"
-        },
-        {
-          "file": "crates/clean-cli/src/cmd_run.rs",
-          "line": 112,
-          "needle": "\"clean run: program terminated by signal {signal} ({})\","
-        }
-      ],
-      "fix_scope": "not local: structural recursion whose motive is a function type compiled as a direct self-recursive function (Lean's compiler does this from the equation compiler's output, not from the recursor), with RC that leaves the self call in tail position, and a C or trust-cg emission of that tail call as a jump. Falsifies R4 (iv) on both backends today.",
-      "stack_comparison": "reports/x1-recheck/stack-comparison.json"
-    },
-    {
-      "id": "match-join-point-lambda-in-value-position",
-      "construct": "a match whose overlapping nested rows elaborate to a join point (`_match_join_w`) and whose lambda then sits in a value position: `| .ok (.term a, p) => … | .ok _ => … | .error e => …` over `Except ε (Resp × Nat)`, and the decoder rows `| n + 1, 0 :: bs => … | n + 1, 1 :: k :: bs => … | _ + 1, _ => none`",
-      "needed_for": "R4 (v) and (viii): the request-sum form dispatches on nested responses with a catch-all, and every byte decoder has a catch-all row after nested list patterns",
-      "lanes": [
-        "c",
-        "trust_cg"
-      ],
-      "stage": "clean-compiler, LCNF lowering of a let value (`expr_to_let_value`): a `Lam` is not a let value it lowers",
-      "refusal": "unsupported expression: Expression form: Lam(",
-      "refusal_seen_with": "clean compile <program> --decl run --emit c -o <file> (`clean run` now preserves this original cause at the source dependency closure)",
-      "site": {
-        "file": "crates/clean-compiler/src/to_lcnf/lower.rs",
-        "line": 657,
-        "needle": "\"Expression form: {expr:?}\""
-      },
-      "more_sites": [
-        {
-          "file": "crates/clean-native/src/compile.rs",
-          "line": 364,
-          "needle": ".with_context(|| format!(\"failed to lower `{decl_name}` to L5CNF\"))?"
-        }
-      ],
-      "fix_scope": "not measured: the join point's lambda in a value position must be lowered as a local function (LCNF `fun` declaration) or inlined; which, and whether the elaborator should not emit it there, is open"
-    },
-    {
-      "id": "nested-mutual-recursor-has-no-runtime-value",
-      "construct": "structural recursion over a nested, mutually inductive type (`Head`/`Cert` with `List Cert` inside `Head`): the three functions compile to the kernel recursors `Head.rec`, `Cert.rec` and `Head.rec_1`",
-      "needed_for": "R4 (viii), formulation (B) of design 3.2: the advice tree is exactly such a type, and (B) is the first fallback for the checker's recursion",
-      "lanes": [
-        "c",
-        "trust_cg"
-      ],
-      "stage": "clean-compiler, the pipeline's recursor-reference check: a valueless kernel recursor reached from a body keeps the declaration an extern",
-      "refusal": "references kernel recursor `Head.rec`, which has no runtime value and no runtime shim",
-      "refusal_seen_with": "clean compile <program> --decl whnf --emit c -o <file> (also `conv`: `Cert.rec`, `certs`: `Head.rec_1`)",
-      "site": {
-        "file": "crates/clean-compiler/src/pass_manager/pipeline.rs",
-        "line": 472,
-        "needle": "\"declaration `{}` references kernel recursor `{name}`, \\"
-      },
-      "fix_scope": "not local: a lowering of structural recursion over nested mutual inductives to direct recursive functions, as for the non-nested case"
-    },
-    {
-      "id": "bytearray-absent-from-builtin-prelude",
-      "construct": "`ByteArray` (`ByteArray.mk`, `.size`, `.get!`): advice tokens read from bytes by index",
-      "needed_for": "R4 (vii): the advice is bytes and a position (design 3.2), read by the checker one byte per token",
-      "lanes": [
-        "c",
-        "trust_cg"
-      ],
-      "stage": "front end: the builtin prelude has no `ByteArray` type, so the binder's type is auto-bound as a type variable and `.size` on it is unknown (the runtime has `String.toByteArray` shims, the elaborator no type)",
-      "refusal": "Unknown identifier: size; dot notation `.size` on a receiver of type `fvar#0`, whose head does not name a type after reduction (opaque type variable)",
-      "site": {
-        "file": "crates/clean-elab/src/infer/elab_core.rs",
-        "line": 3041,
-        "needle": "pub(super) fn unknown_ident_error(&self, name: &SurfaceName) -> ElabError {"
-      },
-      "more_sites": [
-        {
-          "file": "crates/clean-kernel/src/env/data_types_collections.rs",
-          "line": 2096,
-          "needle": "// String wraps a validated ByteArray (`String.ofByteArray`;"
-        }
-      ],
-      "fix_scope": "not local: builtin-prelude definitions are hand-built kernel terms; the same choice as gap list-form-absent-from-builtin-prelude (grow that prelude, or compile against real Init)"
-    }
-  ],
+  "gaps": [],
   "lane_shortfalls": [
     {
       "id": "no-body-is-licensed",
@@ -1006,7 +801,7 @@
     {
       "item": "vi",
       "program": "c29_r4_vi_ground_acceptance_theorem",
-      "what": "one ground acceptance stated as a theorem and closed by `rfl` or `decide`, re-checked by Lean's kernel and Clean's (the kernel `clean check` runs; the fenced ReferenceKernel entry is not measured here)"
+      "what": "one ground acceptance stated as a theorem and closed by `rfl` or `decide`, re-checked by Lean's kernel, Clean's `clean check`, and the empty-base fenced `ReferenceKernel` + `leanchecker --fresh` qualification in `crates/clean-olean/tests/x1_r4_vi_fenced.rs`"
     },
     {
       "item": "vii",
@@ -1139,14 +934,14 @@
     {
       "steps": 10000,
       "program": "c37_head_loop_10000",
-      "clean_sha256": "ee390afe4e3376ad74f3c312fc4f4af1fcad04a583e56423740b8da4c15ecc32",
+      "clean_sha256": "16fbead2398dd501f7a23a6b6d0bee57247fa6a2b08ab226f1cc3ebdbd9d8695",
       "source_sha256": "8606e59b5d96dcfdd8473b6419bcc81fb353055151f7654b9c23f92717d33cf5",
       "measurement": {
         "c_lane": {
           "command": [
-            "$HOME/clean-wt/x1-recheck-fixes/target-tests/debug/clean",
+            "$HOME/clean/.claude/worktrees/x4-head-loop/target.noindex/debug/clean",
             "run",
-            "$HOME/clean-wt/x1-recheck-fixes/tests/fixtures/advice_replay_checker/programs/c37_head_loop_10000.lean",
+            "$HOME/clean/.claude/worktrees/x4-head-loop/tests/fixtures/advice_replay_checker/programs/c37_head_loop_10000.lean",
             "--decl",
             "main"
           ],
@@ -1160,15 +955,15 @@
         },
         "trust_cg_lane": {
           "command": [
-            "$HOME/clean-wt/x1-recheck-fixes/target-tests/debug/clean",
+            "$HOME/clean/.claude/worktrees/x4-head-loop/target.noindex/debug/clean",
             "run",
-            "$HOME/clean-wt/x1-recheck-fixes/tests/fixtures/advice_replay_checker/programs/c37_head_loop_10000.lean",
+            "$HOME/clean/.claude/worktrees/x4-head-loop/tests/fixtures/advice_replay_checker/programs/c37_head_loop_10000.lean",
             "--decl",
             "main",
             "--backend",
             "trust-cg",
             "--receipt",
-            "/var/folders/xg/p7rmcgnn72n3s8dnc_wcxln40000gn/T/x1-run-tc4dlf3j/receipt.json"
+            "/var/folders/8w/wmnxrnkx6zd2fsnvzr28m4pw0000gn/T/x1-run-zaiy4yoo/receipt.json"
           ],
           "exit_code": 0,
           "stdout": "ACCEPT lit 10000 cursor=10000\nREFUSE depth\nACCEPT lit 6 cursor=3\n",
@@ -1183,7 +978,7 @@
             "stage": "built",
             "step": null,
             "cause": null,
-            "module_digest": "sha256:560bc121d44e322cad43abfb746291c3a5eeaf7833cc4ef1a82bd697d0469b13",
+            "module_digest": "sha256:bf9c1921ef265d81b13078cfd2f63cf383a50e0343a3d07e3a28e7d29b2dd318",
             "kernel_tv_certified": 0,
             "bodies_unvalidated": 38,
             "bodies_kept": {},
@@ -1210,40 +1005,40 @@
     {
       "steps": 100000,
       "program": "c37_head_loop_100000",
-      "clean_sha256": "ee390afe4e3376ad74f3c312fc4f4af1fcad04a583e56423740b8da4c15ecc32",
+      "clean_sha256": "16fbead2398dd501f7a23a6b6d0bee57247fa6a2b08ab226f1cc3ebdbd9d8695",
       "source_sha256": "86ee7bc51ecbe555c43ebd240616a4e8bcd39f371a6d5bf0ce90607d4764030e",
       "measurement": {
         "c_lane": {
           "command": [
-            "$HOME/clean-wt/x1-recheck-fixes/target-tests/debug/clean",
+            "$HOME/clean/.claude/worktrees/x4-head-loop/target.noindex/debug/clean",
             "run",
-            "$HOME/clean-wt/x1-recheck-fixes/tests/fixtures/advice_replay_checker/programs/c37_head_loop_100000.lean",
+            "$HOME/clean/.claude/worktrees/x4-head-loop/tests/fixtures/advice_replay_checker/programs/c37_head_loop_100000.lean",
             "--decl",
             "main"
           ],
-          "exit_code": 139,
-          "stdout": "",
-          "stderr": "clean run: program terminated by signal 11 (SIGSEGV)\n",
+          "exit_code": 0,
+          "stdout": "ACCEPT lit 100000 cursor=100000\nREFUSE depth\nACCEPT lit 6 cursor=3\n",
+          "stderr": "",
           "pin": {
-            "outcome": "CRASHED",
-            "refusal": "clean run: program terminated by signal 11 (SIGSEGV)"
+            "outcome": "BYTE_EQUAL",
+            "refusal": ""
           }
         },
         "trust_cg_lane": {
           "command": [
-            "$HOME/clean-wt/x1-recheck-fixes/target-tests/debug/clean",
+            "$HOME/clean/.claude/worktrees/x4-head-loop/target.noindex/debug/clean",
             "run",
-            "$HOME/clean-wt/x1-recheck-fixes/tests/fixtures/advice_replay_checker/programs/c37_head_loop_100000.lean",
+            "$HOME/clean/.claude/worktrees/x4-head-loop/tests/fixtures/advice_replay_checker/programs/c37_head_loop_100000.lean",
             "--decl",
             "main",
             "--backend",
             "trust-cg",
             "--receipt",
-            "/var/folders/xg/p7rmcgnn72n3s8dnc_wcxln40000gn/T/x1-run-w0r1i7mi/receipt.json"
+            "/var/folders/8w/wmnxrnkx6zd2fsnvzr28m4pw0000gn/T/x1-run-vbe_mffc/receipt.json"
           ],
-          "exit_code": 139,
-          "stdout": "",
-          "stderr": "clean run: program terminated by signal 11 (SIGSEGV)\n",
+          "exit_code": 0,
+          "stdout": "ACCEPT lit 100000 cursor=100000\nREFUSE depth\nACCEPT lit 6 cursor=3\n",
+          "stderr": "",
           "receipt": {
             "schema": "clean-run-trustcg-receipt/v1",
             "lowered": "clean-compiler-unvalidated",
@@ -1254,7 +1049,7 @@
             "stage": "built",
             "step": null,
             "cause": null,
-            "module_digest": "sha256:ff65b5800c505e79be39bc6647644b8cadf5956e263075aa950a6081e6be8269",
+            "module_digest": "sha256:8463dd50fcd16dd5e269e7fd472d93c74c17ce2e011b4ae9154cbfc9ebfd54d1",
             "kernel_tv_certified": 0,
             "bodies_unvalidated": 38,
             "bodies_kept": {},
@@ -1262,63 +1057,59 @@
             "driver_entry": "clean_lx0_driver_main (-e)"
           },
           "pin": {
-            "outcome": "CRASHED",
-            "refusal": "clean run: program terminated by signal 11 (SIGSEGV)"
+            "outcome": "BYTE_EQUAL",
+            "refusal": ""
           }
         }
       },
       "c_lane": {
-        "outcome": "CRASHED",
-        "refusal": "clean run: program terminated by signal 11 (SIGSEGV)",
-        "gaps": [
-          "head-loop-is-not-a-loop"
-        ]
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
       },
       "trust_cg_lane": {
-        "outcome": "CRASHED",
-        "refusal": "clean run: program terminated by signal 11 (SIGSEGV)",
-        "gaps": [
-          "head-loop-is-not-a-loop"
-        ]
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
       }
     },
     {
       "steps": 1000000,
       "program": "c27_r4_iv_head_loop_million",
-      "clean_sha256": "ee390afe4e3376ad74f3c312fc4f4af1fcad04a583e56423740b8da4c15ecc32",
+      "clean_sha256": "16fbead2398dd501f7a23a6b6d0bee57247fa6a2b08ab226f1cc3ebdbd9d8695",
       "source_sha256": "d473c49b5b42da7cfa267d721db2295fb35ea1cb1c7944c5de9a137ed76ad6e3",
       "measurement": {
         "c_lane": {
           "command": [
-            "$HOME/clean-wt/x1-recheck-fixes/target-tests/debug/clean",
+            "$HOME/clean/.claude/worktrees/x4-head-loop/target.noindex/debug/clean",
             "run",
-            "$HOME/clean-wt/x1-recheck-fixes/tests/fixtures/advice_replay_checker/programs/c27_r4_iv_head_loop_million.lean",
+            "$HOME/clean/.claude/worktrees/x4-head-loop/tests/fixtures/advice_replay_checker/programs/c27_r4_iv_head_loop_million.lean",
             "--decl",
             "main"
           ],
-          "exit_code": 139,
-          "stdout": "",
-          "stderr": "clean run: program terminated by signal 11 (SIGSEGV)\n",
+          "exit_code": 0,
+          "stdout": "ACCEPT lit 1000000 cursor=1000000\nREFUSE depth\nACCEPT lit 6 cursor=3\n",
+          "stderr": "",
           "pin": {
-            "outcome": "CRASHED",
-            "refusal": "clean run: program terminated by signal 11 (SIGSEGV)"
+            "outcome": "BYTE_EQUAL",
+            "refusal": ""
           }
         },
         "trust_cg_lane": {
           "command": [
-            "$HOME/clean-wt/x1-recheck-fixes/target-tests/debug/clean",
+            "$HOME/clean/.claude/worktrees/x4-head-loop/target.noindex/debug/clean",
             "run",
-            "$HOME/clean-wt/x1-recheck-fixes/tests/fixtures/advice_replay_checker/programs/c27_r4_iv_head_loop_million.lean",
+            "$HOME/clean/.claude/worktrees/x4-head-loop/tests/fixtures/advice_replay_checker/programs/c27_r4_iv_head_loop_million.lean",
             "--decl",
             "main",
             "--backend",
             "trust-cg",
             "--receipt",
-            "/var/folders/xg/p7rmcgnn72n3s8dnc_wcxln40000gn/T/x1-run-rer_2j3w/receipt.json"
+            "/var/folders/8w/wmnxrnkx6zd2fsnvzr28m4pw0000gn/T/x1-run-33b_sz_l/receipt.json"
           ],
-          "exit_code": 139,
-          "stdout": "",
-          "stderr": "clean run: program terminated by signal 11 (SIGSEGV)\n",
+          "exit_code": 0,
+          "stdout": "ACCEPT lit 1000000 cursor=1000000\nREFUSE depth\nACCEPT lit 6 cursor=3\n",
+          "stderr": "",
           "receipt": {
             "schema": "clean-run-trustcg-receipt/v1",
             "lowered": "clean-compiler-unvalidated",
@@ -1329,7 +1120,7 @@
             "stage": "built",
             "step": null,
             "cause": null,
-            "module_digest": "sha256:e1ecdba55aa95a395682a140b904caf2ee621278da63e54da10681be8c0550bc",
+            "module_digest": "sha256:cd15c63a482c13e75fc3d7f3e05a14043c5c57010d39970b5e6735cb00022a0d",
             "kernel_tv_certified": 0,
             "bodies_unvalidated": 38,
             "bodies_kept": {},
@@ -1337,24 +1128,91 @@
             "driver_entry": "clean_lx0_driver_main (-e)"
           },
           "pin": {
-            "outcome": "CRASHED",
-            "refusal": "clean run: program terminated by signal 11 (SIGSEGV)"
+            "outcome": "BYTE_EQUAL",
+            "refusal": ""
           }
         }
       },
       "c_lane": {
-        "outcome": "CRASHED",
-        "refusal": "clean run: program terminated by signal 11 (SIGSEGV)",
-        "gaps": [
-          "head-loop-is-not-a-loop"
-        ]
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
       },
       "trust_cg_lane": {
-        "outcome": "CRASHED",
-        "refusal": "clean run: program terminated by signal 11 (SIGSEGV)",
-        "gaps": [
-          "head-loop-is-not-a-loop"
-        ]
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      }
+    },
+    {
+      "steps": 10000000,
+      "program": "c37_head_loop_10000000",
+      "clean_sha256": "16fbead2398dd501f7a23a6b6d0bee57247fa6a2b08ab226f1cc3ebdbd9d8695",
+      "source_sha256": "cb4b7e9fdf0fcdb2907a7d1690c64ac94c22f01e213bdba59e5c532951c659ee",
+      "measurement": {
+        "c_lane": {
+          "command": [
+            "$HOME/clean/.claude/worktrees/x4-head-loop/target.noindex/debug/clean",
+            "run",
+            "$HOME/clean/.claude/worktrees/x4-head-loop/tests/fixtures/advice_replay_checker/programs/c37_head_loop_10000000.lean",
+            "--decl",
+            "main"
+          ],
+          "exit_code": 0,
+          "stdout": "ACCEPT lit 10000000 cursor=10000000\nREFUSE depth\nACCEPT lit 6 cursor=3\n",
+          "stderr": "",
+          "pin": {
+            "outcome": "BYTE_EQUAL",
+            "refusal": ""
+          }
+        },
+        "trust_cg_lane": {
+          "command": [
+            "$HOME/clean/.claude/worktrees/x4-head-loop/target.noindex/debug/clean",
+            "run",
+            "$HOME/clean/.claude/worktrees/x4-head-loop/tests/fixtures/advice_replay_checker/programs/c37_head_loop_10000000.lean",
+            "--decl",
+            "main",
+            "--backend",
+            "trust-cg",
+            "--receipt",
+            "/var/folders/8w/wmnxrnkx6zd2fsnvzr28m4pw0000gn/T/x1-run-v04ccrr8/receipt.json"
+          ],
+          "exit_code": 0,
+          "stdout": "ACCEPT lit 10000000 cursor=10000000\nREFUSE depth\nACCEPT lit 6 cursor=3\n",
+          "stderr": "",
+          "receipt": {
+            "schema": "clean-run-trustcg-receipt/v1",
+            "lowered": "clean-compiler-unvalidated",
+            "runtime": "C via cc",
+            "claim": "measurement only; no binary claim; lane = clean-compiler-unvalidated",
+            "decl": "main",
+            "trust_cg": "$HOME/Library/Application Support/aterm/pkg/bin/trust-cg (trust-cg 0.7.0)",
+            "stage": "built",
+            "step": null,
+            "cause": null,
+            "module_digest": "sha256:6173b0e72abec5d94d7c7d0c13fa48db3569b82404a535ba2a3a8515f786f0f2",
+            "kernel_tv_certified": 0,
+            "bodies_unvalidated": 38,
+            "bodies_kept": {},
+            "entry_symbol": "main",
+            "driver_entry": "clean_lx0_driver_main (-e)"
+          },
+          "pin": {
+            "outcome": "BYTE_EQUAL",
+            "refusal": ""
+          }
+        }
+      },
+      "c_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      },
+      "trust_cg_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
       }
     }
   ],
@@ -1391,6 +1249,46 @@
       "id": "rc-linearity-nested-pattern-under-unary-ctor",
       "evidence": "reports/nested-pattern-rc-2026-11-16/README.md",
       "scope": "Actual c03 source: C and trust-cg 11616 both print pinned Lean bytes after preserving zero-arg FVar alias scalar metadata; original refusal retained in the report. No license or authority claim."
+    },
+    {
+      "id": "runtime-nat-stops-at-128-bits",
+      "evidence": "reports/wide-nat-repr-2026-11-17/README.md",
+      "scope": "Probes c16 and c17: C and trust-cg 11616 both print pinned Lean bytes. 51e1df918e made the runtime's Nat variable-length limbs, which moved the refusal to `toString` (`clean_nat_to_u128`: \"native Nat does not fit u128\"); `l_instToStringNat` now renders through the runtime's `clean_nat_repr`. Nat literals above 128 bits stay refused (nat-literal-wider-than-128-bits). No license or authority claim."
+    },
+    {
+      "id": "match-join-point-lambda-in-value-position",
+      "evidence": "reports/x4-join-point-lambda-2026-11-16/README.md",
+      "scope": "Probes c28_r4_v_one_function_over_requests and c31 decodeOne: C and trust-cg lanes both compile and print pinned Lean bytes after lowering Let-bound join-point lambdas and value-position lambdas to local LCNF FunDecls with scoped kernel return-type recovery. No body license or authority claim."
+    },
+    {
+      "id": "nested-mutual-recursor-has-no-runtime-value",
+      "evidence": "reports/x4-nested-mutual-recursor-2026-11-16/README.md",
+      "scope": "Probe c31_r4_viii_advice_tree_with_certificates: C and trust-cg lanes both compile Head.rec / Cert.rec / Head.rec_1 and print pinned Lean bytes via tag-dispatched self-recursive LCNF `_mrec` lowering verified fail-closed against RecursorRule.rhs. No body license or authority claim."
+    },
+    {
+      "id": "bytearray-absent-from-builtin-prelude",
+      "evidence": "reports/x4-bytearray-list-form-2026-11-16/README.md",
+      "scope": "Probe c30_r4_vii_tokens_from_bytearray: accepted by `clean check` and BYTE_EQUAL on both C and trust-cg lanes via constructive, axiom-free ByteArray/mk/data/size/get! in Environment::init_byte_array (withheld in .olean import mode). No body license or authority claim."
+    },
+    {
+      "id": "list-form-absent-from-builtin-prelude",
+      "evidence": "reports/x4-bytearray-list-form-2026-11-16/README.md",
+      "scope": "Probe c09_list_form_io: BYTE_EQUAL on both C and trust-cg lanes via constructive, axiom-free List.forM.{u, v, w} in Environment::init_list_form and closed-monad List.forM unfolding in native_monad_inline. No body license or authority claim."
+    },
+    {
+      "id": "nat-literal-wider-than-128-bits",
+      "evidence": "reports/x4-wide-nat-literal-2026-11-17/README.md",
+      "scope": "Probe c23_nat_literal_of_129_bits: BYTE_EQUAL on both C and trust-cg lanes via IRLiteral::NatLimbs(Vec<u64>) lowered through clean_nat_big + clean_nat_limb_step over 51e1df918e's variable-length runtime Nat and 123899ae28's clean_nat_repr. No body license or authority claim."
+    },
+    {
+      "id": "head-loop-is-not-a-loop",
+      "evidence": "reports/x4-head-loop-2026-11-15/README.md",
+      "construct": "a self tail call on Nat compiled as recursive closure applications rather than a loop, overflowing the compiled program stack",
+      "was": "c27 (10^6 steps), c37_head_loop_100000 (10^5), c33 and c36 died of SIGSEGV on both lanes at the default 8 MiB stack. Structural recursion with a function-typed motive was compiled to a closure per step: `go(pred)` returned a closure that the caller applied with `clean_apply_n`, the induction hypothesis was bound eagerly at the head of the arm, and a lifted mutual block built its `PProd` tuple of closures eagerly. No recursive call was a direct call in tail position (464 B of C stack per step measured with lldb).",
+      "fix": "X4 (reports/x4-head-loop-2026-11-15/README.md). An induction hypothesis is a call of the synthesized recursive function where it occurs, uncurried by the minors' syntactic arity (crates/clean-compiler/src/to_lcnf/rec_ih.rs); a lifted mutual block becomes one function with a selector (rec_select.rs); a syntactic well-founded step is inlined the same way (rec_wf.rs); an over-applied case analysis passing an IH is commuted into its alternatives (rec_commute.rs). On the final L5IR every self tail call becomes a jump to a loop join point (tail_loop.rs): `goto` in C, a branch in trust-ir, with parallel jump assignment (emit_c/body.rs, emit_rust/body.rs), erased jump arguments materialised (emit_trust_ir.rs), a back-edge model in the RC linearity check (rc_repair_linearity_back_edge.rs) and no CSE of actions (opt/cse/mod.rs).",
+      "tests": "crates/clean/tests/deep_recursion.rs (both lanes, opt 0/1/2, a 512 KiB stack, Lean bytes, with the non-tail negative control and emitted-shape pins); crates/clean-compiler/src/tail_loop_tests.rs, to_lcnf/rec_ih_tests.rs, to_lcnf/rec_select_tests.rs, to_lcnf/rec_wf_tests.rs, opt/cse/action_tests.rs",
+      "probe": "c27, c33, c36, c37_head_loop_100000 and the new c37_head_loop_10000000: BYTE_EQUAL on both lanes at the default 8 MiB stack; head_loop_samples now has a 10^7 row",
+      "scope": "self tail calls of one synthesized recursive function (a member of a lifted mutual block counts, through its selector). As in Lean, a tail call between separate functions is not a loop, and a non-tail recursion still uses the stack (deep_recursion's non_tail_deep_1m control). The entry still runs on the process's main thread (R3, Lean's 1 GiB entry thread, is not in this unit)."
     }
   ],
   "scoped_rechecks": [

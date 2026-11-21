@@ -22,6 +22,29 @@ fn issue796_cover_env() -> Environment {
 }
 
 #[test]
+fn positional_field_head_uses_the_registered_term_elaborator() {
+    let env = Environment::with_prelude();
+    let mut ctx = ElabCtx::new(&env);
+    let local = ctx.push_local(
+        SurfaceName::component("n", false),
+        Expr::const_(Name::from_string("Nat"), vec![]),
+    );
+    let succ = Expr::const_(Name::from_string("Nat.succ"), vec![]);
+    let implementation = succ.clone();
+    ctx.term_elab_registry.register(
+        "proj",
+        crate::term_elab_registry::TermElabEntry {
+            syntax_kind: "proj".to_owned(),
+            handler: std::sync::Arc::new(move |_, _, _| Ok(implementation.clone())),
+            priority: 2000,
+        },
+    );
+    let parsed = parse_expr("n.custom n").unwrap();
+    let applied = ctx.elaborate(&parsed).unwrap();
+    assert_eq!(applied, Expr::app(succ, Expr::fvar(local)));
+}
+
+#[test]
 fn test_projection_index_resolves_struct_name() {
     let env = pair_env();
     // Surface `.1` is 1-based (Lean); it resolves to kernel field index 0 (first field).
@@ -85,6 +108,37 @@ fn test_namespace_projection_resolves_const() {
             assert_eq!(name, &Name::from_string("whnf_to.refl"));
         }
         other => panic!("expected const, got {other:?}"),
+    }
+}
+
+#[test]
+fn accessor_named_for_a_field_cannot_read_a_different_receiver() {
+    let mut env = pair_env_with_namespaced_const();
+    let owner = Name::from_string("Pair");
+    let pair = Expr::const_(owner.clone(), vec![]);
+    let wrong_target = Expr::const_(Name::from_string("pairVal"), vec![]);
+    env.add_decl(Declaration::Definition {
+        name: Name::from_string("Pair.fst"),
+        level_params: vec![],
+        type_: Expr::pi(BinderInfo::Default, pair.clone(), Expr::prop()),
+        value: Expr::lam(
+            BinderInfo::Default,
+            pair,
+            Expr::proj(owner.clone(), 0, wrong_target),
+        ),
+        is_reducible: true,
+    })
+    .unwrap();
+    for source in ["fun (p : Pair) => p.fst", "fun (p : Pair) => p.1"] {
+        let expr = elab_with_env(&env, source).unwrap();
+        let ExprKind::Lam(_, _, body) = expr.kind() else {
+            panic!("expected a function of the source receiver")
+        };
+        assert_eq!(
+            body.as_ref(),
+            &Expr::proj(owner.clone(), 0, Expr::bvar(0)),
+            "{source}"
+        );
     }
 }
 
@@ -193,7 +247,9 @@ fn test_projection_receiver_error_and_namespace_retry_restore_expected_context()
     // fallback may strand `current_expected_type = None`.
     let missing_receiver = SurfaceExpr::Ident(span, SurfaceName::generated_path("MissingReceiver"));
     let missing_field = Projection::Named(SurfaceName::generated_path("field"));
-    assert!(ctx.elab_proj(&missing_receiver, &missing_field).is_err());
+    assert!(ctx
+        .elab_proj(&missing_receiver, &missing_field, None)
+        .is_err());
     assert_eq!(ctx.current_expected_type, Some(outer_expected.clone()));
     assert_eq!(ctx.locals, locals_before);
 
@@ -202,7 +258,7 @@ fn test_projection_receiver_error_and_namespace_retry_restore_expected_context()
     let namespace_receiver = SurfaceExpr::Ident(span, SurfaceName::generated_path("Foo"));
     let namespace_field = Projection::Named(SurfaceName::generated_path("bar"));
     let result = ctx
-        .elab_proj(&namespace_receiver, &namespace_field)
+        .elab_proj(&namespace_receiver, &namespace_field, None)
         .expect("namespace fallback should remain usable after receiver failure");
     assert!(
         matches!(result.kind(), ExprKind::Const(name, _) if *name == Name::from_string("Foo.bar")),

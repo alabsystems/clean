@@ -29,13 +29,16 @@ use clean_olean::{
 };
 use sha2::{Digest, Sha256};
 
-const MODULES: [&str; 6] = [
+const PACKAGE_ROOT: &str = "KCheckC7P2";
+
+const MODULES: [&str; 7] = [
     "KCheckC7P2.TokenStream",
     "KCheckC7P2.NonTransitivity",
     "KCheckC7P2.Completeness",
+    "KCheckC7P2.AdviceSize",
     "KCheckC7P2.ReleaseGate",
     "KCheckC7P2.Contracts",
-    "KCheckC7P2",
+    PACKAGE_ROOT,
 ];
 
 const EXECUTABLE_C7_P2_DEFS: &[&str] = &[
@@ -49,6 +52,7 @@ const EXECUTABLE_C7_P2_DEFS: &[&str] = &[
     "KCheckC7P2.compileCheck",
     "KCheckC7P2.compileWalk",
     "KCheckC7P2.compileOrdinary",
+    "KCheckC7P2.ordinaryNodes",
     "KCheckC7P2.initIdDecl",
     "KCheckC7P2.initEqSymmDecl",
     "KCheckC7P2.checkChainTelescopesFrom",
@@ -91,6 +95,9 @@ const HEADLINE_THEOREMS: &[&str] = &[
     "KCheckC7P2.initId_accepted_end_to_end",
     "KCheckC7P2.initEqSymm_accepted_by_kcheck",
     "KCheckC7P2.initId_kcheckRun_ok",
+    // AdviceSize: an exact encoded byte bound and admission of that same advice
+    "KCheckC7P2.compileOrdinary_bytes_le",
+    "KCheckC7P2.algoOrdinary_complete_linear",
     // ReleaseGate: Plan P2 / Decision 15 validator soundness & single-guard refusals
     "KCheckC7P2.checkReleaseAcceptance_iff",
     "KCheckC7P2.interim_backing_grants_nothing",
@@ -219,7 +226,7 @@ fn kcheck_c7_p2_rechecks_through_two_kernels_with_zero_choice_and_release_refusa
 
     // Kernel 1: Lean's independent fresh kernel replay (`leanchecker --fresh KCheckC7P2`).
     let replay = Command::new(bin.join("leanchecker"))
-        .args(["--fresh", MODULES[5]])
+        .args(["--fresh", PACKAGE_ROOT])
         .current_dir(&compiled)
         .env(
             "LEAN_PATH",
@@ -231,13 +238,13 @@ fn kcheck_c7_p2_rechecks_through_two_kernels_with_zero_choice_and_release_refusa
     assert!(
         replay.status.success(),
         "leanchecker --fresh {} failed:\n{}\n{}",
-        MODULES[5],
+        PACKAGE_ROOT,
         String::from_utf8_lossy(&replay.stdout),
         String::from_utf8_lossy(&replay.stderr)
     );
 
     let mut loaded = Environment::for_lean_replay();
-    let summaries = load_module_with_deps(&mut loaded, MODULES[5], &[compiled.clone(), lib])
+    let summaries = load_module_with_deps(&mut loaded, PACKAGE_ROOT, &[compiled.clone(), lib])
         .expect("compiled original input");
     let not_replayable: BTreeSet<&str> = summaries
         .iter()

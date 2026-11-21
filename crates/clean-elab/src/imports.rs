@@ -97,6 +97,7 @@ pub enum ImportPolicy {
 #[derive(Debug, Clone, Copy)]
 struct ImportResolution<'a> {
     policy: ImportPolicy,
+    requires_artifact: bool,
     /// Modules whose declarations are already in `env` because this run
     /// elaborated their intra-project `.lean` source. Such an import is
     /// resolved even though no `.olean` exists for it.
@@ -105,7 +106,7 @@ struct ImportResolution<'a> {
 
 impl ImportResolution<'_> {
     fn is_satisfied_from_source(&self, module: &Name) -> bool {
-        self.satisfied_from_source.contains(module)
+        !self.requires_artifact && self.satisfied_from_source.contains(module)
     }
 }
 
@@ -165,6 +166,7 @@ pub(crate) fn process_imports_clean_native_with_provided(
 ) -> Result<(), ElabError> {
     let resolution = ImportResolution {
         policy,
+        requires_artifact: false,
         satisfied_from_source,
     };
     for path in paths {
@@ -241,6 +243,7 @@ pub(crate) fn process_imports_with_search_paths_and_policy(
     let search_paths = import_search_paths(extra_search_paths);
     let resolution = ImportResolution {
         policy,
+        requires_artifact: false,
         satisfied_from_source: no_source_resolved(),
     };
 
@@ -296,6 +299,7 @@ pub(crate) fn process_imports_with_search_paths_shared(
         visited,
         ImportResolution {
             policy: ImportPolicy::default(),
+            requires_artifact: false,
             satisfied_from_source: no_source_resolved(),
         },
     )
@@ -334,6 +338,15 @@ fn process_imports_shared_inner(
 
     for path in paths {
         let module = path.name().clone();
+
+        // This run already checked the selected source in this environment.
+        // Replaying an artifact can change its compiler context. Artifact-only
+        // bootstrap still has to judge the selected artifact itself.
+        if resolution.is_satisfied_from_source(&module)
+            && !clean_olean::clean_payload_imports_required(env)
+        {
+            continue;
+        }
 
         let outcome = if search_paths.is_empty() {
             None
@@ -393,6 +406,7 @@ pub(crate) fn process_imports_for_file(
         }
     }
     let policy = file_ctx.import_policy();
+    let requires_artifact = file_ctx.imports_require_artifacts();
     let (visited, satisfied_from_source) = file_ctx.import_loader_state_mut();
     process_imports_shared_inner(
         env,
@@ -401,6 +415,7 @@ pub(crate) fn process_imports_for_file(
         visited,
         ImportResolution {
             policy,
+            requires_artifact,
             satisfied_from_source,
         },
     )
@@ -441,6 +456,19 @@ fn finish_import_module(
     outcome: Option<Result<Vec<clean_olean::LoadSummary>, clean_olean::ImportError>>,
     resolution: ImportResolution<'_>,
 ) -> Result<(), ElabError> {
+    if resolution.requires_artifact {
+        let reason = match outcome.as_ref() {
+            Some(Ok(_)) => None,
+            Some(Err(error)) => Some(error.to_string()),
+            None => Some("no `.olean` search path was available".to_owned()),
+        };
+        if let Some(reason) = reason {
+            return Err(ElabError::UnresolvedImport {
+                module: module.to_string(),
+                reason,
+            });
+        }
+    }
     if clean_olean::clean_payload_imports_required(env) {
         if let Some(Err(error)) = outcome.as_ref() {
             // A bootstrap selected from Clean artifacts cannot silently change
@@ -743,7 +771,8 @@ pub fn olean_available_in_world(
             search_paths.push(default);
         }
     }
-    clean_olean::resolve_typed_module_path(module, &search_paths).is_ok()
+    clean_olean::resolve_typed_module_path_in_world(module, &search_paths, world.declared_world())
+        .is_ok()
 }
 
 fn is_lake_root(path: &Path) -> bool {
@@ -974,6 +1003,46 @@ mod tests {
             env.get_const(&Name::from_string("Real")).is_some(),
             "Real stub should be defined via fallback when no .olean is found",
         );
+    }
+
+    #[test]
+    fn raw_lean_import_context_requires_an_artifact_and_captured_context_keeps_the_shim() {
+        let dir = tempfile::tempdir().expect("isolated import root");
+        fs::write(
+            dir.path().join("lean-toolchain"),
+            "leanprover/lean4:v4.30.0-rc2\n",
+        )
+        .expect("default-world test pin");
+        let decision = clean_olean::source_world_for_file(&dir.path().join("Main.lean"), None)
+            .expect("default world needs no installed SDK");
+        let paths = vec![dir.path().to_path_buf()];
+        let module = "Lean.RawImportRequiresAnArtifact";
+        let imports = [SurfaceName::generated_path(module)];
+        let header = clean_parser::Parser::parse_header("prelude\n").expect("bare header");
+        let (mut env, mut raw) =
+            crate::module_driver::module_environment_and_context_with_import_paths(
+                crate::module_driver::EnvironmentSetup::default(),
+                &decision,
+                &header,
+                paths.clone(),
+            )
+            .expect("raw Lean context");
+        let error = super::process_imports_for_file(&mut env, &imports, &mut raw)
+            .expect_err("missing compiled import must fail");
+        assert!(
+            matches!(&error, ElabError::UnresolvedImport { module: name, reason }
+                if name == module && reason.contains("not found")),
+            "{error}"
+        );
+
+        let mut captured = crate::FileContext::new();
+        captured.set_captured_source_world(&decision, paths);
+        super::process_imports_for_file(
+            &mut clean_kernel::Environment::new(),
+            &imports,
+            &mut captured,
+        )
+        .expect("captured sources still allow their declared Lean shim");
     }
 
     #[test]
@@ -1320,3 +1389,7 @@ mod resource_tests;
 #[cfg(test)]
 #[path = "imports/clean_payload_requirement_tests.rs"]
 mod clean_payload_requirement_tests;
+
+#[cfg(test)]
+#[path = "imports_source_satisfaction_tests.rs"]
+mod source_satisfaction_tests;

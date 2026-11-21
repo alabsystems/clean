@@ -174,6 +174,8 @@ mod eval_ir_ctr_census;
 
 #[path = "eval_ir_stack_census.rs"]
 mod eval_ir_stack_census;
+#[path = "eval_ir_stack_late_strict.rs"]
+mod eval_ir_stack_late_strict;
 // The assume-guarantee activation's census: the A4-SHAPED statement about
 // infer_type, and the assertions that stop its NAME outrunning its premises.
 #[path = "eval_ir_itf_census.rs"]

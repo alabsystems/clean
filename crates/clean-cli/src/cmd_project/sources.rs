@@ -388,6 +388,7 @@ pub(super) fn count_declaration_leaves(decl: &SurfaceDecl) -> usize {
         | SurfaceDecl::Reduce { .. }
         | SurfaceDecl::Print { .. }
         | SurfaceDecl::PrintAxioms { .. }
+        | SurfaceDecl::PrintEquations { .. }
         | SurfaceDecl::Syntax { .. }
         | SurfaceDecl::DeclareSyntaxCat { .. }
         | SurfaceDecl::Macro { .. }

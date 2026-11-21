@@ -7,7 +7,7 @@ use std::path::Path;
 use std::process::Command;
 use std::sync::Arc;
 
-use clean_compiler::runtime_lcnf::{RuntimeContext, RuntimeSourceRecord};
+use clean_compiler::runtime_lcnf::RuntimeSourceRecord;
 use clean_kernel::Environment;
 use clean_olean::ImportWorld;
 
@@ -104,20 +104,11 @@ impl ExternalLeanProgram {
         )
         .map_err(|e| ExternalLeanError::Input(e.to_string()))?;
         let original_after = std::fs::canonicalize(input.file)?;
-        let capture = RuntimeContext::capture_with_environment(
-            vec![],
-            &base,
-            &env,
-            vec![RuntimeSourceRecord {
-                module: format!("{:?}", input.module),
-                path: original_after.display().to_string(),
-                source,
-            }],
-        );
-        let observation = capture
-            .environment_capture()
-            .cloned()
-            .ok_or_else(|| ExternalLeanError::Input("missing source observation".into()))?;
+        let sources = vec![RuntimeSourceRecord {
+            module: input.module.to_string(),
+            path: original_after.display().to_string(),
+            source,
+        }];
         let parts =
             super::primary_artifact::PrimaryArtifactCapture::recorded_parts(&output_path, &files);
         let sdk_after =
@@ -142,22 +133,19 @@ impl ExternalLeanProgram {
             &inputs,
             parts,
         );
-        #[cfg(feature = "trust-ir-backend")]
-        let source_snapshot = Arc::new(env.clone());
-        #[cfg(feature = "trust-ir-backend")]
-        let base_snapshot = Arc::new(base.clone());
+        let env = Arc::new(env);
+        let base = Arc::new(base);
         Ok(Self {
-            env,
-            base,
+            env: Arc::clone(&env),
+            base: Arc::clone(&base),
             module_names,
             usage: super::inspection::Usage::Inspection,
             custody: Arc::new(Custody {
                 world: input.world,
-                #[cfg(feature = "trust-ir-backend")]
-                source: source_snapshot,
-                #[cfg(feature = "trust-ir-backend")]
-                base: base_snapshot,
-                observation,
+                source: env,
+                base,
+                sources,
+                global_observation: Default::default(),
                 inputs,
                 primary_artifact,
                 _snapshot: snapshot,

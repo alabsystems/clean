@@ -1256,7 +1256,7 @@
         },
         "command": "bash scripts/kv_invariance_gate.sh",
         "expect_contains": "independent-parity unit tests FAILED:",
-        "why": "The ALWAYS-ON seed leg, not the corpus leg -- and deliberately NOT KVINV_GATE_REQUIRE_MEASURED=1, which would only prove the gate refuses a deferral. This plants a real defect in the production serve path: `verify_one_closure_shard` stops comparing the recomputed blake3 of the on-disk .olean against the shard header, so a shard that is stale or swapped relative to its module is marked verified and its constants are served. `test_load_time_hash_mismatch_refuses` flips one byte of the on-disk olean and requires not-verified => not-served; with the binding gone it is served, the seed leg goes red, and the gate exits 1. LIMIT, stated because the verdict line states it too: at HEAD on this machine the gate then reports `KVINV_GATE=seed-only:no-target` -- the corpus-scale eager-vs-lazy stamp is NOT measured here and this arm does not claim it. | PIN UPDATED 2026-09-15. It read `always-on v3 closure-binding / independent-parity unit tests failed`, which was the seed step's ONLY failure message when that step discarded cargo's output and could not tell a failing test from a cargo that never ran. The step now has two refusals, so the pin has to name which one: `independent-parity unit tests FAILED:` (with the colon, and the capitals libtest's own verdict branch prints) appears only when libtest actually reported. Deliberately NOT pinned on the verdict line `KVINV_GATE=failed:seed-unit-tests`, which is a PREFIX of `...-unrunnable` and would match a cargo that never ran -- exactly the confusion this arm now has to survive."
+        "why": "The ALWAYS-ON seed leg, not the corpus leg -- and deliberately NOT KVINV_GATE_REQUIRE_MEASURED=1, which would only prove the gate refuses a deferral. This plants a real defect in the production serve path: `verify_one_closure_shard` stops comparing the recomputed blake3 of the on-disk .olean against the shard header, so a shard that is stale or swapped relative to its module is marked verified and its constants are served. `test_load_time_hash_mismatch_refuses` flips one byte of the on-disk olean and requires not-verified => not-served; with the binding gone it is served, the seed leg goes red, and the gate exits 1. LIMIT, stated because the verdict line states it too: at HEAD on this machine the gate then reports `KVINV_GATE=seed-only:no-target` -- the corpus-scale eager-vs-lazy stamp is NOT measured here and this arm does not claim it. | PIN UPDATED 2026-09-15. It read `always-on v3 closure-binding / independent-parity unit tests failed`, which was the seed step's ONLY failure message when that step discarded cargo's output and could not tell a failing test from a cargo that never ran. The step now has two refusals, so the pin has to name which one: `independent-parity unit tests FAILED:` (with the colon, and the capitals libtest's own verdict branch prints) appears only when libtest actually reported. Deliberately NOT pinned on the verdict line `KVINV_GATE=failed:seed-unit-tests`, which is a PREFIX of `...-unrunnable` and would match a cargo that never ran -- exactly the confusion this arm now has to survive. | TEST RE-AIMED 2026-11-17 (p3lc-registry2): the named test's tamper changed, the arm did not. The one-byte flip of Minimal.olean described above now also leaves the olean unparseable (`region error: unsupported typed Name layout 1/2/223`), so with the binding disabled the subset check's parse refused it first and the test stayed green without the binding it exists to test. `test_load_time_hash_mismatch_refuses` (now in crates/clean-mathverse/src/cli/closure_load_v3_tests_source.rs, module `v3_closure_binding_tests_source`, still inside the seed filter) edits the source-olean blake3, then the length, that the shard header records, leaving the .olean, the arena and the recon digests as built: `open_lazy` skips the footer checksum, and the subset, arena and Lean-world gates all accept the edited shard, so only the binding can refuse it. The test asserts the refusal is `ClosureShardRefusal::SourceOleanMismatch` with the binding's own message, after a positive control that the pristine shard passes every gate. The old flip is kept as `test_load_time_unparseable_olean_flip_refuses`: the binding refuses it as built, and with the header re-bound to the flipped bytes the subset parse refuses it. Same command, same defence, same expect_contains."
       },
       {
         "arm": "the eager-vs-lazy comparison stops refusing two empty accepted sets, so a renamed or missing name key could make the corpus leg pass over nothing",
@@ -1318,15 +1318,26 @@
         "why": "The reviewed diagnostic example is one scanner-counted untrusted DATA restore, not a file-wide exemption. This source-only control must fail at the unchanged occurrence guard; it executes no Rust and confers no admission or proof grade."
       },
       {
-        "arm": "an eighth reducibility write exceeds the reviewed seven-call census",
+        "arm": "a ninth reducibility write exceeds the reviewed eight-call census",
         "mutate": {
           "file": "crates/clean-kernel/src/env/checked_metadata.rs",
           "op": "append",
           "text": "\n// Census control: an additional hint write in an accounted file.\n#[allow(dead_code)]\nfn gate_demo_extra_hint(env: &mut Environment, name: &Name) {\n    env.set_reducibility(name, Reducibility::Irreducible);\n}\n"
         },
         "command": "python3 scripts/check_env_bypass_census.py",
-        "expect_contains": "census row 'reducibility-hints' measures 8 production occurrences, above its max_occurrences baseline 7",
-        "why": "The reviewed seven calls include both distinct checked_metadata paths; their file account must not hide another raw write. This scanner control compiles no Rust and leaves the unclassified R1-REDUC semantic/budget obligation open."
+        "expect_contains": "census row 'reducibility-hints' measures 9 production occurrences, above its max_occurrences baseline 8",
+        "why": "The eight reviewed calls include two checked_metadata writes and one source staging mirror. Adding another write in an accounted file must exceed their shared occurrence cap."
+      },
+      {
+        "arm": "a second fixed-cohort field registration exceeds the reviewed structure-field census",
+        "mutate": {
+          "file": "crates/clean-olean/src/fixed_cohort/source_context.rs",
+          "op": "append",
+          "text": "\n// Source-only census control for an additional occurrence in this file.\nfn gate_demo_repeat_structure_fields(env: &mut Environment, name: Name, fields: Vec<Name>) {\n    let _ = env.register_structure_fields(name, fields);\n}\n"
+        },
+        "command": "python3 scripts/check_env_bypass_census.py",
+        "expect_contains": "census row 'structure-field-metadata' measures 90 production occurrences, above its max_occurrences baseline 89",
+        "why": "The reviewed fixed-cohort projection contributes one call. Another registration in the same file must exceed the row cap even though the file is already accounted for."
       }
     ],
     "a0a6_probe_transcription": [
@@ -4837,16 +4848,16 @@
         "why": "The pin file is the theorem inventory: a theorem a level module declares with no line in statement_pins.json refuses, so the set of theorems the qualification speaks for cannot grow without a reviewed line."
       },
       {
-        "arm": "the test's root reaches fewer modules than ORDER lists",
+        "arm": "the generated qualification root reaches fewer modules than ORDER lists",
         "mutate": {
-          "file": "crates/clean-olean/tests/cic_l_level.rs",
+          "file": "crates/clean-olean/src/test_support/pinned_lean.rs",
           "op": "regex-sub",
-          "pattern": "const THEORY_ROOT: &str = \"CICL\\.ListSupportCases\";",
-          "replacement": "const THEORY_ROOT: &str = \"CICL.LetCongruenceCases\";"
+          "pattern": "(?s)let hash = content_hash\\(&pinned_lean_version\\(\\), files\\);(.*?)compile_theory_aggregate\\(&lean, &staging, name, stems\\);",
+          "replacement": "let hash = content_hash_with_recipe(RECIPE_VERSION | (1 << 31), &pinned_lean_version(), files);\\1compile_theory_aggregate(&lean, &staging, name, &stems[..stems.len() - 1]);"
         },
         "command": "targo --unverified test -p clean-olean --locked --test cic_l_level -q -- level_theory_rechecks_with_false_computation_controls",
         "expect_contains": "ORDER mismatch: listed but not loaded [",
-        "why": "`CICL.LetCongruenceCases` imports part of the theory. Loaded from it, every check on what was loaded passes, as it did when a module was appended to ORDER and compiled but imported by nothing the test loads. The modules reached must equal ORDER's entries."
+        "why": "RE-AIMED 2026-11-17 (p3lc-registry). Until 81f9976c43 (2026-11-16) the test's root was the hand-picked module `CICL.ListSupportCases`, and this arm moved THEORY_ROOT to `CICL.LetCongruenceCases`, which imports part of the theory. Since then THEORY_ROOT is `CleanQualification.cic_l`, the import-only aggregate crates/clean-olean/src/test_support/pinned_lean.rs generates from the theory's ORDER (recipe 5), and `import_closure` refuses a root that declares names, so the old mutation no longer matches and no CICL module can stand in as the root without that assertion firing first. What decides the modules the root reaches is now the generator, so the arm plants the defect there: the aggregate drops ORDER's last root (`CICL.QuotientHeadCases`, a leaf no ORDER module imports). The same regex keys the compiled package under a recipe number no real recipe takes (`u32::MAX`; RECIPE_VERSION is a u32 counted up from 1, one per recipe change); without a new key the content-addressed fixture cache would serve the baseline's full aggregate and the arm would be vacuous. The toolchain, census, Lean replay and lakefile checks all pass over the short root; `check_order` refuses it with `ORDER mismatch: listed but not loaded [\"CICL.QuotientHeadCases\"]`. Same defence, same expected refusal as before. | Previous why: `CICL.LetCongruenceCases` imports part of the theory. Loaded from it, every check on what was loaded passes, as it did when a module was appended to ORDER and compiled but imported by nothing the test loads. The modules reached must equal ORDER's entries. | KEY MOVED 2026-11-17 (p3lc-registry2): the mutated compile was keyed as RECIPE_VERSION + 1, the value the next real recipe bump takes. The fixture cache persists under <repo>/target/gate-demo-<layout>/clean-olean-lean-fixtures/, so a real bump to that value with unchanged theory files would have been served this arm's partial aggregate (one such entry, a recipe-6 aggregate with 67 of the full aggregate's 68 imports and no `CICL.QuotientHeadCases`, was found in this lane's worktree cache target/gate-demo-tree-build and removed). Same command, same defence (check_order), same expected refusal. KEY REFINED 2026-11-17 (p3lc-repin3, after review): u32::MAX never collides with a real recipe but no longer tracks one, so after a real RECIPE_VERSION bump with the theory files unchanged the persistent demo cache would serve this arm the partial aggregate the OLD recipe compiled and the replay would not run the mutated generator. The key is now RECIPE_VERSION | (1 << 31): the high bit keeps it apart from every real recipe (RECIPE_VERSION is 5) and the low bits move with each bump."
       },
       {
         "arm": "E7's census row hides an axiom the kernel's walk of the admitted declaration sees",
@@ -5250,6 +5261,122 @@
         "expect_contains": "test result: ok",
         "why": "Designed 2026-11-14 for R7c's burn-down (data/replay_record_debt.json), as the control for the hollow-carrier arm. It makes the same plant at the same site and changes only what the masquerade turns on. Here the carrier is FAITHFUL: `NNVerify.DemoMasquerade.faithfulCarrier := fun n => Nat.succ n`, whose body Nat.succ (BVar 0) uses its binder. The theorem `faithfulAtZero : faithfulCarrier Nat.zero = Nat.succ Nat.zero`, closed by `@Eq.refl.{1} Nat (Nat.succ Nat.zero)`, is a sound definitional-equality lemma with distinct sides, the shape the module docs say the detector must not flag (Nat.add_zero, the C004 faithful refls). Read from proof_quality.rs: M4 needs syntactically identical sides, and these differ. M1 needs both sides headed by the same reducible Definition, and the heads are faithfulCarrier and the constructor Nat.succ. M2 needs a body that ignores its binder or is a bare BVar, and this body is an App that uses BVar 0. So check_proof_nontrivial returns an empty set, and the corpus grows by one theorem, which THEOREM_FLOOR (>= 619) allows. Without this arm the refusal arm would also pass on a gate that reddens on ANY new definition or theorem in an init root, or on the edit itself. With it, the replay shows that the red is the hollow carrier being refused, which is the claim the empty ALLOWLIST rests on ('the gate passes because the detector is PRECISE'). What was measured statically: re.findall finds the pattern exactly once, the replacement is ASCII with no backslashes, and braces, parens and brackets balance after the substitution. What the replay will measure: the unmutated run is green, and the mutated run exits 0 and prints libtest's 'test result: ok'."
       }
+    ],
+    "trustcore-evidence-staleness": [
+      {
+        "arm": "a flipped byte in the kernel receipt's module-tree pin",
+        "mutate": {
+          "file": "reports/kernel-soundness-launch-evidence.json",
+          "op": "regex-sub",
+          "pattern": "(\"crates/clean-cli/src/cmd_replacement/\\*\\*/\\*\\.rs\": \")[0-9a-f]",
+          "replacement": "\\g<1>z"
+        },
+        "command": "targo --unverified run --locked -q -p clean-evidence -- check trustcore-staleness --repo-root .",
+        "expect_contains": "pins module-tree digest z",
+        "why": "The planted-mutation arm `flipped byte` of design section 8.2: one character of a receipt's pin moves and the verdict must name that pin. The replacement is a non-hex character so the arm cannot collide with a real digest."
+      },
+      {
+        "arm": "the deny-sorry receipt names the retired v1 schema",
+        "mutate": {
+          "file": "reports/deny-sorry-launch-evidence.json",
+          "op": "json-set",
+          "path": [
+            "schema_version"
+          ],
+          "value": "clean-deny-sorry-launch-evidence-v1"
+        },
+        "command": "targo --unverified run --locked -q -p clean-evidence -- check trustcore-staleness --repo-root .",
+        "expect_contains": "expected schema_version clean-deny-sorry-launch-evidence-v2",
+        "why": "A v1 receipt carries none of the shared-digest pins, so the schema check is what refuses a receipt from a minter that predates them (the shell minters wrote v1 until the EV0 review)."
+      },
+      {
+        "arm": "the kernel receipt loses its shared-digest pin",
+        "mutate": {
+          "file": "reports/kernel-soundness-launch-evidence.json",
+          "op": "regex-sub",
+          "pattern": "\\n\\s*\"crates/clean-evidence/src/digest\\.rs\": \"[0-9a-f]{64}\",",
+          "replacement": ""
+        },
+        "command": "targo --unverified run --locked -q -p clean-evidence -- check trustcore-staleness --repo-root .",
+        "expect_contains": "source_sha256 is missing crates/clean-evidence/src/digest.rs",
+        "why": "The `deleted qualifier` arm: a missing pin is stale, never vacuously fresh."
+      },
+      {
+        "arm": "a source edit under cmd_replacement/ leaves the receipts behind",
+        "mutate": {
+          "file": "crates/clean-cli/src/cmd_replacement/consts.rs",
+          "op": "append",
+          "text": "\n// planted by the gate demonstration\n"
+        },
+        "command": "targo --unverified run --locked -q -p clean-evidence -- check trustcore-staleness --repo-root .",
+        "expect_contains": "pins module-tree digest",
+        "why": "The `stale input` arm: the receipts pin the module tree, so an edit to any non-test file under it must stale both v2 receipts."
+      }
+    ],
+    "python-minters-publication": [
+      {
+        "arm": "a staged same-count registry ID swap re-mints its own baseline",
+        "mutate": {
+          "file": "data/gate_registry.json",
+          "op": "regex-sub",
+          "pattern": "\"id\": \"a0a6_probe_transcription\"",
+          "replacement": "\"id\": \"ev3-demo-replacement-id\""
+        },
+        "command": "git add -- data/gate_registry.json && targo --unverified run --offline --locked -q -p clean-evidence -- inventory python-minters-membership --repo-root . > data/python_minters_baseline.json && git add -- data/python_minters_baseline.json && targo --unverified run --offline --locked -q -p clean-evidence -- check python-minters --published e580ec1b9db582c8984adb001983bd9526c03464 --repo-root .",
+        "expect_contains": "new Python registry path for row \"ev3-demo-replacement-id\"",
+        "why": "The replay stages the changed registry and its matching canonical baseline inside the demonstration sandbox. Counts and paths remain equal. Only the published row identity keeps the replacement from passing."
+      }
+    ],
+    "w0-receipt-validation": [
+      {
+        "arm": "the mutated comparator replay is recorded as passing",
+        "mutate": {
+          "file": "reports/evidence-ev2-w0-comparator-mutation-2026-11-18/receipt.json",
+          "op": "json-set",
+          "path": [
+            "phases",
+            "mutant",
+            "replay_exit"
+          ],
+          "value": 0
+        },
+        "command": "targo --unverified run --locked --offline -q -p clean-evidence -- check w0-mutation --repo-root .",
+        "expect_contains": "W0_MUTATION_RECEIPT=invalid recorded replay must have the exact single-test verdict",
+        "sandbox": "clone",
+        "why": "The recorded comparator bypass must fail its single checkout-built regression. A claimed pass cannot demonstrate detection."
+      },
+      {
+        "arm": "the receipt supplies a different well-formed lowered-board digest",
+        "mutate": {
+          "file": "reports/evidence-ev2-w0-comparator-mutation-2026-11-18/receipt.json",
+          "op": "json-set",
+          "path": [
+            "lowered_board",
+            "sha256"
+          ],
+          "value": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "command": "targo --unverified run --locked --offline -q -p clean-evidence -- check w0-mutation --repo-root .",
+        "expect_contains": "W0_MUTATION_RECEIPT=invalid recorded lowered board digest does not match the one-count edit",
+        "sandbox": "clone",
+        "why": "The verifier reconstructs the canonical one-count edit from the pinned saved board. Checking only the shape of the digest would accept this value."
+      }
+    ],
+    "w0-scoreboard-comparator": [
+      {
+        "arm": "the Rust comparator accepts a saved board with a lowered Clean P3 count",
+        "mutate": {
+          "file": "crates/clean-cli/src/cmd_evidence/w0_scoreboard.rs",
+          "op": "regex-sub",
+          "pattern": "(?m)^    if saved != expected \\{$",
+          "replacement": "    if false && saved != expected {",
+          "count": 1
+        },
+        "command": "scripts/cargo_test_nonvacuous.sh w0-scoreboard-comparator -- targo --unverified test --locked --offline -p clean --test w0_scoreboard_cli -- --exact w0_scoreboard_self_test",
+        "expect_contains": "assertion `left == right` failed: \n  left: Some(0)\n right: Some(1)",
+        "sandbox": "clone",
+        "why": "The same exact checkout-built test must pass before the bypass. Its first forged-board refusal must see exit 0 instead of exit 1 after the comparator is bypassed."
+      }
     ]
   },
   "arm_coverage_debt": {
@@ -5258,10 +5385,11 @@
       "kernel_soundness_gate": {
         "owner": "crystal audit lane (r11)",
         "expires": "2027-03-01",
-        "sites": 8,
+        "sites": 9,
         "arms": 1,
-        "owed": "arms for Lane 1 (kernel_lean4_parity) and Lane 2 (elab_soundness_gate), each mutating the lane's own expectation so the lane must fail; both are cargo-weight, so they belong to a lane with a build budget",
-        "sites_measured_by": "effect-based count (audit r13 M13-8): Python returns that can yield non-zero incl. IfExp, any exit-shaped call; shell exit with any operand and non-zero/variable return"
+        "owed": "arms for Lane 1 (kernel_lean4_parity) and Lane 2 (elab_soundness_gate), each mutating the lane's own expectation so the lane must fail; both are cargo-weight, so they belong to a lane with a build budget; and an arm for the refusal to write the committed receipt reports/kernel-soundness-launch-evidence.json (added 2026-11-17, EV0 review)",
+        "sites_measured_by": "effect-based count (audit r13 M13-8): Python returns that can yield non-zero incl. IfExp, any exit-shaped call; shell exit with any operand and non-zero/variable return",
+        "sites_remeasured": "2026-11-17 (EV0 review): 8 -> 9. The new site is the refusal to write the committed launch receipt, whose one producer is `clean replacement trust-core-evidence --kernel-soundness`. It is owed an arm like the two lanes above, not discharged by one: an arm for it alone would lift this row over R12's one-arm threshold and silence the account of the two cargo lanes, which are still unarmed."
       },
       "crystal_fixture_freshness": {
         "owner": "crystal audit lane (r11)",

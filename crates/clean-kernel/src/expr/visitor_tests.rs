@@ -86,6 +86,49 @@ fn test_visitor_collect_fvars() {
 }
 
 #[test]
+fn guarded_visitors_charge_shared_edges_and_visit_each_selected_node_once() {
+    #[derive(Default)]
+    struct SharedVars {
+        seen: std::collections::HashSet<*const Expr>,
+        fvars: Vec<FVarId>,
+    }
+    impl ExprVisitor for SharedVars {
+        type Result = ();
+        fn combine(&self, _a: (), _b: ()) {}
+        fn should_visit(&mut self, expr: &Expr) -> bool {
+            self.seen.insert(std::ptr::from_ref(expr))
+        }
+        fn visit_fvar(&mut self, id: FVarId) {
+            self.fvars.push(id);
+        }
+    }
+
+    const DEPTH: usize = 12;
+    let id = FVarId::new(19);
+    let mut root = Arc::new(Expr::fvar(id));
+    for _ in 0..DEPTH {
+        root = Arc::new(Expr::app_arc(Arc::clone(&root), root));
+    }
+
+    let mut guarded = SharedVars::default();
+    let _ = crate::work_meter::stats::take();
+    guarded.visit_expr(&root);
+    assert_eq!(
+        crate::work_meter::stats::take().fold_nodes,
+        2 * DEPTH as u64 + 1
+    );
+    assert_eq!(guarded.fvars, [id]);
+
+    let mut every_path = FreeVarCollector { fvars: Vec::new() };
+    every_path.visit_expr(&root);
+    assert_eq!(
+        crate::work_meter::stats::take().fold_nodes,
+        (1 << (DEPTH + 1)) - 1
+    );
+    assert_eq!(every_path.fvars.len(), 1 << DEPTH);
+}
+
+#[test]
 fn test_visitor_no_fvars_in_bvar_expr() {
     let expr = Expr::app(Expr::bvar(0), Expr::bvar(1));
     let mut collector = FreeVarCollector { fvars: vec![] };

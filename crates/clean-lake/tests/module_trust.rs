@@ -463,7 +463,33 @@ fn removing_a_dependency_module_is_refused() {
         &payload,
     )
     .expect("re-export");
-    fs::write(olean(&dir, "K1Lib"), rewritten).expect("write");
+    write_payload(&rewritten, &payload, &olean(&dir, "K1Lib"));
+    let mut incomplete = Environment::with_prelude();
+    incomplete.init_io_ops().expect("io ops");
+    let error = clean_olean::load_module_with_deps(&mut incomplete, "K1Lib", &[lib_dir(&dir)])
+        .expect_err("the old compiler graph contradicts the removed import");
+    assert!(error.to_string().contains("compiler context"), "{error}");
+
+    // An untrusted producer can also remove the proof-only compiler context.
+    // Keep the independent proof-dependency gate exercised after that coherent
+    // metadata rewrite: compiler fingerprints are not a proof certificate.
+    assert!(payload
+        .constants
+        .iter()
+        .all(|info| matches!(info.kind, ConstantKind::Theorem | ConstantKind::Axiom)));
+    let mut payload = payload;
+    let mut base = Environment::with_prelude();
+    base.init_io_ops().expect("io ops");
+    payload.csimp = clean_kernel::env::csimp::export_compilation_snapshot(&base);
+    let rewritten = OleanExporter::export_with_payload(
+        &[],
+        &["K1Lib.zero_add'"],
+        &[],
+        clean_lake::CLEAN_OLEAN_GIT_HASH,
+        &payload,
+    )
+    .expect("proof-only re-export with coherent compiler context");
+    write_payload(&rewritten, &payload, &olean(&dir, "K1Lib"));
     let verdict = gate(&dir, "K1Lib", &zero_add());
     assert_refused(&verdict, "dependency removed");
     assert!(
@@ -1024,3 +1050,274 @@ mod metadata;
 
 #[path = "module_trust/real_artifacts.rs"]
 mod real_artifacts;
+
+#[test]
+fn macro_inline_markers_survive_artifacts_before_runtime_availability_checks() {
+    use clean_elab::module_driver::{elaborate_decls, module_file_context, DriverOptions};
+    let tmp = tempfile::tempdir().expect("tmp");
+    let dir = tmp.path();
+    write_project(dir, &["MacroLib"], &[("MacroLib",
+        "@[macro_inline] def MacroLib.deferred : Nat := Classical.choice ⟨0⟩\n@[macro_inline] def MacroLib.ignored (_ : Nat) : Nat := 0\n")]);
+    let result = build(dir);
+    assert!(result.failed.is_empty(), "{result:?}");
+    let (imported, _) = load(dir, "MacroLib");
+    assert!(
+        imported.is_macro_inline(&name("MacroLib.deferred")),
+        "macro_inline marker lost at the real artifact boundary"
+    );
+    assert!(imported.is_macro_inline(&name("MacroLib.ignored")));
+    let check = |source: &str| {
+        let (mut env, _) = load(dir, "MacroLib");
+        let path = dir.join("UseMacro.lean");
+        let parsed = clean_parser::parse_file_with_diagnostics(source).expect("caller syntax");
+        assert!(parsed.diagnostics.is_empty());
+        let mut context = module_file_context(&path);
+        context.set_import_search_paths(load_paths(dir));
+        elaborate_decls(
+            &mut env,
+            &parsed.decls,
+            source,
+            &mut context,
+            DriverOptions {
+                lean_front_door: true,
+                ..DriverOptions::default()
+            },
+            &mut (),
+        )
+    };
+    let good =
+        check("import MacroLib\ndef accepted : Nat := MacroLib.ignored (Classical.choice ⟨0⟩)\n");
+    assert!(
+        good.verdicts.iter().all(|v| !v.kind.is_failure()),
+        "{good:#?}"
+    );
+    let bad = check("import MacroLib\ndef rejected : Nat := MacroLib.deferred\n");
+    let rejected = bad
+        .verdicts
+        .iter()
+        .find(|v| v.name == "rejected")
+        .expect("caller verdict");
+    assert_eq!(
+        rejected.kind,
+        clean_elab::module_driver::VerdictKind::SourceError,
+        "{bad:#?}"
+    );
+    assert!(rejected
+        .detail
+        .as_deref()
+        .is_some_and(|s| s.contains("Classical.choice")));
+
+    // A genuine saved helper's metadata must not attach to a different
+    // declaration already resident under the same name.
+    let (mut shadowed, _) = builder_base();
+    shadowed
+        .add_decl(clean_kernel::Declaration::Definition {
+            name: name("MacroLib.ignored"),
+            level_params: vec![],
+            type_: Expr::arrow(Expr::const_str("Nat"), Expr::const_str("Nat")),
+            value: Expr::lam(
+                clean_kernel::BinderInfo::Default,
+                Expr::const_str("Nat"),
+                Expr::nat_lit(1),
+            ),
+            is_reducible: true,
+        })
+        .expect("different genuine resident");
+    let before = shadowed
+        .get_const(&name("MacroLib.ignored"))
+        .expect("resident")
+        .clone();
+    let failure = clean_olean::load_module_with_deps(&mut shadowed, "MacroLib", &load_paths(dir))
+        .expect_err("shadowed compiler context must refuse");
+    assert!(
+        failure.to_string().contains("compiler context"),
+        "{failure}"
+    );
+    assert!(!shadowed.is_macro_inline(&name("MacroLib.ignored")));
+    assert_eq!(shadowed.get_const(&name("MacroLib.ignored")), Some(&before));
+}
+
+fn missing_macro_compiler_context_is_refused(tampering: &str) {
+    use clean_elab::module_driver::{elaborate_decls, module_file_context, DriverOptions};
+    use clean_kernel::env::csimp;
+    let tmp = tempfile::tempdir().expect("tmp");
+    let dir = tmp.path();
+    write_project(dir, &["MacroLib"], &[("MacroLib",
+        "@[macro_inline] def MacroLib.deferred : Nat := Classical.choice ⟨0⟩\n@[macro_inline] def MacroLib.ignored (_ : Nat) : Nat := 0\n")]);
+    let result = build(dir);
+    assert!(result.failed.is_empty(), "genuine library: {result:?}");
+    let check = |env: &mut Environment| {
+        let source = "import MacroLib\ndef rejected : Nat := MacroLib.deferred\n";
+        let path = dir.join("UseMacro.lean");
+        let parsed = clean_parser::parse_file_with_diagnostics(source).expect("caller parses");
+        let mut context = module_file_context(&path);
+        context.set_import_search_paths(load_paths(dir));
+        elaborate_decls(
+            env,
+            &parsed.decls,
+            source,
+            &mut context,
+            DriverOptions {
+                lean_front_door: true,
+                ..DriverOptions::default()
+            },
+            &mut (),
+        )
+    };
+    let (mut genuine, _) = load(dir, "MacroLib");
+    let before = check(&mut genuine);
+    assert!(
+        before
+            .verdicts
+            .iter()
+            .any(|v| v.name == "rejected" && v.kind.is_failure()),
+        "genuine caller must reject: {before:#?}"
+    );
+    tamper(dir, "MacroLib", |payload| {
+        payload.csimp = match tampering {
+            "absent" => Vec::new(),
+            "empty" => {
+                let mut env = Environment::new();
+                csimp::begin_source_module(&mut env, name("MacroLib"), vec![]);
+                csimp::export_compilation_snapshot(&env)
+            }
+            "incomplete" => {
+                let mut env = Environment::with_prelude();
+                csimp::begin_source_module(&mut env, name("MacroLib"), vec![]);
+                let info = payload
+                    .constants
+                    .iter()
+                    .find(|info| info.name == name("MacroLib.ignored"))
+                    .expect("ignored constant");
+                env.add_decl(clean_kernel::Declaration::Definition {
+                    name: info.name.clone(),
+                    level_params: info.level_params.clone(),
+                    type_: info.type_.clone(),
+                    value: info.value.clone().expect("definition body"),
+                    is_reducible: info.is_reducible,
+                })
+                .expect("genuine copied helper");
+                env.register_macro_inline(info.name.clone());
+                csimp::record_compiled(&mut env, [info.name.clone()]);
+                csimp::export_compilation_snapshot(&env)
+            }
+            _ => panic!("unexpected tampering control"),
+        };
+    });
+    let (mut env, _) = builder_base();
+    let imported = clean_olean::load_module_with_deps(&mut env, "MacroLib", &load_paths(dir));
+    if imported.is_ok() {
+        let after = check(&mut env);
+        panic!(
+            "{tampering} compiler context accepted; deferred marker={} and caller={after:#?}",
+            env.is_macro_inline(&name("MacroLib.deferred"))
+        );
+    }
+    let failure = imported.expect_err("missing context refuses");
+    assert!(
+        failure.to_string().contains("compiler context"),
+        "{tampering}: refusal must come from the compiler-context boundary: {failure}"
+    );
+    assert!(!env.is_macro_inline(&name("MacroLib.deferred")));
+    assert!(!env.is_macro_inline(&name("MacroLib.ignored")));
+}
+
+#[test]
+fn missing_macro_compiler_context_absent_is_refused() {
+    missing_macro_compiler_context_is_refused("absent");
+}
+
+#[test]
+fn missing_macro_compiler_context_empty_is_refused() {
+    missing_macro_compiler_context_is_refused("empty");
+}
+
+#[test]
+fn missing_macro_compiler_context_incomplete_is_refused() {
+    missing_macro_compiler_context_is_refused("incomplete");
+}
+
+#[test]
+fn logical_only_payload_keeps_values_for_proofs_but_does_not_claim_runtime_code() {
+    use clean_elab::module_driver::{elaborate_decls, module_file_context, DriverOptions};
+    let tmp = tempfile::tempdir().expect("tmp");
+    let dir = tmp.path();
+    write_project(
+        dir,
+        &["LogicalLib"],
+        &[("LogicalLib", "def LogicalLib.value : Nat := 7\n")],
+    );
+    assert!(build(dir).failed.is_empty());
+    let original = read_payload(&olean(dir, "LogicalLib"))
+        .1
+        .constants
+        .into_iter()
+        .find(|info| info.name == name("LogicalLib.value"))
+        .expect("original logical body")
+        .value;
+    tamper(dir, "LogicalLib", |payload| {
+        payload.compiler_context = clean_olean::CompilerContextKind::LogicalOnly;
+        payload.csimp.clear();
+    });
+    let (mut env, _) = load(dir, "LogicalLib");
+    assert_eq!(
+        env.get_const(&name("LogicalLib.value"))
+            .expect("logical value")
+            .value,
+        original
+    );
+    let source = "import LogicalLib\ntheorem same : LogicalLib.value = 7 := rfl\ndef runtime : Nat := LogicalLib.value\n";
+    let path = dir.join("LogicalUse.lean");
+    let parsed = clean_parser::parse_file_with_diagnostics(source).expect("syntax");
+    let mut context = module_file_context(&path);
+    context.set_import_search_paths(vec![lib_dir(dir)]);
+    let report = elaborate_decls(
+        &mut env,
+        &parsed.decls,
+        source,
+        &mut context,
+        DriverOptions {
+            lean_front_door: true,
+            ..DriverOptions::default()
+        },
+        &mut (),
+    );
+    assert!(
+        report
+            .verdicts
+            .iter()
+            .any(|v| v.name == "same" && !v.kind.is_failure()),
+        "{report:#?}"
+    );
+    assert!(
+        report.verdicts.iter().any(|v| v.name == "runtime"
+            && v.kind.is_failure()
+            && v.detail
+                .as_deref()
+                .is_some_and(|message| message.contains("compiler context"))),
+        "{report:#?}"
+    );
+}
+
+#[test]
+fn logical_only_payload_cannot_apply_runtime_hints() {
+    let tmp = tempfile::tempdir().expect("tmp");
+    let dir = tmp.path();
+    write_project(
+        dir,
+        &["HintLib"],
+        &[("HintLib", "@[macro_inline] def HintLib.value : Nat := 7\n")],
+    );
+    assert!(build(dir).failed.is_empty());
+    tamper(dir, "HintLib", |payload| {
+        payload.compiler_context = clean_olean::CompilerContextKind::LogicalOnly;
+    });
+    let mut env = Environment::with_prelude();
+    env.init_io_ops().expect("io ops");
+    let result = clean_olean::load_module_with_deps(&mut env, "HintLib", &[lib_dir(dir)]);
+    assert!(
+        result.is_err(),
+        "logical-only payload with hints must refuse"
+    );
+    assert!(!env.is_macro_inline(&name("HintLib.value")));
+}

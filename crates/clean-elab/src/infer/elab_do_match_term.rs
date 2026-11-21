@@ -25,7 +25,7 @@ use clean_parser::SurfaceMatchArm;
 impl<'a> ElabCtx<'a> {
     /// Whether this do-match is lowered through the term `match` compiler.
     pub(super) fn do_match_term_route_applies(
-        &self,
+        &mut self,
         discrs: &[SurfaceExpr],
         arms: &[DoMatchArm],
     ) -> bool {
@@ -47,7 +47,7 @@ impl<'a> ElabCtx<'a> {
             || arms
                 .iter()
                 .flat_map(|arm| arm.patterns.iter())
-                .any(pattern_needs_term_route);
+                .any(|pattern| self.do_pattern_needs_term_route(pattern, false));
         shape
             && arms.iter().all(|arm| {
                 let info = infer_control_info_seq(&arm.body);
@@ -120,33 +120,39 @@ impl<'a> ElabCtx<'a> {
         self.current_expected_type = saved;
         result
     }
-}
-
-/// A pattern the do-match `casesOn` lowering does not compile: a literal of
-/// a non-`Nat` type (G51), or a constructor pattern nested under another
-/// constructor or literal position (G35).
-fn pattern_needs_term_route(pattern: &SurfacePattern) -> bool {
-    match pattern {
-        SurfacePattern::Lit(lit) => !matches!(lit, SurfaceLit::Nat(_) | SurfaceLit::BigNat(_)),
-        SurfacePattern::Ctor(_, subs) => subs.iter().any(|sub| {
-            pattern_needs_term_route(sub)
-                || matches!(
-                    sub,
-                    SurfacePattern::Ctor(_, _)
-                        | SurfacePattern::Lit(_)
-                        | SurfacePattern::NumeralAdd(..)
-                )
-        }),
-        SurfacePattern::As(_, inner) | SurfacePattern::NumeralAdd(inner, _) => {
-            pattern_needs_term_route(inner)
+    /// A field pattern can be a constructor application or a bare identifier
+    /// that resolves to a constructor. Let the term match compile the complete
+    /// field column in both cases, including all of its sibling alternatives.
+    fn do_pattern_needs_term_route(&mut self, pattern: &SurfacePattern, field: bool) -> bool {
+        match pattern {
+            SurfacePattern::Var(name) => {
+                field
+                    && (name.is_relative_constructor()
+                        || self.bare_pattern_name_is_constructor(name) == Some(true))
+            }
+            SurfacePattern::Ctor(_, fields) => {
+                field
+                    || fields
+                        .iter()
+                        .any(|p| self.do_pattern_needs_term_route(p, true))
+            }
+            SurfacePattern::Lit(lit) => {
+                field || !matches!(lit, SurfaceLit::Nat(_) | SurfaceLit::BigNat(_))
+            }
+            SurfacePattern::As(_, inner) => self.do_pattern_needs_term_route(inner, field),
+            SurfacePattern::NumeralAdd(inner, _) => {
+                field || self.do_pattern_needs_term_route(inner, field)
+            }
+            SurfacePattern::Or(a, b) => {
+                self.do_pattern_needs_term_route(a, field)
+                    || self.do_pattern_needs_term_route(b, field)
+            }
+            SurfacePattern::Wildcard
+            | SurfacePattern::Inaccessible(_)
+            | SurfacePattern::QPattern(_)
+            | SurfacePattern::StructInst { .. }
+            | SurfacePattern::Ellipsis => false,
         }
-        SurfacePattern::Or(a, b) => pattern_needs_term_route(a) || pattern_needs_term_route(b),
-        SurfacePattern::Var(_)
-        | SurfacePattern::Wildcard
-        | SurfacePattern::Inaccessible(_)
-        | SurfacePattern::QPattern(_)
-        | SurfacePattern::StructInst { .. }
-        | SurfacePattern::Ellipsis => false,
     }
 }
 

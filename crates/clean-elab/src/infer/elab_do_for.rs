@@ -4,10 +4,7 @@
 
 //! ForIn loop elaboration for do-notation (#1818 Phase 4C).
 //!
-//! Handles `for x in xs do body` by building the INLINED `List.forIn`
-//! recursion (`List.rec` + `ForInStep.rec`) — see the lowering comment at the
-//! bottom of `elab_do_for_core` for why the `ForIn.forIn` PROJECTION cannot be
-//! applied in Clean's prelude.
+//! Resolves the collection's `ForIn` instance and calls its iteration field.
 //! When the body contains break/continue, sets up a `DoLoopContext` so
 //! that break -> ForInStep.done and continue -> ForInStep.yield directly,
 //! matching Lean 4 BuiltinDo/For.lean.
@@ -48,6 +45,12 @@ impl<'a> ElabCtx<'a> {
         let core = self.elab_do_for_core(binder, collection, body);
         self.current_expected_type = expected.clone();
         let result = core.and_then(|(beta, mut_var_info, return_type, for_in_expr)| {
+            if self.do_loop_ctx.is_some() && return_type.is_none() {
+                // A terminal inner loop is an ordinary Unit action. Its caller
+                // binds that action and yields the enclosing loop's accumulator.
+                let (_, _, m) = self.get_or_create_monad_info();
+                self.current_expected_type = Some(Expr::app(m, Expr::const_str("Unit")));
+            }
             self.elab_do_for_post_loop(for_in_expr, &beta, &mut_var_info, &return_type, None)
         });
         self.current_expected_type = expected;
@@ -112,54 +115,8 @@ impl<'a> ElabCtx<'a> {
         // Reuse cached monad info: u1 = do_u, u2 = do_v, m = do_m
         let (do_u, do_v, m) = self.get_or_create_monad_info();
 
-        // Collection type ρ and element type α both live at the monad-domain
-        // level `do_u`. This matches the standard `ForIn m ρ α` instances
-        // (`ForIn m (List α) α` requires ρ = List α : Type u and α : Type u
-        // with m : Type u → Type v), and lets `instForInList` resolve the
-        // `[ForIn …]` argument below: the instance ties ρ's and α's universes
-        // to the monad domain, so independent fresh *params* (which can never
-        // be unified) would block resolution. (Track EE.)
-        let u_rho = do_u.clone();
-        let u_alpha = do_u.clone();
-
-        // ρ : Type u_rho and α : Type u_alpha, i.e. their *types* are
-        // `Sort (succ u_rho)` / `Sort (succ u_alpha)`. (The pre-existing code
-        // used `Sort u_rho`, which made `ρ`/`α` Prop-typed metavars that could
-        // never unify with a real `List _ : Type 0` collection — masked only
-        // because nothing previously pinned them. Track EE.)
-        let rho = self.fresh_meta(Expr::sort(Level::succ(u_rho.clone())));
-        let alpha = self.fresh_meta(Expr::sort(Level::succ(u_alpha.clone())));
-
-        let for_in_class = Expr::const_(
-            Name::from_string("ForIn"),
-            vec![do_u.clone(), do_v.clone(), u_rho, u_alpha],
-        );
-        let inst_ty = Expr::app(
-            Expr::app(Expr::app(for_in_class, m.clone()), rho.clone()),
-            alpha.clone(),
-        );
-        // Resolve the `[ForIn m ρ α]` instance now (Track EE). The for-loop
-        // term is assembled by hand (it never flows through `elab_app`), so the
-        // normal deferred-instance machinery never sees this `inst` metavar.
-        // Without an assignment it would leak as a free variable and the kernel
-        // would reject the enclosing declaration with "contains free variables"
-        // (trust-ir `Semantics/Memory.lean` `semGEP`).
-        //
-        // Pin `ρ` to the collection's type first so the goal is concrete enough
-        // for `instForInList : {m} {α} → ForIn m (List α) α` to unify (ρ = List
-        // α, α = element). Both gates are mandatory.  A hand-built
-        // `ForIn.forIn` application bypasses ordinary deferred instance
-        // synthesis, so accepting either failure here would publish an
-        // unassigned instance metavariable into the kernel term.
-        self.enforce_expr_type(&collection_expr, &rho)?;
-        let goal_ty = self.metas.instantiate(&inst_ty);
-        let inst =
-            self.resolve_instance(&goal_ty)
-                .ok_or_else(|| ElabError::FailedToSynthesize {
-                    class_name: Name::from_string("ForIn"),
-                    goal: crate::error_render::term(&goal_ty),
-                })?;
-        self.enforce_expr_type(&inst, &goal_ty)?;
+        let rho = self.infer_type(&collection_expr)?;
+        let (alpha, instance) = self.resolve_loop_instance(&m, &rho)?;
 
         // Compute mutable variable accumulator (mut_beta, mut_init).
         let (mut_beta, mut_init, mut_var_info) = if has_reassigns {
@@ -271,7 +228,21 @@ impl<'a> ElabCtx<'a> {
         // or early return.
         let needs_loop_ctx =
             has_break_or_continue || has_reassigns || body_control_info.returns_early;
+        let for_in_step_beta = Expr::app(
+            Expr::const_(Name::from_string("ForInStep"), vec![do_u.clone()]),
+            beta.clone(),
+        );
         let outer_loop_ctx = self.do_loop_ctx.take();
+        let outer_expected = self.current_expected_type.clone();
+        // The surrounding function result is independent of the action that
+        // runs on each iteration. Ordinary actions infer their own unit carrier
+        // (Unit or the universe-polymorphic PUnit); control terminals return a step.
+        let body_result_ty = if needs_loop_ctx {
+            for_in_step_beta.clone()
+        } else {
+            self.fresh_meta(Expr::sort(Level::succ(do_u.clone())))
+        };
+        self.current_expected_type = Some(Expr::app(m.clone(), body_result_ty));
         if needs_loop_ctx {
             self.do_loop_ctx = Some(DoLoopContext {
                 sigma: beta.clone(),
@@ -291,6 +262,7 @@ impl<'a> ElabCtx<'a> {
         // terminal `return` is elaborated in the reusable context.
         let body_result = self.elab_do_elems(body);
         self.do_loop_ctx = outer_loop_ctx;
+        self.current_expected_type = outer_expected;
         let body_expr = body_result?;
 
         // When DoLoopContext was active (needs_loop_ctx), terminal elements in
@@ -319,11 +291,6 @@ impl<'a> ElabCtx<'a> {
             let yield_const =
                 Expr::const_(Name::from_string("ForInStep.yield"), vec![do_u.clone()]);
             let yield_expr = Expr::app(Expr::app(yield_const, beta.clone()), acc_value);
-            let for_in_step_beta = Expr::app(
-                Expr::const_(Name::from_string("ForInStep"), vec![do_u.clone()]),
-                beta.clone(),
-            );
-
             // pure (ForInStep.yield acc) : m (ForInStep β)
             let yield_pure = self.mk_pure_term(
                 do_u.clone(),
@@ -333,20 +300,7 @@ impl<'a> ElabCtx<'a> {
                 yield_expr,
             );
 
-            // The discarded result binder is typed at the bind's `α` (the inner
-            // type of `body_expr`). This is evidence carried by the action's
-            // authenticated `m α` type, not a convention: defaulting to `Unit`
-            // can turn an ill-typed body into a hand-built `Bind.bind` whose
-            // continuation has the wrong domain.
-            let bind_alpha = self
-                .try_extract_bind_inner_type(&body_expr)
-                .ok_or_else(|| ElabError::TypeMismatch {
-                    expected: "for-loop body action of type `m α`".into(),
-                    actual: self
-                        .infer_type(&body_expr)
-                        .map(|ty| crate::error_render::term(&self.metas.instantiate(&ty)))
-                        .unwrap_or_else(|err| format!("untypable body ({err})")),
-                })?;
+            let bind_alpha = self.for_body_discard_type(&body_expr, &do_u)?;
             let fvar_discard =
                 self.push_local(SurfaceName::generated_path("_"), bind_alpha.clone());
             let yield_abs = yield_pure.abstract_fvar(fvar_discard);
@@ -401,87 +355,7 @@ impl<'a> ElabCtx<'a> {
         let inner_lam = Expr::lam(BinderInfo::Default, beta.clone(), body_abs);
         let outer_lam = Expr::lam(BinderInfo::Default, loop_var_ty, inner_lam);
 
-        // Lower to the INLINED `List.forIn` recursion, NOT to an application of
-        // the `ForIn.forIn` projection.
-        //
-        // `ForIn.forIn`'s registered telescope is NINE binders
-        // (`clean-kernel` `env/data_for_in.rs::init_for_in`):
-        //   {m} {ρ} {α} [self : ForIn m ρ α] {β} [Monad m]
-        //     (x : ρ) (b : β) (f : α → β → m (ForInStep β)) : m β
-        // The `[Monad m]` binder sits between `{β}` and `(x : ρ)`; it was added
-        // by `1d18d151c` (2026-06-28) for `.olean` fidelity with real Lean.
-        // Measured 2026-09-16 on `target/debug/clean check`:
-        // `@List.forIn Id Nat Nat xs 0 f` reports `Type mismatch: expected
-        // Monad Id, got rigid head/arity mismatch: List vs Monad`, so that slot
-        // really is the fourth explicit argument.
-        //
-        // The code that stood here applied EIGHT arguments to that telescope, so
-        // `collection` landed in the `[Monad m]` slot, `init` in `(x : ρ)`, the
-        // step lambda in `(b : β)`, and the step argument was never supplied.
-        // `ElabCtx::infer_type` runs the kernel with `infer_only = true`, so the
-        // misplaced arguments were never checked: the application's type came
-        // back as the LEFTOVER Pi `(α → β → m (ForInStep β)) → m β`. That is not
-        // an `m α`, so `try_extract_bind_inner_type` returned `None` and
-        // `mk_bind_app` substituted a fresh metavariable for the bind's `α` that
-        // nothing ever assigned. Measured before this change, `clean check` of
-        // `def f (xs : List String) : IO Unit := do / for x in xs do / IO.println x`
-        // failed with
-        // `def f: elaboration left unresolved variables (unsolved metavariables ?[4])`.
-        //
-        // Supplying the missing argument was not available when this was
-        // written: `Monad` was an INSTANCE-LESS opaque axiom carrier, so no
-        // term of type `Monad m` existed for any `m`. Since 2026-09-28
-        // `Monad` is Lean's class with real instances
-        // (`env/data_monad_classes.rs`), so applying `ForIn.forIn` is now
-        // possible; the inlined fold is kept because it is the term the
-        // mutable-state lane already emits and the kernel already accepts.
-        //
-        // `build_list_forin_fold` emits `List.forIn`'s own kernel-registered
-        // body (`List.rec` + `ForInStep.rec` + `Bind.bind`/`Pure.pure`)
-        // specialised to this block's monad — the very term the mutable-state
-        // lane (`elab_do_pure_for`) already emits and the kernel already
-        // accepts — and it needs no `Monad` instance at all.
-        //
-        // `ρ` was pinned to the collection's type by `enforce_expr_type` above
-        // and then unified by `instForInList` against
-        // `ForIn m (List.{do_u} α) α`, so a RESOLVED `ForIn` instance leaves `ρ`
-        // as `List.{do_u} α` — exactly the shape and universe
-        // `build_list_forin_fold` reconstructs.
-        let rho_inst = self.whnf(&self.metas.instantiate(&rho));
-        let list_name = Name::from_string("List");
-        let elem_ty = match rho_inst.kind() {
-            ExprKind::App(head, elem) if matches!(head.kind(), ExprKind::Const(n, _) if *n == list_name) => {
-                elem.as_ref().clone()
-            }
-            // Unreachable with today's instance table — `instForInList` is the
-            // only registered `ForIn` instance, so the `resolve_instance` above
-            // already refuses every non-`List` collection with
-            // `FailedToSynthesize`. Kept so that ADDING a `ForIn` instance for a
-            // collection this fold cannot walk fails LOUD here instead of
-            // silently emitting a term the kernel will reject.
-            _ => {
-                return Err(ElabError::Unsupported {
-                    feature: format!(
-                        "`for x in xs do …` lowers to the inlined `List.forIn` \
-                         recursion, so only `List` collections are supported in a \
-                         non-mutating `do` block; this one iterates `{}` (only \
-                         `List` has a `ForIn` instance in Clean's prelude)",
-                        crate::error_render::term(&rho_inst)
-                    ),
-                })
-            }
-        };
-
-        let for_in_expr = self.build_list_forin_fold(
-            &elem_ty,
-            &beta,
-            &m,
-            &do_u,
-            &do_v,
-            &collection_expr,
-            &init,
-            &outer_lam,
-        );
+        let for_in_expr = self.apply_loop_instance(&instance, &m, &beta, &collection_expr, &init, &outer_lam)?;
 
         Ok((beta, mut_var_info, return_type, for_in_expr))
     }
@@ -583,5 +457,75 @@ impl<'a> ElabCtx<'a> {
             .map(|(name, fvar, ty, _)| (name.clone(), Expr::fvar(*fvar), ty.clone()))
             .collect();
         elab_do_prod::build_sigma_value(self, &vars)
+    }
+
+    /// Resolve the element out-parameter from the selected instance. Imported
+    /// classes keep their own universe parameter order and binder types.
+    pub(super) fn resolve_loop_instance(
+        &mut self,
+        monad: &Expr,
+        collection_ty: &Expr,
+    ) -> Result<(Expr, Expr), ElabError> {
+        let mut class = self.elab_ident(&SurfaceName::global_path("ForIn"))?;
+        for arg in [monad, collection_ty] {
+            let ty = self.whnf(&self.infer_type(&class)?);
+            let ExprKind::Pi(_, domain, _) = ty.kind() else {
+                return Err(ElabError::Unsupported {
+                    feature: "ForIn class binder telescope".into(),
+                });
+            };
+            self.enforce_expr_type(arg, domain)?;
+            class = Expr::app(class, arg.clone());
+        }
+        self.solve_head_const_levels(&class);
+        let ty = self.whnf(&self.infer_type(&class)?);
+        let ExprKind::Pi(_, domain, _) = ty.kind() else {
+            return Err(ElabError::Unsupported {
+                feature: "ForIn element out-parameter".into(),
+            });
+        };
+        let element = self.fresh_meta(self.whnf(domain));
+        let goal = Expr::app(class, element.clone());
+        let instance =
+            self.resolve_instance(&goal)
+                .ok_or_else(|| ElabError::FailedToSynthesize {
+                    class_name: Name::from_string("ForIn"),
+                    goal: crate::error_render::term(&goal),
+                })?;
+        self.enforce_expr_type(&instance, &goal)?;
+        Ok((self.metas.instantiate(&element), instance))
+    }
+
+    /// Apply the registered class field. The stable SDK field takes the state
+    /// type and then the collection. Clean's bundled field also requests a Monad.
+    pub(super) fn apply_loop_instance(
+        &mut self,
+        instance: &Expr,
+        monad: &Expr,
+        state_ty: &Expr,
+        collection: &Expr,
+        init: &Expr,
+        step: &Expr,
+    ) -> Result<Expr, ElabError> {
+        let mut action = Expr::app(
+            Expr::proj(Name::from_string("ForIn"), 0, instance.clone()),
+            state_ty.clone(),
+        );
+        let remaining = self.whnf(&self.infer_type(&action)?);
+        if let ExprKind::Pi(binder, domain, _) = remaining.kind() {
+            if binder.info == BinderInfo::InstImplicit {
+                let dict =
+                    self.resolve_instance(domain)
+                        .ok_or_else(|| ElabError::FailedToSynthesize {
+                            class_name: Name::from_string("Monad"),
+                            goal: crate::error_render::term(domain),
+                        })?;
+                self.enforce_expr_type(&dict, domain)?;
+                action = Expr::app(action, dict);
+            }
+        }
+        let result = Expr::apps(action, [collection.clone(), init.clone(), step.clone()]);
+        self.enforce_expr_type(&result, &Expr::app(monad.clone(), state_ty.clone()))?;
+        Ok(result)
     }
 }

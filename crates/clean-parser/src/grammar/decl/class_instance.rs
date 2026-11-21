@@ -87,55 +87,9 @@ impl Parser {
 
         self.expect(&TokenKind::Where)?;
 
-        // Parse fields (same as structure), including Lean's parenthesized
-        // binder groups (`(op : a → a)`) interleaved with simple fields — the
-        // same silently-zero-fields gap the structure `where` block had.
-        let mut fields = Vec::new();
-        loop {
-            if self.check(&TokenKind::LParen) {
-                fields.extend(self.parse_paren_field_binders()?);
-                continue;
-            }
-            if !self.is_field_start() {
-                break;
-            }
-            let field_span = self.current_span();
-            let field_name = self.ident()?;
-
-            // Bare `name := value` — a field-default override of an inherited
-            // field, same surface arm as the structure parser. The elaborator's
-            // class path rejects it loudly (parent methods are prepended as own
-            // fields there, so no inherited-field target exists). (B90)
-            if self.eat(&TokenKind::ColonEq) {
-                let default_val = self.field_type_expr()?;
-                fields.push(SurfaceField {
-                    span: field_span,
-                    name: field_name,
-                    ty: SurfaceExpr::Hole(field_span),
-                    default: Some(default_val),
-                    is_default_override: true,
-                });
-                continue;
-            }
-
-            self.expect(&TokenKind::Colon)?;
-            let field_ty = self.field_type_expr()?;
-
-            // Optional default value
-            let default = if self.eat(&TokenKind::ColonEq) {
-                Some(self.field_type_expr()?)
-            } else {
-                None
-            };
-
-            fields.push(SurfaceField {
-                span: field_span,
-                name: field_name,
-                ty: field_ty,
-                default,
-                is_default_override: false,
-            });
-        }
+        // Lean parses `class` with the `«structure»` command, so the field
+        // block is the shared `structFields` grammar.
+        let fields = self.struct_fields()?;
 
         Ok(SurfaceDecl::Class {
             span: start_span,
@@ -332,6 +286,7 @@ impl Parser {
                         attr,
                         Attribute::ImplementedBy(_)
                             | Attribute::Extern(_)
+                            | Attribute::ExternMetadata(_)
                             | Attribute::DefaultInstance { .. }
                     ) || matches!(attr, Attribute::Unknown(n) if matches!(n.as_str(), "expose" | "no_expose" | "defeq" | "backward_defeq"))
                 })
@@ -345,9 +300,18 @@ impl Parser {
     /// Shared by instance declarations and the `def x : S where` struct-
     /// instance sugar (B90) — the loop body is the instance parser's original,
     /// moved verbatim.
+    ///
+    /// Lean's `whereStructInst` parses the block with `sepByIndent`, which is
+    /// `withPosition`: the first field's column is saved, so `checkColGt` in a
+    /// value (application arguments, the level of `Type` / `Sort`) stops at
+    /// the next field — `T := Type` ⏎ `n := 3` is two fields, not `Type n`.
     pub(in crate::grammar) fn parse_where_field_assigns(
         &mut self,
     ) -> Result<Vec<SurfaceFieldAssign>, ParseError> {
+        self.with_position("where fields", Self::where_field_assigns_in_position)
+    }
+
+    fn where_field_assigns_in_position(&mut self) -> Result<Vec<SurfaceFieldAssign>, ParseError> {
         let mut fields = Vec::new();
         while self.is_field_assign_start() {
             let field_span = self.current_span();

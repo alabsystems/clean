@@ -1,5 +1,6 @@
+// Modified in Clean: typed array-lambda dialect and explicit lambda export refusal.
 use super::{
-    assert_alpha_equiv, assert_clause_len, assert_eq, assert_num_premises,
+    assert_alpha_equiv, assert_clause_len, assert_eq, assert_num_args, assert_num_premises,
     first_conclusion_literal, get_premise_term, CheckerError, RuleArgs, RuleResult,
 };
 use crate::ast::{build_term, match_term_err, Binder, BindingList, Sort, Term};
@@ -100,4 +101,49 @@ pub fn ext(
         &expected,
         polyeq_time,
     )
+}
+
+/// Clean dialect: independently check a unary ARRAY-lambda read. Function
+/// lambdas retain their separate higher-order beta_equiv rule. This introduces
+/// no assumption, extensional equality, or array-default/choice axiom.
+pub fn lambda(
+    RuleArgs {
+        conclusion,
+        premises,
+        args,
+        pool,
+        polyeq_time,
+        ..
+    }: RuleArgs,
+) -> RuleResult {
+    use crate::ast::Substitution;
+    assert_num_premises(premises, 0)?;
+    assert_num_args(args, 0)?;
+    assert_clause_len(conclusion, 1)?;
+    let (read, result) = match_term_err!((= read result) = &conclusion[0])?;
+    let (array, index) = match_term_err!((select array index) = read)?;
+    let Term::Binder(Binder::ArrayLambda, bindings, body) = array.as_ref() else {
+        return Err(CheckerError::Explanation(
+            "arrays_lambda requires a typed array lambda".into(),
+        ));
+    };
+    let [(name, domain)] = bindings.as_slice() else {
+        return Err(CheckerError::Explanation(
+            "array lambda must bind exactly one index".into(),
+        ));
+    };
+    let range = pool.sort(body);
+    let array_sort = pool.sort(array);
+    if array_sort.as_ref() != &Sort::Array(domain.clone(), range.clone())
+        || pool.sort(index) != *domain
+        || pool.sort(read) != range
+        || pool.sort(result) != range
+    {
+        return Err(CheckerError::Explanation(
+            "arrays_lambda domain or range mismatch".into(),
+        ));
+    }
+    let variable = pool.add(Term::new_var(name.clone(), domain.clone()));
+    let reduced = Substitution::single(pool, variable, index.clone())?.apply(pool, body);
+    assert_alpha_equiv(&reduced, result, polyeq_time)
 }

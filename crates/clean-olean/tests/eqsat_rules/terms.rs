@@ -113,6 +113,18 @@ pub(super) fn add_zero_literal(zero: u64) -> Expr {
     )
 }
 
+/// `(OP ?x ?y) = (OP ?y ?x)`: the saturation tier's `add_comm` and `mul_comm`
+/// with `add` and `mul`, and a false rule with `sub`.
+pub(super) fn comm_literal(op: &str) -> Expr {
+    rule(
+        "equiv",
+        sorts(&[("t", false), ("t", false)]),
+        bin(op, var(0), var(1)),
+        bin(op, var(1), var(0)),
+        conds(vec![]),
+    )
+}
+
 pub(super) fn rotl_full_literal(with_condition: bool) -> Expr {
     rule(
         "equiv",

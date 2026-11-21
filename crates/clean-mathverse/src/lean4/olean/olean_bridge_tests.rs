@@ -27,6 +27,7 @@ fn mock_module(constants: Vec<ParsedConstant>) -> ParsedModule {
 fn mock_constant(name: &str, kind: ConstantKind, has_val: bool) -> ParsedConstant {
     ParsedConstant {
         definition_safety: None,
+        mutual_declarations: None,
         quot_kind: None,
         name: name.to_string(),
         kind,
@@ -52,6 +53,7 @@ fn rich_constant(
 ) -> ParsedConstant {
     ParsedConstant {
         definition_safety: None,
+        mutual_declarations: None,
         quot_kind: None,
         name: name.to_string(),
         kind,
@@ -547,6 +549,7 @@ fn mock_constant_with_levels(
 ) -> ParsedConstant {
     ParsedConstant {
         definition_safety: None,
+        mutual_declarations: None,
         quot_kind: None,
         name: name.to_string(),
         kind,

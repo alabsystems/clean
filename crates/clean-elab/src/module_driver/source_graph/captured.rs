@@ -175,14 +175,18 @@ impl CapturedSourceGraph {
             .map_err(|error| SourceGraphError::Input(error.to_string()))?;
         let library_paths = selected_library_paths(imports)?;
         for module in self.modules.values() {
-            match clean_olean::resolve_typed_module_path(&module.name, &library_paths) {
-                Ok(_) => {
+            match clean_olean::resolve_typed_module_path_in_world(
+                &module.name,
+                &library_paths,
+                decision.declared_world(),
+            ) {
+                Ok(path) if path.exists() => {
                     return Err(module_error(
                         module,
                         "captured module collides with an artifact in the selected world".into(),
                     ))
                 }
-                Err(clean_olean::ImportError::ModuleNotFound { .. }) => {}
+                Ok(_) | Err(clean_olean::ImportError::ModuleNotFound { .. }) => {}
                 Err(error) => return Err(module_error(module, error.to_string())),
             }
         }

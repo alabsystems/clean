@@ -2,8 +2,9 @@
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 // SPDX-License-Identifier: Apache-2.0
 
-//! PKG-U6: decision procedures for trust-cg's e-graph rule statements,
-//! kernel-checked by Clean THROUGH the reference entry, every closure ⊆ Ax0.
+//! PKG-U6, PKG-U6b: decision procedures for trust-cg's e-graph rule
+//! statements, kernel-checked by Clean THROUGH the reference entry, every
+//! closure ⊆ Ax0.
 //!
 //! The fixture family `tests/fixtures/lean/v4.30.0-rc2/eqsat_decide/` (its
 //! README) holds what a rule found by search is proved with: no lemma per
@@ -23,12 +24,13 @@
 //! * the replay and every check below run under the budget of U6-BUDGET
 //!   ([`BUDGET`] kernel heartbeats: the entry has one `maxHeartbeats` for
 //!   both);
-//! * every theorem of `EqsatResidue`, `EqsatExhaust` and
-//!   `EqsatDecideControls` is required by name in the replayed environment
-//!   and its statement is the pinned one (the family's `STATEMENTS` file,
-//!   [`statement_digest`]). The row of `EqsatDecide.exhaust8_sound` pins what
-//!   the soundness theorem states, with the closure digest of `exhaust8`, of
-//!   `EqsatRule.Sound` and of every other constant its statement names;
+//! * every theorem of the family's nine modules ([`PINNED_MODULES`]) is
+//!   required by name in the replayed environment and its statement is the
+//!   pinned one (the family's `STATEMENTS` file, [`statement_digest`]). The
+//!   rows of `EqsatDecide.exhaust8_sound`, `exhaust8p_sound`,
+//!   `bitwiseAll_sound` and `ringAll_sound` pin what each soundness theorem
+//!   states, with the closure digest of its procedure, of `EqsatRule.Sound`
+//!   and of every other constant its statement names;
 //! * the residue evaluator is evaluated by the kernel: closed outcomes of
 //!   `Pat.evalR` and `checkR` are accepted by `Eq.refl`, and beside each a
 //!   forged outcome is refused: a wrong residue, `true` for a false rule at
@@ -53,9 +55,20 @@
 //!   assignment satisfies and for a `refines` rule whose left side is
 //!   undefined behaviour on every assignment; the last two are `Sound` (a
 //!   proof of each is accepted beside the refusal);
-//! * the counts of the three groups of controls are asserted
-//!   ([`CLOSED_OUTCOME_PAIRS`], [`RULES_PROVED`], [`TERMS_REFUSED`]): a
-//!   control removed is an edit of a number;
+//! * the three procedures of PKG-U6b prove rules by the same term with their
+//!   own soundness theorem (`eqsat_decide/three_procedures.rs`): `exhaust8p`
+//!   proves `(and ?x (or ?x ?y)) = ?x`, a rule with two 8-bit variables, at
+//!   `i8` and `u8`; `bitwiseAll` proves `(and ?x (not ?x)) = (const 0)` at
+//!   each of the twelve integer types and `ringAll` proves `(sub (add ?x ?y)
+//!   ?y) = ?x` at each of the twelve; the gate prints the smallest heartbeat
+//!   limit each check passes under. Each procedure's term is refused for the
+//!   claim for false rules, for rules outside its fragment, at a type it does
+//!   not cover, and where the term of one rule or type is offered for
+//!   another; `(and ?x (const 255)) = ?x`, true at eight bits only, is
+//!   refused at `u16` under each;
+//! * the counts of the controls are asserted ([`CLOSED_OUTCOME_PAIRS`],
+//!   [`RULES_PROVED`], [`TERMS_REFUSED`], [`THREE_PROCEDURES`]): a control
+//!   removed is an edit of a number;
 //! * the budget is in force: the enumeration of a true rule with two 8-bit
 //!   variables, asked for without the size limit, is refused with
 //!   `HeartbeatExceeded` at [`BUDGET`];
@@ -95,6 +108,9 @@ use procedure::refused_for_the_claim as refused;
 #[path = "eqsat_decide/operators.rs"]
 mod operators;
 
+#[path = "eqsat_decide/three_procedures.rs"]
+mod three_procedures;
+
 #[allow(dead_code)]
 #[path = "eqsat_rules/statements.rs"]
 mod statements;
@@ -107,14 +123,30 @@ const FAMILY: &str = "eqsat_decide";
 const FROM_EQSAT_RULES: [&str; 2] = ["EqsatRule", "EqsatBasics"];
 
 /// The family's own modules, in `ORDER`.
-const MODULES: [&str; 3] = ["EqsatResidue", "EqsatExhaust", "EqsatDecideControls"];
+const MODULES: [&str; 9] = [
+    "EqsatResidue",
+    "EqsatExhaust",
+    "EqsatDecideControls",
+    "EqsatPacked",
+    "EqsatPackedControls",
+    "EqsatBitwise",
+    "EqsatBitwiseControls",
+    "EqsatRing",
+    "EqsatRingControls",
+];
 
 /// The modules whose every theorem is pinned by name and statement, each with
 /// the namespace its theorems are declared in (`statements.rs` reads these).
-const PINNED_MODULES: [(&str, &str); 3] = [
+const PINNED_MODULES: [(&str, &str); 9] = [
     ("EqsatResidue", "EqsatDecide"),
     ("EqsatExhaust", "EqsatDecide"),
     ("EqsatDecideControls", "EqsatDecideControls"),
+    ("EqsatPacked", "EqsatDecide"),
+    ("EqsatPackedControls", "EqsatPackedControls"),
+    ("EqsatBitwise", "EqsatDecide"),
+    ("EqsatBitwiseControls", "EqsatBitwiseControls"),
+    ("EqsatRing", "EqsatDecide"),
+    ("EqsatRingControls", "EqsatRingControls"),
 ];
 
 /// U6-BUDGET (`docs/DECISIONS.md`): the kernel heartbeats one check gets. The
@@ -132,6 +164,15 @@ const RULES_PROVED: usize = 16;
 
 /// The terms the procedure controls have the entry refuse for the claim.
 const TERMS_REFUSED: usize = 72;
+
+/// The three procedures of PKG-U6b (`eqsat_decide/three_procedures.rs`), each
+/// with the rule and type pairs its record term proves under the budget and
+/// the terms its controls have the entry refuse for the claim.
+const THREE_PROCEDURES: [(&str, usize, usize); 3] = [
+    ("exhaust8p", 12, 69),
+    ("bitwiseAll", 17, 49),
+    ("ringAll", 19, 41),
+];
 
 /// `statements.rs` also requires the `eqsat_rules` satisfiability lemmas;
 /// this family has none.
@@ -741,10 +782,17 @@ fn eqsat_decide_replay_from_empty_with_closures_in_ax0_and_kernel_controls() {
         "eqsat_decide: {} statements required by name and equal to their pins",
         observed.len()
     );
-    eprintln!(
-        "eqsat_decide: statement(EqsatDecide.exhaust8_sound) {}",
-        observed["EqsatDecide.exhaust8_sound"]
-    );
+    for theorem in [
+        "exhaust8_sound",
+        "exhaust8p_sound",
+        "bitwiseAll_sound",
+        "ringAll_sound",
+    ] {
+        eprintln!(
+            "eqsat_decide: statement(EqsatDecide.{theorem}) {}",
+            observed[&format!("EqsatDecide.{theorem}")]
+        );
+    }
     // The comparison refuses a moved statement and a missing row, on the real
     // table, and a definition has no statement digest.
     {
@@ -789,6 +837,29 @@ fn eqsat_decide_replay_from_empty_with_closures_in_ax0_and_kernel_controls() {
          for the claim",
         procedure.proved, procedure.dearest, procedure.total, procedure.refused
     );
+
+    // ── The three procedures of PKG-U6b: what each proves and refuses. ──
+    let counted = three_procedures::three_procedures(k);
+    for (counted, (name, proved, refused)) in counted.iter().zip(THREE_PROCEDURES) {
+        assert_eq!(
+            counted.name, name,
+            "the procedures in the order of the table"
+        );
+        assert_eq!(
+            counted.proved, proved,
+            "the rule and type pairs the {name} record term proves"
+        );
+        assert_eq!(
+            counted.refused, refused,
+            "the terms the {name} controls have the entry refuse"
+        );
+        eprintln!(
+            "eqsat_decide: {} rule and type pairs proved by `{name}_sound <literal> <type> \
+             rflTrue` under {BUDGET} heartbeats: the dearest {}, all of them {}; {} terms \
+             refused for the claim",
+            counted.proved, counted.dearest, counted.total, counted.refused
+        );
+    }
 
     // ── Identity: a second replay from EMPTY in this process. ──
     let second = replay();
@@ -895,6 +966,23 @@ fn eqsat_decide_statement_pins_name_the_sources_theorems() {
         "EqsatDecide.exhaust8_sound",
         "EqsatDecide.exhaust8_defined",
         "EqsatDecide.exhaust8_satisfiable",
+        "EqsatDecide.exhaust8p_sound",
+        "EqsatDecide.exhaust8p_defined",
+        "EqsatDecide.exhaust8p_satisfiable",
+        "EqsatDecide.Packed.evalV_lanes",
+        "EqsatDecide.Packed.evalS_evalR",
+        "EqsatDecide.Packed.sweepP_spec",
+        "EqsatDecide.bitwise_sound",
+        "EqsatDecide.bitwiseAll_sound",
+        "EqsatDecide.bitwiseAll_defined",
+        "EqsatDecide.bitwiseAll_satisfiable",
+        "EqsatDecide.Bitwise.frag_eval",
+        "EqsatDecide.RingAll.ringPat_norm",
+        "EqsatDecide.RingAll.ringRun_sound",
+        "EqsatDecide.ringAll_int",
+        "EqsatDecide.ringAll_sound",
+        "EqsatDecide.ringAll_defined",
+        "EqsatDecide.ringAll_satisfiable",
     ] {
         assert!(pinned.contains(theorem), "{theorem} is a pinned statement");
     }

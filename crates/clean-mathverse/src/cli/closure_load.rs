@@ -41,6 +41,10 @@ use hashbrown::HashSet;
 use crate::cli::MathverseCliError;
 use crate::closure_source::ShardConstantSource;
 
+#[path = "closure_shard_refusal.rs"]
+mod closure_shard_refusal;
+pub(crate) use closure_shard_refusal::ClosureShardRefusal;
+
 /// Per-target slice of the shared-environment closure load: how much *new*
 /// module/constant work each target contributed on top of the cumulative env
 /// already built by earlier targets. The first target pays the bulk of the
@@ -529,6 +533,7 @@ pub(crate) fn verify_closure_shards_against_oleans(
 /// * `Some(false)` — a v3-bound shard that FAILED a gate; left unverified
 ///   (its `get()`s refuse ⇒ per-name eager fallback). Never retried within a
 ///   process (the caller records the outcome), so a bad shard costs one check.
+///   The refusal of the first gate that failed is printed.
 ///
 /// SOUNDNESS: identical gates, identical fail-closed outcome as the whole-dir
 /// pass — extraction changes WHEN a shard is checked, never WHAT is checked,
@@ -540,71 +545,75 @@ pub(crate) fn verify_one_closure_shard(
     search_paths: &[PathBuf],
     world: &mut LeanWorldScope,
 ) -> Option<bool> {
-    // Collect every owned datum we need, then DROP the immutable reader
-    // borrow before any `mark_shard_verified` (mutable) call.
-    let (is_v3_bound, candidate) = {
-        let reader = source.reader(shard)?;
-        // Skip synthetic / unbound / non-fail-closed readers.
-        if reader.header.source_olean_blake3 == [0u8; 32] || reader.header.fail_closed_verified != 1
-        {
-            (false, None)
-        } else {
-            (
-                true,
-                reader.source_module.clone().map(|module| {
-                    let served: Vec<String> = reader
-                        .constants
-                        .iter()
-                        .filter(|c| crate::closure_source::servable_kind(c.decl_kind))
-                        .map(|c| reader.strings.get(c.name_idx as usize).cloned())
-                        .map(|n| n.unwrap_or_default())
-                        .collect();
-                    (
-                        module,
-                        reader.header.source_olean_blake3,
-                        reader.header.source_olean_len,
-                        served,
-                    )
-                }),
-            )
+    // The gates borrow `source` immutably and return an owned verdict, so the
+    // borrow has ended before the mutable `mark_shard_verified`.
+    match closure_shard_binding(source, shard, search_paths, world)? {
+        Ok(()) => {
+            source.mark_shard_verified(shard);
+            Some(true)
         }
-    };
-    if !is_v3_bound {
+        Err(refusal) => {
+            eprintln!("kv lazy-closure: {refusal}");
+            Some(false)
+        }
+    }
+}
+
+/// The load-time gates of [`verify_one_closure_shard`], run in order over
+/// shard `shard` of `source` WITHOUT marking anything: `None` for a reader that
+/// is not a fail-closed-bound v3 shard (synthetic, unbound or pre-v3),
+/// `Some(Err(refusal))` naming the FIRST gate that refused, `Some(Ok(()))` on a
+/// full match, after which (and only after which) the caller may mark the
+/// shard verified. `world` is bound by the Lean-world gate, the last one.
+pub(crate) fn closure_shard_binding(
+    source: &ShardConstantSource,
+    shard: usize,
+    search_paths: &[PathBuf],
+    world: &mut LeanWorldScope,
+) -> Option<Result<(), ClosureShardRefusal>> {
+    let reader = source.reader(shard)?;
+    // Skip synthetic / unbound / non-fail-closed readers.
+    if reader.header.source_olean_blake3 == [0u8; 32] || reader.header.fail_closed_verified != 1 {
         return None;
     }
-    let Some((module, hdr_hash, hdr_len, served_names)) = candidate else {
-        // v3 fail-closed marker present but no module name recorded — can never
-        // bind; stays unverified.
-        return Some(false);
+    Some(closure_shard_gates(reader, search_paths, world))
+}
+
+/// The gates themselves, over one fail-closed-bound v3 reader (see
+/// [`closure_shard_binding`]).
+fn closure_shard_gates(
+    reader: &crate::shard::ShardMmapReader,
+    search_paths: &[PathBuf],
+    world: &mut LeanWorldScope,
+) -> Result<(), ClosureShardRefusal> {
+    // v3 fail-closed marker present but no module name recorded — can never
+    // bind; stays unverified.
+    let Some(module) = reader.source_module.clone() else {
+        return Err(ClosureShardRefusal::NoModuleName);
     };
+    let hdr_hash = reader.header.source_olean_blake3;
+    let hdr_len = reader.header.source_olean_len;
+    let served_names: Vec<String> = reader
+        .constants
+        .iter()
+        .filter(|c| crate::closure_source::servable_kind(c.decl_kind))
+        .map(|c| reader.strings.get(c.name_idx as usize).cloned())
+        .map(|n| n.unwrap_or_default())
+        .collect();
 
     // Resolve the olean for the shard's OWN module (never the file name).
     let Some(olean) = resolve_module_olean(&module, search_paths) else {
-        eprintln!(
-            "kv lazy-closure: shard for `{module}` has no resolvable .olean on the \
-             closure search paths — left UNVERIFIED (=> eager for its names)."
-        );
-        return Some(false);
+        return Err(ClosureShardRefusal::OleanUnresolved { module });
     };
 
     // Recompute the source-olean digest (read + blake3 ONLY — never an Expr
     // parse, never the mmap'd arena) and compare to the header.
     let (recomputed_hash, recomputed_len) = match source_olean_digest(&olean) {
         Ok(d) => d,
-        Err(e) => {
-            eprintln!(
-                "kv lazy-closure: hashing `{}` failed: {e} — UNVERIFIED.",
-                olean.display()
-            );
-            return Some(false);
-        }
+        Err(error) => return Err(ClosureShardRefusal::OleanUnreadable { path: olean, error }),
     };
     if recomputed_hash != hdr_hash || recomputed_len != hdr_len {
-        eprintln!(
-            "kv lazy-closure: source-olean MISMATCH for module `{module}` \
-             (shard is stale/swapped vs on-disk .olean) — UNVERIFIED (=> eager)."
-        );
-        return Some(false);
+        return Err(ClosureShardRefusal::SourceOleanMismatch { module });
     }
 
     // SUBSET CHECK (defeats foreign-constant laundering): every served name in
@@ -619,27 +628,18 @@ pub(crate) fn verify_one_closure_shard(
     let declared: std::collections::HashSet<String> =
         match crate::lean4::olean::olean_bridge::parse_target_module_with_proofs(&olean) {
             Ok(parsed) => parsed.constants.iter().map(|c| c.name.clone()).collect(),
-            Err(e) => {
-                eprintln!(
-                    "kv lazy-closure: parsing `{}` for the subset check failed: {e} — \
-                     UNVERIFIED.",
-                    olean.display()
-                );
-                return Some(false);
+            Err(error) => {
+                return Err(ClosureShardRefusal::OleanUnparseable { path: olean, error });
             }
         };
-    let subset_ok = served_names.iter().all(|name| {
-        let ok = !name.is_empty() && declared.contains(name);
-        if !ok {
-            eprintln!(
-                "kv lazy-closure: shard `{module}` serves name `{name}` NOT declared by its \
-                 olean — UNVERIFIED (foreign-constant laundering refused)."
-            );
-        }
-        ok
-    });
-    if !subset_ok {
-        return Some(false);
+    if let Some(name) = served_names
+        .iter()
+        .find(|name| name.is_empty() || !declared.contains(*name))
+    {
+        return Err(ClosureShardRefusal::ForeignName {
+            module,
+            name: name.clone(),
+        });
     }
 
     // LOAD-TIME ARENA-BINDING CHECK (the no-weaker fix). The source-olean
@@ -669,63 +669,36 @@ pub(crate) fn verify_one_closure_shard(
     // attacker who controls the shard bytes can recompute a matching digest
     // (the bytes also carry `_pad2`); that case stays out-of-scope (no signing
     // key) — exactly as the no-weaker certificate states.
-    let arena_ok = {
-        let Some(reader) = source.reader(shard) else {
-            return Some(false);
+    for (index, c) in reader
+        .constants
+        .iter()
+        .enumerate()
+        .filter(|(_, c)| crate::closure_source::servable_kind(c.decl_kind))
+    {
+        let Some(stamped) = c.recon_digest() else {
+            return Err(ClosureShardRefusal::MissingReconDigest { module, index });
         };
-        reader
-            .constants
-            .iter()
-            .enumerate()
-            .filter(|(_, c)| crate::closure_source::servable_kind(c.decl_kind))
-            .all(|(idx, c)| {
-                let Some(stamped) = c.recon_digest() else {
-                    eprintln!(
-                        "kv lazy-closure: shard `{module}` served constant #{idx} has NO \
-                             recon_digest — UNVERIFIED (=> eager)."
-                    );
-                    return false;
-                };
-                match crate::closure_source::materialize_constant_from_reader(reader, idx as u32) {
-                    Some(rc) if recon_digest_of(&rc) == stamped => true,
-                    Some(_) => {
-                        eprintln!(
-                            "kv lazy-closure: shard `{module}` constant #{idx} arena \
-                                 reconstructs to a recon_digest != the stamped one \
-                                 (corrupted/stale/swapped arena) — UNVERIFIED (=> eager)."
-                        );
-                        false
-                    }
-                    None => {
-                        eprintln!(
-                            "kv lazy-closure: shard `{module}` constant #{idx} failed to \
-                                 materialize at load time — UNVERIFIED (=> eager)."
-                        );
-                        false
-                    }
-                }
-            })
-    };
-    if !arena_ok {
-        return Some(false);
+        match crate::closure_source::materialize_constant_from_reader(reader, index as u32) {
+            Some(rc) if recon_digest_of(&rc) == stamped => {}
+            Some(_) => return Err(ClosureShardRefusal::ArenaMismatch { module, index }),
+            None => return Err(ClosureShardRefusal::ArenaUnmaterializable { module, index }),
+        }
     }
 
     // LEAN WORLD (docs/DECISIONS.md R81): the source `.olean` and its
     // companions must be of `world`, the world the caller reads, so a shard
     // of a refused or second world is never servable, whatever its digests
     // say. Checked last, so that each gate above meets its own failure first.
-    if let Err(e) = world.admit_artifact(&module, &olean) {
-        eprintln!("kv lazy-closure: shard for `{module}`: {e} — UNVERIFIED (=> eager).");
-        return Some(false);
+    if let Err(error) = world.admit_artifact(&module, &olean) {
+        return Err(ClosureShardRefusal::LeanWorld { module, error });
     }
 
     // Full match: this shard's content is byte-bound to the on-disk olean
     // eager would import, only serves names that olean declares, every served
     // constant's arena reconstructs to the build-time-verified content
-    // (recon_digest match), AND the olean is of the caller's Lean world. Mark
-    // it.
-    source.mark_shard_verified(shard);
-    Some(true)
+    // (recon_digest match), AND the olean is of the caller's Lean world. The
+    // caller marks it.
+    Ok(())
 }
 
 /// Coverage check for the HYBRID lazy closure (step 3 of the Phase-1 wiring).
@@ -2246,11 +2219,14 @@ mod closure_shard_build_tests {
     }
 }
 /// ALWAYS-ON tests for the v3 closure-binding fail-closed hardening, split into
-/// `closure_load_v3_tests.rs` (build-time oracle + digest half) and
+/// `closure_load_v3_tests.rs` (build-time oracle + digest half),
 /// `closure_load_v3_tests_binding.rs` (load-time content/arena binding + serving
-/// half) for the 500-line paragon ratchet. The `#[path]` makes each a submodule
-/// of `closure_load`, so its `use super::*` resolves to this module's private
-/// items.
+/// half) and `closure_load_v3_tests_source.rs` (the load-time source-olean
+/// binding, each tamper aimed at one gate) for the 500-line paragon ratchet.
+/// The `#[path]` makes each a submodule of `closure_load`, so its `use
+/// super::*` resolves to this module's private items. Every module name starts
+/// `v3_closure_binding_tests`: scripts/kv_invariance_gate.sh's seed leg runs
+/// them by that filter.
 #[cfg(test)]
 #[path = "closure_load_v3_tests.rs"]
 mod v3_closure_binding_tests;
@@ -2258,6 +2234,10 @@ mod v3_closure_binding_tests;
 #[cfg(test)]
 #[path = "closure_load_v3_tests_binding.rs"]
 mod v3_closure_binding_tests_binding;
+
+#[cfg(test)]
+#[path = "closure_load_v3_tests_source.rs"]
+mod v3_closure_binding_tests_source;
 
 #[cfg(test)]
 mod sibling_discovery_tests {

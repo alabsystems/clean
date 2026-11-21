@@ -11,6 +11,8 @@ use clean_kernel::level::Level;
 use clean_kernel::name::{Name, NameInner};
 use std::collections::{BTreeSet, HashMap};
 
+use super::family_index::FamilyIndex;
+
 /// How an `MData` wrapper enters a term's hash.
 ///
 /// A wrapper is ERASED (hashed as its body) where every kernel judgment that
@@ -49,12 +51,15 @@ enum Annotations {
 /// `fp(c) = H(kind, name, universe params, type, [value if a definition or
 /// opaque], for each constant d mentioned: (d, fp(d)))`, with a theorem's value
 /// deliberately left out (any proof of the same statement is interchangeable),
-/// and a family member mapped to its whole block's `add_inductive_core` input.
+/// and a regenerated family member mapped to its whole block's
+/// `add_inductive_core` input. Source wrappers admitted as definitions include
+/// their bodies in this hash.
 /// Binder names and binder info are not hashed; they do not affect typing.
 /// `MData` wrappers are erased from an ordinary constant's type and value and
 /// kept in a family's input ([`Annotations`]).
 pub(super) struct Fingerprinter<'a> {
     env: &'a Environment,
+    family_index: Option<&'a FamilyIndex>,
     done: HashMap<Name, [u8; 32]>,
     in_progress: BTreeSet<Name>,
     expr_memo: HashMap<(*const ExprKind, Annotations), [u8; 32]>,
@@ -68,10 +73,18 @@ impl<'a> Fingerprinter<'a> {
     pub(super) fn new(env: &'a Environment) -> Self {
         Self {
             env,
+            family_index: None,
             done: HashMap::new(),
             in_progress: BTreeSet::new(),
             expr_memo: HashMap::new(),
             ordinary_annotations: Annotations::Erased,
+        }
+    }
+
+    pub(super) fn with_family_index(env: &'a Environment, index: &'a FamilyIndex) -> Self {
+        Self {
+            family_index: Some(index),
+            ..Self::new(env)
         }
     }
 
@@ -88,6 +101,12 @@ impl<'a> Fingerprinter<'a> {
 
     /// The canonical head of the family `name` belongs to, if any.
     fn family_head(&self, name: &Name) -> Option<Name> {
+        if self
+            .family_index
+            .is_some_and(|index| index.is_source_wrapper(name))
+        {
+            return None;
+        }
         let env = self.env;
         let ind = env.get_inductive(name).or_else(|| {
             env.get_constructor(name)

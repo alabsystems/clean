@@ -389,6 +389,7 @@ fn may_mention_free(e: &SurfaceExpr, name: &SurfaceName) -> bool {
         | SurfaceExpr::Proj(_, i, _)
         | SurfaceExpr::Explicit(_, i)
         | SurfaceExpr::NamedArg(_, _, i)
+        | SurfaceExpr::Borrowed(_, i)
         | SurfaceExpr::OutParam(_, i)
         | SurfaceExpr::SemiOutParam(_, i)
         | SurfaceExpr::UniverseInst(_, i, _)

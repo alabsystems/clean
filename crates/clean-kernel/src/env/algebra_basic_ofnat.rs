@@ -240,7 +240,10 @@ impl Environment {
             level_params: vec![],
             type_: inst_type,
             value: inst_value,
-            is_reducible: true,
+            // Init.Prelude declares a regular instance. Registration below
+            // makes it unfold at instance transparency. Its computed height
+            // also contributes to the height of definitions using a numeral.
+            is_reducible: false,
         })?;
 
         // Lean's INSTANCE priority for `instOfNatNat` is the unannotated

@@ -110,3 +110,100 @@ fn test_prelude_module_keeps_its_refusal() {
     );
     assert!(!tmp.path().join(".lake/build/lib/P.olean").exists());
 }
+
+#[test]
+fn stable_project_prelude_can_check_a_bare_proof_and_has_no_implicit_nat() {
+    let tmp = project(
+        "W",
+        "prelude\ntheorem bareIdentity (p : Prop) : p → p := fun h => h\n",
+    );
+    let toolchain = tmp.path().join("lean-toolchain");
+    std::fs::write(&toolchain, "leanprover/lean4:v4.36.0\n").expect("write stable toolchain");
+    let source = tmp.path().join("W.lean");
+    let selected = clean_olean::source_world_for_file(&source, None).expect("source world");
+    assert_eq!(
+        selected.declared_world(),
+        Some("v4.36.0"),
+        "use the exact installed SDK: {:?}",
+        selected.imports()
+    );
+    let result = build(&tmp);
+    assert!(result.failed.is_empty(), "{:?}", result.failed);
+    assert!(recorded_imports(&tmp, "W").is_empty());
+    let cached = build(&tmp);
+    assert_eq!(cached.skipped, ["W"], "unchanged stable artifact is reused");
+
+    std::fs::write(&toolchain, "leanprover/lean4:v4.99.0\n").expect("change only the source world");
+    let changed = build(&tmp);
+    assert!(changed.skipped.is_empty(), "the stable artifact is stale");
+    assert_eq!(changed.failed.len(), 1, "{:?}", changed.failed);
+    assert!(
+        changed.failed[0]
+            .1
+            .contains("prelude requires a fresh module environment"),
+        "{:?}",
+        changed.failed
+    );
+    std::fs::write(&toolchain, "leanprover/lean4:v4.36.0\n").expect("restore stable toolchain");
+
+    std::fs::write(
+        &source,
+        include_str!("../../../tests/fixtures/olean/v4.36.0/plain/StablePlain.lean"),
+    )
+    .expect("rewrite with an explicit stable prelude import");
+    let result = build(&tmp);
+    assert!(result.failed.is_empty(), "{:?}", result.failed);
+    assert_eq!(recorded_imports(&tmp, "W"), ["Init.Prelude"]);
+
+    std::fs::write(
+        &source,
+        "prelude\nset_option autoImplicit false\naxiom accidentalNat : Nat\n",
+    )
+    .expect("rewrite as a genuine Lean refusal");
+    let result = build(&tmp);
+    assert_eq!(result.failed.len(), 1, "{:?}", result.failed);
+    assert!(result.failed[0].1.contains("Nat"), "{:?}", result.failed);
+}
+
+#[test]
+fn refused_project_world_still_builds_local_dependencies() {
+    let tmp = project("W", "import W.Dep\ntheorem keep : W.value = 7 := rfl\n");
+    std::fs::write(
+        tmp.path().join("lean-toolchain"),
+        "leanprover/lean4:v4.99.0\n",
+    )
+    .expect("write refused toolchain");
+    std::fs::create_dir(tmp.path().join("W")).expect("create dependency directory");
+    std::fs::write(tmp.path().join("W/Dep.lean"), "def W.value : Nat := 7\n")
+        .expect("write local dependency");
+
+    let result = build(&tmp);
+    assert!(result.failed.is_empty(), "{:?}", result.failed);
+    assert_eq!(recorded_imports(&tmp, "W"), ["W.Dep"]);
+    assert!(recorded_imports(&tmp, "W/Dep").is_empty());
+}
+
+#[test]
+fn refused_project_world_refuses_nonworkspace_imports_even_when_permissive() {
+    for import in ["Init", "OtherPackage"] {
+        let tmp = project("W", &format!("import {import}\ndef keep : Nat := 7\n"));
+        std::fs::write(
+            tmp.path().join("lean-toolchain"),
+            "leanprover/lean4:v4.99.0\n",
+        )
+        .expect("write refused toolchain");
+        for permissive in [false, true] {
+            let ws = Workspace::load(tmp.path()).expect("workspace loads");
+            let result = BuildContext::new(ws)
+                .with_options(BuildOptions::new().with_permissive_imports(permissive))
+                .build_all()
+                .expect("build runs");
+            assert_eq!(result.failed.len(), 1, "{:?}", result.failed);
+            let (module, reason) = &result.failed[0];
+            assert_eq!(module, "W");
+            assert!(reason.contains(&format!("import '{import}'")), "{reason}");
+            assert!(reason.contains("v4.99.0"), "{reason}");
+            assert!(!tmp.path().join(".lake/build/lib/W.olean").exists());
+        }
+    }
+}

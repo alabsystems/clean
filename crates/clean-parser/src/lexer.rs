@@ -738,10 +738,8 @@ impl<'a> Lexer<'a> {
                                 }
                             }
                         }
-                        self.doc_comments.push(DocComment::new(
-                            Span::new(start, self.pos),
-                            text.trim().to_string(),
-                        ));
+                        self.doc_comments
+                            .push(DocComment::new(Span::new(start, self.pos), text));
                     } else {
                         // Block comment, skip to -/. A `!` after the `/-`
                         // makes it a module doc, whose span is recorded.
@@ -3496,12 +3494,12 @@ mod tests {
 
     #[test]
     fn test_interpolated_string_escaped_content() {
-        // Escaped braces preserved verbatim for parse_interpolation
+        // The opening brace escape is preserved for parse_interpolation.
         assert_eq!(
-            lex("s!\"\\{literal\\}\""),
+            lex("s!\"\\{literal}\""),
             vec![TokenKind::InterpolatedString(
                 InterpolatedStringKind::String,
-                "\\{literal\\}".to_string()
+                "\\{literal}".to_string()
             )]
         );
     }

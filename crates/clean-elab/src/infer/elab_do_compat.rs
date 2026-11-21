@@ -40,7 +40,7 @@ impl<'a> ElabCtx<'a> {
         self.elaborate(&result)
     }
 
-    /// Lower `let_expr` to the existing do-match / do-bind infrastructure.
+    /// Lower a refutable expression destructure through do-match or do-bind.
     pub(super) fn elab_do_let_expr_elem(
         &mut self,
         pat: &SurfacePattern,
@@ -73,7 +73,7 @@ impl<'a> ElabCtx<'a> {
         };
 
         match kind {
-            DoLetExprKind::Pure => {
+            DoLetExprKind::Pure | DoLetExprKind::PurePattern => {
                 let match_elem =
                     DoElem::Match(span, vec![discr.clone()], vec![success_arm, fallback_arm]);
                 self.elab_do_elems(&[match_elem])

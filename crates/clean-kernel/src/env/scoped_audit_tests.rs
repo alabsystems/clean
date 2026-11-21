@@ -284,6 +284,172 @@ fn scoped_audit_rejects_ill_typed_reducible_external_domain() {
     assert!(!result.is_certified());
 }
 
+fn with_scoped_claim_budget<T>(limit: u64, check: impl FnOnce() -> T) -> T {
+    struct Budget;
+    impl Drop for Budget {
+        fn drop(&mut self) {
+            crate::tc::clear_declaration_budget();
+        }
+    }
+    crate::tc::set_declaration_budget(limit);
+    let _budget = Budget;
+    check()
+}
+
+#[test]
+fn scoped_audit_reuses_an_exact_outer_claim_with_a_strict_independent_tail() {
+    let mut environment = Environment::with_mode(CleanMode::Classical);
+    environment.init_eq().unwrap();
+    environment.init_nat().unwrap();
+    environment.init_true_false().unwrap();
+    let binder = BinderInfo::Default;
+    let name = Name::from_string("alias");
+    let x = FVarId::new(10);
+    let alias = FVarId::new(11);
+    let universe = vec![Level::succ(Level::zero())];
+    let equality = |left, right| {
+        Expr::apps(
+            Expr::const_(Name::from_string("Eq"), universe.clone()),
+            [c("Nat"), left, right],
+        )
+    };
+    let mut context = LocalContext::new();
+    context.push_with_id(x, Name::anon(), c("Nat"), binder);
+    context.push_let_with_id(alias, name.clone(), c("Nat"), Expr::fvar(x));
+    let goal = equality(Expr::fvar(alias), Expr::fvar(x));
+    let proof = Expr::apps(
+        Expr::const_(Name::from_string("Eq.refl"), universe.clone()),
+        [c("Nat"), Expr::fvar(x)],
+    );
+    let claim = |domain, rhs, tail| {
+        Expr::pi(
+            binder,
+            domain,
+            Expr::let_named(name.clone(), c("Nat"), rhs, tail, false),
+        )
+    };
+    let tail = equality(Expr::bvar(0), Expr::bvar(1));
+    let exact = claim(c("Nat"), Expr::bvar(0), tail.clone());
+    let run = |environment: &Environment, external: &Expr, limit| {
+        with_scoped_claim_budget(limit, || {
+            environment.audit_scoped_certification(&context, 2, external, &goal, &proof, 10_000)
+        })
+    };
+    let (accepted, exact_work) = run(&environment, &exact, 2_000_000);
+    assert!(accepted.is_certified(), "{accepted:?}");
+    assert!(exact_work.declarations.iter().all(|row| row.installed));
+    assert_eq!(exact_work.matched_claim_bindings, 2);
+    assert_eq!(exact_work.after_parameters, exact_work.after_external_type);
+    assert!(exact_work.after_external_type.unwrap() > exact_work.after_declarations.unwrap());
+    assert!(exact_work.after_dependencies.is_some());
+
+    let exhausted = exact_work.after_external_type.unwrap() - 1;
+    let (refused, work) = run(&environment, &exact, exhausted);
+    assert!(!refused.is_certified(), "{refused:?}");
+    assert_eq!(work.total, exhausted);
+    assert_eq!(work.declarations.len(), 2);
+    assert!(work.declarations.iter().all(|row| row.installed));
+    assert!(work.after_external_type.is_none());
+
+    let equivalent_domain = Expr::app(Expr::lam(binder, c("True"), c("Nat")), c("True.intro"));
+    let equivalent = claim(equivalent_domain, Expr::bvar(0), tail.clone());
+    let (accepted, ordinary_work) = run(&environment, &equivalent, 2_000_000);
+    assert!(accepted.is_certified(), "{accepted:?}");
+    assert!(ordinary_work.after_parameters > ordinary_work.after_external_type);
+
+    let goal_change = claim(c("Nat"), c("Nat.zero"), tail.clone());
+    let malformed_rhs = claim(c("Nat"), c("True.intro"), tail);
+    // Erasing this wrong argument yields the wanted conclusion. The
+    // independent tail still has to type-check in the exact context.
+    let malformed_tail = Expr::app(
+        Expr::lam(binder, c("Nat"), equality(Expr::bvar(1), Expr::bvar(2))),
+        c("True.intro"),
+    );
+    let malformed_tail = claim(c("Nat"), Expr::bvar(0), malformed_tail);
+    for changed in [goal_change, malformed_rhs, malformed_tail] {
+        let (refused, work) = run(&environment, &changed, 2_000_000);
+        assert!(!refused.is_certified(), "{refused:?}");
+        assert!(work.after_body.is_none());
+    }
+
+    {
+        let mut checker = TypeChecker::with_context(&environment, context.clone());
+        checker.set_cumulative(true);
+        assert!(checked_external_tail(&checker, &context, &exact)
+            .unwrap()
+            .is_none());
+    }
+    environment.set_kernel_theory(KernelTheory::LeanReference);
+    let (accepted, ordinary_work) = run(&environment, &exact, 2_000_000);
+    assert!(accepted.is_certified(), "{accepted:?}");
+    assert!(ordinary_work.after_parameters > ordinary_work.after_external_type);
+}
+
+#[test]
+fn scoped_audit_exact_outer_claim_keeps_unused_definition_dependency() {
+    let mut environment = environment();
+    let axiom = Name::from_string("Scoped.UnusedExactPrefixAxiom");
+    environment
+        .add_decl(Declaration::Axiom {
+            name: axiom.clone(),
+            level_params: vec![],
+            type_: Expr::prop(),
+        })
+        .expect("intentional hostile fixture axiom");
+    let rhs = Expr::const_(axiom.clone(), vec![]);
+    let name = Name::from_string("unused");
+    let binder = BinderInfo::Default;
+    let mut context = LocalContext::new();
+    context.push_with_id(FVarId::new(10), Name::anon(), c("Nat"), binder);
+    context.push_let_with_id(FVarId::new(11), name.clone(), Expr::prop(), rhs.clone());
+    let external = Expr::pi(
+        binder,
+        c("Nat"),
+        Expr::let_named(name, Expr::prop(), rhs, c("True"), true),
+    );
+    let (refused, work) = with_scoped_claim_budget(2_000_000, || {
+        environment.audit_scoped_certification(
+            &context,
+            2,
+            &external,
+            &c("True"),
+            &c("True.intro"),
+            10_000,
+        )
+    });
+    assert!(!refused.is_certified(), "{refused:?}");
+    assert_eq!(work.matched_claim_bindings, 2);
+    assert_eq!(work.after_parameters, work.after_external_type);
+    assert!(work.after_body.is_some());
+    assert!(work.after_dependencies.is_some());
+    assert!(refused.dependencies.contains(&axiom));
+}
+
+#[test]
+fn scoped_audit_sort_compatibility_cannot_form_an_exact_external_pi() {
+    let environment = environment();
+    let checker = TypeChecker::new(&environment);
+    let binder = BinderInfo::Default;
+    let not_a_type = Expr::lam(binder, c("Nat"), Expr::bvar(0));
+    assert!(checker.infer_sort(&not_a_type).is_ok());
+    assert!(!checker.infer_sort_with_formation(&not_a_type).unwrap().1);
+
+    let mut context = LocalContext::new();
+    context.push_with_id(FVarId::new(10), Name::anon(), not_a_type.clone(), binder);
+    let external = Expr::pi(binder, not_a_type, c("True"));
+    let (refused, work) = environment.audit_scoped_certification(
+        &context,
+        1,
+        &external,
+        &c("True"),
+        &c("True.intro"),
+        10_000,
+    );
+    assert!(!refused.is_certified(), "{refused:?}");
+    assert!(work.declarations[0].installed);
+    assert!(work.after_external_type.is_none());
+}
+
 #[test]
 fn scoped_audit_formats_real_shared_type_mismatch_without_tree_expansion() {
     let environment = environment();
@@ -298,7 +464,7 @@ fn scoped_audit_formats_real_shared_type_mismatch_without_tree_expansion() {
     let failure = checker
         .check_type(&c("Nat.zero"), &goal)
         .expect_err("Nat.zero cannot prove the constructed proposition");
-    assert!(matches!(failure, crate::tc::TypeError::TypeMismatch { .. }));
+    assert!(matches!(failure, TypeError::TypeMismatch { .. }));
     let issue = rejection_debug(format_args!("complete scoped root body: {failure:?}"));
     let CertificationIssue::TermRejected { error: message } = issue else {
         panic!("the malformed proof must remain a term rejection")
@@ -306,4 +472,136 @@ fn scoped_audit_formats_real_shared_type_mismatch_without_tree_expansion() {
     assert!(message.contains("TypeMismatch"), "{message}");
     assert!(message.contains("diagnostic truncated"), "{message}");
     assert!(message.len() <= 4096);
+}
+
+fn paired_definition(binder: BinderInfo, rhs: Expr, body: Expr) -> Expr {
+    let h = Expr::lam(BinderInfo::Default, Expr::bvar(0), body);
+    let r = Expr::let_named(Name::from_string("R"), Expr::prop(), rhs, h, false);
+    Expr::lam(binder, Expr::prop(), r)
+}
+
+#[test]
+fn scoped_audit_paired_introductions_preserve_dependent_lets_and_refusals() {
+    let environment = environment();
+    let binder = BinderInfo::Default;
+    let body = Expr::pi(binder, Expr::bvar(0), Expr::bvar(1));
+    let annotation = |rhs| {
+        let body = Expr::let_named(
+            Name::from_string("R"),
+            Expr::prop(),
+            rhs,
+            body.clone(),
+            false,
+        );
+        Expr::pi(binder, Expr::prop(), body)
+    };
+    let replay = |type_: Expr, value: Expr| {
+        let mut context = LocalContext::new();
+        let id = FVarId::new(10);
+        context.push_let_with_id(id, Name::anon(), type_, value);
+        environment.audit_scoped_certification(
+            &context,
+            0,
+            &c("True"),
+            &c("True"),
+            &Expr::apps(Expr::fvar(id), [c("True"), c("True.intro")]),
+            10_000,
+        )
+    };
+
+    let exact = paired_definition(binder, Expr::bvar(0), Expr::bvar(0));
+    let (accepted, work) = replay(annotation(Expr::bvar(0)), exact);
+    assert!(accepted.is_certified(), "{accepted:?}");
+    assert!(work.declarations[0].installed);
+    assert!(work.after_body.is_some() && work.after_dependencies.is_some());
+
+    let changed_binder = paired_definition(BinderInfo::Implicit, Expr::bvar(0), Expr::bvar(0));
+    let (accepted, _) = replay(annotation(Expr::bvar(0)), changed_binder);
+    assert!(
+        accepted.is_certified(),
+        "ordinary binder conversion: {accepted:?}"
+    );
+
+    for changed in [
+        paired_definition(binder, Expr::bvar(0), c("True.intro")),
+        paired_definition(binder, c("True"), Expr::bvar(0)),
+    ] {
+        let (refused, work) = replay(annotation(Expr::bvar(0)), changed);
+        assert!(!refused.is_certified(), "changed body or RHS accepted");
+        assert!(work.declarations[0].after_value.is_some());
+        assert!(!work.declarations[0].installed);
+        assert!(work.after_body.is_none());
+    }
+
+    let bad_rhs = c("True.intro");
+    let matching_bad = paired_definition(binder, bad_rhs.clone(), Expr::bvar(0));
+    let (refused, work) = replay(annotation(bad_rhs), matching_bad);
+    assert!(!refused.is_certified(), "identical ill-typed LETs accepted");
+    assert!(work.declarations[0].after_value.is_none());
+    assert!(!work.declarations[0].installed);
+
+    // The annotation's inferred type is Nat -> Nat, not a Sort. The
+    // standalone infer_sort Pi fallback cannot serve the strict binder rule.
+    let non_sort = Expr::lam(binder, c("Nat"), Expr::bvar(0));
+    let bad_type = Expr::pi(binder, non_sort.clone(), c("True"));
+    let bad_value = Expr::lam(binder, non_sort, c("True.intro"));
+    let (refused, work) = replay(bad_type, bad_value);
+    assert!(!refused.is_certified(), "non-sort binder domain accepted");
+    assert!(work.declarations[0].after_value.is_none());
+    assert!(!work.declarations[0].installed);
+}
+
+#[test]
+fn scoped_audit_paired_residual_sort_preserves_ordinary_pi_rejection() {
+    let classical = Environment::try_with_prelude().unwrap();
+    assert_eq!(classical.mode(), CleanMode::Classical);
+    for environment in [environment(), classical] {
+        assert_paired_residual_sort_refusal(&environment);
+    }
+}
+
+fn assert_paired_residual_sort_refusal(environment: &Environment) {
+    let binder = BinderInfo::Default;
+    let level_one = Level::succ(Level::zero());
+    let level_two = Level::succ(level_one.clone());
+    let level_three = Level::succ(level_two.clone());
+    let recursor = Expr::const_(Name::from_string("True.rec"), vec![level_three]);
+    let motive = Expr::lam(binder, c("True"), Expr::sort(level_two));
+    let family_body = Expr::apps(recursor, [motive, Expr::sort(level_one), Expr::bvar(0)]);
+    let family_type = Expr::pi(binder, c("True"), family_body);
+    let family_value = Expr::lam(binder, c("True"), Expr::prop());
+    let family_id = FVarId::new(10);
+    let result_id = FVarId::new(11);
+    let mut context = LocalContext::new();
+    context.push_let_with_id(family_id, Name::anon(), family_type, family_value);
+    let result_body = Expr::app(Expr::fvar(family_id), Expr::bvar(0));
+    let result_type = Expr::pi(binder, c("True"), result_body);
+    let result_value = Expr::lam(binder, c("True"), c("True"));
+
+    let ordinary = TypeChecker::with_context(environment, context.clone());
+    assert!(matches!(
+        ordinary.infer_sort(&result_type),
+        Err(TypeError::ExpectedSort { .. })
+    ));
+    let local = ordinary.push_binder_local(Name::anon(), c("True"), binder);
+    let opened = Expr::app(Expr::fvar(family_id), Expr::fvar(local));
+    let inferred = ordinary.infer_type_full(&opened).unwrap();
+    assert!(!matches!(inferred.kind(), ExprKind::Sort(_)));
+    assert!(matches!(ordinary.whnf(&inferred).kind(), ExprKind::Sort(_)));
+    ordinary.pop_binder_local();
+
+    context.push_let_with_id(result_id, Name::anon(), result_type, result_value);
+    let (audit, work) = environment.audit_scoped_certification(
+        &context,
+        0,
+        &c("True"),
+        &c("True"),
+        &c("True.intro"),
+        10_000,
+    );
+    assert!(!audit.is_certified(), "paired replay changed Pi refusal");
+    assert_eq!(work.declarations.len(), 2, "{audit:?}");
+    assert!(work.declarations[0].installed, "{audit:?}");
+    assert!(work.declarations[1].after_value.is_none());
+    assert!(!work.declarations[1].installed);
 }

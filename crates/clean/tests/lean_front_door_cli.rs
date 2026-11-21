@@ -363,3 +363,65 @@ fn test_module_syntax_refusal_prints_only_the_first_message_known_gap() {
         "every message is Lean's: assert Lean's bytes here instead"
     );
 }
+
+#[test]
+fn test_manual_doc_links_follow_the_selected_source_world() {
+    let dir = scratch("manual-doc-world");
+    write(&dir, "d.lean", "/-- [](lean-manual://f) -/\ndef x := 44\n");
+    assert_run(&lean(&dir, V4_8_0, &["d.lean"]), 0, "", "");
+    assert_run(
+        &lean(&dir, V4_30_0_RC2, &["d.lean", "-DprintMessageEndPos=true"]),
+        1,
+        "d.lean:1:7-1:22: error: Unknown documentation type `f`. Expected one of the following: `section`, `errorExplanation`\n",
+        "",
+    );
+}
+
+#[test]
+fn test_doc_link_ranges_preserve_unicode_and_following_commands() {
+    let dir = scratch("manual-doc-range");
+    write(
+        &dir,
+        "d.lean",
+        "/-- λ🙂\nSee [](lean-manual://f).\n-/\ndef x := 44\ndef y := x\n#check y\n",
+    );
+    let run = lean(&dir, V4_30_0_RC2, &["d.lean", "--json"]);
+    assert_eq!(run.status.code(), Some(1));
+    assert_eq!(stderr(&run), "");
+    let messages: Vec<serde_json::Value> = stdout(&run)
+        .lines()
+        .map(|line| serde_json::from_str(line).expect("real Lean message JSON"))
+        .collect();
+    assert_eq!(messages.len(), 2, "{messages:#?}");
+    let error = messages
+        .iter()
+        .find(|m| m["severity"] == "error")
+        .expect("doc error");
+    assert_eq!(error["pos"], serde_json::json!({"line": 2, "column": 7}));
+    assert_eq!(
+        error["endPos"],
+        serde_json::json!({"line": 2, "column": 22})
+    );
+    assert!(
+        messages
+            .iter()
+            .any(|m| m["severity"] == "information" && m["data"] == "y : Nat"),
+        "the genuine declaration and follow-up survived: {messages:#?}"
+    );
+}
+
+#[test]
+fn test_doc_link_guard_checks_the_executed_attachment() {
+    let dir = scratch("manual-doc-guard");
+    write(&dir, "d.lean", "/-- error: Unknown documentation type `f`. Expected one of the following: `section`, `errorExplanation` -/\n#guard_msgs in\n/-- [](lean-manual://f) -/\ndef x := 44\n#check x\n");
+    assert_run(&lean(&dir, V4_30_0_RC2, &["d.lean"]), 0, "x : Nat\n", "");
+}
+
+#[test]
+fn test_manual_url_text_outside_declaration_docs_remains_inert() {
+    let dir = scratch("manual-doc-inert");
+    write(&dir, "d.lean", "/-! lean-manual://f -/\n/- lean-manual://f -/\n-- lean-manual://f\ndef literal := \"lean-manual://f\"\n/-- [](lean-manual://section/Real) -/\ndef x := 44\n");
+    for release in [V4_8_0, V4_30_0_RC2] {
+        assert_run(&lean(&dir, release, &["d.lean"]), 0, "", "");
+    }
+}

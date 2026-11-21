@@ -12,10 +12,14 @@ pinned reasons. Missing tools, incomplete reports, crashes, panics and
 timeouts never vote; a panic is recorded as a panic, not a refusal. Fenced
 Clean's refusals are classified (`kstar_subjects.classify_clean`), never
 filtered. --members is a local build receipt, not a claim of compiler
-verification. --check-record checks the standing dated result and its exact
-source inputs (every file a member's build reads, by the rule in
-`kstar_inputs`); it never promotes a red result. Binary availability is
-required for replay.
+verification. Each Rust member is built through --build-member, which stamps the
+build's start (as cargo stamps a unit's dep-info) and the git state before and
+after it. The replay records each Rust member's build read set (`build_reads`,
+from cargo's dep-info and that stamp). --check-record calls the standing dated
+result fresh only while it carries that set for both Rust members and every
+listed file keeps its digest, and while the files `kstar_inputs` names (a
+coarse lexical conjunct that no longer decides freshness alone) keep theirs; it
+never promotes a red result. Binary availability is required for replay.
 """
 import argparse
 from datetime import datetime, timezone
@@ -38,6 +42,7 @@ ROOT = Path(__file__).resolve().parents[1]
 AX0 = sorted(nano.AX0)
 ANSWERS_PINNED_INPUTS = True
 MEMBERS = ('lean', 'clean-reference', 'ck0-stock', 'lean4lean')
+RUST_MEMBERS = ('clean-reference', 'ck0-stock')
 CONTROL_NAMES = ('extra-axiom', 'ill-typed-body', 'forged-recursor')
 # The pinned exports (CIC_L, Lean v4.30.0-rc2 Init) and their Ax0 restrictions.
 SOURCE_PINS = {
@@ -74,7 +79,7 @@ def pinned_inputs():
             'scripts/lean4lean_recheck.py', 'scripts/lean4lean_selftest.py',
             'scripts/nanoda_recheck.py',
             'scripts/lean_export_replay.sh', 'scripts/lean_export_replay/Upstream.lean',
-            l4l.PIN, l4l.REASONS,
+            l4l.PIN, l4l.REASONS, l4l.REFERENCE_OBSERVATION, *l4l.patch_files(),
             *[nano.CONTROLS[n]['path'] for n in CONTROL_NAMES]]
 
 
@@ -82,17 +87,17 @@ def pinned_inputs():
 # reference lexer it reads Rust through included), the theory and the controls.
 FIXED_INPUTS = ('Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', '.cargo/config.toml',
                 'scripts/kstar_recheck.sh', 'scripts/kstar_recheck.py', 'scripts/kstar_selftest.py',
-                'scripts/kstar_inputs.py', 'scripts/check_add_decl_ratchet.py',
+                'scripts/kstar_inputs.py', 'scripts/check_add_decl_ratchet.py', 'data/kstar_build_reads.json',
                 'scripts/kstar_subjects.py', 'scripts/lean4lean_recheck.py',
                 'scripts/lean4lean_selftest.py', 'scripts/nanoda_recheck.py',
                 'scripts/lean_export_replay.sh', 'scripts/lean_export_mint.sh', 'scripts/heavy_gate.sh',
-                'scripts/lean_export_replay/Upstream.lean', l4l.PIN, l4l.REASONS,
+                'scripts/lean_export_replay/Upstream.lean', l4l.PIN, l4l.REASONS, l4l.REFERENCE_OBSERVATION, *l4l.patch_files(),
                 'theories/cic_l/lean-toolchain', 'theories/cic_l/ORDER',
                 *[nano.CONTROLS[n]['path'] for n in CONTROL_NAMES])
 
 
 def source_inputs():
-    """Digest of every file a member's build reads (`kstar_inputs`); ValueError if one cannot be named."""
+    """Digest of each input `kstar_inputs` names; ValueError for a form it refuses."""
     return {p: digest(ROOT / p) for p in kstar_inputs.inputs(ROOT, FIXED_INPUTS)}
 
 
@@ -201,6 +206,273 @@ def identity(path):
     return dict(path=str(p), sha256=digest(p))
 
 
+def parse_dep_info(text, target):
+    """The paths cargo's dep-info for `target` names, read as cargo writes them (measured):
+    one line, `<target>: <path> <path> ...`, a space in a path written `\\ ` and nothing
+    else escaped (`:`, `\\`, `#` and `$` stand for themselves). Another line, another
+    target or a relative path (`build.dep-info-basedir`) refuses."""
+    heads = [str(t).replace(' ', '\\ ') + ':' for t in (target, os.path.realpath(target))]
+    head = next((h for h in heads if text.startswith(h)), None)
+    if head is None or not text.endswith('\n') or '\n' in text[:-1]:
+        raise ValueError(f'dep-info is not one rule for {target}')
+    rest, paths, i = text[len(head):-1], [], 0
+    while i < len(rest):
+        if rest[i] != ' ' or i + 1 == len(rest) or rest[i + 1] == ' ':
+            raise ValueError(f'dep-info for {target} is malformed at column {len(head) + i}')
+        i, path = i + 1, []
+        while i < len(rest) and rest[i] != ' ':
+            step = 2 if rest.startswith('\\ ', i) else 1
+            path.append(' ' if step == 2 else rest[i])
+            i += step
+        paths.append(''.join(path))
+    if any(not os.path.isabs(p) for p in paths):
+        raise ValueError(f'dep-info for {target} names a relative path')
+    return paths
+
+
+def watched_packages(root, listed):
+    """Each repository package whose build script the dep-info lists, by name."""
+    roots = {d for p in listed for d in (root / p).parents if d == root or root in d.parents}
+    for d in sorted(roots):
+        table = kstar_inputs.read_toml(d / 'Cargo.toml', d) if (d / 'Cargo.toml').is_file() else {}
+        package = table.get('package', table.get('project'))  # cargo still reads `[project]`
+        build = package.get('build', True) if isinstance(package, dict) else False
+        script = 'build.rs' if build is True else build
+        if isinstance(script, str) and os.path.relpath((d / script).resolve(), root) in listed:
+            yield package['name']
+
+
+BUILD_RECORD = '.kstar-build.json'  # beside the member binary: the build-start stamp and git state
+SHA256_HEX = frozenset('0123456789abcdef')
+
+
+def git(root, *argv, stdin=None):
+    """A git command's stdout in `root`, the caller's GIT_* variables dropped; ValueError when it fails."""
+    env = {key: value for key, value in os.environ.items() if not key.startswith('GIT_')}
+    done = subprocess.run(['git', '--no-optional-locks', '-C', str(root), *argv], input=stdin,
+                          capture_output=True, text=True, env=env)
+    if done.returncode:
+        raise ValueError(f'git {argv[0]} in {root} exited {done.returncode}: {done.stderr.strip()[:200]}')
+    return done.stdout
+
+
+def tree_state(root):
+    """(HEAD, every tracked path that differs from HEAD in the index or the work tree, renames' sources included)."""
+    fields = git(root, 'status', '--porcelain=v1', '-z', '--untracked-files=no').split('\0')
+    dirty, i = [], 0
+    while i < len(fields) and fields[i]:
+        dirty.append(fields[i][3:])
+        if set(fields[i][:2]) & set('RC'):  # the source path follows
+            i += 1
+            dirty.append(fields[i])
+        i += 1
+    return git(root, 'rev-parse', 'HEAD').strip(), sorted(dirty)
+
+
+def build_member(name, built, argv, root=None, env=None):
+    """Run a Rust member's build command `argv`, stamped the way cargo stamps a unit's dep-info.
+
+    Before the command runs it creates `<built>.kstar-build.json`, whose mtime is the build-start
+    stamp, and reads HEAD and the tracked paths that differ from it; after the command it reads
+    them again and writes them, the stamp, the exit status and the binary's sha256 into that file.
+    `build_reads` refuses a member built any other way. Returns the command's exit status."""
+    root, built = (root or ROOT).resolve(), Path(built)
+    record = built.with_name(built.name + BUILD_RECORD)
+    record.parent.mkdir(parents=True, exist_ok=True)
+    record.unlink(missing_ok=True)
+    record.write_text('')  # its mtime is the stamp, on the file system's clock as cargo reads its own
+    started = record.stat().st_mtime_ns
+    head, dirty = tree_state(root)
+    code = subprocess.run(list(map(str, argv)), cwd=root, env=env).returncode
+    head_after, dirty_after = tree_state(root)
+    record.write_text(json.dumps(dict(
+        schema='clean.kstar-build.v1', member=name, command=list(map(str, argv)), started_ns=started,
+        head_before=head, head_after=head_after, dirty_before=dirty, dirty_after=dirty_after, exit_code=code,
+        binary_sha256=digest(built) if built.is_file() else None), indent=2) + '\n')
+    return code
+
+
+def build_stamp(name, built, sha):
+    """The build-start record beside `built`, validated: of this binary, a completed build, HEAD unmoved."""
+    path = built.with_name(built.name + BUILD_RECORD)
+    try:
+        b = json.loads(path.read_text())
+    except (OSError, ValueError):
+        raise ValueError(f'{name}: no build-start record beside {built} (build it through --build-member)') from None
+    shape = dict(member=str, started_ns=int, head_before=str, head_after=str, dirty_before=list,
+                 dirty_after=list, exit_code=int, binary_sha256=str)
+    if (not isinstance(b, dict) or any(type(b.get(key)) is not t for key, t in shape.items())
+            or not all(isinstance(p, str) for p in b['dirty_before'] + b['dirty_after'])):
+        raise ValueError(f'{name}: malformed build-start record {path}')
+    if b['member'] != name or b['binary_sha256'] != sha:
+        raise ValueError(f'{name}: the build-start record {path} is of another build')
+    if b['exit_code'] != 0:
+        raise ValueError(f"{name}: the stamped build exited {b['exit_code']}")
+    if b['head_before'] != b['head_after']:
+        raise ValueError(f"{name}: HEAD moved during the build ({b['head_before']} to {b['head_after']})")
+    return b
+
+
+def blob_ids(root, head, paths):
+    """{path: its blob's object id at `head`, or None when `head` holds no blob there}."""
+    if any('\n' in p for p in paths):
+        raise ValueError('a build read path holds a newline')
+    out = git(root, 'cat-file', '--batch-check=%(objectname) %(objecttype)',
+              stdin=''.join(f'{head}:{p}\n' for p in paths)).splitlines()
+    if len(out) != len(paths):
+        raise ValueError(f'git cat-file answered {len(out)} of {len(paths)} paths at {head}')
+    return {p: line.split(' ')[0] if line.endswith(' blob') else None for p, line in zip(paths, out)}
+
+
+def first_link(listed, root):
+    """The first symbolic link the listed path passes through inside the repository, else None."""
+    step = ''
+    for part in Path(listed).parts:
+        step = os.path.join(step, part)
+        here = Path(os.path.normpath(step))
+        if (here == root or root in here.parents) and os.path.islink(step):
+            return step
+    return None
+
+
+def build_reads(name, entry, root=None, head=None):
+    """{repository path: sha256} of each repository file a Rust member's build depends on.
+
+    The source is the dep-info cargo writes beside the binary (`<target>/<profile>/<bin>.d`,
+    at `built_at`): what rustc read for each local package and every rerun-if-changed path,
+    keyed as the dep-info lists it, normalized lexically and never resolved. The time of the
+    reads is the build's START, which `build_member` stamps before the command runs, as cargo
+    stamps a unit's dep-info; the dep-info's own mtime, written at the end, is not used.
+    Refused (ValueError), beyond a dep-info of another shape:
+    - no dep-info, one older than the binary (stock cargo keeps an unchanged one on a relink:
+      remove it first) or beside other bytes;
+    - no build-start record of this binary, a build that exited nonzero, HEAD moving during it;
+    - any tracked path not clean before or after the build, listed or not: a dirty manifest,
+      Cargo.lock, Cargo configuration, rust-toolchain.toml or unlisted build-script input changes
+      what is built while the dep-info lists none of them, so members are built in a clean checkout;
+    - a listed repository file that cannot be read as a file, whose mtime is at or after the
+      stamp, that HEAD does not track, or whose bytes differ from its blob at the build's HEAD
+      or at the record's (`head`);
+    - a listed path that is a symbolic link, passes through one inside the repository, or
+      reaches the repository through one;
+    - a path outside the repository, the target directory, Cargo's home and the toolchain, no
+      repository file, and a repository build script that printed no rerun-if-changed (cargo
+      then watches package files the dep-info omits).
+    Inside the repository the set omits manifests, Cargo.lock and Cargo configuration (the
+    `kstar_inputs` conjunct hashes them at receipt and check). Uncovered residuals, not claimed
+    (docs/DECISIONS.md, 2026-11-19, "Q4 freshness rests on the members' build read sets", and its
+    corrections):
+    - a listed file edited and reverted with its mtime restored before these checks: the mtime
+      test and git's stat cache both miss it, and benign tools do it (`cp -p` or shutil.copy2
+      restores: scripts/bump-trust-ir-pin.sh's rollback, scripts/crystal_perturb_meta_tag_shl.sh);
+    - an untracked file the build reads without the dep-info listing it (the dirty set holds
+      tracked paths only);
+    - native link inputs, and what a proc macro or build script reads unnamed;
+    - outside the repository, where nothing is hashed here: the bytes under Cargo's home
+      (Cargo.lock pins registry archive checksums and git revisions, not the extracted sources,
+      which cargo does not re-verify); Cargo configuration outside the repository
+      ($CARGO_HOME/config.toml, and .cargo/config.toml in the repository's parent directories);
+      the build environment (RUSTFLAGS and other variables: the build-start record keeps none);
+      the linker and system libraries; a registry build script's reads beyond its sources; and
+      clean-olean's build script, in clean-reference's graph, which reads the installed Lean
+      toolchain's .olean parts with no rerun-if-changed and compiles their BLAKE3 manifest into
+      the binary (data/kstar_build_reads.json, `outside`).
+    The Rust toolchain is pinned by identity only (the receipt's compiler path, that executable's
+    sha256 and its `-Vv` line; the replay hashes the stock member's compiler again, --check-record
+    neither, and no sysroot library is hashed); target-directory files follow from their inputs."""
+    root = (root or ROOT).resolve()
+    built = Path(entry.get('built_at') or entry['binary']['path'])
+    dep = built.with_name(built.name + '.d')
+    if not dep.is_file():
+        raise ValueError(f'{name}: no dep-info beside {built}')
+    if not built.is_file() or digest(built) != entry['binary']['sha256']:
+        raise ValueError(f'{name}: {built} is not the member binary, so its dep-info is of another build')
+    if dep.stat().st_mtime_ns < built.stat().st_mtime_ns:
+        raise ValueError(f'{name}: dep-info {dep} is older than the binary')
+    stamp = build_stamp(name, built, entry['binary']['sha256'])
+    outside = {built.parent.parent, Path(os.environ.get('CARGO_HOME') or Path.home() / '.cargo')}
+    if 'compiler_path' in entry:  # the toolchain: its directory and the sysroot it prints
+        sysroot = invoke([entry['compiler_path'], '--print', 'sysroot'], 60)
+        outside |= {Path(entry['compiler_path']).parent.parent, Path(sysroot['stdout'].strip() or '/nonexistent')}
+    outside |= {o.resolve() for o in outside}
+    reads, blobs = {}, {}
+    hasher = git(root, 'rev-parse', '--show-object-format').strip()
+    def under(x):
+        return any(x == o or o in x.parents for o in outside)
+    def inside(x):
+        return x == root or root in x.parents
+    for p in parse_dep_info(dep.read_bytes().decode(), built):
+        lexical, real = Path(os.path.normpath(p)), Path(os.path.realpath(p))
+        if under(lexical):
+            if inside(real) and not under(real):
+                raise ValueError(f'{name}: dep-info lists {p}, which reaches the repository through a symbolic link')
+            continue  # not hashed, even for a target directory inside the repository
+        if not inside(lexical):
+            if inside(real):
+                raise ValueError(f'{name}: dep-info lists {p}, which reaches the repository through a symbolic link')
+            if under(real):
+                continue
+            raise ValueError(f"{name}: dep-info names {p}, outside the repository, the target directory, Cargo's home and the toolchain")
+        link = first_link(p, root)
+        if link or real != lexical:
+            what = 'is' if link and Path(os.path.normpath(link)) == lexical else 'passes through'
+            raise ValueError(f'{name}: dep-info lists {p}, which {what} a symbolic link ({link or real})')
+        rel = lexical.relative_to(root).as_posix()
+        if not lexical.is_file():
+            raise ValueError(f'{name}: dep-info lists {p}, which cannot be read as a file')
+        if lexical.stat().st_mtime_ns >= stamp['started_ns']:
+            raise ValueError(f'{name}: dep-info lists {rel}, which changed at or after the start of the build')
+        data = lexical.read_bytes()
+        reads[rel] = hashlib.sha256(data).hexdigest()
+        blobs[rel] = hashlib.new(hasher, b'blob %d\0' % len(data) + data).hexdigest()
+    # Any dirty tracked path refuses, listed or not: the dep-info lists no manifest or configuration.
+    dirty = sorted(set(stamp['dirty_before']) | set(stamp['dirty_after']))
+    if dirty:
+        raise ValueError(f"{name}: tracked paths were not clean before or after the build ({', '.join(dirty[:5])}"
+                         f"{', ...' if len(dirty) > 5 else ''}); build the member in a clean checkout")
+    if not reads:
+        raise ValueError(f'{name}: dep-info names no repository file')
+    for commit in dict.fromkeys(h for h in (stamp['head_before'], head) if h):
+        for rel, oid in blob_ids(root, commit, list(blobs)).items():
+            if oid is None:
+                raise ValueError(f'{name}: dep-info lists {rel}, which {commit} does not track')
+            if oid != blobs[rel]:
+                raise ValueError(f'{name}: dep-info lists {rel}, whose bytes differ from its blob at {commit}')
+    for package in watched_packages(root, reads):
+        # Build-script output: `build/<package>-<hash>/output`, or `build/<package>/<hash>/run/stdout`
+        # in the build-dir layout Trust's targo writes.
+        found = [d / 'output' for d in (built.parent / 'build').glob(package + '-*') if d.name[len(package) + 1:].isalnum()]
+        outputs = sorted(o for o in found + list((built.parent / 'build' / package).glob('*/run/stdout')) if o.is_file())
+        if not outputs:
+            raise ValueError(f'{name}: no build-script output of {package} beside {built}')
+        for out in outputs:
+            if not any(line.startswith(('cargo:rerun-if-changed=', 'cargo::rerun-if-changed='))
+                       for line in out.read_text(errors='replace').splitlines()):
+                raise ValueError(f'{name}: the build script of {package} printed no rerun-if-changed ({out}): '
+                                 'cargo then watches its whole package (or, with rerun-if-env-changed, no file), '
+                                 'and the dep-info lists none of what it reads')
+    return reads
+
+
+def moved_build_reads(reads):
+    """Each listed file whose bytes moved; ValueError for a build read set of any other shape."""
+    if not isinstance(reads, dict):
+        raise ValueError('record carries no build read set')
+    for member in RUST_MEMBERS:
+        if not isinstance(reads.get(member), dict) or not reads[member]:
+            raise ValueError(f'record carries no build read set for {member}')
+    if set(reads) != set(RUST_MEMBERS):
+        raise ValueError('build read set names a member other than ' + ' and '.join(RUST_MEMBERS))
+    for member, files in reads.items():
+        for p, h in files.items():
+            if not isinstance(h, str) or len(h) != 64 or not set(h) <= SHA256_HEX:
+                raise ValueError(f'build read set of {member} holds no sha256 for {p}')
+            if Path(p).is_absolute() or '..' in Path(p).parts or os.path.normpath(p) != p:
+                raise ValueError(f'build read set of {member} names {p}, not a normalized path inside the repository')
+    return sorted({p for files in reads.values() for p, h in files.items()
+                   if not (ROOT / p).is_file() or digest(ROOT / p) != h})
+
+
 def prepare(args):
     receipt = json.loads(args.members.read_text())
     if receipt['source_inputs'] != source_inputs():
@@ -284,6 +556,11 @@ def replay(data, ids, timeout, graph, excluded=()):
 def check_record(path):
     try:
         r = json.loads(path.read_text())
+        if not isinstance(r, dict):
+            raise ValueError('record is not a JSON object')
+        moved = moved_build_reads(r.get('build_reads'))
+        if moved:
+            raise ValueError('stale build reads: ' + ', '.join(moved[:5]))
         if r['source_inputs'] != source_inputs():
             raise ValueError('stale source inputs')
         if not r['success'] or not r['subjects'] or not r['qualified_lean4lean']:
@@ -310,8 +587,14 @@ def check_record(path):
 
 
 def main():
+    argv = sys.argv[1:]
+    # --build-member's command follows `--`; nothing after it is read as an option here.
+    argv, command = (argv[:argv.index('--')], argv[argv.index('--') + 1:]) if '--' in argv else (argv, [])
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--selftest', action='store_true')
+    ap.add_argument('--build-member', choices=RUST_MEMBERS,
+                    help='run the member build command given after --, stamped (build_member)')
+    ap.add_argument('--built-at', type=Path, help='with --build-member: the binary the command builds')
     ap.add_argument('--pinned-inputs', action='store_true')
     ap.add_argument('--check-record', type=Path)
     ap.add_argument('--members', type=Path)
@@ -319,7 +602,14 @@ def main():
     ap.add_argument('--subject', type=Path, action='append')
     ap.add_argument('--out', type=Path)
     ap.add_argument('--timeout', type=int, default=600)
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
+    if args.build_member:
+        if not args.built_at or not command:
+            print('KSTAR_BUILD=not knowable here: --built-at and a command after -- required'); return 2
+        try:
+            return build_member(args.build_member, args.built_at, command)
+        except (OSError, ValueError) as e:  # git unreadable: the record stays empty, which refuses
+            print(f'KSTAR_BUILD=not knowable here: {e}'); return 2
     if args.selftest:
         from kstar_selftest import selftest
         return selftest()
@@ -346,6 +636,7 @@ def main():
     try:
         ids = prepare(args)
         record['identities'] = ids; save()
+        record['build_reads'] = {n: build_reads(n, ids[n], head=record['source_commit']) for n in RUST_MEMBERS}; save()
         # Arena qualification is executed afresh; no historical JSON can confer a vote.
         binary = ids['lean4lean']['binary']['path']
         rc = l4l.main(['--binary', binary, '--out', str(args.out / 'lean4lean-qualification')])
@@ -373,8 +664,8 @@ def main():
             row['refused_for_reason'] = {m: control_refused(m, name, row['members'][m]) for m in MEMBERS}
             row['panicked'] = sorted(m for m, r in row['members'].items() if r.get('verdict') == 'panic')
             record['controls'][name] = row; save()
-        if source_inputs() != record['source_inputs']:
-            raise ValueError('source inputs changed during replay')
+        if source_inputs() != record['source_inputs'] or moved_build_reads(record['build_reads']):
+            raise ValueError('source inputs or build reads changed during replay')
         record['success'] = (record['qualified_lean4lean'] and all(s['accepted'] for s in record['subjects'])
                              and all(c['all_refused_for_reason'] for c in record['controls'].values()))
         save()

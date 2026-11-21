@@ -27,6 +27,9 @@ fn register(env: &mut Environment, source_input: &str) {
 
 fn guard_environment() -> Environment {
     let mut env = Environment::with_prelude();
+    // These fixtures exercise checked kernel conversion. Generic Bool/custom
+    // recursors have no Lean code generator implementation, so keep the actual
+    // noncomputable source form rather than claiming native compilation.
     for source in [
         "inductive CongruenceLayout : Type where | mk (align : Nat) : CongruenceLayout",
         "def congruence_align (layout : CongruenceLayout) : Nat := @CongruenceLayout.rec (fun (_ : CongruenceLayout) => Nat) (fun (align : Nat) => align) layout",
@@ -40,7 +43,7 @@ fn guard_environment() -> Environment {
         "def congruence_alignment (fuel a limit : Nat) : Bool := Bool.and (congruence_ltb a limit) (congruence_pow2_go fuel a)",
         // The actual byte accessibility predicate contains this symbolic-minus-
         // limit shape inside its range comparison, beside the alignment check.
-        "def congruence_access_guard (fuel base align limit : Nat) : Bool := Bool.and (congruence_pos base) (Bool.and (congruence_leb (Nat.add base 8) limit) (Bool.and (congruence_alignment fuel align limit) (congruence_eqb (Nat.mod base align) 0)))",
+        "noncomputable def congruence_access_guard (fuel base align limit : Nat) : Bool := Bool.and (congruence_pos base) (Bool.and (congruence_leb (Nat.add base 8) limit) (Bool.and (congruence_alignment fuel align limit) (congruence_eqb (Nat.mod base align) 0)))",
     ] {
         register(&mut env, source);
     }
@@ -90,7 +93,7 @@ fn ignored_argument_environment() -> Environment {
     let mut env = Environment::with_prelude();
     register(
         &mut env,
-        "def congruence_ignore (ignored result : Nat) : Nat := result",
+        "noncomputable def congruence_ignore (ignored result : Nat) : Nat := result",
     );
     env
 }
@@ -381,7 +384,7 @@ fn rigid_congruence_eligibility_limits_do_not_reject_inputs() {
         .collect::<String>();
     register(
         &mut env,
-        &format!("def congruence_wide {parameters}: Nat := 3"),
+        &format!("noncomputable def congruence_wide {parameters}: Nat := 3"),
     );
     let wide = |value| {
         (0..65).fold(Expr::const_str("congruence_wide"), |f, _| {

@@ -15,6 +15,67 @@ fn by_tactics(input: &str) -> Vec<SurfaceTactic> {
 }
 
 #[test]
+fn test_subst_contextual_names_keep_sibling_tactics() {
+    let tactics =
+        by_tactics("by\n  subst constructor left «first»\n  constructor\n  subst right; rfl");
+    let [SurfaceTactic::Named { name, args, .. }, constructor, subst, reflexivity] =
+        tactics.as_slice()
+    else {
+        panic!("expected four tactics: {tactics:?}");
+    };
+    assert_eq!(name, "subst");
+    let [first, second, third] = args.as_slice() else {
+        panic!("expected three arguments: {args:?}");
+    };
+    for (arg, text, escaped) in [
+        (first, "constructor", false),
+        (second, "left", false),
+        (third, "first", true),
+    ] {
+        assert!(matches!(arg, SurfaceExpr::Ident(_, name)
+            if *name == crate::SurfaceName::component(text, escaped)));
+    }
+    assert!(
+        matches!(constructor, SurfaceTactic::Named { name, args, .. }
+        if name == "constructor" && args.is_empty())
+    );
+    assert!(matches!(subst, SurfaceTactic::Named { name, args, .. }
+        if name == "subst" && matches!(args.as_slice(), [SurfaceExpr::Ident(_, arg)]
+            if *arg == crate::SurfaceName::component("right", false))));
+    assert!(matches!(reflexivity, SurfaceTactic::Named { name, .. } if name == "rfl"));
+}
+
+#[test]
+fn test_subst_argument_layout_uses_the_tactic_block_column() {
+    let tactics = by_tactics("by\n  · skip; subst\n      right\n    constructor");
+    let [SurfaceTactic::FocusBlock(_, body)] = tactics.as_slice() else {
+        panic!("expected a bullet: {tactics:?}");
+    };
+    let [_, subst, constructor] = body.as_slice() else {
+        panic!("expected three tactics inside the bullet: {body:?}");
+    };
+    assert!(matches!(subst, SurfaceTactic::Named { name, args, .. }
+        if name == "subst" && matches!(args.as_slice(), [SurfaceExpr::Ident(_, arg)]
+            if *arg == crate::SurfaceName::component("right", false))));
+    assert!(matches!(constructor, SurfaceTactic::Named { name, .. } if name == "constructor"));
+}
+
+#[test]
+fn test_subst_requires_an_identifier_before_the_next_tactic() {
+    for source in ["subst\n  constructor", "subst nomatch"] {
+        let file = format!("example : True := by\n  {source}");
+        let report = Parser::parse_file_with_diagnostics(&file).expect("recover malformed subst");
+        assert!(
+            report.diagnostics.iter().any(|diagnostic| diagnostic
+                .message
+                .contains("expected at least one identifier in subst")),
+            "{source}: {:?}",
+            report.diagnostics
+        );
+    }
+}
+
+#[test]
 fn test_have_underscore_preserves_proof_and_following_tactic() {
     for input in [
         "by\n  have _ := h.symm\n  exact h",
@@ -43,13 +104,27 @@ fn test_have_equations_leave_the_enclosing_case_pipe() {
         // The empty continuation tests a pipe immediately after the local
         // equation, without another tactic masking the arm-list boundary.
         let tactics = by_tactics(&format!(
-            "by\n  cases b with\n  | false =>\n    have _ : Nat → True\n      | _ => True.intro\n{continuation}  | true =>\n    trivial",
+            "by\n  cases b with\n  | false =>\n    have _ : Bool → Bool → True\n      | false, false | true, true => True.intro\n      | _, _ => True.intro\n{continuation}  | true =>\n    trivial",
         ));
         let SurfaceTactic::Cases(_, _, _, alts) = &tactics[0] else {
             panic!("expected cases: {tactics:?}");
         };
         assert_eq!(alts.len(), 2, "local equations must not consume a case");
     }
+}
+
+#[test]
+fn test_grouped_declaration_equations_cannot_take_a_dedented_case_arrow() {
+    let input = "example (b : Bool) : True := by\n  cases b with\n  | false =>\n    have _ : Bool → True\n      | false\n  | true =>\n        exact True.intro";
+    let report = Parser::parse_file_with_diagnostics(input).expect("recover malformed proof");
+    assert!(
+        report.diagnostics.iter().any(|diagnostic| {
+            diagnostic.message.contains("expected FatArrow, got Pipe")
+                && diagnostic.recovery_start.line == 6
+        }),
+        "{:?}",
+        report.diagnostics
+    );
 }
 
 #[test]
@@ -155,6 +230,45 @@ fn test_named_tactic_with_pattern_term_arg() {
         "TermArg pattern should produce 1 arg, got {:?}",
         t[0]
     );
+}
+
+#[test]
+fn change_location_keeps_escaped_at_in_the_term() {
+    let tactics = by_tactics("by\n  change P «at» at h k ⊢\n  exact h");
+    let [SurfaceTactic::Named { name, args, .. }, SurfaceTactic::Named { name: next, .. }] =
+        tactics.as_slice()
+    else {
+        panic!("expected change followed by exact: {tactics:?}");
+    };
+    assert_eq!(name, "change");
+    assert_eq!(next, "exact");
+    let [SurfaceExpr::App(_, _, term_args), SurfaceExpr::Ident(_, first), SurfaceExpr::Ident(_, second), SurfaceExpr::Ident(_, goal)] =
+        args.as_slice()
+    else {
+        panic!("expected term plus three locations: {args:?}");
+    };
+    assert!(matches!(&term_args[..], [arg] if matches!(&arg.expr,
+        SurfaceExpr::Ident(_, name) if name.to_string() == "at")));
+    assert_eq!(first.to_string(), "h");
+    assert_eq!(second.to_string(), "k");
+    assert!(goal.same_syntax(&crate::SurfaceName::generated_path("⊢")));
+}
+
+#[test]
+fn change_location_accepts_contextual_hypothesis_names() {
+    let tactics = by_tactics("by\n  change P at right left\n  exact right");
+    let [SurfaceTactic::Named { name, args, .. }, SurfaceTactic::Named { name: next, .. }] =
+        tactics.as_slice()
+    else {
+        panic!("expected change followed by exact: {tactics:?}");
+    };
+    assert_eq!(name, "change");
+    assert_eq!(next, "exact");
+    let [_, SurfaceExpr::Ident(_, right), SurfaceExpr::Ident(_, left)] = args.as_slice() else {
+        panic!("expected term and both hypothesis names: {args:?}");
+    };
+    assert_eq!(right.to_string(), "right");
+    assert_eq!(left.to_string(), "left");
 }
 
 #[test]
@@ -452,6 +566,153 @@ fn test_named_tactic_let_still_parses_to_let() {
 }
 
 #[test]
+fn test_anonymous_tactic_let_keeps_both_bindings_and_continuation() {
+    let source = "def t (h : Nat) : Nat := by\n  let _ := h\n  let _ : Nat := h\n  exact h";
+    let decls = crate::parse_file_with_tactics_located(source, &TacticPatterns::new())
+        .expect("both anonymous lets must parse without recovery");
+    let [SurfaceDecl::Def { val, .. }] = decls.as_slice() else {
+        panic!("expected one definition, got {decls:?}");
+    };
+    let SurfaceExpr::ByTactic(_, tactics) = val.as_ref() else {
+        panic!("expected a tactic block, got {val:?}");
+    };
+    let [SurfaceTactic::Let(_, inferred, None, first), SurfaceTactic::Let(_, typed, Some(ty), second), continuation] =
+        tactics.as_slice()
+    else {
+        panic!("expected two lets and their continuation, got {tactics:?}");
+    };
+    for name in [inferred, typed] {
+        assert_eq!(name, &tactic::inaccessible_hypothesis());
+    }
+    for value in [first, second] {
+        assert!(
+            matches!(value.as_ref(), SurfaceExpr::Ident(_, name) if name.is_unescaped_component("h"))
+        );
+    }
+    assert!(
+        matches!(ty.as_ref(), SurfaceExpr::Ident(_, name) if name.is_unescaped_component("Nat"))
+    );
+    assert!(matches!(continuation, SurfaceTactic::Named { name, .. } if name == "exact"));
+}
+
+#[test]
+fn test_anonymous_tactic_let_requires_a_value() {
+    let source = "def t : Nat := by\n  let _ : Nat :=\n";
+    assert!(crate::parse_file_with_tactics_located(source, &TacticPatterns::new()).is_err());
+}
+
+#[test]
+fn tactic_let_i_keeps_named_anonymous_and_inaccessible_binders() {
+    let tactics = by_tactics(
+        "by\n  letI d : Decidable p := w\n  letI : Decidable q := by exact v\n  letI := w\n  letI _ := w\n  exact d",
+    );
+    let [SurfaceTactic::LetI(_, d, Some(ty), w), SurfaceTactic::LetI(_, typed, Some(_), proof), SurfaceTactic::LetI(_, inferred, None, _), SurfaceTactic::LetI(_, inaccessible, None, _), continuation] =
+        tactics.as_slice()
+    else {
+        panic!("expected four local instance declarations and their continuation: {tactics:?}");
+    };
+    assert!(d.is_unescaped_component("d"));
+    assert!(matches!(ty.as_ref(), SurfaceExpr::App(..)));
+    assert!(matches!(w.as_ref(), SurfaceExpr::Ident(_, n) if n.is_unescaped_component("w")));
+    assert!(matches!(proof.as_ref(), SurfaceExpr::ByTactic(_, t) if t.len() == 1));
+    assert!(typed.is_unescaped_component("this"));
+    assert!(inferred.is_unescaped_component("this"));
+    assert_eq!(inaccessible, &super::tactic::inaccessible_hypothesis());
+    assert!(matches!(continuation, SurfaceTactic::Named { name, .. } if name == "exact"));
+}
+
+#[test]
+fn tactic_let_i_binder_telescope_scopes_the_result_and_value() {
+    for (declaration, binder) in [
+        ("letI f (x : Nat) : Nat := x", "f"),
+        ("letI (x : Nat) : Nat := x", "this"),
+    ] {
+        let tactics = by_tactics(&format!("by\n  {declaration}\n  exact {binder}"));
+        let [SurfaceTactic::LetI(_, name, Some(ty), val), _] = tactics.as_slice() else {
+            panic!("expected local function and continuation: {tactics:?}");
+        };
+        assert!(name.is_unescaped_component(binder));
+        assert!(matches!(ty.as_ref(), SurfaceExpr::Pi(_, bs, _) if bs.len() == 1));
+        assert!(matches!(val.as_ref(), SurfaceExpr::Lambda(_, bs, _) if bs.len() == 1));
+    }
+}
+
+#[test]
+fn tactic_let_i_requires_a_value_and_refuses_patterns() {
+    for decl in [
+        "letI d : Nat",
+        "letI (x, y) := (1, 2)",
+        "letI f (x, y) := (1, 2)",
+        "letI ⟨x, y⟩ := p",
+        "letI (x) := p",
+        "letI f[x] := p",
+    ] {
+        let source = format!("def t : Nat := by\n  {decl}\n  exact 1");
+        assert!(
+            crate::parse_file_with_tactics_located(&source, &TacticPatterns::new()).is_err(),
+            "{source}"
+        );
+    }
+}
+
+#[test]
+fn test_tactic_binding_types_keep_arguments_inside_record_fields() {
+    let body = "  typed := by\n    have h : And True True := ⟨True.intro, True.intro⟩\n    let xs : List Nat := []\n    exact h.1";
+    for source in [
+        format!("def r : Record where\n{body}\n  tail := 1"),
+        format!("def r : Record := {{\n{body},\n  tail := 1\n}}"),
+    ] {
+        let decls = crate::parse_file_with_tactics_located(&source, &TacticPatterns::new())
+            .unwrap_or_else(|error| panic!("{source}\n{error:?}"));
+        let [SurfaceDecl::Def { val, .. }] = decls.as_slice() else {
+            panic!("expected one definition, got {decls:?}");
+        };
+        let SurfaceExpr::StructLit { fields, .. } = val.as_ref() else {
+            panic!("expected record fields, got {val:?}");
+        };
+        let [typed, tail] = fields.as_slice() else {
+            panic!("expected both fields, got {fields:?}");
+        };
+        assert!(typed.name.is_unescaped_component("typed"));
+        assert!(tail.name.is_unescaped_component("tail"));
+        let SurfaceExpr::ByTactic(_, tactics) = &typed.val else {
+            panic!("expected field tactics, got {:?}", typed.val);
+        };
+        let [SurfaceTactic::Have(_, _, Some(have_ty), _), SurfaceTactic::Let(_, _, Some(let_ty), _), continuation] =
+            tactics.as_slice()
+        else {
+            panic!("expected have, let and their continuation, got {tactics:?}");
+        };
+        for (ty, constructor, count, last) in
+            [(have_ty, "And", 2, "True"), (let_ty, "List", 1, "Nat")]
+        {
+            let SurfaceExpr::App(_, head, args) = ty.as_ref() else {
+                panic!("expected applied type, got {ty:?}");
+            };
+            assert!(
+                matches!(head.as_ref(), SurfaceExpr::Ident(_, name) if name.is_unescaped_component(constructor))
+            );
+            assert_eq!(args.len(), count);
+            assert!(
+                matches!(&args[count - 1].expr, SurfaceExpr::Ident(_, name) if name.is_unescaped_component(last))
+            );
+        }
+        assert!(matches!(continuation, SurfaceTactic::Named { name, .. } if name == "exact"));
+    }
+}
+
+#[test]
+fn test_tactic_binding_type_in_field_still_needs_assignment() {
+    for tactic in ["have h : And True True", "let xs : List Nat"] {
+        let source = format!("def r : Record where\n  typed := by\n    {tactic}\n  tail := 1");
+        assert!(
+            crate::parse_file_with_tactics_located(&source, &TacticPatterns::new()).is_err(),
+            "{source}"
+        );
+    }
+}
+
+#[test]
 fn test_obtain_with_type_ascription_parses() {
     let t = by_tactics("by obtain ⟨x, hx⟩ : Foo := h");
     match &t[0] {
@@ -713,4 +974,29 @@ fn test_rcases_alternation_then_sequenced_continuation_parses_separately() {
         }
         other => unreachable!("expected SurfaceTactic::RCases first, got {:?}", other),
     }
+}
+
+#[test]
+fn intro_constructor_pattern_binds_into_later_template_tactics() {
+    let tactics = by_tactics("by\n  intro z ⟨_, «case»⟩ w\n  exact «case»");
+    let expanded = crate::instantiate_tactic_template(&tactics, &[], &[], true).unwrap();
+    let [SurfaceTactic::Paren(_, steps), SurfaceTactic::Named { name, args, .. }] =
+        expanded.as_slice()
+    else {
+        panic!("expected an intro followed by exact");
+    };
+    assert_eq!(name, "exact");
+    let [SurfaceTactic::Named { name: first, .. }, SurfaceTactic::IntroPattern(_, SurfacePattern::Ctor(_, fields)), SurfaceTactic::Named { name: last, .. }] =
+        steps.as_slice()
+    else {
+        panic!("expected an introduction on either side of the pattern");
+    };
+    assert_eq!((first.as_str(), last.as_str()), ("intro", "intro"));
+    let [SurfacePattern::Wildcard, SurfacePattern::Var(bound)] = fields.as_slice() else {
+        panic!("expected the two constructor fields");
+    };
+    let [SurfaceExpr::Ident(_, used)] = args.as_slice() else {
+        panic!("expected exact to use the second field");
+    };
+    assert!(bound.same_syntax(used));
 }

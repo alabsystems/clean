@@ -329,3 +329,7 @@ impl Specification {
         Ok(())
     }
 }
+
+#[cfg(test)]
+#[path = "eval_ir_byte_type_telescope_tests.rs"]
+mod telescope_tests;

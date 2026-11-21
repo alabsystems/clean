@@ -1,3 +1,4 @@
+// Modified in Clean: typed array-lambda dialect and explicit lambda export refusal.
 //! Added in Clean (not part of upstream Carcara): free-variable sets that share structure.
 //!
 //! Upstream's pool cached, for every term it was asked about, an `IndexSet` of the term's free
@@ -1213,6 +1214,9 @@ mod tests {
                             bindings.truncate(1);
                             let s = self.sorts.iter().position(|s| *s == bindings[0].1).unwrap();
                             s
+                        }
+                        Binder::ArrayLambda => {
+                            return;
                         }
                         Binder::Lambda => {
                             let lambda =

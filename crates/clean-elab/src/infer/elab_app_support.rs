@@ -25,6 +25,22 @@ impl<'a> ElabCtx<'a> {
         result
     }
 
+    /// [`Self::elaborate_app_head`] with no expected type for the head: the
+    /// whole application's expected result is not the function head's type,
+    /// so a dot recursor with supplied motive arguments keeps those slots for
+    /// the application's own argument loop.
+    pub(in crate::infer) fn elaborate_app_head_without_expected(
+        &mut self,
+        func: &SurfaceExpr,
+        args: &[SurfaceArg],
+        projection: Option<&mut DotHeadCapture>,
+    ) -> Result<Expr, ElabError> {
+        let saved = self.dot_elim.arm_app_head(func, args);
+        let result = self.elaborate_with_expected_and_projection(func, None, projection);
+        self.dot_elim.restore_app_head(saved);
+        result
+    }
+
     /// Check if a binder info requires implicit argument insertion
     pub(in crate::infer) fn is_implicit_binder(bi: impl Into<BinderData>) -> bool {
         let info = bi.into().info;
@@ -59,7 +75,7 @@ impl<'a> ElabCtx<'a> {
     }
 
     /// Count the number of explicit (non-implicit) binders in a function type.
-    /// This is used to decide whether user-provided args should fill implicit slots.
+    /// Used for anonymous-constructor field grouping and application ellipsis.
     pub(in crate::infer) fn count_explicit_binders(ty: &Expr) -> usize {
         let mut count = 0;
         let mut current = ty.clone();
@@ -307,7 +323,26 @@ impl<'a> ElabCtx<'a> {
                 "binder info mismatch (implicit-arg insertion gate)".to_string(),
             );
         }
+        let actual = self.metas.instantiate(ty1);
+        let expected = self.metas.instantiate(ty2);
+        let same_head = matches!(
+            (actual.get_app_fn().kind(), expected.get_app_fn().kind()),
+            (ExprKind::Const(left, _), ExprKind::Const(right, _)) if left == right
+        );
         let ctx = self.build_local_ctx();
+        if same_head && self.has_metavars(&actual) && !self.has_metavars(&expected) {
+            // A type family can reduce to a proposition that discards its
+            // type parameter. Compare its written arguments while they can
+            // still constrain the proof's implicit metavariables.
+            self.metas.push_scope();
+            let matched = Unifier::with_env(&mut self.metas, self.env, ctx.clone())
+                .unify_no_initial_whnf(&actual, &expected);
+            if matches!(matched, UnifyResult::Success) {
+                self.metas.commit();
+                return matched;
+            }
+            self.metas.pop_scope();
+        }
         let mut unifier = Unifier::with_env(&mut self.metas, self.env, ctx);
         unifier.unify(ty1, ty2)
     }
@@ -621,10 +656,10 @@ impl<'a> ElabCtx<'a> {
                             let meta = self.fresh_meta(arg_ty_whnf.clone());
                             let result = Expr::app(val.clone(), meta.clone());
                             let result_ty = body_ty.instantiate(&meta);
-                            let result_ty_whnf = self.whnf(&self.metas.instantiate(&result_ty));
 
-                            // Unify to solve the metavariable
-                            let unify_result = self.direct_type_match(&result_ty_whnf, expected_ty);
+                            // Let the written family constrain the metavariable
+                            // before reduction can erase its type argument.
+                            let unify_result = self.direct_type_match(&result_ty, expected_ty);
                             match unify_result {
                                 UnifyResult::Success => {
                                     // Instantiate the result with solved metavariables
@@ -844,10 +879,11 @@ impl<'a> ElabCtx<'a> {
     /// later elaboration cannot solve fails the declaration instead of
     /// abstracting over it.
     pub(in crate::infer) fn resolve_named_args(
-        &self,
+        &mut self,
         func_expr: &Expr,
         args: &[SurfaceArg],
-    ) -> Result<(Vec<SurfaceArg>, usize), ElabError> {
+        dot: Option<(&NamedDotReceiver, &SurfaceExpr)>,
+    ) -> Result<(Vec<SurfaceArg>, usize, Option<usize>), ElabError> {
         let named_arg_err = |name: &SurfaceName, reason: String| ElabError::NamedArgBindingFailed {
             func: match func_expr.kind() {
                 ExprKind::Const(n, _) => n.to_string(),
@@ -864,7 +900,7 @@ impl<'a> ElabCtx<'a> {
             .unwrap_or(&unnamed);
 
         // Binder slots in declaration order: (name if known, kind if known).
-        let slots: Vec<(Option<SurfaceName>, Option<BinderInfo>)> = 'slots: {
+        let mut slots: Vec<(Option<SurfaceName>, Option<BinderInfo>)> = 'slots: {
             // Extract the function name to look up parameter names.
             let ExprKind::Const(func_name, _) = func_expr.kind() else {
                 // A non-constant head (a local, a projection, a lambda): Lean
@@ -883,7 +919,7 @@ impl<'a> ElabCtx<'a> {
                              are known (a declared constant, a constructor, or a head \
                              whose type unfolds to a definition's `∀`)"
                                 .to_string(),
-                        ))
+                        ));
                     }
                 }
             };
@@ -942,11 +978,7 @@ impl<'a> ElabCtx<'a> {
                     .ok_or_else(|| {
                         named_arg_err(
                             first_named,
-                            format!(
-                                "constructor `{func_name}` has no recorded field names \
-                             (non-structure inductive constructors are a LOUD descope; \
-                             pass the arguments positionally)"
-                            ),
+                            format!("constructor `{func_name}` has no recorded field names"),
                         )
                     })?;
                 let kinds = Self::pi_telescope_binder_infos(&ctor.type_, num_params + num_fields);
@@ -1035,8 +1067,20 @@ impl<'a> ElabCtx<'a> {
         let mut positioned: Vec<Option<SurfaceArg>> = vec![None; slots.len()];
         let mut positional_queue: Vec<&SurfaceArg> = Vec::new();
 
+        let mut ellipsis_span = None;
+        let mut dot_names = std::collections::HashSet::new();
         for arg in args {
+            if arg.is_ellipsis() {
+                ellipsis_span = Some(arg.span);
+                continue;
+            }
             if let Some(ref name) = arg.name {
+                if dot.is_some() && !dot_names.insert(name) {
+                    return Err(named_arg_err(
+                        name,
+                        "binder already bound by an earlier named argument".to_string(),
+                    ));
+                }
                 let pos = slots
                     .iter()
                     .enumerate()
@@ -1067,6 +1111,27 @@ impl<'a> ElabCtx<'a> {
             }
         }
 
+        let receiver_slot = if let Some((receiver, source)) = dot {
+            let (index, kinds) = self.named_dot_receiver_slot(
+                func_expr,
+                receiver,
+                &slots,
+                &positioned,
+                positional_queue.len(),
+                ellipsis_span.is_some(),
+            )?;
+            // The reduced method telescope includes unnamed arrows and any
+            // trailing function exposed by a result alias when `..` is present.
+            for kind in kinds.into_iter().skip(slots.len()) {
+                slots.push((None, Some(kind)));
+                positioned.push(None);
+            }
+            positioned[index] = Some(SurfaceArg::positional(source.clone()));
+            Some(index)
+        } else {
+            None
+        };
+
         // Positional args fill the remaining EXPLICIT binders in order (Lean
         // `ElabAppArgs`). Slots with unknown kind are treated as explicit.
         // Under `@` every binder is consumed positionally, so positionals fill
@@ -1078,6 +1143,10 @@ impl<'a> ElabCtx<'a> {
             if slot.is_none() && explicit {
                 if let Some(arg) = pos_iter.next() {
                     *slot = Some(arg.clone());
+                } else if let Some(span) = ellipsis_span {
+                    // The receiver and named implicit arguments already own
+                    // their slots. Only an unprovided explicit binder gets a hole.
+                    *slot = Some(SurfaceArg::positional(SurfaceExpr::Hole(span)));
                 }
             }
         }
@@ -1096,12 +1165,12 @@ impl<'a> ElabCtx<'a> {
             }
         }
 
-        // Append remaining positional args beyond the named param range
+        // Append ordinary positional applications beyond the named range.
         for arg in pos_iter {
             result.push(arg.clone());
         }
 
-        Ok((result, positioned_prefix))
+        Ok((result, positioned_prefix, receiver_slot))
     }
 
     /// Binder kinds of the leading `limit` Pi binders of a declared type.

@@ -306,11 +306,7 @@ pub(crate) fn zero_trust_gate_rows(
             debt_class: ZeroTrustDebtClass::KernelSoundness,
             required_for_launch: true,
             command: KERNEL_SOUNDNESS_RUST_GATE_COMMAND,
-            source_artifacts: vec![
-                TRUST_CORE_RUST_SOURCE_PATH,
-                LEAN4_BASELINE_PATH,
-                LEAN4_EXPRESSIONS_PATH,
-            ],
+            source_artifacts: KERNEL_SOUNDNESS_LAUNCH_SOURCE_FILES.to_vec(),
             active_debt_count: 0,
             evidence_summary: format!(
                 "kernel differential artifacts are current; {}",
@@ -328,7 +324,7 @@ pub(crate) fn zero_trust_gate_rows(
             debt_class: ZeroTrustDebtClass::SorryAndTrustedFallback,
             required_for_launch: true,
             command: DENY_SORRY_RUST_GATE_COMMAND,
-            source_artifacts: vec![TRUST_CORE_RUST_SOURCE_PATH, UNCHECKED_DECL_RATCHET_PATH],
+            source_artifacts: DENY_SORRY_LAUNCH_SOURCE_FILES.to_vec(),
             active_debt_count: fallback_debt,
             evidence_summary: format!(
                 "add_decl_structural_count={}, add_decl_unchecked_count={}, total={fallback_debt}; {}",

@@ -272,6 +272,7 @@ impl ElabCtx<'_> {
         };
         match prune_section_type(&ty, offset, request.section_names.len(), &request.rule) {
             Some((ty, kept)) => {
+                self.prune_public_param_infos(decl, offset, &kept);
                 self.section_prune_outcome = Some(SectionPruneOutcome {
                     decl: decl.clone(),
                     kept,
@@ -319,6 +320,7 @@ impl ElabCtx<'_> {
         let k = request.section_names.len();
         match prune_section_binders(&ty, &val, offset, k, &request.rule) {
             Some((pruned_ty, pruned_val, kept)) => {
+                self.prune_public_param_infos(decl, offset, &kept);
                 // A universe parameter only a dropped binder mentioned leaves
                 // the registered level list with it: every declaration kind
                 // closes through `finalize_level_params`, which keeps only the

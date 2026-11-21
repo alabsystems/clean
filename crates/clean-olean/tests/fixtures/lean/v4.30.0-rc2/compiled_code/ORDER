@@ -1,0 +1,17 @@
+# The compiled-checker refusal's controls (crates/clean-olean/tests/compiled_code.rs):
+# one module per refused construct and one with none. None imports another, so
+# each loads alone; the last three import Lean and are read without a load.
+CompiledCodeClean
+CompiledCodeImplementedBy
+CompiledCodeExtern
+CompiledCodeCSimp
+CompiledCodeExport
+CompiledCodeInit
+CompiledCodeBuiltinInit
+CompiledCodeOpaque
+CompiledCodePartial
+CompiledCodeUnsafe
+CompiledCodeUnsafeRec
+CompiledCodeCPass
+CompiledCodeFolder
+CompiledCodeImportLean

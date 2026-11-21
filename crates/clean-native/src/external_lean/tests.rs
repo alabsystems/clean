@@ -113,12 +113,11 @@ fn replace(program: &mut ExternalLeanProgram, name: &str, mutate: impl FnOnce(&m
     let name = n(name);
     let mut info = program.env.get_const(&name).unwrap().clone();
     mutate(&mut info);
-    program.env.forget_decl(&name);
+    let env = Arc::make_mut(&mut program.env);
+    env.forget_decl(&name);
     // SOUNDNESS: test-only import forgery; the production handoff has no
     // caller-accessible environment mutator. Replay must refuse the payload.
-    let rejected = program
-        .env
-        .extend_constants_structural(std::iter::once(info));
+    let rejected = env.extend_constants_structural(std::iter::once(info));
     assert!(rejected.is_empty());
 }
 

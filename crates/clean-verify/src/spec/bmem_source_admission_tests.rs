@@ -116,7 +116,7 @@ fn original_f1_s1a_complete_source_admission_join() {
             built.as_ref().err()
         );
         let full = built.expect("ordinary complete fresh Full must build");
-        // Full installs the standard prelude; init_classical upgrades its mode.
+        // The complete Full bundle must reach its ordinary Classical mode.
         assert_eq!(
             full.env().mode(),
             clean_kernel::mode::CleanMode::Classical,
@@ -376,8 +376,16 @@ fn original_f1_s1a_complete_source_admission_join() {
                     }
                 });
                 let actual = capture.last_event().expect("actual duplicate call");
-                let cause = matches!(actual.elaborator_error.as_ref(),
-                    Some(ElabError::KernelRegistrationFailed {detail,..}) if detail==&format!("Duplicate declaration: {name}"));
+                let cause = if row.kind == "inductive" {
+                    matches!(actual.elaborator_error.as_ref(),
+                        Some(ElabError::KernelRegistrationFailed { operation, detail })
+                            if operation == "source family name preflight"
+                                && detail == &format!("environment already contains '{}'",
+                                    Name::from_string(name).to_unambiguous_string()))
+                } else {
+                    matches!(actual.elaborator_error.as_ref(),
+                        Some(ElabError::KernelRegistrationFailed {detail,..}) if detail==&format!("Duplicate declaration: {name}"))
+                };
                 if refused.is_ok() || !cause || snapshot(&duplicate) != before {
                     failures.push(format!(
                         "{name}: UNQUALIFIED duplicate guard: {refused:?}; {actual:?}"

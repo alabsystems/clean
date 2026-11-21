@@ -17,7 +17,7 @@
  "limits": [
   "The vocabulary is authority-shaped NAMES (KernelVerified, KernelChecked*, KernelProved, KernelBridged, KernelCertified, KernelAccepted, Certified, SourceVerified, the sibling tiers AxiomDependent, CertificateReplayed, AxiomDischarged, AxiomAccepted, UnsafeAccepted and clean-c-sem's StructuralProved (added 2026-11-12/13 after the P1 review), and on the Trust side KernelReferenceChecked / KernelReconstructed), WRITES to a snake_case field or local whose name says kernel_[re]verified / checked / certified / proved (`+=`, `.push/.extend/.insert/.append(`, `= true`, `: true`), and checker roots (ReferenceKernel and its entry methods, ReferenceAccepted, for_lean_replay, KernelTheory::<variant>, KernelVerifiedManifest, and Trust's certificate seam). NOT scanned, by name: clean-verify's ProofStatus::DerivedProved (1539 production occurrences in 203 files, 405 functions, measured 2026-11-12; 1516 are `proof_status:` literals in its spec tables, and its run-time promotions, three `def.proof_status = ProofStatus::DerivedProved` assignments in crates/clean-verify/src/proofs/promote.rs, are unscanned too); the generic outcome variants Verified, Proved, Checked, Accepted and Valid (277 production occurrences in 107 files, every role, measured 2026-11-12; the first census recorded 224 in 92), mostly tactic and automation outcomes; a kernel-named field assigned anything but `true`; and a write to a field whose name says checked or verified without `kernel` (`family_checked: true`). The user-facing verbs among them are the `entries`.",
   "An environment built without a censused root runs KernelTheory::Extended. The census does not list the plain Environment::new() / with_prelude() calls (360 production calls of Environment::new at the first census), so `checker.theory = Extended` on an add_decl mint is read from the function, and `caller-selected` means the function does not decide.",
-  "A new verb that reaches the kernel through an already-counted helper is not detected; entries are hand-kept.",
+  "A new verb that reaches the kernel through an already-counted helper is not detected; entries are hand-kept. The measured clean-olean NDJSON front doors in the P3 record require a matching public reader entry. Kernel wrappers declared inside an entry provide evidence only there.",
   "Scripts are out of scope: a label written by a shell or Python script is not a site here.",
   "The Trust half is a census of one Trust commit (trust.commit). At that commit the gate is a consistency check of this file; it sees a new Trust site only when run with --trust-ref <newer ref>, which is how the pin is moved. Where no Trust checkout holds the commit the Trust half reports unknown and the gate still decides the Clean half (--require-trust makes that a failure). Trust's own tcb_document_exhaustiveness gate owns its authority table.",
   "Trust rows marked unexamined were found by the scanner and not read through; none remains at trust.commit (the 16 there were read for the P1 review, 2026-11-12). A newly pinned Trust commit may bring new ones, named so that they cannot be mistaken for classified sites.",
@@ -108,10 +108,76 @@
      "kind": "clean-kernel",
      "entry": "add_decl",
      "theory": "Extended",
-     "detail": "check_file_body calls clean_elab::module_driver::elaborate_decls (cmd_core.rs:1476). That calls elaborate_decl_and_register_with_context_and_warning (drive.rs:133), and the chain goes on through elaborate_decl_and_register_inner, _inner_with_aux, _leaf, elaborate_general_and_register, source_family_authority::register_source, register_elab_result and register_elab_result_in_place to add_decl_with_kernel_check, which calls Environment::add_decl (register.rs:401); families go through env.add_inductive (register.rs:894/1059). Each leaf is then re-validated by check_leaf -> typecheck_elab_result -> validate_decl_read_only -> TypeChecker::check_type (drive.rs:145/167, verdict.rs:245, validation.rs:56). No set_kernel_theory call on the path: module_driver/setup.rs builds on for_lean_replay/with_prelude and neither selects a theory, so the theory is KernelTheory::Extended."
+     "detail": "check_file_body calls clean_elab::module_driver::elaborate_decls (cmd_core.rs:1476). That calls elaborate_decl_and_register_with_context_and_warning (drive.rs:133), and the chain goes on through elaborate_decl_and_register_inner, _inner_with_aux, _leaf, elaborate_general_and_register, source_family_authority::register_source_with_matchers, register_elab_result_with_matchers and register_elab_result_in_place to add_decl_with_kernel_check, which calls Environment::add_decl (register.rs:401); families go through env.add_inductive (register.rs:894/1059). Each leaf is then re-validated by check_leaf -> typecheck_elab_result -> validate_decl_read_only -> TypeChecker::check_type (drive.rs:145/167, verdict.rs:245, validation.rs:56). No set_kernel_theory call on the path: module_driver/setup.rs builds on for_lean_replay/with_prelude and neither selects a theory, so the theory is KernelTheory::Extended."
     },
     "evidence_tokens": [
      "elaborate_decls"
+    ],
+    "reach": "user",
+    "kcheck_rung": 2
+   },
+   {
+    "id": "entry:clean-olean-replay-from-export",
+    "verb": "clean olean replay --from-export / clean_export_check",
+    "file": "crates/clean-olean/src/ndjson/mod.rs",
+    "symbol": "check_export_reader",
+    "accepts": "ExitClass::Accept and an admitted row for each replayed declaration that passed. Both CLI paths return the shared reader's report through check_export_path.",
+    "mints": "The NDJSON replay exit status and per-declaration verdicts.",
+    "checker": {
+     "kind": "clean-kernel",
+     "entry": "replay",
+     "theory": "Lean",
+     "detail": "The loader selects KernelTheory::Lean. The reader checks the loaded export with the ordered replay engine, propagates refusals, and decides the report. The verdict for a value-bearing declaration reaches the existing replay_one → check_declaration → check_value kernel chain."
+    },
+    "evidence_tokens": [
+     "check_export"
+    ],
+    "kernel_entry_wrappers": [
+     {
+      "name": "check_export",
+      "file": "crates/clean-olean/src/ndjson/replay.rs",
+      "symbol": "check_export",
+      "calls": [
+       "replay"
+      ],
+      "detail": "Loads the export, runs replay, propagates refusals and computes the report."
+     },
+     {
+      "name": "replay",
+      "file": "crates/clean-olean/src/ndjson/replay.rs",
+      "symbol": "replay",
+      "calls": [
+       "typecheck_constants_full_ordered"
+      ],
+      "detail": "Runs ordered checks on the eligible targets and reads their verdicts."
+     },
+     {
+      "name": "typecheck_constants_full_ordered",
+      "file": "crates/clean-olean/src/verify_batch_full.rs",
+      "symbol": "typecheck_constants_full_ordered",
+      "calls": [
+       "full_ordered"
+      ],
+      "detail": "Delegates to the ordered replay implementation."
+     },
+     {
+      "name": "full_ordered",
+      "file": "crates/clean-olean/src/verify_batch_replay.rs",
+      "symbol": "full_ordered",
+      "calls": [
+       "run_eager"
+      ],
+      "detail": "Runs the scheduled checks and collects their ordered verdicts."
+     },
+     {
+      "name": "run_eager",
+      "file": "crates/clean-olean/src/verify_batch_replay.rs",
+      "symbol": "run_eager",
+      "calls": [
+       "replay_one"
+      ],
+      "detail": "Checks each scheduled name with replay_one."
+     }
     ],
     "reach": "user",
     "kcheck_rung": 2
@@ -353,26 +419,26 @@
   ],
   "summary": {
    "sites_by_role": {
-    "call": 53,
-    "construct": 239,
+    "call": 67,
+    "construct": 241,
     "def": 58,
-    "import": 15,
-    "mention": 12,
-    "read": 201
+    "import": 18,
+    "mention": 17,
+    "read": 204
    },
    "occurrences_by_role": {
-    "call": 54,
-    "construct": 302,
+    "call": 71,
+    "construct": 304,
     "def": 63,
-    "import": 15,
-    "mention": 20,
-    "read": 231
+    "import": 18,
+    "mention": 29,
+    "read": 234
    },
    "classified_sites_by_class": {
     "mint": 97,
     "relabel": 93,
-    "root": 52,
-    "threshold": 50
+    "root": 67,
+    "threshold": 51
    },
    "mint_sites_by_checker": {
     "clean-kernel/add_decl/Extended": 7,
@@ -911,6 +977,31 @@
     ]
    },
    {
+    "id": "clean:crates/clean-cli/src/cmd_lean/elaborate.rs#elaborate#KernelTheory::LeanReference#construct",
+    "file": "crates/clean-cli/src/cmd_lean/elaborate.rs",
+    "symbol": "elaborate",
+    "family": "root",
+    "token": "KernelTheory::LeanReference",
+    "role": "construct",
+    "count": 1,
+    "lines": [
+     161
+    ],
+    "class": "root",
+    "mints": "the kernel theory selected for source .olean output",
+    "checker": {
+     "kind": "clean-kernel",
+     "entry": "reference",
+     "theory": "LeanReference",
+     "detail": "The olean_output branch selects the fenced theory before source elaboration."
+    },
+    "evidence_tokens": [
+     "set_kernel_theory"
+    ],
+    "kcheck_rung": 2,
+    "reach": "user"
+   },
+   {
     "id": "clean:crates/clean-cli/src/cmd_math/handlers.rs#apply_unchecked_artifact_kernel_claim#CertificationEvidenceKind::KernelCertified#read",
     "file": "crates/clean-cli/src/cmd_math/handlers.rs",
     "symbol": "apply_unchecked_artifact_kernel_claim",
@@ -1105,7 +1196,7 @@
     "role": "construct",
     "count": 1,
     "lines": [
-     1001
+     999
     ],
     "class": "mint",
     "mints": "a trust-ir ProofObligation with ProofStatus::Certified and Attempt::Certified (translation validation of a lowered definition)",
@@ -1132,7 +1223,7 @@
     "role": "construct",
     "count": 1,
     "lines": [
-     843
+     841
     ],
     "class": "mint",
     "mints": "a trust-ir ProofObligation with ProofStatus::Certified and Attempt::Certified (translation validation of a lowered definition)",
@@ -1159,7 +1250,7 @@
     "role": "read",
     "count": 1,
     "lines": [
-     421
+     419
     ]
    },
    {
@@ -1171,60 +1262,161 @@
     "role": "def",
     "count": 1,
     "lines": [
-     543
+     541
     ]
    },
    {
-    "id": "clean:crates/clean-elab/src/module_driver/setup.rs#foundation_import_base#for_lean_replay#call",
-    "file": "crates/clean-elab/src/module_driver/setup.rs",
-    "symbol": "foundation_import_base",
+    "id": "clean:crates/clean-elab/examples/check_split_at_reference.rs#main#check_closed_term#call",
+    "file": "crates/clean-elab/examples/check_split_at_reference.rs",
+    "symbol": "main",
     "family": "root",
-    "token": "for_lean_replay",
+    "token": "check_closed_term",
     "role": "call",
-    "count": 1,
+    "count": 2,
     "lines": [
-     265
+     166,
+     167
     ],
     "class": "root",
-    "mints": "the import base every `.lean` module is elaborated over (clean check, clean lake build, Trust's island elaboration)",
+    "mints": "the example's original split-at proof and wrong-goal control",
     "checker": {
      "kind": "clean-kernel",
-     "entry": "replay",
-     "theory": "Extended",
-     "detail": "for_lean_replay builds the base environment; this function selects no theory, so declarations elaborated on top are admitted by add_decl under KernelTheory::Extended"
+     "entry": "reference",
+     "theory": "LeanReference",
+     "detail": "The fenced kernel checks the original type and must return TypeMismatch on the altered goal."
     },
     "evidence_tokens": [
-     "for_lean_replay"
+     "check_closed_term"
     ],
     "kcheck_rung": 2,
-    "reach": "user+trust",
-    "reach_detail": "Trust calls clean-elab's module driver (elaborate_module in crates/trust-certify/src/clean_island_batch.rs at the pin)"
+    "reach": "example"
    },
    {
-    "id": "clean:crates/clean-elab/src/module_driver/setup.rs#module_environment_with_import_base_in_world#for_lean_replay#call",
-    "file": "crates/clean-elab/src/module_driver/setup.rs",
-    "symbol": "module_environment_with_import_base_in_world",
+    "id": "clean:crates/clean-elab/examples/check_split_at_reference.rs#main#for_lean_replay#call",
+    "file": "crates/clean-elab/examples/check_split_at_reference.rs",
+    "symbol": "main",
     "family": "root",
     "token": "for_lean_replay",
     "role": "call",
     "count": 1,
     "lines": [
-     198
+     113
     ],
     "class": "root",
-    "mints": "the import base every `.lean` module is elaborated over (clean check, clean lake build, Trust's island elaboration)",
+    "mints": "the import environment for the split-at example",
     "checker": {
      "kind": "clean-kernel",
      "entry": "replay",
      "theory": "Extended",
-     "detail": "for_lean_replay builds the base environment; this function selects no theory, so declarations elaborated on top are admitted by add_decl under KernelTheory::Extended"
+     "detail": "Load the source dependencies into the default extended replay environment, then replay the closed roots into a separate fenced kernel."
     },
     "evidence_tokens": [
-     "for_lean_replay"
+     "for_lean_replay",
+     "reference_base_closed"
     ],
     "kcheck_rung": 2,
-    "reach": "user+trust",
-    "reach_detail": "Trust calls clean-elab's module driver (elaborate_module in crates/trust-certify/src/clean_island_batch.rs at the pin)"
+    "reach": "example"
+   },
+   {
+    "id": "clean:crates/clean-elab/src/module_driver/lean_v2_export.rs#CheckedLeanV2Source::export#KernelTheory::LeanReference#read",
+    "file": "crates/clean-elab/src/module_driver/lean_v2_export.rs",
+    "symbol": "CheckedLeanV2Source::export",
+    "family": "root",
+    "token": "KernelTheory::LeanReference",
+    "role": "read",
+    "count": 1,
+    "lines": [
+     82
+    ]
+   },
+   {
+    "id": "clean:crates/clean-elab/src/module_driver/lean_v2_export.rs#require_checked_local#OriginTrust::KernelChecked#construct",
+    "file": "crates/clean-elab/src/module_driver/lean_v2_export.rs",
+    "symbol": "require_checked_local",
+    "family": "label",
+    "token": "OriginTrust::KernelChecked",
+    "role": "construct",
+    "count": 1,
+    "lines": [
+     364
+    ],
+    "class": "threshold",
+    "mints": "the required provenance value for exporting a local declaration",
+    "checker": {
+     "kind": "not-a-mint",
+     "detail": "The function compares the stored origin and verification level and rejects a mismatch."
+    },
+    "evidence_tokens": [
+     "get_constant_origin",
+     "declaration_verification"
+    ],
+    "kcheck_rung": null,
+    "rung_note": "This comparison consumes the existing verification and origin labels.",
+    "reach": "user"
+   },
+   {
+    "id": "clean:crates/clean-elab/src/module_driver/setup.rs#foundation_import_base_in_paths#for_lean_replay#call",
+    "file": "crates/clean-elab/src/module_driver/setup.rs",
+    "symbol": "foundation_import_base_in_paths",
+    "family": "root",
+    "token": "for_lean_replay",
+    "role": "call",
+    "count": 1,
+    "lines": [
+     366
+    ],
+    "class": "root",
+    "mints": "the staging environment for the original Init.Core foundation",
+    "checker": {
+     "kind": "clean-kernel",
+     "entry": "replay",
+     "theory": "Extended",
+     "detail": "Import Init.Core into an extended replay environment. ImportedConeGate::from_reference_cone independently checks the named foundation."
+    },
+    "evidence_tokens": [
+     "for_lean_replay",
+     "from_reference_cone"
+    ],
+    "kcheck_rung": 2,
+    "reach": "user"
+   },
+   {
+    "id": "clean:crates/clean-elab/src/module_driver/setup.rs#module_environment_with_import_base_in_paths#for_lean_replay#call",
+    "file": "crates/clean-elab/src/module_driver/setup.rs",
+    "symbol": "module_environment_with_import_base_in_paths",
+    "family": "root",
+    "token": "for_lean_replay",
+    "role": "call",
+    "count": 1,
+    "lines": [
+     248
+    ],
+    "class": "root",
+    "mints": "the selected-world module's Init replay environment",
+    "checker": {
+     "kind": "clean-kernel",
+     "entry": "replay",
+     "theory": "Extended",
+     "detail": "Start with the default extended environment, declare the selected world and load Init inside with_import_base."
+    },
+    "evidence_tokens": [
+     "for_lean_replay",
+     "with_import_base"
+    ],
+    "kcheck_rung": 2,
+    "reach": "user"
+   },
+   {
+    "id": "clean:crates/clean-elab/src/register.rs#add_decl_with_kernel_check#KernelTheory::LeanReference#read",
+    "file": "crates/clean-elab/src/register.rs",
+    "symbol": "add_decl_with_kernel_check",
+    "family": "root",
+    "token": "KernelTheory::LeanReference",
+    "role": "read",
+    "count": 1,
+    "lines": [
+     424
+    ]
    },
    {
     "id": "clean:crates/clean-elab/src/tactic/mathverse_use.rs#TrustGate::accepts#ImportConfidence::KernelVerified#read",
@@ -1676,7 +1868,7 @@
     "role": "read",
     "count": 1,
     "lines": [
-     219
+     220
     ]
    },
    {
@@ -1688,7 +1880,7 @@
     "role": "construct",
     "count": 1,
     "lines": [
-     219
+     220
     ],
     "class": "root",
     "mints": "the theory an inductive block is replayed in",
@@ -1711,7 +1903,7 @@
     "role": "read",
     "count": 1,
     "lines": [
-     220
+     221
     ]
    },
    {
@@ -1723,7 +1915,7 @@
     "role": "read",
     "count": 1,
     "lines": [
-     220
+     221
     ]
    },
    {
@@ -1735,7 +1927,7 @@
     "role": "def",
     "count": 1,
     "lines": [
-     3912
+     3930
     ]
    },
    {
@@ -1875,6 +2067,18 @@
     "count": 1,
     "lines": [
      38
+    ]
+   },
+   {
+    "id": "clean:crates/clean-kernel/src/env/scoped_audit.rs#checked_external_tail#KernelTheory::Extended#read",
+    "file": "crates/clean-kernel/src/env/scoped_audit.rs",
+    "symbol": "checked_external_tail",
+    "family": "root",
+    "token": "KernelTheory::Extended",
+    "role": "read",
+    "count": 1,
+    "lines": [
+     96
     ]
    },
    {
@@ -2060,8 +2264,8 @@
     "role": "read",
     "count": 2,
     "lines": [
-     677,
-     678
+     672,
+     673
     ]
    },
    {
@@ -2073,8 +2277,8 @@
     "role": "read",
     "count": 2,
     "lines": [
-     745,
-     746
+     743,
+     744
     ]
    },
    {
@@ -2086,8 +2290,8 @@
     "role": "read",
     "count": 2,
     "lines": [
-     571,
-     572
+     563,
+     564
     ]
    },
    {
@@ -2159,8 +2363,8 @@
     "role": "read",
     "count": 2,
     "lines": [
-     868,
-     869
+     886,
+     887
     ]
    },
    {
@@ -2172,8 +2376,8 @@
     "role": "read",
     "count": 2,
     "lines": [
-     988,
-     989
+     1018,
+     1019
     ]
    },
    {
@@ -2185,8 +2389,8 @@
     "role": "read",
     "count": 2,
     "lines": [
-     1053,
-     1054
+     1089,
+     1090
     ]
    },
    {
@@ -2198,8 +2402,8 @@
     "role": "read",
     "count": 2,
     "lines": [
-     928,
-     929
+     952,
+     953
     ]
    },
    {
@@ -2211,7 +2415,7 @@
     "role": "read",
     "count": 1,
     "lines": [
-     155
+     157
     ]
    },
    {
@@ -3035,7 +3239,7 @@
     "role": "call",
     "count": 1,
     "lines": [
-     198
+     202
     ],
     "class": "root",
     "mints": "the base environment of a targets-closure load (verify-batch)",
@@ -5173,7 +5377,7 @@
     "role": "construct",
     "count": 1,
     "lines": [
-     259
+     261
     ],
     "class": "threshold",
     "mints": "assertion operands of a test module compiled through include!",
@@ -5195,9 +5399,9 @@
     "role": "construct",
     "count": 3,
     "lines": [
-     248,
-     254,
-     255
+     250,
+     256,
+     257
     ],
     "class": "threshold",
     "mints": "assertion operands of a test module compiled through include!",
@@ -9499,7 +9703,7 @@
     "role": "call",
     "count": 1,
     "lines": [
-     46
+     52
     ],
     "class": "root",
     "mints": "the environment a Lean program is elaborated in, shared since a55584e8ea by native compilation (ExternalLeanProgram::elaborate, which then requires complete runtime capture) and the read-only inspection context (ExternalLeanInspection::elaborate, whose custody require_native refuses for native selection)",
@@ -9703,29 +9907,54 @@
     "rung_note": "a diagnostic pilot behind a default-off feature: it grants no acceptance and persists only a measurement report (C4 in the self-proof plan)"
    },
    {
-    "id": "clean:crates/clean-olean/src/fixed_cohort.rs#open_replay#for_lean_replay#call",
+    "id": "clean:crates/clean-olean/src/fixed_cohort.rs#load_expected#for_lean_replay#call",
     "file": "crates/clean-olean/src/fixed_cohort.rs",
-    "symbol": "open_replay",
+    "symbol": "load_expected",
     "family": "root",
     "token": "for_lean_replay",
     "role": "call",
     "count": 1,
     "lines": [
-     87
+     119
     ],
     "class": "root",
-    "mints": "the replay base of a fixed cohort",
+    "mints": "the import environment for a manifest-pinned module cohort",
     "checker": {
      "kind": "clean-kernel",
      "entry": "replay",
-     "theory": "Lean",
-     "detail": "cohort replay base"
+     "theory": "Extended",
+     "detail": "The default extended import environment receives the byte-checked modules. open_replay subsequently uses reference_base_closed on the roots."
     },
     "evidence_tokens": [
-     "for_lean_replay"
+     "for_lean_replay",
+     "load_modules_with_deps_checked"
     ],
     "kcheck_rung": 2,
     "reach": "user"
+   },
+   {
+    "id": "clean:crates/clean-olean/src/fixed_cohort/source_context.rs#<module>#ReferenceKernel#import",
+    "file": "crates/clean-olean/src/fixed_cohort/source_context.rs",
+    "symbol": "<module>",
+    "family": "root",
+    "token": "ReferenceKernel",
+    "role": "import",
+    "count": 1,
+    "lines": [
+     8
+    ]
+   },
+   {
+    "id": "clean:crates/clean-olean/src/fixed_cohort/source_context.rs#struct CheckedSourceContext#ReferenceKernel#mention",
+    "file": "crates/clean-olean/src/fixed_cohort/source_context.rs",
+    "symbol": "struct CheckedSourceContext",
+    "family": "root",
+    "token": "ReferenceKernel",
+    "role": "mention",
+    "count": 1,
+    "lines": [
+     17
+    ]
    },
    {
     "id": "clean:crates/clean-olean/src/local_check_roster.rs#lean_checker#KernelTheory::Lean#construct",
@@ -9752,6 +9981,19 @@
     "reach_detail": "Trust names local_check_roster in crates/trust-clean/src/trustir_bridge.rs at the pin"
    },
    {
+    "id": "clean:crates/clean-olean/src/meaning_digest/resident.rs#struct ResidentTermInputs#ReferenceKernel#mention",
+    "file": "crates/clean-olean/src/meaning_digest/resident.rs",
+    "symbol": "struct ResidentTermInputs",
+    "family": "root",
+    "token": "ReferenceKernel",
+    "role": "mention",
+    "count": 2,
+    "lines": [
+     80,
+     81
+    ]
+   },
+   {
     "id": "clean:crates/clean-olean/src/ndjson/load.rs#replay_environment#KernelTheory::Lean#construct",
     "file": "crates/clean-olean/src/ndjson/load.rs",
     "symbol": "replay_environment",
@@ -9760,7 +10002,7 @@
     "role": "construct",
     "count": 1,
     "lines": [
-     97
+     98
     ],
     "class": "root",
     "mints": "the theory an NDJSON export is replayed in",
@@ -9773,6 +10015,30 @@
     "evidence_tokens": [],
     "kcheck_rung": 2,
     "reach": "user"
+   },
+   {
+    "id": "clean:crates/clean-olean/src/ndjson/reference.rs#<module>#ReferenceKernel#import",
+    "file": "crates/clean-olean/src/ndjson/reference.rs",
+    "symbol": "<module>",
+    "family": "root",
+    "token": "ReferenceKernel",
+    "role": "import",
+    "count": 1,
+    "lines": [
+     47
+    ]
+   },
+   {
+    "id": "clean:crates/clean-olean/src/ndjson/reference.rs#<module>#ReferenceKernel#mention",
+    "file": "crates/clean-olean/src/ndjson/reference.rs",
+    "symbol": "<module>",
+    "family": "root",
+    "token": "ReferenceKernel",
+    "role": "mention",
+    "count": 1,
+    "lines": [
+     129
+    ]
    },
    {
     "id": "clean:crates/clean-olean/src/payload_entry.rs#<module>#ReferenceAccepted#import",
@@ -9890,7 +10156,7 @@
     "role": "call",
     "count": 1,
     "lines": [
-     120
+     125
     ],
     "class": "root",
     "mints": "a ReferenceAccepted token per declaration of the closed cone",
@@ -9914,7 +10180,7 @@
     "role": "call",
     "count": 1,
     "lines": [
-     140
+     145
     ],
     "class": "root",
     "mints": "a ReferenceAccepted token per declaration of the closed cone",
@@ -9938,7 +10204,7 @@
     "role": "call",
     "count": 1,
     "lines": [
-     147
+     152
     ],
     "class": "root",
     "mints": "a ReferenceAccepted token per declaration of the closed cone",
@@ -9967,28 +10233,30 @@
     ]
    },
    {
-    "id": "clean:crates/clean-olean/src/recheck_closed/reference_base.rs#reference_base_closed#ReferenceKernel::new#call",
+    "id": "clean:crates/clean-olean/src/recheck_closed/reference_base.rs#reference_base_closed_inner#ReferenceKernel::new#call",
     "file": "crates/clean-olean/src/recheck_closed/reference_base.rs",
-    "symbol": "reference_base_closed",
+    "symbol": "reference_base_closed_inner",
     "family": "root",
     "token": "ReferenceKernel::new",
     "role": "call",
     "count": 1,
     "lines": [
-     175
+     226
     ],
     "class": "root",
-    "mints": "a ReferenceKernel over pinned Lean Init",
+    "mints": "the fenced kernel for closed dependency replay",
     "checker": {
      "kind": "clean-kernel",
      "entry": "reference",
      "theory": "LeanReference",
-     "detail": "the fenced entry is constructed over the closed re-checked base"
+     "detail": "Start with the default empty environment and the requested heartbeat limit. ReferenceKernel::new selects the fenced theory and run_closed checks the dependency cone."
     },
-    "evidence_tokens": [],
+    "evidence_tokens": [
+     "run_closed"
+    ],
     "kcheck_rung": 2,
     "reach": "user+trust",
-    "reach_detail": "named by Trust in trust-cg-bridge examples and trust-certify tests at the pin"
+    "reach_detail": "Trust's pinned trust-cg-bridge calls reference_base_closed from frame_step_evidence/cohort.rs when preparing the frame-step cohort."
    },
    {
     "id": "clean:crates/clean-olean/src/recheck_closed/reference_base.rs#reference_base_core_tracing#ReferenceKernel::new#call",
@@ -9999,7 +10267,7 @@
     "role": "call",
     "count": 1,
     "lines": [
-     555
+     607
     ],
     "class": "root",
     "mints": "a ReferenceKernel over an empty Environment::default base for the C4 tracing replay target, which observes each ordinary declaration through the labelled tracing core and then passes the same declaration to the same fenced admission (EntryTarget::admit_decl)",
@@ -10027,7 +10295,7 @@
     "role": "call",
     "count": 1,
     "lines": [
-     632
+     685
     ],
     "class": "root",
     "mints": "a ReferenceKernel over an empty Environment::default base (maxHeartbeats set from the options) for the C4 progress replay target, which prints a progress line every 100 rows and passes every declaration, family and Quot to the same fenced admission (EntryTarget)",
@@ -10055,7 +10323,7 @@
     "role": "mention",
     "count": 1,
     "lines": [
-     94
+     95
     ]
    },
    {
@@ -10121,25 +10389,367 @@
     "reach": "user"
    },
    {
-    "id": "clean:crates/clean-olean/src/semr_bool_body.rs#UnboundBoolMathematicsContext::check#check_closed_term#call",
+    "id": "clean:crates/clean-olean/src/semr_bool_body.rs#PreparedBoolMathematicsContext::check#check_closed_term#call",
     "file": "crates/clean-olean/src/semr_bool_body.rs",
+    "symbol": "PreparedBoolMathematicsContext::check",
+    "family": "root",
+    "token": "check_closed_term",
+    "role": "call",
+    "count": 2,
+    "lines": [
+     581,
+     597
+    ],
+    "class": "root",
+    "mints": "the nominal and concrete Boolean conjunction proofs",
+    "checker": {
+     "kind": "clean-kernel",
+     "entry": "reference",
+     "theory": "LeanReference",
+     "detail": "Check the packet proof against the nominal goal, then check the transported proof against the concrete bytes before returning the unbound result."
+    },
+    "evidence_tokens": [
+     "check_closed_term"
+    ],
+    "kcheck_rung": 2,
+    "reach": "user"
+   },
+   {
+    "id": "clean:crates/clean-olean/src/semr_bool_body.rs#PreparedBoolMathematicsContext::check_concrete_goal#check_closed_term#call",
+    "file": "crates/clean-olean/src/semr_bool_body.rs",
+    "symbol": "PreparedBoolMathematicsContext::check_concrete_goal",
+    "family": "root",
+    "token": "check_closed_term",
+    "role": "call",
+    "count": 1,
+    "lines": [
+     502
+    ],
+    "class": "root",
+    "mints": "the concrete conjunction goal of a prepared Boolean subject",
+    "checker": {
+     "kind": "clean-kernel",
+     "entry": "reference",
+     "theory": "LeanReference",
+     "detail": "The closed claim uses the prepared concrete quotation and expected function."
+    },
+    "evidence_tokens": [
+     "check_closed_term"
+    ],
+    "kcheck_rung": 2,
+    "reach": "user"
+   },
+   {
+    "id": "clean:crates/clean-olean/src/semr_bool_body.rs#PreparedBoolMathematicsContext::check_conjunction_counterexample#check_closed_term#call",
+    "file": "crates/clean-olean/src/semr_bool_body.rs",
+    "symbol": "PreparedBoolMathematicsContext::check_conjunction_counterexample",
+    "family": "root",
+    "token": "check_closed_term",
+    "role": "call",
+    "count": 1,
+    "lines": [
+     525
+    ],
+    "class": "root",
+    "mints": "the concrete counterexample return equation",
+    "checker": {
+     "kind": "clean-kernel",
+     "entry": "reference",
+     "theory": "LeanReference",
+     "detail": "Construct and check the Eq.refl witness for the return on inputs true and false at depth zero."
+    },
+    "evidence_tokens": [
+     "check_closed_term"
+    ],
+    "kcheck_rung": 2,
+    "reach": "user"
+   },
+   {
+    "id": "clean:crates/clean-olean/src/semr_bool_body.rs#PreparedBoolMathematicsContext::check_source_rhs#check_closed_term#call",
+    "file": "crates/clean-olean/src/semr_bool_body.rs",
+    "symbol": "PreparedBoolMathematicsContext::check_source_rhs",
+    "family": "root",
+    "token": "check_closed_term",
+    "role": "call",
+    "count": 1,
+    "lines": [
+     635
+    ],
+    "class": "root",
+    "mints": "the reconstructed Boolean execution claim with its source right-hand side",
+    "checker": {
+     "kind": "clean-kernel",
+     "entry": "reference",
+     "theory": "LeanReference",
+     "detail": "Check the earlier proof against the concrete body with the specified right-hand side."
+    },
+    "evidence_tokens": [
+     "check_closed_term"
+    ],
+    "kcheck_rung": 2,
+    "reach": "user"
+   },
+   {
+    "id": "clean:crates/clean-olean/src/semr_bool_body.rs#PreparedBoolMathematicsContext::prepare_proofs#add_checked#call",
+    "file": "crates/clean-olean/src/semr_bool_body.rs",
+    "symbol": "PreparedBoolMathematicsContext::prepare_proofs",
+    "family": "root",
+    "token": "add_checked",
+    "role": "call",
+    "count": 1,
+    "lines": [
+     452
+    ],
+    "class": "root",
+    "mints": "a checked nominal theorem in the prepared Boolean context",
+    "checker": {
+     "kind": "clean-kernel",
+     "entry": "reference",
+     "theory": "LeanReference",
+     "detail": "Replay each proposal as a nominal theorem. Store a checked constant for a successful proposal and retain the refusal for an unsuccessful one."
+    },
+    "evidence_tokens": [
+     "add_checked"
+    ],
+    "kcheck_rung": 2,
+    "reach": "user"
+   },
+   {
+    "id": "clean:crates/clean-olean/src/semr_bool_body/byte_quote.rs#<module>#ReferenceKernel#import",
+    "file": "crates/clean-olean/src/semr_bool_body/byte_quote.rs",
+    "symbol": "<module>",
+    "family": "root",
+    "token": "ReferenceKernel",
+    "role": "import",
+    "count": 1,
+    "lines": [
+     10
+    ]
+   },
+   {
+    "id": "clean:crates/clean-olean/src/semr_bool_body/byte_quote.rs#<module>#ReferenceKernel#mention",
+    "file": "crates/clean-olean/src/semr_bool_body/byte_quote.rs",
+    "symbol": "<module>",
+    "family": "root",
+    "token": "ReferenceKernel",
+    "role": "mention",
+    "count": 2,
+    "lines": [
+     97,
+     114
+    ]
+   },
+   {
+    "id": "clean:crates/clean-olean/src/semr_bool_body/byte_quote.rs#ByteQuotePlan::admit#add_checked#call",
+    "file": "crates/clean-olean/src/semr_bool_body/byte_quote.rs",
+    "symbol": "ByteQuotePlan::admit",
+    "family": "root",
+    "token": "add_checked",
+    "role": "call",
+    "count": 2,
+    "lines": [
+     232,
+     310
+    ],
+    "class": "root",
+    "mints": "the supplied byte-quotation declarations and final opaque binding",
+    "checker": {
+     "kind": "clean-kernel",
+     "entry": "reference",
+     "theory": "LeanReference",
+     "detail": "The two direct admissions cover producer declarations and the checked opaque binding. Derived definitions and equations also use checked helpers."
+    },
+    "evidence_tokens": [
+     "add_checked"
+    ],
+    "kcheck_rung": 2,
+    "reach": "user"
+   },
+   {
+    "id": "clean:crates/clean-olean/src/semr_bool_body/byte_quote.rs#admit_definition#add_checked#call",
+    "file": "crates/clean-olean/src/semr_bool_body/byte_quote.rs",
+    "symbol": "admit_definition",
+    "family": "root",
+    "token": "add_checked",
+    "role": "call",
+    "count": 1,
+    "lines": [
+     102
+    ],
+    "class": "root",
+    "mints": "a checked definition in the byte quotation",
+    "checker": {
+     "kind": "clean-kernel",
+     "entry": "reference",
+     "theory": "LeanReference",
+     "detail": "Submit the generated definition, including its type and value, to the fenced kernel."
+    },
+    "evidence_tokens": [
+     "add_checked"
+    ],
+    "kcheck_rung": 2,
+    "reach": "user"
+   },
+   {
+    "id": "clean:crates/clean-olean/src/semr_bool_body/byte_quote.rs#admit_equation#add_checked#call",
+    "file": "crates/clean-olean/src/semr_bool_body/byte_quote.rs",
+    "symbol": "admit_equation",
+    "family": "root",
+    "token": "add_checked",
+    "role": "call",
+    "count": 1,
+    "lines": [
+     121
+    ],
+    "class": "root",
+    "mints": "a checked equality theorem in the byte quotation",
+    "checker": {
+     "kind": "clean-kernel",
+     "entry": "reference",
+     "theory": "LeanReference",
+     "detail": "Submit the generated equation and its proof to the fenced kernel."
+    },
+    "evidence_tokens": [
+     "add_checked"
+    ],
+    "kcheck_rung": 2,
+    "reach": "user"
+   },
+   {
+    "id": "clean:crates/clean-olean/src/semr_bool_body/byte_quote.rs#impl ByteQuotePlan#ReferenceKernel#mention",
+    "file": "crates/clean-olean/src/semr_bool_body/byte_quote.rs",
+    "symbol": "impl ByteQuotePlan",
+    "family": "root",
+    "token": "ReferenceKernel",
+    "role": "mention",
+    "count": 2,
+    "lines": [
+     191,
+     208
+    ]
+   },
+   {
+    "id": "clean:crates/clean-olean/src/semr_bool_body/concrete.rs#UnboundBoolMathematicsContext::check#check_closed_term#call",
+    "file": "crates/clean-olean/src/semr_bool_body/concrete.rs",
     "symbol": "UnboundBoolMathematicsContext::check",
     "family": "root",
     "token": "check_closed_term",
     "role": "call",
     "count": 1,
     "lines": [
-     225
+     74
     ],
     "class": "root",
-    "mints": "a ReferenceAccepted token for a closed Bool-body judgment",
+    "mints": "the concrete Boolean conjunction judgment",
     "checker": {
      "kind": "clean-kernel",
      "entry": "reference",
      "theory": "LeanReference",
-     "detail": "closed judgment checked by the fenced entry"
+     "detail": "Check the packet proof against the concrete module bytes and function before returning the unbound result."
     },
-    "evidence_tokens": [],
+    "evidence_tokens": [
+     "check_closed_term"
+    ],
+    "kcheck_rung": 2,
+    "reach": "user"
+   },
+   {
+    "id": "clean:crates/clean-olean/src/semr_bool_body/minirust_call.rs#PreparedBoolMathematicsContext::check_minirust_call#check_closed_term#call",
+    "file": "crates/clean-olean/src/semr_bool_body/minirust_call.rs",
+    "symbol": "PreparedBoolMathematicsContext::check_minirust_call",
+    "family": "root",
+    "token": "check_closed_term",
+    "role": "call",
+    "count": 1,
+    "lines": [
+     77
+    ],
+    "class": "root",
+    "mints": "a checked MiniRust SourceCall judgment",
+    "checker": {
+     "kind": "clean-kernel",
+     "entry": "reference",
+     "theory": "LeanReference",
+     "detail": "Build the SourceCall goal from the original arguments and check its closed proof."
+    },
+    "evidence_tokens": [
+     "check_closed_term"
+    ],
+    "kcheck_rung": 2,
+    "reach": "user"
+   },
+   {
+    "id": "clean:crates/clean-olean/src/semr_bool_body/minirust_call.rs#PreparedBoolMathematicsContext::check_minirust_call_blob#check_closed_term#call",
+    "file": "crates/clean-olean/src/semr_bool_body/minirust_call.rs",
+    "symbol": "PreparedBoolMathematicsContext::check_minirust_call_blob",
+    "family": "root",
+    "token": "check_closed_term",
+    "role": "call",
+    "count": 1,
+    "lines": [
+     133
+    ],
+    "class": "root",
+    "mints": "a checked MiniRust SourceCallBlob judgment",
+    "checker": {
+     "kind": "clean-kernel",
+     "entry": "reference",
+     "theory": "LeanReference",
+     "detail": "Check the source-call judgment combined with the prepared root's bytes and function."
+    },
+    "evidence_tokens": [
+     "check_closed_term"
+    ],
+    "kcheck_rung": 2,
+    "reach": "user"
+   },
+   {
+    "id": "clean:crates/clean-olean/src/semr_bool_body/original_item.rs#PreparedBoolMathematicsContext::check_original_bool_item#check_closed_term#call",
+    "file": "crates/clean-olean/src/semr_bool_body/original_item.rs",
+    "symbol": "PreparedBoolMathematicsContext::check_original_bool_item",
+    "family": "root",
+    "token": "check_closed_term",
+    "role": "call",
+    "count": 1,
+    "lines": [
+     127
+    ],
+    "class": "root",
+    "mints": "a checked original Rust Boolean item judgment",
+    "checker": {
+     "kind": "clean-kernel",
+     "entry": "reference",
+     "theory": "LeanReference",
+     "detail": "The closed BoundAt claim includes the original item arguments."
+    },
+    "evidence_tokens": [
+     "check_closed_term"
+    ],
+    "kcheck_rung": 2,
+    "reach": "user"
+   },
+   {
+    "id": "clean:crates/clean-olean/src/semr_bool_body/original_item.rs#PreparedBoolMathematicsContext::check_original_bool_item_blob#check_closed_term#call",
+    "file": "crates/clean-olean/src/semr_bool_body/original_item.rs",
+    "symbol": "PreparedBoolMathematicsContext::check_original_bool_item_blob",
+    "family": "root",
+    "token": "check_closed_term",
+    "role": "call",
+    "count": 1,
+    "lines": [
+     156
+    ],
+    "class": "root",
+    "mints": "a checked original Boolean item and prepared root judgment",
+    "checker": {
+     "kind": "clean-kernel",
+     "entry": "reference",
+     "theory": "LeanReference",
+     "detail": "Combine the original item arguments with the prepared root's bytes and function and check the resulting closed proof."
+    },
+    "evidence_tokens": [
+     "check_closed_term"
+    ],
     "kcheck_rung": 2,
     "reach": "user"
    },
@@ -10152,7 +10762,7 @@
     "role": "import",
     "count": 1,
     "lines": [
-     4
+     6
     ]
    },
    {
@@ -10162,9 +10772,10 @@
     "family": "root",
     "token": "ReferenceKernel",
     "role": "mention",
-    "count": 1,
+    "count": 2,
     "lines": [
-     55
+     57,
+     61
     ]
    },
    {
@@ -10176,7 +10787,7 @@
     "role": "mention",
     "count": 1,
     "lines": [
-     30
+     32
     ]
    },
    {
@@ -10188,7 +10799,7 @@
     "role": "mention",
     "count": 1,
     "lines": [
-     21
+     23
     ]
    },
    {
@@ -10863,18 +11474,27 @@
     "file": "crates/clean-elab/src/lib.rs",
     "symbol": "elaborate_general_and_register",
     "calls": [
-     "register_source"
+     "register_source_with_matchers"
     ],
-    "detail": "Elaborates, then calls source_family_authority::register_source(env, &result)? in lib.rs. The declared source_family_authority.rs helper performs source-slot preflight and delegates to the existing register_elab_result. This is the observed qualified source call; the census retains its documented name-only matching limit."
+    "detail": "Elaborates the source result and passes it with its generated matchers to source_family_authority::register_source_with_matchers."
    },
    {
     "name": "register_source",
     "file": "crates/clean-elab/src/source_family_authority.rs",
     "symbol": "register_source",
     "calls": [
-     "register_elab_result"
+     "register_source_with_matchers"
     ],
-    "detail": "The source_family_authority::register_source function first calls preflight_source_slots, then crate::register::register_elab_result(env, result)?, and constructs PublishedSourceResult after success. The existing registrar reaches register_elab_result_in_place and the kernel entries. This is static call-path evidence, not resolved Rust callee identity, every-path checking or semantic soundness."
+    "detail": "Delegates to register_source_with_matchers with empty matcher metadata."
+   },
+   {
+    "name": "register_source_with_matchers",
+    "file": "crates/clean-elab/src/source_family_authority.rs",
+    "symbol": "register_source_with_matchers",
+    "calls": [
+     "register_elab_result_with_matchers"
+    ],
+    "detail": "Checks source slots, then registers the result and its matcher metadata through the shared transaction."
    },
    {
     "name": "elaborate_decls",
@@ -10908,9 +11528,18 @@
     "file": "crates/clean-elab/src/register.rs",
     "symbol": "register_elab_result",
     "calls": [
+     "register_elab_result_with_matchers"
+    ],
+    "detail": "Delegates to register_elab_result_with_matchers with empty matcher metadata."
+   },
+   {
+    "name": "register_elab_result_with_matchers",
+    "file": "crates/clean-elab/src/register.rs",
+    "symbol": "register_elab_result_with_matchers",
+    "calls": [
      "register_elab_result_in_place"
     ],
-    "detail": "Refuses reserved kernel names, then calls register_elab_result_in_place on a candidate environment for composite results or in place otherwise (register.rs:600/605)."
+    "detail": "Checks reserved names and runs registration on the appropriate environment. On the candidate path matcher metadata is committed with the declaration."
    },
    {
     "name": "register_elab_result_in_place",

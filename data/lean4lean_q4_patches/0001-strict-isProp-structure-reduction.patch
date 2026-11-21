@@ -1,0 +1,50 @@
+# Q4 corrected-reference repair.
+# Base: digama0/lean4lean bce3448115f7819fc12d647fadd3bb090666637e.
+# Reference: official Lean v4.34.0 293d5d0c0c3f3dded4688b3ccd6a33939ac5102b,
+# strict type_checker::is_prop and to_cnstr_when_structure (PR14807/PR14843).
+# Original control fa498cf880a5390e65c3990e8361829a5012de4fae133dbfcd6a81af26f74ca8
+# is parsed and rejected by that genuine local reference with typeExpected.
+
+diff --git a/Lean4Lean/Inductive/Reduce.lean b/Lean4Lean/Inductive/Reduce.lean
+index cdac9f9e371750f60922a5ecee19612d158fc76a..f6176de003f691eda04843eb727a833793d4bd23 100644
+--- a/Lean4Lean/Inductive/Reduce.lean
++++ b/Lean4Lean/Inductive/Reduce.lean
+@@ -8,7 +8,8 @@ open Kernel
+ 
+ section
+ variable [Monad m] (env : Environment)
+-    (whnf : Expr → m Expr) (inferType : Expr → m Expr) (isDefEq : Expr → Expr → m Bool)
++    (whnf : Expr → m Expr) (inferType : Expr → m Expr) (isProp : Expr → m Bool)
++    (isDefEq : Expr → Expr → m Bool)
+ 
+ def getFirstCtor (dName : Name) : Option Name := do
+   let some (.inductInfo info) := env.find? dName | none
+@@ -60,8 +61,7 @@ def toCtorWhenStruct (inductName : Name) (e : Expr) : m Expr := do
+     return e
+   let eType ← whnf (← inferType e)
+   if !eType.getAppFn.isConstOf inductName then return e
+-  let .sort u ← whnf (← inferType eType) | unreachable!
+-  unless u.isNeverZero do return e
++  if ← isProp eType then return e
+   return expandEtaStruct env eType e
+ 
+ def getRecRuleFor (rval : RecursorVal) (major : Expr) : Option RecursorRule := do
+@@ -78,7 +78,8 @@ constructor to everything before the indices in the recursor application (its pa
+ and minor premises) and then to the fields of the constructor application; any arguments after the
+ major premise are re-applied to the result. -/
+ def inductiveReduceRec [Monad m] (env : Environment) (e : Expr)
+-    (whnf : Expr → m Expr) (inferType : Expr → m Expr) (isDefEq : Expr → Expr → m Bool) :
++    (whnf : Expr → m Expr) (inferType : Expr → m Expr) (isProp : Expr → m Bool)
++    (isDefEq : Expr → Expr → m Bool) :
+     m (Option Expr) := do
+   let .const recFn ls := e.getAppFn | return none
+   let some (.recInfo info) := env.find? recFn | return none
+@@ -91,7 +92,7 @@ def inductiveReduceRec [Monad m] (env : Environment) (e : Expr)
+   match ← whnf major with
+   | .lit (.natVal n) => major := .natLitToConstructor n
+   | .lit (.strVal s) => major ← whnf (.strLitToConstructor s)
+-  | e => major ← toCtorWhenStruct env whnf inferType info.getMajorInduct e
++  | e => major ← toCtorWhenStruct env whnf inferType isProp info.getMajorInduct e
+   let some rule := getRecRuleFor info major | return none
+   let majorArgs := major.getAppArgs
+   if rule.nfields > majorArgs.size then return none

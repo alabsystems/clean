@@ -18,6 +18,28 @@ fn input<'a>(file: &'a std::path::Path, module: &'a Name) -> ExternalLeanInput<'
 }
 
 #[test]
+fn captured_source_record_exposes_the_full_module_spelling() {
+    let directory = tempfile::tempdir().unwrap();
+    let file = directory.path().join("Inspection.lean");
+    std::fs::write(&file, SOURCE).unwrap();
+    let module = Name::from_string("Examples.Tutorial.Provenance.Inspection");
+    let inspection = ExternalLeanInspection::elaborate(input(&file, &module)).unwrap();
+    let [record] = inspection.source_capture().sources.as_slice() else {
+        panic!("expected one captured source")
+    };
+    assert_eq!(record.module, "Examples.Tutorial.Provenance.Inspection");
+    assert_eq!(record.path, file.canonicalize().unwrap().to_string_lossy());
+    assert_eq!(record.source, SOURCE);
+    assert_eq!(
+        inspection
+            .primary_artifact(Default::default())
+            .unwrap()
+            .module(),
+        &module
+    );
+}
+
+#[test]
 fn test_replayed_context_logical_only_complete_capture_cannot_select_and_native_rechecks_real_readiness(
 ) {
     let directory = tempfile::tempdir().unwrap();
@@ -27,6 +49,12 @@ fn test_replayed_context_logical_only_complete_capture_cannot_select_and_native_
     let query = Name::from_string("query");
     let inspection = ExternalLeanInspection::elaborate(input(&file, &module)).unwrap();
     assert_eq!(inspection.world(), LeanWorld::Lean435);
+    assert!(inspection
+        .program
+        .custody
+        .global_observation
+        .get()
+        .is_some());
     assert!(!inspection.inputs().is_empty());
     assert!(inspection.source_capture().errors.is_empty());
     assert!(inspection.source_capture().snapshot_blake3.is_some());
@@ -45,6 +73,7 @@ fn test_replayed_context_logical_only_complete_capture_cannot_select_and_native_
         );
     }
     let mut executable = ExternalLeanProgram::elaborate(input(&file, &module)).unwrap();
+    assert!(executable.custody.global_observation.get().is_some());
     assert!(executable.require_native().is_ok());
     assert!(executable.select(&query, 0).is_ok());
     assert!(executable.select_in_runtime_closure(&query, 0).is_ok());
@@ -52,7 +81,9 @@ fn test_replayed_context_logical_only_complete_capture_cannot_select_and_native_
     // cannot bless missing/failed compiler capture. No production mutator exists.
     Arc::get_mut(&mut executable.custody)
         .unwrap()
-        .observation
+        .global_observation
+        .get_mut()
+        .unwrap()
         .errors
         .push("test-only changed capture".into());
     assert!(executable

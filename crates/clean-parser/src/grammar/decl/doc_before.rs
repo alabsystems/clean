@@ -114,6 +114,18 @@ impl Parser {
         Some((declarations, modules))
     }
 
+    /// Capture an actual documentation prefix with its raw text and source
+    /// coordinates. This never validates comments or inspects ordinary strings.
+    pub(in crate::grammar) fn documentation_before(&self, index: usize) -> Option<DocComment> {
+        let DocBefore::Declaration { end } = self.doc_before(index)? else {
+            return None;
+        };
+        self.doc_comments
+            .iter()
+            .find(|doc| doc.span.end == end)
+            .cloned()
+    }
+
     /// What the command at token `index` carries, reading the doc comments
     /// before it with no token between in source order, as Lean does. A
     /// module doc is a command of its own. The first declaration doc comment

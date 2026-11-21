@@ -3597,6 +3597,26 @@ class ARunnerRowMeasuresOneBuildProfile(unittest.TestCase):
             self.assertIn("::release::", entry["id"])
             self.assertEqual(entry["profile"], vr.PROFILE_RELEASE)
 
+    def test_release_fast_path_requires_the_retained_children_memo_control(self):
+        entry = next(row for row in vr.RELEASE_PROFILE_TARGETS
+                     if row["id"] == "clean-kernel::release::lib::fast_path")
+        name = ("tc::infer_arc_memo::certificate_tests::"
+                "discarded_release_warm_weaker_memo_never_answers_retained_children")
+        self.assertIn(name, entry["_must_pass"])
+        _cargo, libtest = vr._split_libtest_args(entry["argv"])
+        filters, skips, exact = vr._libtest_filters(libtest)
+        self.assertEqual(vr.libtest_select([name], filters, skips, exact=exact), {name})
+        passed = list(entry["_must_pass"])
+        complete = record(target=entry["id"], profile=vr.PROFILE_RELEASE,
+                          passed_tests=passed,
+                          counts={"passed": len(passed), "failed": 0, "ignored": 0,
+                                  "result_lines": 1})
+        self.assertEqual(vr.derive(entry, complete, DIGEST)["bucket"], vr.BUCKET_GREEN)
+        without_control = dict(complete, passed_tests=[test for test in passed if test != name])
+        row = vr.derive(entry, without_control, DIGEST)
+        self.assertEqual(row["bucket"], vr.BUCKET_UNKNOWN)
+        self.assertIn(name, row["reason"])
+
     def test_check_profiles_refuses_each_drift(self):
         cases = {
             "no --release": dict(self.RELEASE, argv=[a for a in self.RELEASE["argv"]
@@ -3954,8 +3974,7 @@ class TheKernelPackagesJoinTheBoard(unittest.TestCase):
                 mock.patch.object(vr, "_EXTRA_PATH_SOURCES", vr._EXTRA_PATH_SOURCES[:1]), \
                 mock.patch.object(vr, "TARGET_EXTRA_PATHS",
                                   {"pk::test::t": ["crates/other/fixtures/table.tsv"]}), \
-                mock.patch.object(vr, "PACKAGE_EXTRA_PATHS", {}), \
-                mock.patch.object(vr, "_check_olean_world_inputs", return_value=[]):
+                mock.patch.object(vr, "PACKAGE_EXTRA_PATHS", {}):
             return vr.check_crystal_extra_paths(base)
 
     def test_an_unlisted_resolved_read_is_refused(self):
@@ -4588,6 +4607,8 @@ class ParserInputCoverage(unittest.TestCase):
                 "crates/clean-olean/lean_worlds.tsv", "lean-toolchain",
                 "reports/local-function-headers-2026-11-06/sources/let_rec_equation_class.lean",
                 "tests/lean4_compat/lean4_tests", "tests/matp_bench",
+                "theories/kcheck_labelled/KCheck/Kernel.lean",
+                "theories/kcheck_labelled/KCheckLabelledMain.lean",
             },
             "clean-parser::test::module_system_b_e2e": {
                 "lean-toolchain", "tests/fixtures/module_spellings/modifier_matrix.tsv",
@@ -4929,6 +4950,7 @@ class CheckerQualificationInputs(unittest.TestCase):
         crate = base / "crates/clean-olean"
         crate.mkdir(parents=True)
         (crate / "Cargo.toml").write_text("# inert metadata fixture\n")
+        (crate / "lean_worlds.tsv").write_text("# inert fixture\n")
         (base / "lean-toolchain").write_text("leanprover/lean4:v4.30.0-rc2\n")
         packages = sorted({p for names in self._EXTRA_FIXTURE_CLOSURES.values() for p in names})
         for package in packages:
@@ -5007,7 +5029,26 @@ class CheckerQualificationInputs(unittest.TestCase):
         lbn_expected = {"data/level_bound_n.json", "lean-toolchain"}
         self.assertTrue(lbn_expected <= found.get(lbn_target, set()), (lbn_target, found.get(lbn_target)))
         self.assertTrue(lbn_expected <= set(vr.TARGET_EXTRA_PATHS.get(lbn_target, ())), lbn_target)
-        for pkg in ("kcheck_loader", "kcheck_eval", "kcheck_m5_m6", "kcheck_c7_p2", "kcheck_capstone"):
+        c5g_target = "clean-olean::test::c5_init_slice_gate"
+        c5g_expected = {"data/c5_init_slice.json", "lean-toolchain", "theories/kcheck_init_slice"}
+        self.assertTrue(c5g_expected <= found.get(c5g_target, set()), (c5g_target, found.get(c5g_target)))
+        self.assertTrue(c5g_expected <= set(vr.TARGET_EXTRA_PATHS.get(c5g_target, ())), c5g_target)
+        for pkg in (
+            "kcheck_loader",
+            "kcheck_init_slice",
+            "kcheck_eval",
+            "kcheck_m5_m6",
+            "kcheck_c7_p2",
+            "kcheck_capstone",
+            "kcheck_s1_interface",
+            "kcheck_s2_bool_prod",
+            "kcheck_s3_acc",
+            "kcheck_s4_exists",
+            "kcheck_s5_quot",
+            "kcheck_s6_string_accel",
+            "kcheck_s6_nat_arith",
+            "kcheck_s6_full_binops",
+        ):
             target = f"clean-olean::test::{pkg}"
             expected = base_req | {f"theories/{pkg}"}
             if pkg == "kcheck_capstone":
@@ -5016,6 +5057,15 @@ class CheckerQualificationInputs(unittest.TestCase):
                     "theories/kcheck_eval",
                     "theories/kcheck_m5_m6",
                     "theories/kcheck_c7_p2",
+                }
+            elif pkg == "kcheck_init_slice":
+                expected |= {"theories/kcheck_loader"}
+            elif pkg == "kcheck_s6_nat_arith":
+                expected |= {"theories/kcheck_s6_string_accel"}
+            elif pkg == "kcheck_s6_full_binops":
+                expected |= {
+                    "theories/kcheck_s6_string_accel",
+                    "theories/kcheck_s6_nat_arith",
                 }
             self.assertTrue(expected <= found.get(target, set()), (target, found.get(target)))
             self.assertTrue(expected <= set(vr.TARGET_EXTRA_PATHS.get(target, ())), target)
@@ -5035,6 +5085,7 @@ class CheckerQualificationInputs(unittest.TestCase):
         crate = base / "crates/clean-olean"
         crate.mkdir(parents=True)
         (crate / "Cargo.toml").write_text("# fixture\n")
+        (crate / "lean_worlds.tsv").write_text("# inert fixture\n")
         packages = ["cic_l", "cic_l_model", "kcheck", "kcheck_spec", "kcheck_sound",
                     "align_nat_word", "kcheck_labelled", "kcheck_rule_certificates",
                     "kcheck_bool_island", "kcheck_bool_admission", "kcheck_eq_headers"]
@@ -5097,7 +5148,7 @@ class OleanBuildPinInput(unittest.TestCase):
     def test_workspace_pin_is_a_declared_library_input(self):
         self.assertIn("lean-toolchain", vr.PACKAGE_EXTRA_PATHS.get("clean-olean", ()))
 
-    def test_pin_mutation_invalidates_library_and_consumer_but_not_unrelated(self):
+    def test_build_input_mutations_invalidate_library_and_consumer(self):
         base = Path(tempfile.mkdtemp(prefix="olean_pin_", dir=_SANDBOX))
         subprocess.run(["git", "init", "-q", str(base)], check=True)
         packages = []
@@ -5112,6 +5163,11 @@ class OleanBuildPinInput(unittest.TestCase):
             })
         pin = base / "lean-toolchain"
         pin.write_text("leanprover/lean4:before\n")
+        fixture = base / "tests" / "Producer.olean.private"
+        fixture.parent.mkdir()
+        fixture.write_bytes(b"before")
+        table = base / "crates/clean-olean/lean_worlds.tsv"
+        table.write_text(f"v1\toracle\tlean:v1\t{fixture.relative_to(base)}\n")
         subprocess.run(["git", "-C", str(base), "add", "."], check=True)
         with mock.patch.object(vr, "REPO_ROOT", base), \
                 mock.patch.object(vr, "cargo_metadata", return_value={"packages": packages}), \
@@ -5120,14 +5176,17 @@ class OleanBuildPinInput(unittest.TestCase):
                 mock.patch.object(vr, "toolchain_id", return_value="fixture"):
             entries = vr.build_inventory(["consumer", "clean-olean", "unrelated"], with_gates=False)
             before = {e["id"]: vr.input_digest(e, fresh=True) for e in entries}
-            pin.write_text("leanprover/lean4:after\n")
-            for entry in entries:
-                affected = entry["package"] != "unrelated"
-                after = vr.input_digest(entry, fresh=True)
-                self.assertEqual(before[entry["id"]] != after, affected, entry["id"])
-                status = vr.derive(entry, record(target=entry["id"], input_digest=before[entry["id"]]),
-                                   after)["bucket"]
-                self.assertEqual(status, vr.BUCKET_UNKNOWN if affected else vr.BUCKET_GREEN)
+            for path in (pin, fixture):
+                original = path.read_bytes()
+                path.write_bytes(original + b"changed\n")
+                for entry in entries:
+                    affected = entry["package"] != "unrelated"
+                    old = before[entry["id"]]
+                    after = vr.input_digest(entry, fresh=True)
+                    self.assertEqual(old != after, affected, (path, entry["id"]))
+                    status = vr.derive(entry, record(target=entry["id"], input_digest=old), after)["bucket"]
+                    self.assertEqual(status, vr.BUCKET_UNKNOWN if affected else vr.BUCKET_GREEN)
+                path.write_bytes(original)
 
 
 
@@ -5145,25 +5204,24 @@ class OleanWorldFixtureInputs(unittest.TestCase):
         table.write_text(f"v1\toracle\tlean:v1\t{first}\n")
         return root, table, first, second
 
-    def test_actual_world_fixtures_are_declared_library_inputs(self):
+    def test_actual_world_fixtures_are_valid_library_inputs(self):
         table = vr.REPO_ROOT / "crates/clean-olean/lean_worlds.tsv"
         fixtures = {name for line in table.read_text().splitlines()
                     if line and not line.startswith("#")
                     for name in line.split("\t")[3].split()}
         self.assertTrue(fixtures)
-        self.assertTrue(fixtures <= set(vr.PACKAGE_EXTRA_PATHS.get("clean-olean", ())))
+        paths, problems = vr._olean_world_inputs()
+        self.assertEqual(problems, [])
+        self.assertEqual(set(paths), fixtures)
 
-    def test_new_table_fixture_requires_a_matching_input_declaration(self):
+    def test_new_table_fixture_is_an_input_and_must_exist(self):
         root, table, first, second = self.fixture_tree()
-        with mock.patch.object(vr, "PACKAGE_EXTRA_PATHS", {"clean-olean": [first]}):
-            self.assertEqual(vr._check_olean_world_inputs(root), [])
-            table.write_text(f"v1\toracle\tlean:v1\t{first} {second}\n")
-            errors = vr._check_olean_world_inputs(root)
-            self.assertTrue(any(second in error and "PACKAGE_EXTRA_PATHS" in error for error in errors), errors)
-        with mock.patch.object(vr, "PACKAGE_EXTRA_PATHS", {"clean-olean": [first, second]}):
-            self.assertEqual(vr._check_olean_world_inputs(root), [])
-            (root / second).unlink()
-            self.assertTrue(any(second in e and "missing" in e for e in vr._check_olean_world_inputs(root)))
+        self.assertEqual(vr._olean_world_inputs(root), ([first], []))
+        table.write_text(f"v1\toracle\tlean:v1\t{first} {second}\n")
+        self.assertEqual(vr._olean_world_inputs(root), ([first, second], []))
+        (root / second).unlink()
+        _, errors = vr._olean_world_inputs(root)
+        self.assertTrue(any(second in e and "missing" in e for e in errors), errors)
 
     def test_bad_or_external_table_paths_are_refused(self):
         root, table, _, _ = self.fixture_tree()
@@ -5171,19 +5229,20 @@ class OleanWorldFixtureInputs(unittest.TestCase):
                         "v1\toracle\tlean:v1\t/outside.olean\n",
                         "v1\toracle\tlean:v1\t\n"):
             table.write_text(content)
-            self.assertTrue(vr._check_olean_world_inputs(root), content)
+            _, errors = vr._olean_world_inputs(root)
+            self.assertTrue(errors, content)
 
     def test_ignored_fixture_cannot_be_counted_as_a_digest_input(self):
         root, table, first, second = self.fixture_tree()
         subprocess.run(["git", "init", "-q", str(root)], check=True)
         (root / ".gitignore").write_text(second + "\n")
         table.write_text(f"v1\toracle\tlean:v1\t{first} {second}\n")
-        with mock.patch.object(vr, "PACKAGE_EXTRA_PATHS", {"clean-olean": [first, second]}):
-            errors = vr._check_olean_world_inputs(root)
+        _, errors = vr._olean_world_inputs(root)
         self.assertTrue(any(second in e and "git-visible" in e for e in errors), errors)
 
     def test_world_input_failure_reaches_the_inventory_gate(self):
-        with mock.patch.object(vr, "_check_olean_world_inputs", return_value=["missing world fixture"]):
+        with mock.patch.object(vr, "_olean_world_inputs", return_value=([], ["missing world fixture"])), \
+                mock.patch.object(vr, "cargo_metadata", return_value={"packages": [{"name": "clean-olean"}]}):
             with self.assertRaisesRegex(SystemExit, "missing world fixture"):
                 vr.build_inventory([], with_gates=False)
 

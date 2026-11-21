@@ -270,7 +270,7 @@ pub(crate) fn flatten_module_doc(source: &str) -> String {
 /// run in milliseconds and turn the commonest failure class into instant
 /// feedback.
 pub fn parse_check(source: &str) -> Result<(), String> {
-    clean_parser::parse_decl(source)
+    clean_parser::parse_decl_exact(source)
         .map(|_| ())
         .map_err(|e| format!("{e}"))
 }
@@ -280,6 +280,15 @@ mod tests {
     use super::{build_spec_with_stack, run_with_stack, shared_spec};
     use crate::spec::{ProofStatus, Specification};
     use clean_kernel::Name;
+
+    #[test]
+    fn parse_preflight_consumes_the_complete_declaration() {
+        let valid = "def syntax_preflight (n : Nat) : Nat := n";
+        assert!(super::parse_check(valid).is_ok());
+        assert!(super::parse_check(&format!("{valid})")).is_err());
+        assert!(super::parse_check(&format!("{valid} def hidden : Nat := 0")).is_err());
+        assert!(super::parse_check("def syntax_preflight (n : Nat : Nat := n").is_err());
+    }
 
     /// One line per definition, comparable and sortable without requiring `Ord`
     /// on the label enums.

@@ -315,6 +315,24 @@ pub(crate) fn part_world(label: &str, bytes: &[u8]) -> Result<Option<&'static st
     )
 }
 
+/// Check a part against the same declaration and identity rules as the loader.
+pub(crate) fn check_part_world(
+    label: &str,
+    bytes: &[u8],
+    selected: clean_kernel::LeanWorld,
+) -> Result<(), ImportError> {
+    let table = world::lean_worlds();
+    let selected = selected.tag();
+    declaration(table, None, selected)?;
+    decide(
+        table,
+        Some((selected, DECLARATION)),
+        label,
+        &writer_of(bytes)?,
+    )
+    .map(|_| ())
+}
+
 /// Bind an environment restored from a snapshot of a closure whose world
 /// [`part_world`] measured to that world (a snapshot carries no binding).
 pub(crate) fn bind_restored(

@@ -48,7 +48,7 @@ use clean_elab::{
     elaborate_decl_and_register, preprocess_decl_with_context, ElabResult, FileContext,
 };
 use clean_kernel::env::Environment;
-use clean_kernel::Name;
+use clean_kernel::{Expr, ExprKind, Name};
 use clean_parser::parse_file;
 
 fn fixture(name: &str) -> String {
@@ -149,7 +149,6 @@ fn bare_inherited_field_still_resolves_when_nothing_shadows_it() {
 
 /// Does `e`'s body mention the constant `name` anywhere?
 fn mentions_const(e: &clean_kernel::Expr, name: &str) -> bool {
-    use clean_kernel::ExprKind;
     match e.kind() {
         ExprKind::Const(n, _) => n.to_string() == name,
         ExprKind::App(f, a) => mentions_const(f, name) || mentions_const(a, name),
@@ -164,19 +163,29 @@ fn mentions_const(e: &clean_kernel::Expr, name: &str) -> bool {
     }
 }
 
-/// Depth of the outermost `Proj` spine of `e`, after stripping binders.
-fn proj_spine_depth(e: &clean_kernel::Expr) -> usize {
-    use clean_kernel::ExprKind;
-    let mut cur = e;
-    while let ExprKind::Lam(_, _, b) | ExprKind::MData(_, b) = cur.kind() {
-        cur = b;
+/// Check the explicit path on the fixture's `Nat`-parameterized structures.
+fn assert_accessor_chain(body: &Expr, accessors: &[&str]) {
+    let ExprKind::Lam(_, _, result) = body.strip_mdata().kind() else {
+        panic!("expected a function of the record: {body:?}");
+    };
+    let mut field = result.as_ref();
+    for &accessor in accessors {
+        let app = field.strip_mdata();
+        let ExprKind::Const(name, _) = app.get_app_fn().kind() else {
+            panic!("expected `{accessor}` at the head of {app:?}");
+        };
+        assert_eq!(name, &Name::from_string(accessor));
+        let args = app.get_app_args();
+        let [parameter, receiver] = args.as_slice() else {
+            panic!("expected `{accessor}` applied to Nat and its receiver: {app:?}");
+        };
+        assert_eq!(
+            parameter.strip_mdata(),
+            &Expr::const_(Name::from_string("Nat"), vec![])
+        );
+        field = receiver;
     }
-    let mut n = 0;
-    while let ExprKind::Proj(_, _, inner) = cur.kind() {
-        n += 1;
-        cur = inner;
-    }
-    n
+    assert_eq!(field.strip_mdata(), &Expr::bvar(0));
 }
 
 /// The COST OF CLOSING the divergence, discharged by the kernel rather than
@@ -196,10 +205,8 @@ fn proj_spine_depth(e: &clean_kernel::Expr) -> usize {
 /// plus the two-level (grandparent) case, plus two value-distinguishing rows so
 /// neither side can be vacuously equal by both being stuck.
 ///
-/// This test's job is to prove the two sides are NOT the same term: `viaDot`'s
-/// body must mention the generated constant and `viaChain`'s must be a bare
-/// `Proj` spine of the expected depth. Without that, `rfl` would be comparing a
-/// term with itself and would prove nothing.
+/// `viaDot` uses the generated inherited constant. `viaChain` applies each
+/// written direct-field accessor in order to the original record argument.
 ///
 /// If this ever fails, the composer and the generated constant have drifted
 /// apart, and NEITHER removing the constants nor keeping them is safe until
@@ -232,9 +239,19 @@ fn composed_inherited_projection_is_def_eq_to_generated_constant() {
     }
 
     // THE TWO SIDES ARE GENUINELY DIFFERENT TERMS.
-    for (dot, chain, depth) in [
-        ("viaDot", "viaChain", 2usize),
-        ("viaDotDeep", "viaChainDeep", 3usize),
+    for (dot, chain, generated, accessors) in [
+        (
+            "viaDot",
+            "viaChain",
+            "MyDer.widget",
+            &["MyBase.widget", "MyDer.toMyBase"][..],
+        ),
+        (
+            "viaDotDeep",
+            "viaChainDeep",
+            "MyTop.widget",
+            &["MyBase.widget", "MyDer.toMyBase", "MyTop.toMyDer"][..],
+        ),
     ] {
         let dot_body = env
             .get_const(&Name::from_string(dot))
@@ -244,22 +261,16 @@ fn composed_inherited_projection_is_def_eq_to_generated_constant() {
             .get_const(&Name::from_string(chain))
             .and_then(|c| c.value.clone())
             .unwrap_or_else(|| panic!("`{chain}` must have a body"));
-        let generated = format!("{}.widget", if depth == 2 { "MyDer" } else { "MyTop" });
         assert!(
-            mentions_const(&dot_body, &generated),
+            mentions_const(&dot_body, generated),
             "`{dot}` must go through the generated constant `{generated}` \
              (else the fixture's `rfl` compares a term with itself): {dot_body:?}"
         );
         assert!(
-            !mentions_const(&chain_body, &generated),
+            !mentions_const(&chain_body, generated),
             "`{chain}` must NOT go through `{generated}` — it is the composed \
              spine: {chain_body:?}"
         );
-        assert_eq!(
-            proj_spine_depth(&chain_body),
-            depth,
-            "`{chain}` must be a {depth}-deep kernel `Proj` spine — the exact \
-             shape `compose_subobject_projection` builds: {chain_body:?}"
-        );
+        assert_accessor_chain(&chain_body, accessors);
     }
 }

@@ -280,6 +280,18 @@ mod tests {
             .unwrap_or(false)
     }
 
+    #[test]
+    fn test_run_preserves_string_literal_that_looks_like_a_native_call() {
+        if !cc_available() {
+            return;
+        }
+        let (_dir, file) =
+            write_temp_lean(r#"def main : IO Unit := IO.println "l_missingFromThisString()""#);
+        let outcome = build_and_run_io_entry(&file, "main").expect("build and run literal");
+        assert_eq!(outcome.exit_code, 0);
+        assert_eq!(outcome.stdout, "l_missingFromThisString()\n");
+    }
+
     /// Full end-to-end: emit C for a nullary Nat decl, build, link, run, assert.
     #[test]
     fn test_run_nat_entry_builds_links_and_prints_result() {
@@ -633,8 +645,9 @@ mod tests {
     /// induction hypothesis (`dump rest`) as a `let` at the HEAD of the arm,
     /// ahead of `IO.println s`; under the eager-effect `IO` model of
     /// [`clean_native::native_build`] a hoisted self-call is a hoisted EFFECT, so the
-    /// whole tail printed before the head. Fixed in `to_lcnf::sink_ih`, which
-    /// puts the IH back inside the bind continuation that consumes it.
+    /// whole tail printed before the head. Fixed at the lowering
+    /// (`to_lcnf::rec_ih`): the IH is a call of the recursive function made
+    /// where the arm uses it, inside the bind continuation, never at its head.
     ///
     /// Note what this asserts and why it is not C-implementation-defined: the
     /// emitted effects are separate C STATEMENTS, never operands of one call,
@@ -692,17 +705,18 @@ mod tests {
         );
     }
 
-    /// THREE statements in the recursive arm, not two: the IH sinks through a
-    /// continuation nested inside another continuation, so `sink_ih` has to
-    /// walk past a `Fun` and keep descending rather than stop at the first one.
+    /// THREE statements in the recursive arm, not two: the IH is used in a
+    /// continuation nested inside another continuation, so its call has to be
+    /// made there (`to_lcnf::rec_ih` resolves an IH where it occurs), past a
+    /// `Fun`, rather than in the first one.
     ///
     /// Measured scope, so this is not read as more than it is: with
     /// `lambda_lift`'s capture-boundary swap restricted back to the self entry
     /// this case still PASSES — the shape that needs two boundaries is a
     /// recursion nested inside another recursion, pinned by
     /// `lambda_lift::tests::test_lift_call_crossing_two_capture_boundaries_binds_every_argument`
-    /// and by `native_build`'s nested-`for` fixture. What this pins is the sink
-    /// reaching the innermost continuation.
+    /// and by `native_build`'s nested-`for` fixture. What this pins is the
+    /// call made in the innermost continuation.
     #[test]
     fn test_run_io_recursive_do_block_with_two_statements_per_arm_runs() {
         if !cc_available() {

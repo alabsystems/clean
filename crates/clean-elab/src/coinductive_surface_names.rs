@@ -112,6 +112,7 @@ fn collect_idents<'a>(
         }
         SurfaceExpr::Paren(_, e)
         | SurfaceExpr::Explicit(_, e)
+        | SurfaceExpr::Borrowed(_, e)
         | SurfaceExpr::OutParam(_, e)
         | SurfaceExpr::SemiOutParam(_, e)
         | SurfaceExpr::Proj(_, e, _)

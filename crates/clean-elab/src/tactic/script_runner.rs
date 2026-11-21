@@ -187,7 +187,7 @@ pub fn execute_simple_tactic(
     use elab_tactic::{
         contradiction, exfalso, itauto, left_, right_, rotate, rotate_back, subst, subst_vars, swap,
     };
-    use elab_tactic::{convert, discriminate, injection, interval_cases};
+    use elab_tactic::{convert, discriminate, interval_cases};
     use elab_tactic::{delta, ext, fin_cases, revert, unfold};
     use elab_tactic::{norm_num_at, push_neg_at, unfold_at};
 
@@ -236,7 +236,10 @@ pub fn execute_simple_tactic(
             apply(proof_state, expr)
         }
         "constructor" => constructor(proof_state),
-        "split" => split_(proof_state),
+        "split" => match at_target(&parts)? {
+            Some(hyp) => super::connective_split_at::split_at(proof_state, &hyp),
+            None => split_(proof_state),
+        },
         "rfl" => rfl(proof_state),
         "trivial" => elab_tactic::trivial(proof_state),
         "assumption" => elab_tactic::assumption(proof_state),
@@ -461,7 +464,23 @@ pub fn execute_simple_tactic(
                     expected: "hypothesis name".to_string(),
                 });
             }
-            injection(proof_state, &script_name(parts[1])?)
+            let names = match &parts[2..] {
+                [] => Vec::new(),
+                ["with", names @ ..] if !names.is_empty() => names
+                    .iter()
+                    .map(|name| script_name(name))
+                    .collect::<Result<Vec<_>, _>>()?,
+                _ => {
+                    return Err(TacticError::GoalMismatch(
+                        "injection field names follow 'with'".into(),
+                    ));
+                }
+            };
+            super::inductive_reasoning::injection_with_names(
+                proof_state,
+                &script_name(parts[1])?,
+                &names,
+            )
         }
         "discriminate" => {
             if parts.len() < 2 {

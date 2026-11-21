@@ -107,37 +107,25 @@ impl CaptureBudget {
         Ok(())
     }
 
-    fn admit_length(&self, length: usize) -> io::Result<()> {
-        if let Some(limits) = self.limits {
-            if length > limits.bytes.max_part_bytes {
-                return Err(invalid(format!(
-                    "part has {length} bytes, capture limit is {}",
-                    limits.bytes.max_part_bytes
-                )));
-            }
-            if self
-                .bytes
-                .checked_add(length)
-                .is_none_or(|sum| sum > limits.bytes.max_captured_bytes)
-            {
-                return Err(invalid(format!(
-                    "part of {length} bytes exceeds remaining graph capture budget ({} used, {} limit)",
-                    self.bytes, limits.bytes.max_captured_bytes
-                )));
-            }
+    /// Check both byte limits before allocation. Commit this total only after a stable read.
+    fn total_after_part(&self, path: &Path, length: usize) -> Result<usize, ImportError> {
+        let Some(limits) = self.limits else {
+            return Ok(self.bytes);
+        };
+        if length > limits.bytes.max_part_bytes {
+            return Err(resource(format!(
+                "`{}` has {length} bytes, per-part capture limit is {}",
+                path.display(),
+                limits.bytes.max_part_bytes
+            )));
         }
-        Ok(())
-    }
-
-    fn consume(&mut self, length: usize) -> io::Result<()> {
-        self.admit_length(length)?;
-        if self.limits.is_some() {
-            self.bytes = self
-                .bytes
-                .checked_add(length)
-                .ok_or_else(|| invalid("captured byte count overflow"))?;
-        }
-        Ok(())
+        self.bytes
+            .checked_add(length)
+            .filter(|total| *total <= limits.bytes.max_captured_bytes)
+            .ok_or_else(|| resource(format!(
+                "`{}` has {length} bytes, exceeding the remaining graph capture budget ({} used, {} limit)",
+                path.display(), self.bytes, limits.bytes.max_captured_bytes
+            )))
     }
 }
 
@@ -191,7 +179,7 @@ struct OpenedPart {
 }
 
 impl OpenedPart {
-    fn from_file(file: File, path: &Path, budget: &CaptureBudget) -> io::Result<Self> {
+    fn from_file(file: File, path: &Path) -> io::Result<Self> {
         let metadata = file.metadata()?;
         if !metadata.is_file() {
             return Err(io::Error::new(
@@ -201,7 +189,6 @@ impl OpenedPart {
         }
         let length = usize::try_from(metadata.len())
             .map_err(|_| invalid("module part length does not fit this process"))?;
-        budget.admit_length(length)?;
         Ok(Self {
             file,
             path: path.to_path_buf(),
@@ -222,6 +209,7 @@ impl OpenedPart {
                 invalid("module part changed before capture"),
             ));
         }
+        let total = budget.total_after_part(&self.path, self.length)?;
         let mut bytes = Vec::new();
         bytes.try_reserve_exact(self.length).map_err(|error| {
             unreadable(
@@ -274,9 +262,7 @@ impl OpenedPart {
                 invalid("module part changed during capture"),
             ));
         }
-        budget
-            .consume(bytes.len())
-            .map_err(|error| unreadable(&self.path, error))?;
+        budget.bytes = total;
         Ok(bytes)
     }
 }
@@ -295,9 +281,12 @@ fn open(path: &Path) -> io::Result<File> {
     options.open(path)
 }
 
-pub(super) fn required(path: &Path, budget: &mut CaptureBudget) -> Result<Vec<u8>, ImportError> {
+pub(in crate::import) fn required(
+    path: &Path,
+    budget: &mut CaptureBudget,
+) -> Result<Vec<u8>, ImportError> {
     let file = open(path).map_err(|error| unreadable(path, error))?;
-    OpenedPart::from_file(file, path, budget)
+    OpenedPart::from_file(file, path)
         .map_err(|error| unreadable(path, error))?
         .read(budget)
 }
@@ -307,7 +296,7 @@ pub(super) fn optional(
     budget: &mut CaptureBudget,
 ) -> Result<Option<Vec<u8>>, ImportError> {
     match open(path) {
-        Ok(file) => OpenedPart::from_file(file, path, budget)
+        Ok(file) => OpenedPart::from_file(file, path)
             .map_err(|error| unreadable(path, error))?
             .read(budget)
             .map(Some),

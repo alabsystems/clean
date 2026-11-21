@@ -876,6 +876,43 @@ theorem q2 : TreeQ.label (ForestQ.first (ForestQ.rest (TreeQ.kids (tq 0)))) = 2 
 }
 
 #[test]
+fn test_mutual_codef_distinct_states_follow_member_order() {
+    let src = r#"
+mutual
+  codata TreeQ (A : Type) where
+    label : A
+    kids : ForestQ A
+  codata ForestQ (A : Type) where
+    first : TreeQ A
+    rest : ForestQ A
+end
+
+mutual
+  codef forest (s : Bool) : ForestQ Nat where
+    first := tree 0
+    rest := forest s
+  codef tree (s : Nat) : TreeQ Nat where
+    label := s
+    kids := forest true
+end
+
+theorem tree_label : TreeQ.label (tree 5) = 5 := rfl
+theorem forest_label : TreeQ.label (ForestQ.first (forest false)) = 0 := rfl
+theorem nested_label : TreeQ.label (ForestQ.first (TreeQ.kids (tree 5))) = 0 := rfl
+"#;
+    let env = elab_all(src);
+    for name in [
+        "tree",
+        "forest",
+        "tree_label",
+        "forest_label",
+        "nested_label",
+    ] {
+        assert!(env.get_const(&Name::from_string(name)).is_some(), "{name}");
+    }
+}
+
+#[test]
 fn test_mutual_codef_missing_member_rejected() {
     let src = r#"
 mutual

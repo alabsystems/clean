@@ -431,7 +431,11 @@ pub(super) fn code_to_mono_with_depth(
 
     match code {
         Code::Let(decl, body) => {
-            let ty = to_mono_type(&decl.ty);
+            let ty = if state.checked_void_layout && crate::world_token::is_void_type(&decl.ty) {
+                decl.ty.clone()
+            } else {
+                to_mono_type(&decl.ty)
+            };
 
             let observed_before = state
                 .observation

@@ -16,32 +16,19 @@
 //! `scripts/lean_export_differential.py` compares the two files, each read on
 //! its own by code that is not Clean's, declaration by declaration.
 //!
-//! The raw bytes differ by the format's design, and that script normalizes
-//! what differs by design: each writer numbers its tables and orders its
-//! records its own way; lean4export writes binder names, `mdata` payloads,
-//! the `all` of a definition, and a block's recursors in its `NameSet`'s
-//! order, and Clean's kernel terms keep none of those. The same declarations
-//! are declared on both sides. What else differs is measured, explained and
-//! pinned here, so the test fails the day either list changes:
+//! The writers may number tables and order records differently. The
+//! differential normalizes those differences, binder names, metadata payloads
+//! and recursor order. It compares declaration fields, including unfolding
+//! hints and the ordered names of ordinary mutual declarations.
 //!
-//! - [`BINDER_INFO_ONLY`]: declarations that differ in binder annotations
-//!   alone. lean4export's expression table is a `HashMap Expr Nat`, and
-//!   Lean's `BEq Expr` (`Expr.eqv`) ignores binder annotations, so it writes
-//!   a term equal to an earlier one up to annotations as that earlier term.
-//!   Pinned Lean's environment holds the annotations Clean wrote: the last
-//!   test here reads Clean's export with lean4export's own parser and
-//!   compares every constant with the one Lean imports
-//!   (`scripts/lean_export_replay.sh --reader upstream --against
-//!   Init.Prelude`), and only [`HINT_ONLY`] differs there (decision of
-//!   2026-11-13 in `docs/DECISIONS.md`).
-//! - [`HINT_ONLY`]: definitions whose unfolding hint differs, Clean writing
-//!   `abbrev` where Lean stored `regular 1`. The `.olean` loader promotes
-//!   Lean's parameter-annotation identities to `Reducible`
-//!   (`import/convert.rs`), the kernel keeps no other record of the hint, and
-//!   the writer writes what the kernel holds. A hint orders unfolding in
-//!   Lean's kernel and decides no acceptance.
+//! [`BINDER_INFO_ONLY`] lists the five declarations whose binder annotations
+//! differ. lean4export's expression table is a `HashMap Expr Nat`, and Lean's
+//! `BEq Expr` ignores binder annotations. lean4export can therefore reuse an
+//! earlier expression with different annotations. The independent resident
+//! comparison reads Clean's export with lean4export's own parser and compares
+//! every constant with pinned Lean's imported `Init.Prelude` environment.
 //!
-//! The controls show a changed binder annotation, a changed hint and a
+//! The controls show a changed binder annotation, a changed hint or mutual list, and a
 //! missing declaration are each found by the differential, and a changed
 //! binder annotation by the comparison with Lean's environment.
 //!
@@ -82,10 +69,6 @@ const BINDER_INFO_ONLY: [&str; 5] = [
     "_private.Init.Prelude.0.Nat.pred_le_pred.match_1_1",
     "_private.Init.Prelude.0.Or.elim.match_1_1",
 ];
-
-/// Definitions whose hint differs from lean4export's, and nothing else
-/// (module docs).
-const HINT_ONLY: [&str; 2] = ["optParam", "outParam"];
 
 const LEAN_TAG: &str = "v4.30.0-rc2";
 const LEAN_VERSION: &str = "4.30.0-rc2";
@@ -231,35 +214,19 @@ fn test_export_writer_states_what_lean4export_states_for_the_prelude_roots() {
     assert_eq!(verdict["right"]["exporter"]["name"], "lean4export");
     assert_eq!(verdict["same_lean"], true);
     let declared = verdict["left"]["declarations"].as_u64().expect("a count");
-    assert!(declared > 300, "the cone of the roots is small: {declared}");
+    assert_eq!(declared, 424, "the pinned ten-root closure");
     assert_eq!(verdict["right"]["declarations"].as_u64(), Some(declared));
     // The same declarations on both sides, grouped alike.
     assert_eq!(verdict["only_left_count"], 0, "{verdict:#}");
     assert_eq!(verdict["only_right_count"], 0, "{verdict:#}");
     assert_eq!(verdict["grouped_otherwise_count"], 0, "{verdict:#}");
-    // What differs is exactly the measured, explained lists (module docs).
-    assert_eq!(verdict["verdict"], "different");
-    assert_eq!(verdict["differing"], hint_only(), "{verdict:#}");
+    assert_eq!(verdict["verdict"], "equal_up_to_binder_info", "{verdict:#}");
+    assert_eq!(verdict["differing_count"], 0, "{verdict:#}");
     assert_eq!(
         verdict["binder_info_only"],
         serde_json::json!(BINDER_INFO_ONLY)
     );
-    eprintln!(
-        "Q1 lean4export differential (Init.Prelude roots): {declared} declarations; {} differ \
-         in binder annotations alone (lean4export's), {} in the hint alone (the loader's)",
-        BINDER_INFO_ONLY.len(),
-        HINT_ONLY.len()
-    );
-}
-
-/// [`HINT_ONLY`] as the comparison lists it.
-fn hint_only() -> Value {
-    Value::Array(
-        HINT_ONLY
-            .iter()
-            .map(|name| serde_json::json!({"declaration": name, "fields": ["hints"]}))
-            .collect(),
-    )
+    assert_eq!(verdict["binder_info_only_count"], BINDER_INFO_ONLY.len());
 }
 
 /// The index of the name record spelling `dotted` (each component a string).
@@ -292,16 +259,16 @@ fn name_index(bytes: &[u8], dotted: &str) -> u64 {
 }
 
 #[test]
-fn test_export_writer_differential_finds_a_changed_binder_hint_or_declaration() {
+fn test_export_differential_reports_changed_binders_hints_all_and_missing_declarations() {
     let dir = tempfile::tempdir().expect("a temporary directory");
     let theirs_bytes = lean4export_bytes();
     let ours = clean_export(dir.path());
-    let planted = |name: &str, bytes: &[u8]| -> Value {
+    let planted = |name: &str, bytes: &[u8], expected: &str| -> Value {
         let path = dir.path().join(name);
         std::fs::write(&path, bytes).expect("write a planted export");
         let (output, verdict) = compare(&ours, &path);
         assert_eq!(output.status.code(), Some(1), "{name}: {verdict:#}");
-        assert_eq!(verdict["verdict"], "different", "{name}");
+        assert_eq!(verdict["verdict"], expected, "{name}");
         verdict
     };
 
@@ -315,17 +282,18 @@ fn test_export_writer_differential_finds_a_changed_binder_hint_or_declaration() 
             br#""binderInfo":"default""#,
             br#""binderInfo":"implicit""#,
         ),
+        "equal_up_to_binder_info",
     );
     assert_ne!(
         binder["binder_info_only"],
         serde_json::json!(BINDER_INFO_ONLY),
         "{binder:#}"
     );
-    assert_eq!(binder["differing"], hint_only(), "{binder:#}");
+    assert_eq!(binder["differing_count"], 0, "{binder:#}");
     assert_eq!(binder["only_left_count"], 0);
     assert_eq!(binder["only_right_count"], 0);
 
-    // `Nat.add`'s hint: it joins the hint-only list, in its hints alone.
+    // A change to `Nat.add`'s unfolding priority is attributed to its hint.
     let nat_add = name_index(&theirs_bytes, "Nat.add");
     let hint = planted(
         "hint.ndjson",
@@ -335,15 +303,34 @@ fn test_export_writer_differential_finds_a_changed_binder_hint_or_declaration() 
             br#"{"regular":"#,
             br#"{"regular":9"#,
         ),
+        "different",
     );
-    assert_eq!(hint["differing_count"], 3, "{hint:#}");
-    assert!(
-        hint["differing"]
-            .as_array()
-            .expect("a list")
-            .contains(&serde_json::json!({"declaration": "Nat.add", "fields": ["hints"]})),
+    assert_eq!(hint["differing_count"], 1, "{hint:#}");
+    assert_eq!(
+        hint["differing"],
+        serde_json::json!([{"declaration": "Nat.add", "fields": ["hints"]}]),
         "{hint:#}"
     );
+
+    // Deleting metadata from one record preserves its value and its cone.
+    let members = format!(r#""all":[{nat_add}]"#);
+    let all = planted(
+        "members.ndjson",
+        &replace_once(
+            &theirs_bytes,
+            format!(r#"{{"def":{{{members},"#).as_bytes(),
+            members.as_bytes(),
+            br#""all":[]"#,
+        ),
+        "different",
+    );
+    assert_eq!(
+        all["differing"],
+        serde_json::json!([{"declaration": "Nat.add", "fields": ["all"]}]),
+        "{all:#}"
+    );
+    assert_eq!(all["only_left_count"], 0);
+    assert_eq!(all["only_right_count"], 0);
 
     // The last declaration dropped: Clean declares names lean4export does not.
     let mut lines: Vec<&[u8]> = theirs_bytes.split_inclusive(|b| *b == b'\n').collect();
@@ -360,7 +347,7 @@ fn test_export_writer_differential_finds_a_changed_binder_hint_or_declaration() 
         .rposition(|line| declaration_kinds.iter().any(|kind| line.starts_with(kind)))
         .expect("a declaration record");
     lines.remove(last);
-    let dropped = planted("dropped.ndjson", &lines.concat());
+    let dropped = planted("dropped.ndjson", &lines.concat(), "different");
     assert!(dropped["only_left_count"].as_u64() > Some(0), "{dropped:#}");
     assert_eq!(dropped["only_right_count"], 0);
 }
@@ -396,46 +383,23 @@ fn against_lean(export: &Path) -> (Output, Value) {
     (output, verdict)
 }
 
-/// A comparison's `differing` list, ordered by name.
-fn by_name(list: &Value) -> Vec<Value> {
-    let mut entries = list.as_array().expect("a list").clone();
-    entries.sort_by_key(|entry| entry["name"].as_str().unwrap_or_default().to_owned());
-    entries
-}
-
 #[test]
 fn test_export_writer_states_what_leans_environment_holds_for_the_prelude_roots() {
     let dir = tempfile::tempdir().expect("a temporary directory");
     let ours = clean_export(dir.path());
 
     let (output, verdict) = against_lean(&ours);
-    assert_eq!(output.status.code(), Some(1), "{verdict:#}");
+    assert_eq!(output.status.code(), Some(0), "{verdict:#}");
     assert_eq!(verdict["reader"], "lean4export Export.parseStream");
     assert_eq!(verdict["modules"], serde_json::json!(["Init.Prelude"]));
     assert_eq!(verdict["lean_version"], LEAN_VERSION);
     assert_eq!(verdict["lean_githash"], LEAN_GITHASH);
     let compared = verdict["compared"].as_u64().expect("a count");
-    assert!(compared > 300, "the cone of the roots is small: {compared}");
-    // Every constant is in Lean's environment, and every one but the
-    // loader's promoted hints (module docs) is equal to Lean's, binder
-    // annotations included: the declarations in [`BINDER_INFO_ONLY`] among
-    // them, so the annotations that differ from lean4export's are Lean's.
+    assert_eq!(compared, 424, "the pinned ten-root closure");
+    assert_eq!(verdict["verdict"], "equal", "{verdict:#}");
     assert_eq!(verdict["absent"], serde_json::json!([]), "{verdict:#}");
-    let hints: Vec<Value> = HINT_ONLY
-        .iter()
-        .map(|name| serde_json::json!({"name": name, "fields": ["hints regular 1 vs abbrev"]}))
-        .collect();
-    assert_eq!(by_name(&verdict["differing"]), hints, "{verdict:#}");
-    assert_eq!(
-        verdict["equal"].as_u64(),
-        Some(compared - HINT_ONLY.len() as u64)
-    );
-    eprintln!(
-        "Q1 against Lean's environment (Init.Prelude roots): {compared} constants compared, \
-         {} equal, {} differing in the hint alone",
-        compared - HINT_ONLY.len() as u64,
-        HINT_ONLY.len()
-    );
+    assert_eq!(verdict["equal"].as_u64(), Some(compared), "{verdict:#}");
+    assert_eq!(verdict["differing_count"], 0, "{verdict:#}");
 
     // Control: one binder annotation changed in Clean's export is found, in
     // the type, value or recursor rules of a constant over that term.
@@ -464,5 +428,5 @@ fn test_export_writer_states_what_leans_environment_holds_for_the_prelude_roots(
         }),
         "a changed binder annotation was not found: {verdict:#}"
     );
-    assert!(verdict["differing_count"].as_u64() > Some(HINT_ONLY.len() as u64));
+    assert!(verdict["differing_count"].as_u64().expect("count") > 0);
 }

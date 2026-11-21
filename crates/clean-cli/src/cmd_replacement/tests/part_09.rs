@@ -416,6 +416,26 @@ fn deny_sorry_launch_evidence_rejects_stale_source_hash() {
 }
 
 #[test]
+fn deny_sorry_launch_evidence_requires_current_shared_digest_sources() {
+    let ratchet = closed_unchecked_decl_ratchet();
+    for path in [DIGEST_MODULE_SOURCE, DIGEST_SOURCE] {
+        let mut artifact = valid_deny_sorry_launch_artifact(&ratchet);
+        assert!(artifact.source_sha256.remove(path).is_some());
+
+        let err = validate_deny_sorry_launch_evidence(&artifact, &ratchet)
+            .expect_err("missing shared digest source pin must fail closed");
+        assert_eq!(err, format!("source_sha256 is missing {path}"));
+
+        artifact
+            .source_sha256
+            .insert(path.to_string(), "stale".to_string());
+        let err = validate_deny_sorry_launch_evidence(&artifact, &ratchet)
+            .expect_err("stale shared digest source pin must fail closed");
+        assert!(err.starts_with(&format!("source_sha256[{path}] stale != current ")));
+    }
+}
+
+#[test]
 fn deny_sorry_launch_evidence_rejects_wrong_expected_count() {
     let ratchet = closed_unchecked_decl_ratchet();
     let mut artifact = valid_deny_sorry_launch_artifact(&ratchet);

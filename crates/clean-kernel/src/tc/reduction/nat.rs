@@ -33,6 +33,9 @@ use std::cell::Cell;
 /// flat-iteration succ-peel.
 const NAT_PROBE_MAX_DEPTH: u32 = 8;
 
+/// Existing closed-fold guard boundary, shared with proof-backed recovery.
+pub(super) const CLOSED_FOLD_GRIND_STUCK_THRESHOLD: u64 = 1 << 16;
+
 impl<'env> TypeChecker<'env> {
     /// Check if an expression is Nat zero (either `Nat.zero` constructor or literal 0).
     ///
@@ -228,6 +231,12 @@ impl<'env> TypeChecker<'env> {
         let nargs = e.get_app_num_args();
 
         if nargs == 1 {
+            if let Some(value) = self.reduce_unary_shift_alias(e) {
+                return Some(value);
+            }
+            if let Some(value) = self.reduce_certified_parity(e) {
+                return Some(value);
+            }
             // Probe non-re-entrancy (see `nat_probe_depth` in `tc/mod.rs` and
             // `NAT_PROBE_MAX_DEPTH` above): past the structural probe-nesting
             // bound, decline the unary collapse arms. Without this, each
@@ -666,10 +675,6 @@ impl<'env> TypeChecker<'env> {
     /// pinned exactly, so the common case still yields a literal rather than
     /// going stuck.
     pub(in crate::tc) fn native_closed_fold_grind_stuck(&self, e: &Expr, rec_name: &Name) -> bool {
-        /// See the doc comment: 128x the sibling guards' `2^9`, because this
-        /// guard can block a fold that would have produced a value.
-        const CLOSED_FOLD_GRIND_STUCK_THRESHOLD: u64 = 1 << 16;
-
         if *rec_name != *names::NAT_REC {
             return false;
         }

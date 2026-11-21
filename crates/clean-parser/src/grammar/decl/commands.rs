@@ -76,7 +76,17 @@ impl Parser {
         // a `set_option hygiene` set in it.
         let section_variables = self.section_variable_names.len();
         let hygiene_off = self.hygiene_off;
+        let operators = self.custom_operators.len();
+        let mixfixes = self.custom_mixfixes.len();
         let decls = self.scoped_block_decls_inner();
+        // Ordinary declarations in this scope remain available after `end`.
+        // Remove only newly registered local notations, preserving order.
+        self.custom_operators
+            .extract_if(operators.., |op| op.local)
+            .for_each(drop);
+        self.custom_mixfixes
+            .extract_if(mixfixes.., |mf| mf.local)
+            .for_each(drop);
         self.section_variable_names.truncate(section_variables);
         self.hygiene_off = hygiene_off;
         decls

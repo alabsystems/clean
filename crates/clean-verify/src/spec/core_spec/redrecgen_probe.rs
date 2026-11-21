@@ -53,25 +53,25 @@ impl Specification {
     /// The probe. An assembly of four existing facts, not an induction.
     #[cfg(test)]
     pub(super) fn redrecgen_blind_inert_src() -> String {
-        let tail = "(ListType.cons KExpr t (ListType.nil KExpr))";
-        let args = format!("(ListType.cons KExpr m (list_append ms {tail}))");
+        let tail = "(@ListType.cons KExpr t (@ListType.nil KExpr))";
+        let args = format!("(@ListType.cons KExpr m (list_append ms {tail}))");
         format!(
             "def redrecgen_blind_inert (fam : Name) (sig : ListType Nat) (u : Level) \
-             (hdef : Eq (OptionType KExpr) \
-             (defval_for (red_def the_red_env) (genRecName fam sig)) (OptionType.none KExpr)) \
-             (hrec : Eq (OptionType RecMeta) \
-             (recmeta_for (red_rec the_red_env) (genRecName fam sig)) (OptionType.none RecMeta)) \
+             (hdef : @Eq (OptionType KExpr) \
+             (defval_for (red_def the_red_env) (genRecName fam sig)) (@OptionType.none KExpr)) \
+             (hrec : @Eq (OptionType RecMeta) \
+             (recmeta_for (red_rec the_red_env) (genRecName fam sig)) (@OptionType.none RecMeta)) \
              (m : KExpr) (ms : ListType KExpr) (t : KExpr) \
              (hm : whnf_acc m) (hms : WhnfAccAll ms) (ht : whnf_acc t) : \
              whnf_acc (genRecApp fam sig u m ms t) := \
              whnfAcc_inertSpine (genRecName fam sig) hdef hrec {args} \
              (WhnfAccAll.cons m (list_append ms {tail}) hm \
              (whnfAccAll_append ms {tail} hms \
-             (WhnfAccAll.cons t (ListType.nil KExpr) ht WhnfAccAll.nil))) \
+             (WhnfAccAll.cons t (@ListType.nil KExpr) ht WhnfAccAll.nil))) \
              (genRecC fam sig u) \
-             (Eq.refl (OptionType Name) (OptionType.some Name (genRecName fam sig))) \
+             (@Eq.refl (OptionType Name) (@OptionType.some Name (genRecName fam sig))) \
              (whnfAcc_const (genRecName fam sig) \
-             (ListType.cons Level u (ListType.nil Level)) hdef)"
+             (@ListType.cons Level u (@ListType.nil Level)) hdef)"
         )
     }
 
@@ -85,23 +85,23 @@ impl Specification {
     #[cfg(test)]
     pub(super) fn redrecw_blind_inert_src() -> String {
         "def redrecw_blind_inert (u : Level) \
-         (hdef : Eq (OptionType KExpr) \
-         (defval_for (red_def the_red_env) wRecName) (OptionType.none KExpr)) \
-         (hrec : Eq (OptionType RecMeta) \
-         (recmeta_for (red_rec the_red_env) wRecName) (OptionType.none RecMeta)) \
+         (hdef : @Eq (OptionType KExpr) \
+         (defval_for (red_def the_red_env) wRecName) (@OptionType.none KExpr)) \
+         (hrec : @Eq (OptionType RecMeta) \
+         (recmeta_for (red_rec the_red_env) wRecName) (@OptionType.none RecMeta)) \
          (m : KExpr) (mn : KExpr) (t : KExpr) \
          (hm : whnf_acc m) (hmn : whnf_acc mn) (ht : whnf_acc t) : \
          whnf_acc (wRecApp u m mn t) := \
          whnfAcc_inertSpine wRecName hdef hrec \
-         (ListType.cons KExpr m (ListType.cons KExpr mn \
-         (ListType.cons KExpr t (ListType.nil KExpr)))) \
-         (WhnfAccAll.cons m (ListType.cons KExpr mn \
-         (ListType.cons KExpr t (ListType.nil KExpr))) hm \
-         (WhnfAccAll.cons mn (ListType.cons KExpr t (ListType.nil KExpr)) hmn \
-         (WhnfAccAll.cons t (ListType.nil KExpr) ht WhnfAccAll.nil))) \
+         (@ListType.cons KExpr m (@ListType.cons KExpr mn \
+         (@ListType.cons KExpr t (@ListType.nil KExpr)))) \
+         (WhnfAccAll.cons m (@ListType.cons KExpr mn \
+         (@ListType.cons KExpr t (@ListType.nil KExpr))) hm \
+         (WhnfAccAll.cons mn (@ListType.cons KExpr t (@ListType.nil KExpr)) hmn \
+         (WhnfAccAll.cons t (@ListType.nil KExpr) ht WhnfAccAll.nil))) \
          (wRecC u) \
-         (Eq.refl (OptionType Name) (OptionType.some Name wRecName)) \
-         (whnfAcc_const wRecName (ListType.cons Level u (ListType.nil Level)) hdef)"
+         (@Eq.refl (OptionType Name) (@OptionType.some Name wRecName)) \
+         (whnfAcc_const wRecName (@ListType.cons Level u (@ListType.nil Level)) hdef)"
             .to_string()
     }
 
@@ -109,14 +109,14 @@ impl Specification {
     /// one, `mutRecApp` being `apply_spine (cs ++ (ms ++ [t]))`.
     #[cfg(test)]
     pub(super) fn redrecmut_blind_inert_src() -> String {
-        let tail = "(ListType.cons KExpr t (ListType.nil KExpr))";
+        let tail = "(@ListType.cons KExpr t (@ListType.nil KExpr))";
         let inner = format!("(list_append ms {tail})");
         format!(
             "def redrecmut_blind_inert (msig : ListType FamSpec) (u : Level) (i : Nat) \
-             (hdef : Eq (OptionType KExpr) \
-             (defval_for (red_def the_red_env) (mutRecName msig i)) (OptionType.none KExpr)) \
-             (hrec : Eq (OptionType RecMeta) \
-             (recmeta_for (red_rec the_red_env) (mutRecName msig i)) (OptionType.none RecMeta)) \
+             (hdef : @Eq (OptionType KExpr) \
+             (defval_for (red_def the_red_env) (mutRecName msig i)) (@OptionType.none KExpr)) \
+             (hrec : @Eq (OptionType RecMeta) \
+             (recmeta_for (red_rec the_red_env) (mutRecName msig i)) (@OptionType.none RecMeta)) \
              (cs : ListType KExpr) (ms : ListType KExpr) (t : KExpr) \
              (hcs : WhnfAccAll cs) (hms : WhnfAccAll ms) (ht : whnf_acc t) : \
              whnf_acc (mutRecApp msig u i cs ms t) := \
@@ -124,39 +124,39 @@ impl Specification {
              (list_append cs {inner}) \
              (whnfAccAll_append cs {inner} hcs \
              (whnfAccAll_append ms {tail} hms \
-             (WhnfAccAll.cons t (ListType.nil KExpr) ht WhnfAccAll.nil))) \
+             (WhnfAccAll.cons t (@ListType.nil KExpr) ht WhnfAccAll.nil))) \
              (mutRecC msig u i) \
-             (Eq.refl (OptionType Name) (OptionType.some Name (mutRecName msig i))) \
+             (@Eq.refl (OptionType Name) (@OptionType.some Name (mutRecName msig i))) \
              (whnfAcc_const (mutRecName msig i) \
-             (ListType.cons Level u (ListType.nil Level)) hdef)"
+             (@ListType.cons Level u (@ListType.nil Level)) hdef)"
         )
     }
 
     /// `redRecIdx` — the indexed family. Three joins: `m :: (ms ++ (ix ++ [t]))`.
     #[cfg(test)]
     pub(super) fn redrecidx_blind_inert_src() -> String {
-        let tail = "(ListType.cons KExpr t (ListType.nil KExpr))";
+        let tail = "(@ListType.cons KExpr t (@ListType.nil KExpr))";
         let ixt = format!("(list_append ix {tail})");
         let inner = format!("(list_append ms {ixt})");
         format!(
             "def redrecidx_blind_inert (fam : Name) (isig : ListType ICtor) (u : Level) \
-             (hdef : Eq (OptionType KExpr) \
-             (defval_for (red_def the_red_env) (iRecName fam isig)) (OptionType.none KExpr)) \
-             (hrec : Eq (OptionType RecMeta) \
-             (recmeta_for (red_rec the_red_env) (iRecName fam isig)) (OptionType.none RecMeta)) \
+             (hdef : @Eq (OptionType KExpr) \
+             (defval_for (red_def the_red_env) (iRecName fam isig)) (@OptionType.none KExpr)) \
+             (hrec : @Eq (OptionType RecMeta) \
+             (recmeta_for (red_rec the_red_env) (iRecName fam isig)) (@OptionType.none RecMeta)) \
              (m : KExpr) (ms : ListType KExpr) (ix : ListType KExpr) (t : KExpr) \
              (hm : whnf_acc m) (hms : WhnfAccAll ms) (hix : WhnfAccAll ix) (ht : whnf_acc t) : \
              whnf_acc (iRecApp fam isig u m ms ix t) := \
              whnfAcc_inertSpine (iRecName fam isig) hdef hrec \
-             (ListType.cons KExpr m {inner}) \
+             (@ListType.cons KExpr m {inner}) \
              (WhnfAccAll.cons m {inner} hm \
              (whnfAccAll_append ms {ixt} hms \
              (whnfAccAll_append ix {tail} hix \
-             (WhnfAccAll.cons t (ListType.nil KExpr) ht WhnfAccAll.nil)))) \
+             (WhnfAccAll.cons t (@ListType.nil KExpr) ht WhnfAccAll.nil)))) \
              (iRecC fam isig u) \
-             (Eq.refl (OptionType Name) (OptionType.some Name (iRecName fam isig))) \
+             (@Eq.refl (OptionType Name) (@OptionType.some Name (iRecName fam isig))) \
              (whnfAcc_const (iRecName fam isig) \
-             (ListType.cons Level u (ListType.nil Level)) hdef)"
+             (@ListType.cons Level u (@ListType.nil Level)) hdef)"
         )
     }
 

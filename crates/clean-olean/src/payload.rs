@@ -46,7 +46,22 @@ pub const CLEAN_PAYLOAD_MAGIC: &[u8; 8] = b"CLEANENV";
 // replacement choices across imports and must be rebuilt rather than guessed.
 // Version 7 additionally preserves definition exposure for exporting attribute
 // validation; version 6 lacks that source visibility contract.
-pub const CLEAN_PAYLOAD_VERSION: u32 = 7;
+// Version 8 requires owner/time-point-aware inline modes in compiler snapshots.
+// Version 9 explicitly distinguishes source compiler context from logical-only payloads.
+// Version 10 combines source context with complete compiler extern descriptors.
+pub const CLEAN_PAYLOAD_VERSION: u32 = 10;
+
+/// The producer's explicit compiler contract, separate from logical admission.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CompilerContextKind {
+    /// Kernel objects only. Their bodies are available for logical replay, but
+    /// this payload supplies no source-time execution context or runtime hints.
+    #[default]
+    LogicalOnly,
+    /// A source producer supplies context for all its own body-bearing
+    /// definitions. Import validates completeness before applying runtime hints.
+    Source,
+}
 
 /// Serialized kernel data embedded in a clean-generated `.olean`.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -87,6 +102,9 @@ pub struct CleanPayload {
     /// The module's own `@[extern]` bindings (Lean's `Lean.externAttr`
     /// entries): `(declaration, symbol)`.
     pub externs: Vec<(Name, String)>,
+    /// Full ordered compiler descriptors, separate from diagnostic labels.
+    /// Missing rows are legacy/symbol-only and grant no metadata completeness.
+    pub extern_metadata: Vec<(Name, clean_kernel::env::CompilerExternMetadata)>,
     /// The module's own constants an `attribute [implemented_by]` command of
     /// the module came too late for (`clean_kernel::env::CompiledBefore`):
     /// `(referrer, rebound, via)`. An importer adds them to its order record,
@@ -96,11 +114,22 @@ pub struct CleanPayload {
     /// Resolved body rules and module-global/scoped compiler registrations.
     /// These opaque bytes are Clean metadata, not raw Lean heap objects.
     pub csimp: Vec<clean_kernel::env::EnvExtensionEntry>,
+    /// Default low-level payloads make no claim to source compilation context.
+    pub compiler_context: CompilerContextKind,
     /// Source module definition exposure, independent of runtime body storage.
     pub definition_exposure: Vec<(Name, bool)>,
 }
 
 impl CleanPayload {
+    /// Rebind metadata after an untrusted producer intentionally changes its
+    /// constants. This supplies no typing, compilation or proof evidence.
+    pub fn refresh_compiler_identities(&mut self) -> OleanResult<()> {
+        self.csimp =
+            clean_kernel::env::csimp::refresh_compilation_identities(&self.csimp, &self.constants)
+                .map_err(OleanError::Region)?;
+        Ok(())
+    }
+
     /// Total number of constants represented (counts inductives/ctors/recs too).
     ///
     /// # REQUIRES
@@ -250,11 +279,16 @@ pub fn decode_clean_payload(bytes: &[u8]) -> OleanResult<Option<CleanPayload>> {
     // is bounded by the input slice (here precisely `payload_len` bytes) and caps
     // container pre-allocation to the remaining input, so a tiny malformed input cannot
     // trigger the multi-GB allocation that motivated the old `with_limit` guard (#2421).
-    let (payload, _consumed): (CleanPayload, usize) =
+    let (payload, consumed): (CleanPayload, usize) =
         bincode::serde::decode_from_slice(data, bincode::config::standard()).map_err(|e| {
             OleanError::Serialization(format!("failed to deserialize clean payload: {e}"))
         })?;
 
+    if consumed != data.len() {
+        return Err(OleanError::InvalidPayload(
+            "trailing bytes in compiler metadata payload".into(),
+        ));
+    }
     Ok(Some(payload))
 }
 
@@ -384,12 +418,17 @@ mod tests {
             namespaces: vec![Name::from_string("N")],
             implemented_by: vec![(Name::from_string("slow"), Name::from_string("fast"))],
             externs: vec![(Name::from_string("ext"), "clean_sym".to_owned())],
+            extern_metadata: vec![(
+                Name::from_string("ext"),
+                clean_kernel::env::CompilerExternMetadata::from("clean_sym".to_owned()),
+            )],
             implemented_by_order: vec![(
                 Name::from_string("caller"),
                 Name::from_string("slow"),
                 Name::from_string("slow"),
             )],
             csimp: vec![],
+            compiler_context: CompilerContextKind::LogicalOnly,
             definition_exposure: vec![],
         };
 
@@ -412,15 +451,17 @@ mod tests {
         assert_eq!(decoded.namespaces, payload.namespaces);
         assert_eq!(decoded.implemented_by, payload.implemented_by);
         assert_eq!(decoded.externs, payload.externs);
+        assert_eq!(decoded.extern_metadata, payload.extern_metadata);
         assert_eq!(decoded.implemented_by_order, payload.implemented_by_order);
     }
 
     /// A payload written before private names were mangled (version 3), or
-    /// before compiler bindings travelled (version 4), is refused, never read
+    /// before compiler bindings travelled (version 4), or before explicit
+    /// source compiler-context contracts (version 8), is refused, never read
     /// without them.
     #[test]
     fn test_decode_older_payload_versions_are_refused() {
-        for old in [3u32, 4, 5, 6] {
+        for old in 3..CLEAN_PAYLOAD_VERSION {
             let payload = CleanPayload::default();
             let mut bytes = encode_clean_payload(&payload).expect("encode");
             let version_offset = bytes.len() - 8 - size_of::<u32>();
@@ -431,7 +472,10 @@ mod tests {
             assert!(
                 matches!(
                     err,
-                    OleanError::UnsupportedPayloadVersion { expected: 7, actual }
+                    OleanError::UnsupportedPayloadVersion {
+                        expected: CLEAN_PAYLOAD_VERSION,
+                        actual
+                    }
                         if actual == old
                 ),
                 "{err:?}"
@@ -464,3 +508,7 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "payload_extern_carrier_tests.rs"]
+mod extern_carrier_framing_tests;

@@ -177,14 +177,18 @@ fn variant(
     original: &ExternalLeanProgram,
     change: impl FnOnce(&mut clean_kernel::Environment),
 ) -> ExternalLeanProgram {
-    let mut env = original.env.clone();
+    let mut env = (*original.env).clone();
     change(&mut env);
+    let env = Arc::new(env);
     ExternalLeanProgram {
         custody: Arc::new(super::super::Custody {
             world: original.world(),
-            source: Arc::new(env.clone()),
+            source: Arc::clone(&env),
             base: Arc::clone(&original.custody.base),
-            observation: original.source_capture().clone(),
+            sources: original.custody.sources.clone(),
+            // The variant keeps the original's captured observation, as it
+            // did before custody captured it lazily from `sources`.
+            global_observation: std::sync::OnceLock::from(original.source_capture().clone()),
             inputs: original.inputs().to_vec(),
             // This manufactured environment has no captured primary artifact.
             primary_artifact: Err(super::super::PrimaryArtifactError::MissingAssociation),

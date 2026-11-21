@@ -137,6 +137,7 @@ pub(super) fn do_elem_to_syntax(elem: &DoElem) -> Syntax {
             let kind_name = match kind {
                 DoLetExprKind::Pure => "doLetExpr",
                 DoLetExprKind::Bind => "doLetExprBind",
+                DoLetExprKind::PurePattern => "doLetElsePure",
             };
             Syntax::node(
                 SyntaxKind::app(kind_name),

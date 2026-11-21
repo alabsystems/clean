@@ -1,0 +1,1 @@
+def audit_collision_bad_duplicate : FreshCtorDecls KEnv.empty Nat.zero (CtorDecls.cons (CtorDecl.mk env_freshness_one (KExpr.bvar Nat.zero)) (env_freshness_ctors env_freshness_one)) := @Eq.refl Bool Bool.true

@@ -33,20 +33,20 @@
 //!   `loadIR?` reads it, and a bad header fails the import, before
 //!   `interpData?` sets it aside.
 //!
-//! A part Lean would require and cannot find is an error here too, never a
-//! fallback: Lean's `finalizeImport` throws `missing data file` /
-//! `missing IR data file` in exactly those cases.
+//! Lean 4.36 reads `.ir.sig` and `.ir` as a second incremental chain,
+//! separate from the `.olean` files. With no signature it uses the
+//! main data. A present signature requires a body, and the body supplies
+//! the interpreter data for a `module` at the `private` import level.
 
 use std::path::{Path, PathBuf};
 
-use super::decode::IrDecoder;
+use super::decode::{IrDecoder, IrLayout};
 use super::error::{LeanIrError, LeanIrResult};
 use super::types::{Decl, ExternAttrData};
 use crate::header::OleanHeader;
 use crate::region::{is_ptr, CompactedRegion, TypedModuleLayout};
-#[cfg(any(test, feature = "cli"))]
-use clean_kernel::name::NameInner;
-use clean_kernel::Name;
+use crate::world::{lean_worlds, row_of_source_world, HeaderIdentity, WorldState};
+use clean_kernel::{LeanWorld, Name};
 
 /// `Lean.IR.declMapExt`'s persisted name.
 pub(crate) const DECL_MAP_EXT: &str = "Lean.IR.declMapExt";
@@ -59,11 +59,8 @@ pub(crate) const REGULAR_INIT_EXT: &str = "Lean.regularInitAttr";
 /// `Lean.builtinInitAttr`'s persisted name (`@[builtin_init]`).
 pub(crate) const BUILTIN_INIT_EXT: &str = "Lean.builtinInitAttr";
 
-/// The only Lean version whose IR object layout this decoder has been
-/// measured against. Any other version is refused: the IR types change
-/// between releases (`IRType.struct` gained its `leanTypeName`, `Decl` lost
-/// `ExternAttrData.arity?`), and a layout guess would decode garbage.
-pub(crate) const MEASURED_LEAN_VERSION: &str = clean_kernel::LeanWorld::ORACLE.version();
+/// The historical IR census oracle. Lean 4.36 uses the measured world row.
+pub(crate) const LEAN430_IR_VERSION: &str = LeanWorld::Lean430Rc2.version();
 
 /// Bound on one extension's entry array.
 const MAX_ENTRIES: usize = 1 << 24;
@@ -80,9 +77,9 @@ pub(crate) enum MainSource {
 /// Where a module's interpreter data came from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum InterpSource {
-    /// The `.ir` file of a `module` file.
+    /// The `.ir` file of a `module`, with its signature region in Lean 4.36.
     IrFile,
-    /// The main data (a non-`module` file; any `.ir` beside it is only header-checked).
+    /// The main data, including Lean 4.36 modules with no IR signature.
     MainData,
 }
 
@@ -95,6 +92,7 @@ pub(crate) struct CapturedIrInput {
     pub(crate) server: Option<std::sync::Arc<[u8]>>,
     pub(crate) private: Option<std::sync::Arc<[u8]>>,
     pub(crate) ir: Option<std::sync::Arc<[u8]>>,
+    pub(crate) ir_signature: Option<std::sync::Arc<[u8]>>,
 }
 
 fn read_input(
@@ -114,6 +112,8 @@ fn read_input(
         captured.private.as_deref()
     } else if path == olean.with_extension("ir") {
         captured.ir.as_deref()
+    } else if path == olean.with_extension("ir.sig") {
+        captured.ir_signature.as_deref()
     } else {
         None
     };
@@ -216,17 +216,57 @@ fn module_err(module: &Name, detail: impl Into<String>) -> LeanIrError {
     }
 }
 
-/// Refuse a file whose Lean version is not [`MEASURED_LEAN_VERSION`].
-fn check_version(module: &Name, path: &Path, bytes: &[u8]) -> LeanIrResult<OleanHeader> {
+fn check_layout(module: &Name, path: &Path, bytes: &[u8]) -> LeanIrResult<(OleanHeader, IrLayout)> {
     let header = OleanHeader::parse(bytes)?;
-    if header.lean_version.as_deref() != Some(MEASURED_LEAN_VERSION) {
+    let version = header.lean_version.as_deref();
+    let identity = HeaderIdentity::of_header(&header);
+    let stable = LeanWorld::Lean436;
+    if let Some(row) =
+        row_of_source_world(lean_worlds(), stable).filter(|row| row.identity == identity)
+    {
+        if row.state != WorldState::Canary
+            && row.lean_version == Some(stable.version())
+            && version == row.lean_version
+        {
+            return Ok((header, IrLayout::Lean436));
+        }
         return Err(module_err(
             module,
             format!(
-                "{} was written by Lean {:?}; the IR layout is measured only for {MEASURED_LEAN_VERSION}",
+                "{} has no admitted IR layout for the {} build identity with header version {:?}",
                 path.display(),
-                header.lean_version
+                stable.tag(),
+                version,
             ),
+        ));
+    }
+    if version == Some(LEAN430_IR_VERSION) {
+        return Ok((header, IrLayout::Lean430Rc2));
+    }
+    Err(module_err(
+        module,
+        format!(
+            "{} was written by Lean {:?} ({}); the IR layout is measured only for \
+             {LEAN430_IR_VERSION} and registered Lean {} artifacts",
+            path.display(),
+            version,
+            identity.describe(),
+            stable.version(),
+        ),
+    ))
+}
+
+pub(super) fn check_companion_layout(
+    module: &Name,
+    path: &Path,
+    bytes: &[u8],
+    expected: IrLayout,
+) -> LeanIrResult<OleanHeader> {
+    let (header, layout) = check_layout(module, path, bytes)?;
+    if layout != expected {
+        return Err(module_err(
+            module,
+            format!("{} belongs to a different IR layout", path.display()),
         ));
     }
     Ok(header)
@@ -234,14 +274,14 @@ fn check_version(module: &Name, path: &Path, bytes: &[u8]) -> LeanIrResult<Olean
 
 impl CompactedRegion<'_> {
     /// Read the `isModule` flag and the extension-entry table of the
-    /// `ModuleData` at `root` (Lean v4.30 layout: five object fields then the
+    /// `ModuleData` at `root` (five object fields then the
     /// `isModule` scalar).
     pub(crate) fn ir_part_entries(&self, root: u64) -> LeanIrResult<PartEntries> {
         if self.typed_module_layout_at(root)? != TypedModuleLayout::LeanV2 {
             return Err(LeanIrError::layout(
                 "ModuleData",
                 root,
-                "IR decoding requires the Lean v4.30 ModuleData layout",
+                "IR decoding requires the v2 Lean ModuleData layout",
             ));
         }
         let offset = self.ptr_to_offset(root)?;
@@ -304,8 +344,12 @@ struct PartIr {
     max_nesting: usize,
 }
 
-fn decode_part(region: &CompactedRegion<'_>, part: &PartEntries) -> LeanIrResult<PartIr> {
-    let mut decoder = IrDecoder::new(region);
+fn decode_part(
+    region: &CompactedRegion<'_>,
+    part: &PartEntries,
+    layout: IrLayout,
+) -> LeanIrResult<PartIr> {
+    let mut decoder = IrDecoder::with_layout(region, layout);
     let mut decls = Vec::new();
     if let Some(array) = part.get(DECL_MAP_EXT) {
         for (index, pointer) in decoder
@@ -365,20 +409,6 @@ fn add_extension(path: &Path, suffix: &str) -> PathBuf {
     PathBuf::from(os)
 }
 
-/// The root component of a module name, as `mod.getRoot.toString (escape :=
-/// false)` spells it.
-#[cfg(any(test, feature = "cli"))]
-fn root_package(module: &Name) -> Option<&str> {
-    let mut current = module;
-    loop {
-        match current.inner() {
-            NameInner::Str(parent, s) if parent.is_anon() => return Some(&**s),
-            NameInner::Str(parent, _) | NameInner::Num(parent, _) => current = parent,
-            NameInner::Anon => return None,
-        }
-    }
-}
-
 /// Resolve a module name to its base `.olean` exactly as Lean's `findOLean`
 /// does (`Lean/Util/Path.lean`, `SearchPath.findWithExt`): the FIRST
 /// search-path entry holding a directory named after the module's root
@@ -399,13 +429,9 @@ pub(crate) fn find_module_ir_olean(
         module: super::format::name_to_string(module),
         searched: search_paths.len(),
     };
-    let relative = crate::import::typed_module_rel_path(module).map_err(|_| not_found())?;
-    let root = root_package(module).ok_or_else(not_found)?;
-    let chosen = search_paths
-        .iter()
-        .find(|dir| dir.join(root).is_dir() || dir.join(format!("{root}.olean")).exists())
+    let olean = crate::import::lean_package_module_path(module, search_paths, "olean")
+        .map_err(|_| not_found())?
         .ok_or_else(not_found)?;
-    let olean = chosen.join(relative);
     if !olean.exists() {
         return Err(LeanIrError::MissingFile {
             module: super::format::name_to_string(module),
@@ -418,14 +444,77 @@ pub(crate) fn find_module_ir_olean(
     Ok(olean)
 }
 
+pub(super) fn with_interpreter_part<T>(
+    module: &Name,
+    olean: &Path,
+    captured: Option<&CapturedIrInput>,
+    layout: IrLayout,
+    is_module: bool,
+    read_part: impl FnOnce(&CompactedRegion<'_>, &PartEntries) -> LeanIrResult<T>,
+) -> LeanIrResult<Option<T>> {
+    let signature = match layout {
+        IrLayout::Lean430Rc2 if !is_module => return Ok(None),
+        IrLayout::Lean430Rc2 => None,
+        IrLayout::Lean436 => {
+            let path = olean.with_extension("ir.sig");
+            let exists = match captured {
+                Some(input) => input.ir_signature.is_some(),
+                None => path.try_exists().map_err(|e| LeanIrError::MissingFile {
+                    module: super::format::name_to_string(module),
+                    path: path.clone(),
+                    detail: e.to_string(),
+                })?,
+            };
+            if !exists {
+                // Lean's file-based importer only reads IR parts when it finds
+                // the signature. The absence in a checked capture is final.
+                return Ok(None);
+            }
+            let bytes = read_input(module, olean, &path, captured)?;
+            check_companion_layout(module, &path, &bytes, layout)?;
+            Some(bytes)
+        }
+    };
+
+    let ir_path = olean.with_extension("ir");
+    let ir_bytes = read_input(module, olean, &ir_path, captured)?;
+    let ir_header = check_companion_layout(module, &ir_path, &ir_bytes, layout)?;
+    let assembled = signature
+        .as_deref()
+        .map(|signature| crate::import::assemble_load_part(signature, None, &ir_bytes))
+        .transpose()?;
+    if !is_module {
+        // Lean reads both parts before it selects the plain module's main data.
+        return Ok(None);
+    }
+    let (region, root) = match &assembled {
+        Some(part) => (
+            CompactedRegion::new(&part.bytes, part.base_addr),
+            part.root_ptr,
+        ),
+        None => {
+            let region = CompactedRegion::new(&ir_bytes, ir_header.base_addr);
+            let root = region.root_ptr()?;
+            (region, root)
+        }
+    };
+    let part = region.ir_part_entries(root)?;
+    if !part.is_module {
+        return Err(module_err(
+            module,
+            "the .olean says `module` but its .ir does not",
+        ));
+    }
+    read_part(&region, &part).map(Some)
+}
+
 /// Load and decode one module's compiled IR from its resolved base `.olean`,
 /// as a root-level `private` import sees it (see the module documentation).
 ///
 /// # Errors
 ///
-/// Refuses when a file Lean would read is missing, a file was written by a
-/// Lean version other than [`MEASURED_LEAN_VERSION`], or any object fails to
-/// decode.
+/// Refuses when a required file is missing, an artifact's IR layout is
+/// unsupported, or any object needed by the reader fails to decode.
 pub(crate) fn load_module_ir_at(module: &Name, olean: &Path) -> LeanIrResult<ModuleIr> {
     load_module_ir_from(module, olean, None)
 }
@@ -444,7 +533,7 @@ fn load_module_ir_from(
     captured: Option<&CapturedIrInput>,
 ) -> LeanIrResult<ModuleIr> {
     let base_bytes = read_input(module, olean, olean, captured)?;
-    let base_header = check_version(module, olean, &base_bytes)?;
+    let (base_header, layout) = check_layout(module, olean, &base_bytes)?;
     let base = CompactedRegion::new(&base_bytes, base_header.base_addr);
     let base_root = base.root_ptr()?;
     let base_part = base.ir_part_entries(base_root)?;
@@ -456,13 +545,13 @@ fn load_module_ir_from(
         let private_path = add_extension(olean, "private");
         let server_bytes = read_input(module, olean, &server_path, captured)?;
         let private_bytes = read_input(module, olean, &private_path, captured)?;
-        check_version(module, &server_path, &server_bytes)?;
-        check_version(module, &private_path, &private_bytes)?;
-        let assembled = crate::import::assemble_incremental_part(
-            &base_bytes,
-            Some(&server_bytes),
-            &private_bytes,
-        )?;
+        check_companion_layout(module, &server_path, &server_bytes, layout)?;
+        check_companion_layout(module, &private_path, &private_bytes, layout)?;
+        let assemble = match layout {
+            IrLayout::Lean430Rc2 => crate::import::assemble_incremental_part,
+            IrLayout::Lean436 => crate::import::assemble_load_part,
+        };
+        let assembled = assemble(&base_bytes, Some(&server_bytes), &private_bytes)?;
         let region = CompactedRegion::new(&assembled.bytes, assembled.base_addr);
         let part = region.ir_part_entries(assembled.root_ptr)?;
         if !part.is_module {
@@ -471,39 +560,34 @@ fn load_module_ir_from(
                 "the .olean says `module` but its .olean.private does not",
             ));
         }
-        (MainSource::OleanPrivate, decode_part(&region, &part)?)
+        (
+            MainSource::OleanPrivate,
+            decode_part(&region, &part, layout)?,
+        )
     } else {
-        (MainSource::Olean, decode_part(&base, &base_part)?)
+        (MainSource::Olean, decode_part(&base, &base_part, layout)?)
     };
 
-    // Interpreter data: the `.ir` file of a `module`, else the main data.
-    let (interp_source, ir) = if base_part.is_module {
-        let ir_path = olean.with_extension("ir");
-        let ir_bytes = read_input(module, olean, &ir_path, captured)?;
-        let ir_header = check_version(module, &ir_path, &ir_bytes)?;
-        let region = CompactedRegion::new(&ir_bytes, ir_header.base_addr);
-        let part = region.ir_part_entries(region.root_ptr()?)?;
-        if !part.is_module {
-            return Err(module_err(
-                module,
-                "the .olean says `module` but its .ir does not",
-            ));
-        }
-        (InterpSource::IrFile, Some(decode_part(&region, &part)?))
-    } else {
-        // Lean's `loadIR?` (`importModulesCore`, `Lean/Environment.lean`) reads
-        // a `.ir` beside ANY module's `.olean` when one exists, before
-        // `interpData?` decides that a non-`module` file's interpreter data is
-        // its main data; a `.ir` whose header does not read fails the whole
-        // import (`failed to read file …, invalid header`, measured with the
-        // pinned toolchain on a non-`module` fixture). So a present `.ir` is
-        // header-checked here too and then, as in Lean, not used.
+    if layout == IrLayout::Lean430Rc2 && !base_part.is_module {
+        // Lean 4.30 header-checks any sibling .ir before choosing the main data.
         let ir_path = olean.with_extension("ir");
         if captured.map_or_else(|| ir_path.exists(), |input| input.ir.is_some()) {
             let ir_bytes = read_input(module, olean, &ir_path, captured)?;
-            check_version(module, &ir_path, &ir_bytes)?;
+            check_companion_layout(module, &ir_path, &ir_bytes, layout)?;
         }
-        (InterpSource::MainData, None)
+    }
+    let ir = with_interpreter_part(
+        module,
+        olean,
+        captured,
+        layout,
+        base_part.is_module,
+        |region, part| decode_part(region, part, layout),
+    )?;
+    let interp_source = if ir.is_some() {
+        InterpSource::IrFile
+    } else {
+        InterpSource::MainData
     };
 
     let max_nesting = main
@@ -538,8 +622,9 @@ fn load_module_ir_from(
 ///
 /// # Errors
 ///
-/// As [`load_module_ir_at`]: a missing or unreadable file, another Lean
-/// version, or a row that is not a `Decl`.
+/// As [`load_module_ir_at`], with the additional requirement that a module
+/// system file has its full IR. A partial list from the main data cannot
+/// establish that an omitted name was never compiled.
 pub(crate) fn load_module_ir_names_at(module: &Name, olean: &Path) -> LeanIrResult<Vec<Name>> {
     load_module_ir_names_from(module, olean, None)
 }
@@ -558,24 +643,26 @@ fn load_module_ir_names_from(
     captured: Option<&CapturedIrInput>,
 ) -> LeanIrResult<Vec<Name>> {
     let base_bytes = read_input(module, olean, olean, captured)?;
-    let base_header = check_version(module, olean, &base_bytes)?;
+    let (base_header, layout) = check_layout(module, olean, &base_bytes)?;
     let base = CompactedRegion::new(&base_bytes, base_header.base_addr);
     let base_part = base.ir_part_entries(base.root_ptr()?)?;
-    if !base_part.is_module {
-        return decl_names(module, &base, &base_part);
+    let ir = with_interpreter_part(
+        module,
+        olean,
+        captured,
+        layout,
+        base_part.is_module,
+        |region, part| decl_names(module, region, part, layout),
+    )?;
+    match ir {
+        Some(names) => Ok(names),
+        None if !base_part.is_module => decl_names(module, &base, &base_part, layout),
+        None => Err(LeanIrError::MissingFile {
+            module: super::format::name_to_string(module),
+            path: olean.with_extension("ir.sig"),
+            detail: "complete IR required to read a module's compiled names".to_owned(),
+        }),
     }
-    let ir_path = olean.with_extension("ir");
-    let ir_bytes = read_input(module, olean, &ir_path, captured)?;
-    let ir_header = check_version(module, &ir_path, &ir_bytes)?;
-    let region = CompactedRegion::new(&ir_bytes, ir_header.base_addr);
-    let part = region.ir_part_entries(region.root_ptr()?)?;
-    if !part.is_module {
-        return Err(module_err(
-            module,
-            "the .olean says `module` but its .ir does not",
-        ));
-    }
-    decl_names(module, &region, &part)
 }
 
 /// The `declMapExt` declaration names of one part.
@@ -583,8 +670,9 @@ fn decl_names(
     module: &Name,
     region: &CompactedRegion<'_>,
     part: &PartEntries,
+    layout: IrLayout,
 ) -> LeanIrResult<Vec<Name>> {
-    let decoder = IrDecoder::new(region);
+    let decoder = IrDecoder::with_layout(region, layout);
     let Some(array) = part.get(DECL_MAP_EXT) else {
         return Ok(Vec::new());
     };
@@ -603,7 +691,7 @@ fn decl_names(
         .collect()
 }
 
-/// Read a module's direct imports only (for closure walks), from its base
+/// Read a module's layout and direct imports for closure walks, from its base
 /// `.olean`. Lean's `ModuleData.imports` is the header's import list at every
 /// level (`mkModuleData` copies `env.header`), so the base part suffices.
 ///
@@ -611,11 +699,15 @@ fn decl_names(
 ///
 /// Refuses an unreadable base file or one written by another Lean version.
 #[cfg(any(test, feature = "cli"))]
-pub(crate) fn read_module_imports(module: &Name, olean: &Path) -> LeanIrResult<Vec<Name>> {
+pub(crate) fn read_module_imports(
+    module: &Name,
+    olean: &Path,
+) -> LeanIrResult<(IrLayout, Vec<Name>)> {
     let bytes = read_file(module, olean)?;
-    check_version(module, olean, &bytes)?;
-    Ok(crate::import::parse_typed_imports(&bytes)?
+    let (_, layout) = check_layout(module, olean, &bytes)?;
+    let imports = crate::import::parse_typed_imports(&bytes)?
         .into_iter()
         .map(|import| import.module_name)
-        .collect())
+        .collect();
+    Ok((layout, imports))
 }

@@ -392,7 +392,9 @@ impl<'a> CheckObserver<'a> {
 
 impl ModuleObserver for CheckObserver<'_> {
     fn before_body(&mut self, env: &Environment) {
-        if self.state.source_setup.is_some() {
+        if self.state.source_setup.is_some()
+            || (self.is_entry_file && self.state.export_targets.is_some())
+        {
             self.body_environment = Some(env.clone());
         }
     }

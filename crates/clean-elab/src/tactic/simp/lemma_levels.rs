@@ -44,6 +44,7 @@ use std::sync::LazyLock;
 use clean_kernel::name::Name;
 use clean_kernel::{Expr, ExprKind, Level, LocalContext};
 
+use super::args::SIMP_ARG_RULE_PREFIX;
 use super::expr::collect_binder_types_in_conclusion;
 use super::pattern::substitute_bvars_with_metas;
 use super::types::SimpLemma;
@@ -72,30 +73,27 @@ pub(super) struct LemmaLevels {
 impl LemmaLevels {
     /// The renaming for one attempt to rewrite with `lemma`.
     ///
-    /// Empty — every method the identity — when the lemma has no universe
-    /// parameters, has no environment declaration (a hand-written pattern
-    /// with no declaration behind it), or is a rule minted from a LOCAL
-    /// hypothesis whose name happens to coincide with an environment constant:
-    /// a local's statement spells the GOAL's levels, never a declaration's.
-    /// That is the shadowing rule `bind_undetermined_binders` and
-    /// `binding_violates_declared_domain` already apply.
+    /// Environment rules carry their declaration's universe parameters.
+    /// Term arguments carry the residual universe metavariables from their
+    /// elaborated proof. Local hypotheses carry the goal's rigid parameters.
     pub(super) fn for_lemma(state: &ProofState, lemma: &SimpLemma) -> Self {
-        let empty = Self {
-            declared: Vec::new(),
-            fresh_names: Vec::new(),
-            fresh: Vec::new(),
+        let declared = if crate::namespace::name_has_prefix(&lemma.name, &SIMP_ARG_RULE_PREFIX) {
+            let mut declared = Vec::new();
+            if let Some(proof) = &lemma.proof_expr {
+                collect_level_params(proof, &mut declared);
+                declared
+                    .retain(|name| crate::level_mint::is_reserved_level_name(&name.to_string()));
+            }
+            declared
+        } else if is_local_rule(lemma) {
+            Vec::new()
+        } else {
+            state
+                .env
+                .get_const(&lemma.name)
+                .map_or_else(Vec::new, |info| info.level_params.clone())
         };
-        if is_local_rule(lemma) {
-            return empty;
-        }
-        let Some(info) = state.env.get_const(&lemma.name) else {
-            return empty;
-        };
-        if info.level_params.is_empty() {
-            return empty;
-        }
-        let fresh_names: Vec<Name> = info
-            .level_params
+        let fresh_names: Vec<Name> = declared
             .iter()
             .map(|_| {
                 FRESH_STEM
@@ -105,7 +103,7 @@ impl LemmaLevels {
             .collect();
         let fresh = fresh_names.iter().cloned().map(Level::param).collect();
         Self {
-            declared: info.level_params.clone(),
+            declared,
             fresh_names,
             fresh,
         }

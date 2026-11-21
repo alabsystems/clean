@@ -26,12 +26,12 @@
       "id": "XREF-VERDICT-IO-LANE-B",
       "path": "data/verdict_io_contracts.json",
       "block": "ledger",
-      "row_count": 73,
+      "row_count": 75,
       "direction": "down",
       "rows_by_class": {
-        "content-bearing": 59,
+        "content-bearing": 60,
         "meta": 2,
-        "success-only": 12
+        "success-only": 13
       },
       "why_not_copied": "Ring R2 lane (b) mints and ratchets its own \u00a73.6 rows in its own artifact. Copying them here would give each assumption two accounting points and two ratchets; the env-bypass census follows the same rule. They are counted in the scoreboard by the separate row `assumption_ledger.verdict_io_lane_b`, which is disjoint from `assumption_ledger.count` by construction \u2014 this generator aborts if any id here collides with one there."
     }
@@ -1207,7 +1207,7 @@
       },
       {
         "path": "data/verdict_io_contracts.json",
-        "sha256": "6c034c635d656062a6379badc70b0690cd70a6b22f7bb451a85dbf803a32a8be"
+        "sha256": "d3632e505b975fee7b401399f4865bc01e1ca88fcf8e4f3023158dbb04791d25"
       }
     ],
     "consumers": [

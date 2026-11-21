@@ -25,6 +25,8 @@ pub(crate) struct IrProfile {
     counts: BTreeMap<&'static str, usize>,
     case_types: HashSet<Name>,
     named_struct_types: HashSet<Name>,
+    max_jp: u64,
+    max_var: u64,
 }
 
 impl IrProfile {
@@ -39,6 +41,8 @@ impl IrProfile {
         }
         self.case_types.extend(other.case_types);
         self.named_struct_types.extend(other.named_struct_types);
+        self.max_jp = self.max_jp.max(other.max_jp);
+        self.max_var = self.max_var.max(other.max_var);
     }
 
     /// Profile one module: its sources and every declaration it carries.
@@ -73,6 +77,11 @@ impl IrProfile {
                 self.add("decl_fdecl");
                 if info.sorry_dep.is_some() {
                     self.add("decl_fdecl_sorry_dep");
+                }
+                if let Some(bounds) = &info.index_bounds {
+                    self.add("decl_fdecl_index_bounds");
+                    self.max_jp = self.max_jp.max(bounds.max_jp);
+                    self.max_var = self.max_var.max(bounds.max_var);
                 }
                 for p in params {
                     if p.borrow {
@@ -243,11 +252,15 @@ impl IrProfile {
         self.counts.get(key).copied().unwrap_or(0)
     }
 
-    /// `PROFILE <key>=<count>` lines, sorted by key.
+    /// `PROFILE` counts sorted by key, followed by summary statistics.
     pub(crate) fn render(&self) -> String {
         let mut out = String::new();
         for (key, n) in &self.counts {
             out.push_str(&format!("PROFILE {key}={n}\n"));
+        }
+        if self.counts.contains_key("decl_fdecl_index_bounds") {
+            out.push_str(&format!("PROFILE max_jp={}\n", self.max_jp));
+            out.push_str(&format!("PROFILE max_var={}\n", self.max_var));
         }
         out.push_str(&format!(
             "PROFILE distinct_case_types={}\n",

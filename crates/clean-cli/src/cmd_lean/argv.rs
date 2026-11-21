@@ -35,6 +35,7 @@ enum HasArg {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Opt {
     Help,
+    Features,
     Version,
     ShortVersion,
     Githash,
@@ -47,7 +48,11 @@ pub(crate) enum Opt {
     Quiet,
     Json,
     Deps,
+    DepsJson,
     SrcDeps,
+    PrintPrefix,
+    PrintLibdir,
+    OleanOutput,
     Define,
     ErrorKind,
     /// Options Clean cannot honour; see [`Opt::refusal`].
@@ -79,6 +84,7 @@ pub(crate) enum Refusal {
     Stats,
     ExitOnPanic,
     UndocumentedC,
+    IncrementalSnapshot,
 }
 
 impl Refusal {
@@ -86,10 +92,7 @@ impl Refusal {
     pub(crate) fn reason(self) -> &'static str {
         match self {
             Self::Features => "Clean does not report Lean compiler features",
-            Self::Olean => {
-                "Clean does not write Lean-format `.olean` files (decision D3); a Lean-readable \
-                 artifact needs a faithful writer, which does not exist"
-            }
+            Self::Olean => "Clean does not write Lean-format `.olean` files for this dialect",
             Self::Ilean => "Clean does not write Lean `.ilean` files",
             Self::COutput => {
                 "Clean does not emit Lean's C output (`clean compile --emit c` is Clean's own \
@@ -120,6 +123,7 @@ impl Refusal {
             Self::Stats => "Clean prints no Lean environment statistics",
             Self::ExitOnPanic => "Clean has no Lean interpreter panic mode",
             Self::UndocumentedC => "it is an undocumented Lean option Clean does not model",
+            Self::IncrementalSnapshot => "Clean does not read or write Lean incremental snapshots",
         }
     }
 }
@@ -220,25 +224,10 @@ const LONG: &[LongSpec] = &[
     long("json", HasArg::No, Opt::Json, false),
     long("error", HasArg::Required, Opt::ErrorKind, true),
     long("deps", HasArg::No, Opt::Deps, false),
-    long(
-        "deps-json",
-        HasArg::No,
-        Opt::Refused(Refusal::DepsJson),
-        false,
-    ),
+    long("deps-json", HasArg::No, Opt::DepsJson, false),
     long("src-deps", HasArg::No, Opt::SrcDeps, true),
-    long(
-        "print-prefix",
-        HasArg::No,
-        Opt::Refused(Refusal::PrintPrefix),
-        false,
-    ),
-    long(
-        "print-libdir",
-        HasArg::No,
-        Opt::Refused(Refusal::PrintLibdir),
-        false,
-    ),
+    long("print-prefix", HasArg::No, Opt::PrintPrefix, false),
+    long("print-libdir", HasArg::No, Opt::PrintLibdir, false),
     long("profile", HasArg::No, Opt::Refused(Refusal::Profile), false),
     long("stats", HasArg::No, Opt::Refused(Refusal::Stats), false),
     long(
@@ -246,6 +235,28 @@ const LONG: &[LongSpec] = &[
         HasArg::No,
         Opt::Refused(Refusal::ExitOnPanic),
         false,
+    ),
+];
+
+const STABLE_LONG: &[LongSpec] = &[
+    long("features", HasArg::No, Opt::Features, true),
+    long(
+        "incr-save",
+        HasArg::Required,
+        Opt::Refused(Refusal::IncrementalSnapshot),
+        true,
+    ),
+    long(
+        "incr-load",
+        HasArg::Required,
+        Opt::Refused(Refusal::IncrementalSnapshot),
+        true,
+    ),
+    long(
+        "incr-header-save",
+        HasArg::Required,
+        Opt::Refused(Refusal::IncrementalSnapshot),
+        true,
     ),
 ];
 
@@ -261,9 +272,10 @@ fn short_spec(dialect: LeanDialect, ch: char) -> Option<(bool, Opt)> {
         'h' => (false, Opt::Help),
         'i' => (true, Opt::Refused(Refusal::Ilean)),
         'j' => (true, Opt::Refused(Refusal::Threads)),
-        'o' => (true, Opt::Refused(Refusal::Olean)),
+        'o' => (true, olean_option(dialect)),
         'p' => (true, Opt::Refused(Refusal::Plugin)),
         'q' => (false, Opt::Quiet),
+        'r' if dialect == LeanDialect::V4_36_0 => (false, Opt::RunFile),
         'r' => (false, Opt::RunFlag),
         's' => (true, Opt::Refused(Refusal::Tstack)),
         't' => (true, Opt::Refused(Refusal::Trust)),
@@ -279,6 +291,14 @@ fn short_spec(dialect: LeanDialect, ch: char) -> Option<(bool, Opt)> {
         _ => return None,
     };
     Some(spec)
+}
+
+fn olean_option(dialect: LeanDialect) -> Opt {
+    if dialect == LeanDialect::V4_36_0 {
+        Opt::OleanOutput
+    } else {
+        Opt::Refused(Refusal::Olean)
+    }
 }
 
 /// One option as `getopt_long` returned it.
@@ -297,8 +317,7 @@ pub(crate) struct CommandLine {
     pub(crate) options: Vec<Parsed>,
     /// Operands (permuted out of the options).
     pub(crate) operands: Vec<String>,
-    /// Lean 4.30.0-rc2's `--run <file> args…`: the file and the program's
-    /// arguments, taken verbatim.
+    /// A modern `--run <file> args…`: the file and the program's arguments.
     pub(crate) run_file: Option<(String, Vec<String>)>,
 }
 
@@ -332,7 +351,11 @@ pub(crate) fn parse(dialect: LeanDialect, args: &[String]) -> Result<CommandLine
                 getopt_line: Some(message),
                 before: line.options.clone(),
             })?;
-            let value = match spec.has_arg {
+            // Stable Lean registers long --run as argument-free in getopt.
+            // Its handler consumes the remaining argv starting at the file.
+            let stable_run = dialect == LeanDialect::V4_36_0 && spec.opt == Opt::RunFile;
+            let has_arg = if stable_run { HasArg::No } else { spec.has_arg };
+            let value = match has_arg {
                 HasArg::No => {
                     if inline.is_some() {
                         return Err(UsageError {
@@ -364,8 +387,14 @@ pub(crate) fn parse(dialect: LeanDialect, args: &[String]) -> Result<CommandLine
                 },
             };
             if spec.opt == Opt::RunFile {
-                let file = value.unwrap_or_default();
-                line.run_file = Some((file, args[index..].to_vec()));
+                line.run_file = if stable_run {
+                    line.operands.clear();
+                    args[index..]
+                        .split_first()
+                        .map(|(file, rest)| (file.clone(), rest.to_vec()))
+                } else {
+                    Some((value.unwrap_or_default(), args[index..].to_vec()))
+                };
                 line.options.push(Parsed {
                     opt: Opt::RunFile,
                     spelling: format!("--{name}"),
@@ -374,7 +403,11 @@ pub(crate) fn parse(dialect: LeanDialect, args: &[String]) -> Result<CommandLine
                 break;
             }
             line.options.push(Parsed {
-                opt: spec.opt,
+                opt: if spec.opt == Opt::Refused(Refusal::Olean) {
+                    olean_option(dialect)
+                } else {
+                    spec.opt
+                },
                 spelling: format!("--{name}"),
                 value,
             });
@@ -411,6 +444,24 @@ pub(crate) fn parse(dialect: LeanDialect, args: &[String]) -> Result<CommandLine
                 } else {
                     None
                 };
+                if opt == Opt::RunFile {
+                    line.operands.clear();
+                    line.run_file = if at < chars.len() {
+                        // In a short option cluster Lean keeps argv at the
+                        // current word, so this entire word is its operand.
+                        Some((arg.clone(), args[index..].to_vec()))
+                    } else {
+                        args[index..]
+                            .split_first()
+                            .map(|(file, rest)| (file.clone(), rest.to_vec()))
+                    };
+                    line.options.push(Parsed {
+                        opt,
+                        spelling: format!("-{ch}"),
+                        value: None,
+                    });
+                    return Ok(line);
+                }
                 line.options.push(Parsed {
                     opt,
                     spelling: format!("-{ch}"),
@@ -427,6 +478,9 @@ pub(crate) fn parse(dialect: LeanDialect, args: &[String]) -> Result<CommandLine
 /// `getopt_long`'s lookup: an exact name, else a unique prefix.
 fn find_long(dialect: LeanDialect, name: &str) -> Result<&'static LongSpec, String> {
     let visible = |spec: &&LongSpec| {
+        if spec.opt == Opt::Refused(Refusal::Features) && dialect == LeanDialect::V4_36_0 {
+            return false;
+        }
         // Each release sees its own `--run`.
         let is_run = matches!(spec.opt, Opt::RunFlag | Opt::RunFile);
         if is_run {
@@ -435,12 +489,16 @@ fn find_long(dialect: LeanDialect, name: &str) -> Result<&'static LongSpec, Stri
             !spec.modern_only || dialect.is_modern()
         }
     };
-    if let Some(spec) = LONG.iter().filter(visible).find(|spec| spec.name == name) {
+    let stable = if dialect == LeanDialect::V4_36_0 {
+        STABLE_LONG
+    } else {
+        &[]
+    };
+    let options = LONG.iter().chain(stable).filter(visible);
+    if let Some(spec) = options.clone().find(|spec| spec.name == name) {
         return Ok(spec);
     }
-    let candidates: Vec<&LongSpec> = LONG
-        .iter()
-        .filter(visible)
+    let candidates: Vec<&LongSpec> = options
         .filter(|spec| !name.is_empty() && spec.name.starts_with(name))
         .collect();
     match candidates.as_slice() {

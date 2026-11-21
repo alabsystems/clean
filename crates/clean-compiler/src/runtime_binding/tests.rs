@@ -5,12 +5,152 @@ use super::*;
 use crate::pass_manager::{
     compile_lcnf_decls, compile_lcnf_decls_in_runtime_closure, PipelineConfig,
 };
-use clean_kernel::env::CompiledBefore;
+use clean_kernel::env::{
+    CompiledBefore, CompilerExternArity, CompilerExternDescriptor, CompilerExternEntry,
+    CompilerExternIncomplete, CompilerExternMetadata,
+};
 use clean_kernel::{BinderInfo, Declaration};
 
 fn n(s: &str) -> Name {
     Name::from_string(s)
 }
+
+#[test]
+fn checked_execution_binds_proof_bodies_without_compiling_their_implementations() {
+    let mut base = Environment::with_prelude();
+    for helper in ["proofHelper", "unsafeProofHelper"] {
+        base.add_decl(Declaration::Definition {
+            name: n(helper),
+            level_params: vec![],
+            type_: Expr::const_str("True"),
+            value: Expr::const_str("True.intro"),
+            is_reducible: false,
+        })
+        .unwrap();
+    }
+    base.mark_unsafe(n("unsafeProofHelper"));
+    base.register_implemented_by(n("proofHelper"), n("unsafeProofHelper"));
+    let program = |proof_body: &str, arg: &str| {
+        let mut env = base.clone();
+        env.add_decl(Declaration::Theorem {
+            name: n("checkedProof"),
+            level_params: vec![],
+            type_: Expr::const_str("True"),
+            value: Expr::const_str(proof_body),
+        })
+        .unwrap();
+        env.add_decl(Declaration::Definition {
+            name: n("entry"),
+            level_params: vec![],
+            type_: Expr::const_str("Nat"),
+            value: Expr::app(
+                Expr::lam(
+                    BinderInfo::Default,
+                    Expr::const_str("True"),
+                    Expr::nat_lit(7),
+                ),
+                Expr::const_str(arg),
+            ),
+            is_reducible: false,
+        })
+        .unwrap();
+        env
+    };
+    let roots = [n("entry")];
+    let env = program("proofHelper", "checkedProof");
+    assert!(matches!(
+        RuntimeBindingClosure::check(&env, &roots),
+        Err(CompilerError::ImplementedByUnsafeTarget { .. })
+    ));
+    let checked = RuntimeBindingClosure::check_executable(&env, &roots).unwrap();
+    assert!(checked.attributes.contains_key(&n("checkedProof")));
+    assert!(!checked.attributes.contains_key(&n("proofHelper")));
+    assert!(checked
+        .references(&env, BTreeSet::from([n("proofHelper")]), true)
+        .is_err());
+    assert!(checked
+        .recheck(&program("True.intro", "checkedProof"))
+        .is_err());
+    assert!(matches!(
+        RuntimeBindingClosure::check_executable(&program("True.intro", "proofHelper"), &roots),
+        Err(CompilerError::ImplementedByUnsafeTarget { .. })
+    ));
+}
+#[test]
+fn checked_execution_keeps_type_index_bindings_out_of_runtime_calls() {
+    let mut env = Environment::with_prelude();
+    for helper in ["index", "unsafeIndex"] {
+        env.add_decl(Declaration::Definition {
+            name: n(helper),
+            level_params: vec![],
+            type_: Expr::const_str("Nat"),
+            value: Expr::nat_lit(3),
+            is_reducible: false,
+        })
+        .unwrap();
+    }
+    env.mark_unsafe(n("unsafeIndex"));
+    env.register_implemented_by(n("index"), n("unsafeIndex"));
+    let index = Expr::const_str("index");
+    let indexed_proof = Expr::apps(
+        Expr::const_(
+            n("Eq"),
+            vec![clean_kernel::Level::succ(clean_kernel::Level::zero())],
+        ),
+        [Expr::const_str("Nat"), index.clone(), index.clone()],
+    );
+    for (entry, body) in [("typed", Expr::nat_lit(5)), ("live", index)] {
+        env.add_decl(Declaration::Definition {
+            name: n(entry),
+            level_params: vec![],
+            type_: Expr::arrow(indexed_proof.clone(), Expr::const_str("Nat")),
+            value: Expr::lam(BinderInfo::Default, indexed_proof.clone(), body),
+            is_reducible: false,
+        })
+        .unwrap();
+    }
+    let checked = RuntimeBindingClosure::check_executable(&env, &[n("typed")]).unwrap();
+    assert!(checked.annotation_members.contains(&n("index")));
+    assert!(!checked.attributes.contains_key(&n("index")));
+    checked
+        .constant(&env, env.get_const(&n("typed")).unwrap())
+        .unwrap();
+    let mut decl = crate::constant_to_decl_in_runtime_closure(
+        &env,
+        env.get_const(&n("typed")).unwrap(),
+        &checked,
+    )
+    .unwrap()
+    .unwrap();
+    checked
+        .declarations(&env, std::slice::from_ref(&decl))
+        .unwrap();
+    let result = clean_kernel::FVarId::new(999);
+    decl.body = DeclValue::Code(Box::new(Code::let_bind(
+        crate::lcnf::LetDecl::new(
+            result,
+            Name::anon(),
+            Expr::const_str("Nat"),
+            LetValue::const_simple(n("index")),
+        ),
+        Code::Return(result),
+    )));
+    assert!(checked
+        .declarations(&env, std::slice::from_ref(&decl))
+        .is_err());
+    assert!(checked.transformed_declarations(&env, &[decl]).is_err());
+    assert!(matches!(
+        RuntimeBindingClosure::check_executable(&env, &[n("live")]),
+        Err(CompilerError::ImplementedByUnsafeTarget { .. })
+    ));
+    assert!(matches!(
+        RuntimeBindingClosure::check(&env, &[n("typed")]),
+        Err(CompilerError::ImplementedByUnsafeTarget { .. })
+    ));
+    replace_value(&mut env, "index", Expr::nat_lit(4));
+    assert!(checked.recheck(&env).is_err());
+}
+
 fn identity() -> Expr {
     Expr::lam(BinderInfo::Default, Expr::const_str("Nat"), Expr::bvar(0))
 }
@@ -437,4 +577,532 @@ fn unsafe_and_partial_registry_changes_cannot_reuse_a_plain_root_contract() {
         )
         .is_err());
     }
+}
+
+#[test]
+#[ignore = "requires the official Lean 4.36.0 SDK through CLEAN_LEAN436_LIB"]
+fn stable_list_cases_on_keeps_the_open_major_in_its_source_closure() {
+    let env = stable_sdk_module("Init.Prelude");
+    let name = n("List.casesOn");
+    let closure =
+        RuntimeBindingClosure::check_executable(&env, std::slice::from_ref(&name)).unwrap();
+    let info = env.get_const(&name).expect("stable recursor wrapper");
+    let mut decl = crate::constant_to_decl_in_runtime_closure(&env, info, &closure)
+        .unwrap()
+        .expect("real recursor body");
+    closure
+        .declarations(&env, std::slice::from_ref(&decl))
+        .expect("open List α major comes from the List.casesOn binder");
+    decl.ty = Expr::const_str("Object");
+    let err = closure
+        .declarations(&env, &[decl])
+        .expect_err("an injected Object is still outside the checked source");
+    assert!(err.to_string().contains("Object"), "{err}");
+}
+
+fn extern_descriptor() -> CompilerExternDescriptor {
+    CompilerExternDescriptor {
+        arity: CompilerExternArity::Legacy(Some(1)),
+        entries: vec![
+            CompilerExternEntry::Standard {
+                backend: n("llvm"),
+                symbol: "same-label".into(),
+            },
+            CompilerExternEntry::Standard {
+                backend: n("backend").num(7),
+                symbol: "second-symbol".into(),
+            },
+            CompilerExternEntry::Adhoc { backend: n("cpp") },
+        ],
+    }
+}
+
+fn extern_environment(metadata: CompilerExternMetadata) -> Environment {
+    let mut env = environment();
+    replace_value(&mut env, "chosen", call("deep"));
+    env.register_extern_metadata(n("deep"), metadata)
+        .expect("represented annotation data, not native admission");
+    env
+}
+
+fn assert_extern_drift_refuses(env: &Environment, closure: &RuntimeBindingClosure, decl: &Decl) {
+    assert!(matches!(
+        crate::constant_to_decl_in_runtime_closure(
+            env,
+            env.get_const(&n("chosen")).expect("actual root"),
+            closure,
+        ),
+        Err(CompilerError::RuntimeBindingClosure { .. })
+    ));
+    assert!(matches!(
+        compile_lcnf_decls_in_runtime_closure(
+            std::slice::from_ref(decl),
+            env,
+            &PipelineConfig::default(),
+            closure,
+        ),
+        Err(crate::pass_manager::PipelineError::Compiler(
+            CompilerError::RuntimeBindingClosure { .. }
+        ))
+    ));
+}
+
+#[test]
+fn unchanged_complete_and_incomplete_extern_metadata_preserves_the_checked_contract() {
+    for metadata in [
+        CompilerExternMetadata::Complete(extern_descriptor()),
+        CompilerExternMetadata::from("same-label".to_owned()),
+        CompilerExternMetadata::Incomplete {
+            diagnostic: "same-label".into(),
+            reason: CompilerExternIncomplete::UnspecifiedSourceBinding,
+        },
+    ] {
+        let mut env = extern_environment(metadata.clone());
+        let closure = RuntimeBindingClosure::check(&env, &[n("chosen")]).expect("closure");
+        let decl = crate::constant_to_decl_in_runtime_closure(
+            &env,
+            env.get_const(&n("chosen")).expect("root"),
+            &closure,
+        )
+        .expect("unchanged closure")
+        .expect("ordinary root body");
+        env.register_extern_metadata(n("deep"), metadata.clone())
+            .expect("identical metadata registration");
+        assert_eq!(
+            env.extern_metadata(&n("deep")).expect("metadata"),
+            Some(metadata)
+        );
+        closure
+            .recheck(&env)
+            .expect("unchanged annotation contract");
+        compile_lcnf_decls_in_runtime_closure(&[decl], &env, &PipelineConfig::default(), &closure)
+            .expect("ordinary caller pipeline remains available");
+        // Checking custody never permits lowering the extern's logical body.
+        assert!(matches!(
+            crate::constant_to_decl_in_runtime_closure(
+                &env,
+                env.get_const(&n("deep")).expect("extern declaration"),
+                &closure,
+            ),
+            Err(CompilerError::ExternWithBody { .. })
+        ));
+    }
+}
+
+#[test]
+fn same_diagnostic_typed_extern_changes_invalidate_actual_closure_consumers() {
+    let original = extern_environment(CompilerExternMetadata::Complete(extern_descriptor()));
+    let closure = RuntimeBindingClosure::check(&original, &[n("chosen")]).expect("closure");
+    let decl = crate::constant_to_decl_in_runtime_closure(
+        &original,
+        original.get_const(&n("chosen")).expect("root"),
+        &closure,
+    )
+    .expect("ordinary caller")
+    .expect("runtime body");
+    let mut descriptors = Vec::new();
+    for arity in [
+        CompilerExternArity::Legacy(None),
+        CompilerExternArity::Unspecified,
+    ] {
+        let mut changed = extern_descriptor();
+        changed.arity = arity;
+        descriptors.push(changed);
+    }
+    let mut changed = extern_descriptor();
+    let CompilerExternEntry::Standard { backend, .. } = &mut changed.entries[1] else {
+        panic!("standard fixture")
+    };
+    let display_twin = n("backend").str("7");
+    assert_eq!(backend.to_string(), display_twin.to_string());
+    assert_ne!(*backend, display_twin);
+    *backend = display_twin;
+    descriptors.push(changed);
+    let mut changed = extern_descriptor();
+    changed.entries[1] = CompilerExternEntry::Foreign {
+        backend: n("backend").num(7),
+        symbol: "second-symbol".into(),
+    };
+    descriptors.push(changed);
+    let mut changed = extern_descriptor();
+    changed.entries.swap(1, 2);
+    descriptors.push(changed);
+    let mut changed = extern_descriptor();
+    let CompilerExternEntry::Standard { symbol, .. } = &mut changed.entries[1] else {
+        panic!("standard fixture")
+    };
+    *symbol = "changed-second-symbol".into();
+    descriptors.push(changed);
+
+    let mutations = descriptors
+        .into_iter()
+        .map(CompilerExternMetadata::Complete)
+        .chain([CompilerExternMetadata::Incomplete {
+            diagnostic: "same-label".into(),
+            reason: CompilerExternIncomplete::UnspecifiedSourceBinding,
+        }]);
+    for metadata in mutations {
+        assert_eq!(metadata.diagnostic(), "same-label");
+        let mut changed = original.clone();
+        changed
+            .register_extern_metadata(n("deep"), metadata)
+            .expect("different represented metadata");
+        assert_eq!(
+            changed.get_extern(&n("deep")),
+            original.get_extern(&n("deep"))
+        );
+        RuntimeBindingClosure::check(&changed, &[n("chosen")])
+            .expect("the changed data can form its own contract");
+        assert_extern_drift_refuses(&changed, &closure, &decl);
+    }
+    let mut legacy = original.clone();
+    legacy.register_extern(n("deep"), "same-label".into());
+    assert_extern_drift_refuses(&legacy, &closure, &decl);
+    let legacy_closure =
+        RuntimeBindingClosure::check(&legacy, &[n("chosen")]).expect("legacy contract");
+    legacy
+        .register_extern_metadata(
+            n("deep"),
+            CompilerExternMetadata::Incomplete {
+                diagnostic: "same-label".into(),
+                reason: CompilerExternIncomplete::UnspecifiedSourceBinding,
+            },
+        )
+        .expect("different incomplete status");
+    assert_extern_drift_refuses(&legacy, &legacy_closure, &decl);
+}
+
+#[test]
+fn malformed_reached_extern_carrier_refuses_closure_creation_and_recheck() {
+    let original = extern_environment(CompilerExternMetadata::Complete(extern_descriptor()));
+    let normalize = |mut projection: clean_kernel::env::JsonEnvironment| {
+        // Only these outer vectors came from maps. Name ordering is structural;
+        // declaration records, descriptor order and raw carrier bytes stay exact.
+        projection.constants.sort_by(|a, b| a.name.cmp(&b.name));
+        projection
+            .constant_origins
+            .sort_by(|a, b| a.name.cmp(&b.name));
+        projection.inductives.sort_by(|a, b| a.name.cmp(&b.name));
+        projection.constructors.sort_by(|a, b| a.name.cmp(&b.name));
+        projection.recursors.sort_by(|a, b| a.name.cmp(&b.name));
+        projection.quotients.sort_by(|a, b| a.name.cmp(&b.name));
+        projection
+            .structure_fields
+            .sort_by(|a, b| a.struct_name.cmp(&b.struct_name));
+        projection.extern_bindings.sort_by(|a, b| a.0.cmp(&b.0));
+        projection
+    };
+    let marker = |bytes: &[u8]| {
+        format!(
+            "\"Object\":[{}",
+            bytes
+                .iter()
+                .map(u8::to_string)
+                .collect::<Vec<_>>()
+                .join(",")
+        )
+    };
+    // Corrupt the actual registered raw carrier through the public JSON
+    // transport. Its outer reader retains opaque bytes; metadata must refuse.
+    // Retain the actual checked dependency declarations and registered carrier
+    // without serializing unrelated, deeply nested Prelude declarations.
+    let reached = original
+        .dependency_closure(&n("chosen"))
+        .expect("actual checked dependencies");
+    let retained: HashSet<_> = reached.iter().cloned().collect();
+    let assert_declarations = |actual: &Environment| {
+        assert_eq!(
+            actual
+                .dependency_closure(&n("chosen"))
+                .expect("closed restored declarations"),
+            reached,
+            "the complete reached membership must survive"
+        );
+        for name in &reached {
+            assert_eq!(
+                actual.get_const(name),
+                original.get_const(name),
+                "constant {name:?}"
+            );
+            assert_eq!(
+                actual.get_inductive(name),
+                original.get_inductive(name),
+                "inductive {name:?}"
+            );
+            assert_eq!(
+                actual.get_constructor(name),
+                original.get_constructor(name),
+                "constructor {name:?}"
+            );
+            assert_eq!(
+                actual.get_recursor(name),
+                original.get_recursor(name),
+                "recursor {name:?}"
+            );
+            assert_eq!(
+                actual.get_quot(name),
+                original.get_quot(name),
+                "quotient {name:?}"
+            );
+        }
+    };
+    let mut carrier = original.json_observation();
+    carrier
+        .constants
+        .retain(|info| retained.contains(&info.name));
+    carrier
+        .constant_origins
+        .retain(|info| retained.contains(&info.name));
+    carrier
+        .inductives
+        .retain(|info| retained.contains(&info.name));
+    carrier
+        .constructors
+        .retain(|info| retained.contains(&info.name));
+    carrier
+        .recursors
+        .retain(|info| retained.contains(&info.name));
+    carrier
+        .quotients
+        .retain(|info| retained.contains(&info.name));
+    carrier
+        .structure_fields
+        .retain(|info| retained.contains(&info.struct_name));
+    let json = serde_json::to_string(&carrier).expect("actual environment transport");
+    let restored = Environment::from_json(&json).expect("uncorrupted compact carrier");
+    assert_declarations(&restored);
+    let expected_projection = normalize(carrier);
+    assert_eq!(normalize(restored.json_observation()), expected_projection);
+    assert_eq!(restored.lean_level_profile(), original.lean_level_profile());
+    for name in &reached {
+        assert_eq!(
+            restored.get_extern(name),
+            original.get_extern(name),
+            "diagnostic {name:?}"
+        );
+        assert_eq!(
+            restored
+                .extern_metadata(name)
+                .expect("decoded typed metadata"),
+            original
+                .extern_metadata(name)
+                .expect("original typed metadata"),
+            "full typed metadata {name:?}"
+        );
+    }
+    // JSON does not encode every compiler attribute or environment mode. Form
+    // the policy baseline from the compared projected data, not an unsupported
+    // claim that the original full Environment survived this transport.
+    let closure = RuntimeBindingClosure::check(&restored, &[n("chosen")])
+        .expect("legitimate restored baseline");
+    let unchanged = Environment::from_json(&json).expect("second uncorrupted restore");
+    assert_declarations(&unchanged);
+    assert_eq!(normalize(unchanged.json_observation()), expected_projection);
+    closure
+        .recheck(&unchanged)
+        .expect("unchanged decoded data preserves its own checked contract");
+    let decl = crate::constant_to_decl_in_runtime_closure(
+        &unchanged,
+        unchanged.get_const(&n("chosen")).expect("restored root"),
+        &closure,
+    )
+    .expect("positive restored lowering consumer")
+    .expect("runtime body");
+    compile_lcnf_decls_in_runtime_closure(
+        std::slice::from_ref(&decl),
+        &unchanged,
+        &PipelineConfig::default(),
+        &closure,
+    )
+    .expect("positive restored pipeline consumer");
+    let old_marker = marker(b"Clean.compilerExtern.v1\0");
+    assert_eq!(
+        json.matches(old_marker.as_str()).count(),
+        1,
+        "one actual raw carrier"
+    );
+    let corrupted = json.replacen(
+        old_marker.as_str(),
+        &marker(b"Clean.compilerExtern.v2\0"),
+        1,
+    );
+    assert_ne!(
+        corrupted, json,
+        "the registered carrier must actually change"
+    );
+    let damaged = Environment::from_json(&corrupted).expect("raw carrier restoration");
+    assert_declarations(&damaged);
+    let mut damaged_projection = normalize(damaged.json_observation());
+    let damaged_storage = damaged_projection.compiler_extern_storage.take();
+    assert_ne!(damaged_storage, expected_projection.compiler_extern_storage);
+    let mut expected_noncarrier = expected_projection;
+    expected_noncarrier.compiler_extern_storage = None;
+    assert_eq!(
+        damaged_projection, expected_noncarrier,
+        "only the raw carrier changes"
+    );
+    assert!(damaged.extern_metadata(&n("deep")).is_err());
+    assert!(matches!(
+        RuntimeBindingClosure::check(&damaged, &[n("chosen")]),
+        Err(CompilerError::RuntimeBindingClosure { detail })
+            if detail.contains("extern metadata") && detail.contains("malformed carrier")
+    ));
+    assert_extern_drift_refuses(&damaged, &closure, &decl);
+}
+
+fn stable_sdk_module(module: &str) -> Environment {
+    let lib =
+        std::path::PathBuf::from(std::env::var_os("CLEAN_LEAN436_LIB").expect("official SDK"));
+    let mut env = Environment::new();
+    clean_olean::declare_environment_world(&mut env, clean_kernel::LeanWorld::Lean436.tag())
+        .unwrap();
+    clean_olean::load_module_with_deps(&mut env, module, &[lib]).unwrap();
+    env
+}
+
+#[test]
+#[ignore = "requires the official Lean 4.36.0 SDK through CLEAN_LEAN436_LIB"]
+fn stable_decidable_conditionals_and_elimination_keep_the_bool_field() {
+    use crate::lcnf::Cases;
+    use clean_kernel::FVarId;
+
+    let env = stable_sdk_module("Init.Prelude");
+    let root = n("Char.ofNat");
+    let closure =
+        RuntimeBindingClosure::check_executable(&env, std::slice::from_ref(&root)).unwrap();
+    let info = env.get_const(&root).expect("stable dependent conditional");
+    let decl = crate::constant_to_decl_in_runtime_closure(&env, info, &closure)
+        .unwrap()
+        .expect("Char.ofNat has a value");
+    closure
+        .declarations(&env, std::slice::from_ref(&decl))
+        .expect("stable dite may only refer to operations in the actual SDK source");
+    let DeclValue::Code(code) = &decl.body else {
+        panic!("expected a conditional")
+    };
+    let mut names = Names::new(&env);
+    names.code(code);
+    for ctor in ["Bool.true", "Bool.false"] {
+        assert!(names.found.contains(&n(ctor)), "missing {ctor}");
+    }
+    for old in ["Decidable.isTrue", "Decidable.isFalse"] {
+        assert!(
+            !names.found.contains(&n(old)),
+            "fabricated constructor {old}"
+        );
+    }
+
+    let decision = FVarId::new(10);
+    let field = FVarId::new(11);
+    let proof = FVarId::new(12);
+    let params = vec![
+        Param {
+            fvar_id: field,
+            name: n("bit"),
+            ty: Expr::const_str("Bool"),
+            borrow: false,
+        },
+        Param {
+            fvar_id: proof,
+            name: n("reflected"),
+            ty: Expr::prop(),
+            borrow: false,
+        },
+    ];
+    let cases = Cases::new(
+        n("Decidable"),
+        Expr::const_str("Bool"),
+        decision,
+        vec![Alt::ctor(n("Decidable.intro"), params, Code::ret(field))],
+    );
+    let code = crate::to_mono::cases_to_mono(
+        &cases,
+        &mut crate::to_mono::ToMonoState::new(),
+        &mut 20,
+        &env,
+    );
+    let mut curr = &code;
+    let mut used_field = false;
+    while let Code::Let(decl, rest) = curr {
+        if decl.fvar_id == field {
+            assert!(
+                matches!(&decl.value, LetValue::FVar { fvar, args } if *fvar == decision && args.is_empty())
+            );
+            used_field = true;
+        }
+        curr = rest;
+    }
+    assert!(used_field);
+    assert!(matches!(curr, Code::Return(id) if *id == field));
+}
+
+#[test]
+#[ignore = "requires the official Lean 4.36.0 SDK through CLEAN_LEAN436_LIB"]
+fn stable_decidable_or_keeps_its_bool_and_erases_its_scoped_reflection_theorem() {
+    let env = stable_sdk_module("Init.Prelude");
+    let root = n("instDecidableOr");
+    let reflection = n("instDecidableOr._proof_1");
+    let source = env.get_const(&root).unwrap();
+    let mut source_names = HashSet::new();
+    source
+        .value
+        .as_ref()
+        .unwrap()
+        .used_constants_dag(UsedConstants::ValuePositions, &mut source_names);
+    assert!(source_names.contains(&reflection));
+    let closure =
+        RuntimeBindingClosure::check_executable(&env, std::slice::from_ref(&root)).unwrap();
+    let decl = crate::constant_to_decl_in_runtime_closure(&env, source, &closure)
+        .unwrap()
+        .unwrap();
+    closure
+        .declarations(&env, std::slice::from_ref(&decl))
+        .unwrap();
+    let DeclValue::Code(code) = decl.body else {
+        panic!("expected a compiled dictionary");
+    };
+    let calls = crate::to_lcnf::code_called_constant_names(&code);
+    assert!(
+        !calls.contains(&reflection),
+        "proof scheduled as executable: {calls:?}"
+    );
+    assert!(
+        calls.contains(&n("Decidable.decide"))
+            || calls.contains(&n("Bool.or"))
+            || calls.contains(&n("Bool.Internal.or")),
+        "lost the Boolean calculation: {calls:?}"
+    );
+}
+
+#[test]
+#[ignore = "requires the official Lean 4.36.0 SDK through CLEAN_LEAN436_LIB"]
+fn stable_format_join_separator_erases_the_closed_sparse_match_proof() {
+    let env = stable_sdk_module("Init.Data.Format.Basic");
+    let root = n("_private.Init.Data.Format.Basic")
+        .num(0)
+        .str("Std")
+        .str("Format")
+        .str("joinSep")
+        .str("_sparseCasesOn_1");
+    let proof = n("Nat.ne_of_beq_eq_false");
+    let source = env.get_const(&root).unwrap();
+    let mut source_names = HashSet::new();
+    source
+        .value
+        .as_ref()
+        .unwrap()
+        .used_constants_dag(UsedConstants::ValuePositions, &mut source_names);
+    assert!(source_names.contains(&proof));
+    let closure =
+        RuntimeBindingClosure::check_executable(&env, std::slice::from_ref(&root)).unwrap();
+    let decl = crate::constant_to_decl_in_runtime_closure(&env, source, &closure)
+        .unwrap()
+        .unwrap();
+    closure
+        .declarations(&env, std::slice::from_ref(&decl))
+        .unwrap();
+    let DeclValue::Code(code) = decl.body else {
+        panic!("expected the executable list matcher");
+    };
+    assert!(!crate::to_lcnf::code_called_constant_names(&code).contains(&proof));
 }

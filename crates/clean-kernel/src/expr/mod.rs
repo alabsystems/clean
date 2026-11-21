@@ -227,10 +227,12 @@ pub struct Expr {
     pub(crate) kind: ExprKind,
     /// Cached metadata (hash, depth, flags, loose bvar range).
     meta: ExprMeta,
-    /// Conservative maximum free-variable ID; meaningful only with has_fvar.
-    /// Recomputed from kind on every construction/deserialization, never read
-    /// from a carrier. Scalar copies preserve it when cloning immutable nodes.
-    fvar_upper_bound: u64,
+    /// With has_fvar: the existing full-width conservative FVar upper bound.
+    /// Otherwise: low 63 bits of the structural cache hash, with the high bit
+    /// preserving the old closed-ZFC conservative MAX bound. Closed bounds
+    /// are exactly zero or MAX. Recomputed from kind, never serialized.
+    /// No equality answer or expression address is retained in this word.
+    fvar_bound_or_closed_hash: u64,
 }
 
 impl From<ExprKind> for Expr {
@@ -246,7 +248,7 @@ impl Expr {
         let Self {
             kind,
             meta: _,
-            fvar_upper_bound: _,
+            fvar_bound_or_closed_hash: _,
         } = self;
         kind
     }
@@ -273,11 +275,11 @@ impl Expr {
     #[inline]
     pub fn from_kind(kind: ExprKind) -> Self {
         let meta = kind.compute_meta();
-        let fvar_upper_bound = kind.fvar_upper_bound();
+        let fvar_bound_or_closed_hash = Self::cache_aux(&kind, meta);
         Expr {
             kind,
             meta,
-            fvar_upper_bound,
+            fvar_bound_or_closed_hash,
         }
     }
 
@@ -286,11 +288,33 @@ impl Expr {
     #[inline]
     #[allow(dead_code)]
     pub(crate) fn with_meta(kind: ExprKind, meta: ExprMeta) -> Self {
-        let fvar_upper_bound = kind.fvar_upper_bound();
+        // As before, callers must supply valid metadata. Derive the auxiliary
+        // scalar from the kind even for synthetic metadata-gate tests.
+        let fvar_bound_or_closed_hash = Self::cache_aux(&kind, kind.compute_meta());
         Expr {
             kind,
             meta,
-            fvar_upper_bound,
+            fvar_bound_or_closed_hash,
+        }
+    }
+
+    fn cache_aux(kind: &ExprKind, actual_meta: ExprMeta) -> u64 {
+        let bound = kind.fvar_upper_bound();
+        if actual_meta.has_fvar() {
+            bound
+        } else {
+            const UNKNOWN_BOUND: u64 = 1 << 63;
+            (hash_to_u64(kind) & !UNKNOWN_BOUND) | if bound == u64::MAX { UNKNOWN_BOUND } else { 0 }
+        }
+    }
+
+    fn fvar_upper_bound(&self) -> u64 {
+        if self.has_fvar_quick() {
+            self.fvar_bound_or_closed_hash
+        } else if self.fvar_bound_or_closed_hash >> 63 != 0 {
+            u64::MAX
+        } else {
+            0
         }
     }
 
@@ -391,7 +415,7 @@ impl Clone for Expr {
         Expr {
             kind: self.kind.clone(),
             meta: self.meta,
-            fvar_upper_bound: self.fvar_upper_bound,
+            fvar_bound_or_closed_hash: self.fvar_bound_or_closed_hash,
         }
     }
 }
@@ -408,8 +432,14 @@ impl std::fmt::Debug for Expr {
 impl std::hash::Hash for Expr {
     #[inline]
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        // O(1) hash using cached metadata — no tree traversal
-        state.write_u32(self.meta.hash());
+        // Closed nodes reuse the otherwise unused FVar-bound payload for a
+        // wider structural bucket hash. Open nodes retain the old 32-bit
+        // bucket input. Neither hash grants equality; ExprEqWalk is unchanged.
+        if self.has_fvar_quick() {
+            state.write_u32(self.meta.hash());
+        } else {
+            state.write_u64(self.fvar_bound_or_closed_hash);
+        }
     }
 }
 

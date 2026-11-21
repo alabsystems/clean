@@ -13,29 +13,17 @@
 //!
 //! ## Faithful-in-Clean semantics
 //!
-//! In Lean 4, `classical` registers `Classical.propDecidable` as a low-priority
-//! local instance so `Decidable p` synthesizes for any `p`. Clean's classical
-//! foundation — `Classical.em` / `Classical.choice` / `Or.rec` — is
-//! **unconditionally** in the environment, and Clean's classical case-analysis
-//! tactics (`by_cases`, `by_contra`) use `Classical.em` *directly* rather than
-//! requiring a `Decidable` instance. So the classical case-analysis proofs that
-//! open with `classical` already have everything they need: the faithful
-//! behaviour is to recognize the tactic and succeed with the goal unchanged.
-//! `classical` therefore introduces **no proof term** — it is a structural
-//! no-op — so it cannot affect the kernel-rechecked assembled proof.
-//!
-//! Honest scope (deliberately not covered here): `classical` does not yet
-//! register a `Decidable`-instance fallback, so a `dite`/`ite` over an
-//! undecidable prop after `classical` still fails **loudly at the point of use**
-//! (a clear "could not synthesize Decidable"), never silently-wrong. That wiring
-//! belongs to the instance-synthesis surface and is tracked separately.
+//! Lean registers `Classical.propDecidable` as a low-priority local instance.
+//! Clean's `classical` checks for the classical foundation and leaves the
+//! goals unchanged. A following `by_cases` can use a supplied `Decidable`
+//! instance, or the classical foundation for a proposition with no instance.
 //!
 //! ## Why these are genuine proofs (not `sorry`)
 //!
 //! Each theorem carries a real tactic proof; the test drives the SAME pipeline as
 //! `clean check` (`parse_file → preprocess_decl_with_context →
-//! elaborate_decl_and_register`) and asserts, for every positive gate:
-//!   * the theorem registers (the kernel re-checks the produced `Or.rec`/`em`
+//! elaborate_decl_and_register_with_context`) and asserts, for every positive gate:
+//!   * the theorem registers (the kernel re-checks the produced elimination
 //!     term from the `by_cases`/`by_contra` that follow `classical`),
 //!   * `infer_type` of the proof term is def-eq to the stated proposition, and
 //!   * the transitive `axiom_deps` closure is `⊆ {Classical.em, Classical.choice}`
@@ -45,13 +33,18 @@
 //! The DECISIVE NEGATIVE gate proves `classical` did not weaken the checker: a
 //! genuinely false goal is still unprovable after `classical`.
 
+#[path = "tactic_classical_e2e/lifted_values.rs"]
+mod lifted_values;
+
 use std::collections::BTreeSet;
 
 use clean_kernel::env::Environment;
-use clean_kernel::{Name, TypeChecker};
+use clean_kernel::{Expr, ExprKind, Name, TypeChecker};
 
 use clean_elab::tactic::builtins::builtin_tactic_patterns;
-use clean_elab::{elaborate_decl_and_register, preprocess_decl_with_context, FileContext};
+use clean_elab::{
+    elaborate_decl_and_register_with_context, preprocess_decl_with_context, FileContext,
+};
 use clean_parser::parse_file_with_tactics;
 
 /// Drive the real file pipeline for a (possibly multi-declaration) source.
@@ -70,7 +63,8 @@ fn try_elaborate_into(env: &mut Environment, source: &str) -> Result<(), String>
         parse_file_with_tactics(source, &patterns).map_err(|e| format!("parse error: {e:?}"))?;
     for decl in &decls {
         let processed = preprocess_decl_with_context(decl, &mut file_ctx);
-        elaborate_decl_and_register(env, &processed).map_err(|e| e.to_string())?;
+        elaborate_decl_and_register_with_context(env, &processed, &mut file_ctx)
+            .map_err(|e| e.to_string())?;
     }
     Ok(())
 }
@@ -116,16 +110,14 @@ fn assert_tactic_theorem_axioms(name: &str, source: &str, allowed: &[&str]) {
     }
 }
 
-// The classical foundation `classical` advertises. `by_cases`/`by_contra` build
-// their proof terms from `Classical.em` (which itself rests on `Classical.choice`
-// in the prelude), so a real classical proof's axiom closure lands in this set.
+// The classical cases below have no supplied decision. Their proof terms may
+// use the prelude's excluded-middle theorem and its foundations.
 const CLASSICAL_AXIOMS: &[&str] = &["Classical.em", "Classical.choice", "propext"];
 
 // ---------------------------------------------------------------------------
 // GATE a — `classical` then `by_cases`. This is the canonical Mathlib opener:
 // `classical` must be recognized (not `UnknownTactic`), leave the goal alone,
-// and let the following `by_cases` (which uses `Classical.em` + `Or.rec`) close
-// `p ∨ ¬p`. Kernel re-checks the assembled `Or.rec` term.
+// and let the following `by_cases` close `p ∨ ¬p`. The kernel checks the result.
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -214,4 +206,181 @@ fn classical_leading_does_not_break_block_parse() {
          · exact Or.inr h",
         CLASSICAL_AXIOMS,
     );
+}
+
+#[test]
+fn by_cases_prefers_the_local_decision_to_classical_em() {
+    assert_tactic_theorem_axioms(
+        "localEM",
+        "theorem localEM (p : Prop) [Decidable p] : p ∨ ¬p := by\n\
+         by_cases h : p\n\
+         · exact Or.inl h\n\
+         · exact Or.inr h",
+        &[],
+    );
+}
+
+#[test]
+fn by_cases_local_decision_computes_both_data_branches() {
+    let mut env = Environment::with_prelude();
+    try_elaborate_into(
+        &mut env,
+        "def splitToNat (p : Prop) [Decidable p] : Nat := by\n\
+         by_cases h : p\n\
+         · exact 17\n\
+         · exact 23",
+    )
+    .expect("a supplied decision must support a data-valued case split");
+    for reduction in [
+        "theorem positive (p : Prop) (h : p) : @splitToNat p (Decidable.isTrue h) = 17 := rfl",
+        "theorem negative (p : Prop) (h : ¬p) : @splitToNat p (Decidable.isFalse h) = 23 := rfl",
+    ] {
+        try_elaborate_into(&mut env, reduction).expect("the selected data branch must reduce");
+    }
+}
+
+#[test]
+fn by_cases_rejects_using_a_negative_witness_as_positive() {
+    let mut env = Environment::with_prelude();
+    let error = try_elaborate_into(
+        &mut env,
+        "theorem wrongBranch (p : Prop) [Decidable p] : p ∨ ¬p := by\n\
+         by_cases h : p\n\
+         · exact Or.inl h\n\
+         · exact Or.inl h",
+    )
+    .expect_err("the second branch supplies a witness of ¬p");
+    assert!(error.to_lowercase().contains("type mismatch"), "{error}");
+    assert!(env.get_const(&Name::from_string("wrongBranch")).is_none());
+}
+
+#[test]
+fn by_cases_elaborates_its_condition_under_open_classical() {
+    let mut env = Environment::with_prelude();
+    try_elaborate_into(
+        &mut env,
+        "theorem choiceCondition (q : Nonempty Prop) : True := by\n\
+         by_cases h : (choice q : Prop)\n\
+         · exact True.intro\n\
+         · exact True.intro",
+    )
+    .expect("Classical.choice should resolve inside the proposition");
+    let error = try_elaborate_into(
+        &mut env,
+        "theorem choiceBranch (p : Prop) (inh : Nonempty p) : p := by\n\
+         by_cases h : True\n\
+         · exact choice inh\n\
+         · exact choice inh",
+    )
+    .expect_err("the condition's namespace should be closed before the branches");
+    assert!(
+        error.to_lowercase().contains("unknown") && error.contains("choice"),
+        "{error}"
+    );
+}
+
+#[test]
+fn by_cases_checks_a_boolean_condition_against_prop() {
+    assert_tactic_theorem_axioms(
+        "splitBool",
+        "theorem splitBool (b : Bool) : b = true ∨ ¬ b = true := by\n\
+         by_cases h : b\n\
+         · exact Or.inl h\n\
+         · exact Or.inr h",
+        &[],
+    );
+}
+
+#[test]
+fn let_i_computes_both_branches_with_an_anonymous_decision() {
+    let mut env = Environment::with_prelude();
+    try_elaborate_into(
+        &mut env,
+        "def splitWithInstance (p : Prop) (choose : Nat → Decidable p) : Nat := by
+  letI : Decidable p := choose 7
+  by_cases h : p
+  · exact 17
+  · exact 23",
+    )
+    .expect("by_cases must use the decision bound by letI");
+    for reduction in [
+        "theorem splitYes (p : Prop) (h : p) :
+    splitWithInstance p (fun _ => Decidable.isTrue h) = 17 := rfl",
+        "theorem splitNo (p : Prop) (h : ¬p) :
+    splitWithInstance p (fun _ => Decidable.isFalse h) = 23 := rfl",
+    ] {
+        try_elaborate_into(&mut env, reduction).expect("the supplied decision selects the branch");
+    }
+    assert!(env
+        .axiom_deps(&Name::from_string("splitWithInstance"))
+        .expect("registered definition")
+        .is_empty());
+}
+
+#[test]
+fn let_i_inlines_a_named_value_in_the_stored_term() {
+    fn lambda_body<'a>(env: &'a Environment, name: &str) -> &'a Expr {
+        let info = env.get_const(&Name::from_string(name)).expect(name);
+        let value = info.value.as_ref().expect("stored definition");
+        let ExprKind::Lam(_, _, body) = value.strip_mdata().kind() else {
+            panic!("expected a lambda in {name}, got {value:?}");
+        };
+        body.strip_mdata()
+    }
+
+    let mut env = Environment::with_prelude();
+    try_elaborate_into(
+        &mut env,
+        "def namedInline (n : Nat) : Nat := by
+  letI chosen : Nat := n
+  exact chosen
+def namedOrdinary (n : Nat) : Nat := by
+  let chosen : Nat := n
+  exact chosen",
+    )
+    .expect("both tactic bindings elaborate");
+    let inline = lambda_body(&env, "namedInline");
+    assert!(matches!(inline.kind(), ExprKind::BVar(0)), "{inline:?}");
+    let ordinary = lambda_body(&env, "namedOrdinary");
+    let ExprKind::Let(name, _, value, body, _) = ordinary.kind() else {
+        panic!("ordinary let must retain its binder, got {ordinary:?}");
+    };
+    assert_eq!(name, &Name::from_string("chosen"));
+    assert!(matches!(value.strip_mdata().kind(), ExprKind::BVar(0)));
+    assert!(matches!(body.strip_mdata().kind(), ExprKind::BVar(0)));
+}
+
+#[test]
+fn let_i_only_supplies_an_instance_to_its_own_branch() {
+    let mut env = Environment::with_prelude();
+    try_elaborate_into(
+        &mut env,
+        "def scopedNat : Nat × Nat := by
+  constructor
+  · letI : Inhabited Nat := Inhabited.mk 17
+    exact Inhabited.default
+  · exact Inhabited.default",
+    )
+    .expect("both product goals elaborate");
+    for reduction in [
+        "theorem scopedFirst : scopedNat.1 = 17 := rfl",
+        "theorem scopedSecond : scopedNat.2 = 0 := rfl",
+    ] {
+        try_elaborate_into(&mut env, reduction)
+            .expect("first goal must use its local instance and second the prelude instance");
+    }
+}
+
+#[test]
+fn let_i_rejects_a_witness_of_the_wrong_type() {
+    let mut env = Environment::with_prelude();
+    let error = try_elaborate_into(
+        &mut env,
+        "def badWitness (p : Prop) : Nat := by
+  letI : Decidable p := Nat.zero
+  exact 0",
+    )
+    .expect_err("the unused instance must still type-check");
+    assert!(error.to_lowercase().contains("type mismatch"), "{error}");
+    assert!(env.get_const(&Name::from_string("badWitness")).is_none());
 }

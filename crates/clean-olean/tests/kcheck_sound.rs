@@ -29,6 +29,21 @@
 //! for the rest) is refused at that statement. What it does not show: the seven
 //! bridges or `C3Owes` themselves, which `kcheck_spec.rs` and `kcheck_labelled.rs`
 //! qualify.
+//!
+//! The package is mounted for Trust to compile beside the checker
+//! (`theories/README.md`), so it must use nothing that changes executed code
+//! without moving a pin: the compiled-checker refusal
+//! (`support/compiled_code.rs`, negative controls in `compiled_code.rs`) reads
+//! every module of the four theories the fixture compiles and refuses an import
+//! of anything but `Init` and the package, `@[implemented_by]`, `@[extern]`,
+//! `@[csimp]`, `@[export]`, `initialize`, `builtin_initialize`, `@[cpass]`, a
+//! constant folder, `opaque` and any `unsafe` or `partial` declaration but the
+//! compiler's `._unsafe_rec` copy of a safe recursive definition, and any other
+//! declaration named `<d>._unsafe_rec`, which compiled code runs in `<d>`'s
+//! place.
+
+#[path = "support/compiled_code.rs"]
+mod compiled_code;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::OsStr;
@@ -368,8 +383,31 @@ fn kcheck_sound_rechecks_through_two_kernels_with_pinned_statements() {
     );
 
     let mut loaded = Environment::for_lean_replay();
-    let summaries = load_module_with_deps(&mut loaded, ROOT, &[compiled.clone(), lib])
-        .expect("load the compiled package");
+    let search = [compiled.clone(), lib];
+    let summaries =
+        load_module_with_deps(&mut loaded, ROOT, &search).expect("load the compiled package");
+    let theories = ["cic_l", "cic_l_model", "kcheck_spec", "kcheck_sound"];
+    assert_eq!(
+        include_str!("fixtures/lean/v4.30.0-rc2/kcheck_sound/ORDER")
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty() && !line.starts_with('#'))
+            .collect::<Vec<_>>(),
+        theories.map(|theory| format!("theory {theory}")),
+        "the fixture compiles these theories and nothing else"
+    );
+    let package_modules = compiled_code::theory_modules(&theories);
+    eprintln!(
+        "{}",
+        compiled_code::require_none(
+            &compiled_code::refusals(
+                &compiled,
+                &package_modules,
+                &compiled_code::complete_summaries(&summaries, &package_modules, &search),
+            ),
+            "kcheck_sound (cic_l, cic_l_model, kcheck_spec, kcheck_sound)",
+        )
+    );
 
     // The subjects are the constants the package's own modules declare, read
     // from each artifact's name table: a `KCheckSpec.*` or `CICL.*` constant is

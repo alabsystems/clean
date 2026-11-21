@@ -40,7 +40,25 @@ fn build_unbox_chain(
     }
     let (_, orig_ty) = &original_params[idx];
     let (boxed_var, _) = &boxed_params[idx];
-    if orig_ty.is_scalar() {
+    if orig_ty.is_void() {
+        // Keep the logical slot until direct-ABI lowering. A closure still
+        // takes an argument in this position to force its action. The boxed
+        // adapter owns that argument and sends an erased token to the body.
+        let mut new_args = call_args;
+        new_args.push(IRArg::Erased);
+        let mut new_to_dec = to_dec;
+        new_to_dec.push(*boxed_var);
+        build_unbox_chain(
+            original_params,
+            boxed_params,
+            idx + 1,
+            next_var,
+            new_args,
+            new_to_dec,
+            original_fn,
+            result_type,
+        )
+    } else if orig_ty.is_scalar() {
         let unboxed = VarId(*next_var);
         *next_var += 1;
         let mut new_args = call_args;

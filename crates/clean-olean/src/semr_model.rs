@@ -1,6 +1,8 @@
 // Copyright 2026 Andrew Yates | SPDX-License-Identifier: Apache-2.0
 //! Shared completed SemR context and exact original-model comparison.
-use crate::{reference_base_closed, ClosedRecheckOptions, ReferenceBase};
+#[cfg(test)]
+use crate::reference_base_closed;
+use crate::{ClosedRecheckOptions, ReferenceBase};
 use clean_kernel::{Environment, Expr, Level, Name, ReferenceKernel};
 use std::collections::BTreeSet;
 use std::sync::OnceLock;
@@ -25,7 +27,7 @@ pub(crate) struct SemrModelContext {
 
 // Digests cache an actual completed full replay and exact comparison, never
 // authenticate source or substitute for a mathematical admission.
-struct CheckedSourceReference {
+pub(crate) struct CheckedSourceReference {
     input: Vec<[u8; 32]>,
     _kernel: ReferenceKernel,
 }
@@ -56,8 +58,19 @@ impl SemrModelContext {
         &self.kernel
     }
 
-    fn source_input(&self, original: &Environment) -> Result<Vec<[u8; 32]>, SemrModelRefusal> {
-        self.roots
+    pub(crate) fn kernel_mut(&mut self) -> &mut ReferenceKernel {
+        &mut self.kernel
+    }
+
+    pub(crate) fn source_is_checked(&self) -> bool {
+        self.source_reference.get().is_some()
+    }
+
+    fn source_input(
+        original: &Environment,
+        roots: &[&str],
+    ) -> Result<Vec<[u8; 32]>, SemrModelRefusal> {
+        roots
             .iter()
             .map(|root| {
                 original
@@ -71,8 +84,17 @@ impl SemrModelContext {
         &self,
         original: &Environment,
     ) -> Result<(), SemrModelRefusal> {
-        let input = self.source_input(original)?;
-        if let Some(cached) = self.source_reference.get() {
+        self.check_source_roots(original, self.roots, &self.source_reference)
+    }
+
+    pub(crate) fn check_source_roots(
+        &self,
+        original: &Environment,
+        names: &[&str],
+        cache: &OnceLock<CheckedSourceReference>,
+    ) -> Result<(), SemrModelRefusal> {
+        let input = Self::source_input(original, names)?;
+        if let Some(cached) = cache.get() {
             return if cached.input == input {
                 Ok(())
             } else {
@@ -81,19 +103,16 @@ impl SemrModelContext {
                 ))
             };
         }
-        let roots: BTreeSet<Name> = self
-            .roots
-            .iter()
-            .map(|root| Name::from_string(root))
-            .collect();
-        let base = reference_base_closed(original, &roots, &ClosedRecheckOptions::default())
-            .map_err(|e| SemrModelRefusal::ModelSourceClosure(e.to_string()))?;
+        let roots: BTreeSet<Name> = names.iter().map(|root| Name::from_string(root)).collect();
+        let base =
+            crate::reference_source_base_closed(original, &roots, &ClosedRecheckOptions::default())
+                .map_err(|e| SemrModelRefusal::ModelSourceClosure(e.to_string()))?;
         let source_kernel = base
             .into_kernel()
             .map_err(|report| SemrModelRefusal::ModelSourceClosure(report.verdict_sentence()))?;
         let checked = self.kernel.environment();
         let source = source_kernel.environment();
-        for root in self.roots {
+        for root in names {
             let name = Name::from_string(root);
             let left = checked
                 .dependency_closure(&name)
@@ -115,7 +134,7 @@ impl SemrModelContext {
                 }
             }
         }
-        if self.source_input(original)? != input {
+        if Self::source_input(original, names)? != input {
             return Err(SemrModelRefusal::ModelSourceMismatch(
                 "source changed during replay".into(),
             ));
@@ -124,11 +143,10 @@ impl SemrModelContext {
             input,
             _kernel: source_kernel,
         };
-        match self.source_reference.set(binding) {
+        match cache.set(binding) {
             Ok(()) => Ok(()),
             Err(binding)
-                if self
-                    .source_reference
+                if cache
                     .get()
                     .is_some_and(|source| source.input == binding.input) =>
             {

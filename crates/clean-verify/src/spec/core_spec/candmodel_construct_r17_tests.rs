@@ -539,3 +539,6 @@ fn test_candmodel_r17_introduces_no_unwitnessed_premise() {
         "R17 assumes predicates nothing concludes: {live:?}"
     );
 }
+
+#[path = "candmodel_construct_r17_semantic_tests.rs"]
+mod semantic_controls;

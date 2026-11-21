@@ -2,76 +2,80 @@
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 // SPDX-License-Identifier: Apache-2.0
 
-//! G46 (ledger (116)) mutation control for the speculative definition-body
-//! lane: a term that still mentions an unassigned elaborator metavariable is
-//! NOT committed. The lane's guard asked `has_expr_mvar_quick`, which is
-//! constant false for elaborator metas (bit-63 FVars), so until 2026-10-08 it
-//! committed such a term and the declaration failed later, at the residual
-//! metavariable guard, instead of retrying with the expected type.
+//! Typed definition bodies use their declared result before choosing carriers.
+//! Unresolved elaborator metavariables must still never enter declarations.
 
-use super::*;
+use super::ElabCtx;
 use crate::term_info::TermInfoCapture;
+use crate::unify::MetaState;
 use clean_kernel::{Environment, Name};
 use clean_parser::parse_expr;
 
-fn nat() -> Expr {
-    Expr::const_(Name::from_string("Nat"), vec![])
-}
-
 #[test]
-fn test_speculative_def_value_lane_refuses_an_open_metavariable() {
-    let env = Environment::with_prelude();
-    // `List _`'s element type `?α` is pinned by nothing (pinned Lean 4.8.0:
-    // "don't know how to synthesize placeholder").
-    let val = parse_expr("List.length ([] : List _)").expect("fixture must parse");
-
-    // Non-vacuity: the term ELABORATES, and what it elaborates to still
-    // mentions `?α`, so a `None` below is the guard and not a failed
-    // elaboration.
+fn test_typed_definition_refuses_an_open_metavariable_without_registration() {
+    let mut env = Environment::with_prelude();
+    let val = parse_expr("List.length ([] : List _)").expect("fixture parses");
     let mut probe = ElabCtx::new(&env);
     let probe_capture = TermInfoCapture::default();
     probe.set_term_info_capture(Some(probe_capture.clone()));
-    let raw = probe.elaborate(&val).expect("the fixture elaborates");
+    let raw = probe
+        .elaborate(&val)
+        .expect("unconstrained expression elaborates");
     let raw = probe.metas.instantiate(&raw);
     assert!(
         MetaState::expr_has_meta(&raw),
-        "the fixture must leave an open metavariable: {raw}"
+        "fixture leaves an open type: {raw}"
     );
-    assert!(!raw.has_expr_mvar_quick(), "the kernel flag cannot see it");
+    assert!(
+        !raw.has_expr_mvar_quick(),
+        "the kernel flag cannot see elaborator metas"
+    );
     probe.finish_term_info();
     assert!(
         !probe_capture.take().expect("probe observations").is_empty(),
         "the rejected attempt really creates source observations"
     );
-
+    drop(probe);
+    let declarations =
+        clean_parser::parse_file("def incomplete : Nat := List.length ([] : List _)")
+            .expect("declaration parses");
+    let declaration = declarations.first().expect("one declaration");
+    // Exercise the actual typed declaration and its residual-meta guard inside
+    // the same transaction used by surviving elaboration alternatives. There is
+    // no longer a separate inference-first definition-body attempt to invoke.
     let mut ctx = ElabCtx::new(&env);
     let capture = TermInfoCapture::default();
     ctx.set_term_info_capture(Some(capture.clone()));
-    let got = ctx
-        .try_elab_def_value_without_expected(&val, &nat())
-        .expect("the speculative lane reports a failure as `None`, never an error");
+    let rejected = ctx.with_local_scope_rollback(|ctx| ctx.elab_decl(declaration));
     assert!(
-        got.is_none(),
-        "an open `?α` must send the body to the expected-type lane, got {got:?}"
+        rejected.is_err(),
+        "an open type must fail the real declaration"
     );
     ctx.finish_term_info();
     assert!(
         capture.take().expect("rolled-back observations").is_empty(),
         "a rejected body attempt must not publish its source observations"
     );
+    drop(ctx);
+    let result = crate::elaborate_decl_and_register_with_warning(&mut env, declaration);
+    assert!(
+        result.is_err(),
+        "the unresolved type must not reach a registered declaration"
+    );
+    assert!(env.get_const(&Name::from_string("incomplete")).is_none());
 }
 
 #[test]
-fn test_speculative_def_value_lane_commits_a_ground_term() {
+fn test_typed_definition_registers_a_ground_body() {
     let env = Environment::with_prelude();
     let mut ctx = ElabCtx::new(&env);
     let capture = TermInfoCapture::default();
     ctx.set_term_info_capture(Some(capture.clone()));
     let val = parse_expr("(fun _ => (0 : Nat)) ([] : List Nat)").expect("fixture must parse");
-    let got = ctx
-        .try_elab_def_value_without_expected(&val, &nat())
-        .expect("the speculative lane reports a failure as `None`, never an error");
-    let expr = got.expect("a ground body is committed by the speculative lane");
+    let ty = parse_expr("Nat").expect("type parses");
+    let (expected, expr) = ctx
+        .elab_def_body(&[], Some(&ty), &val)
+        .expect("the actual typed body accepts a ground term");
     assert!(!MetaState::expr_has_meta(&expr), "{expr}");
     ctx.finish_term_info();
     let infos = capture.take().expect("committed observations");
@@ -80,8 +84,53 @@ fn test_speculative_def_value_lane_commits_a_ground_term() {
         .and_then(|info| info.term.as_ref())
         .expect("the accepted outer body was observed");
     assert_eq!(term.expr, expr);
-    assert_eq!(term.expected_type, Some(nat()));
-    assert_eq!(term.type_, nat());
+    assert_eq!(term.expected_type, Some(expected.clone()));
+    assert_eq!(term.type_, expected);
+    assert_eq!(
+        expected,
+        clean_kernel::Expr::const_(Name::from_string("Nat"), vec![])
+    );
+    elab_file("def grounded : Nat := (fun _ => (0 : Nat)) ([] : List Nat)\ntheorem grounded_zero : grounded = 0 := rfl")
+        .expect("ground body registers and its computation kernel-checks");
+}
+
+#[test]
+fn test_typed_numeral_body_observations_use_the_checked_carrier() {
+    let env = Environment::with_prelude();
+    for (surface_type, numeral) in [
+        ("Nat", "1"),
+        ("UInt8", "1"),
+        ("Nat", "18446744073709551616"),
+    ] {
+        let ty = parse_expr(surface_type).expect("carrier parses");
+        let val = parse_expr(numeral).expect("numeral parses");
+        let mut ordinary = ElabCtx::new(&env);
+        let reference = ordinary
+            .elab_def_body(&[], Some(&ty), &val)
+            .expect("typed numeral elaborates without observation");
+        let mut observed = ElabCtx::new(&env);
+        let capture = TermInfoCapture::default();
+        observed.set_term_info_capture(Some(capture.clone()));
+        let (expected, expr) = observed
+            .elab_def_body(&[], Some(&ty), &val)
+            .expect("typed numeral elaborates with observation");
+        assert_eq!(reference, (expected.clone(), expr.clone()));
+        observed.finish_term_info();
+        let infos = capture.take().expect("observations available");
+        let outer = infos.last().expect("the numeral body was observed");
+        assert_eq!(outer.span, val.span());
+        let term = outer.term.as_ref().expect("the body is a term");
+        assert_eq!(term.expr, expr);
+        assert_eq!(term.expected_type, Some(expected.clone()));
+        assert_eq!(term.type_, expected);
+        assert!(!MetaState::expr_has_meta(&expr), "{expr}");
+        let checker =
+            clean_kernel::TypeChecker::with_context(&env, clean_kernel::LocalContext::new());
+        let actual_type = checker
+            .infer_type_full(&expr)
+            .expect("the captured numeral independently kernel-checks");
+        assert!(checker.is_def_eq(&actual_type, &expected));
+    }
 }
 
 /// Elaborate every declaration of `src` into a fresh prelude environment; the
@@ -95,17 +144,11 @@ fn elab_file(src: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// The speculative lane's rollback takes its queued open-carrier instance
-/// goals with it (integ/r5, 2026-10-16). `fun x => x * x` at `Nat → Nat`
-/// queues `HMul ?T ?T ?γ` in this lane, which then fails (G46: the term still
-/// holds the instance metavariable) and pops its scope, rolling the id counter
-/// back; the queued goal used to survive and pin `Nat` into the expected-type
-/// lane's metavariable with the reused id — its `HMul` instance slot — so the
-/// kernel refused `fun x => x * x` ("expected HMul Nat Nat Nat, got Type").
-/// Pinned Lean 4.8.0 accepts each definition and its computation, and
-/// refuses the false twin.
+/// Typed bodies pin arithmetic lambda carriers before their first operation.
+/// Keep the real computation and false-twin controls from the former retry
+/// regression: each definition must register, and refusal belongs to the false claim.
 #[test]
-fn test_speculative_lane_rollback_drops_its_queued_instance_goals() {
+fn test_typed_definition_bodies_pin_arithmetic_lambda_carriers() {
     for (def, holds, fails) in [
         (
             "def sq : Nat → Nat := fun x => x * x\n",

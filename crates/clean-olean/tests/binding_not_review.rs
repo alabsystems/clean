@@ -3,6 +3,21 @@
 //! vote or production pin acceptance. All missing data/tools and unsupported
 //! cones fail closed. The parent supplies frozen generated data; no pin minting
 //! or compiler/kernel bypass is available in this test.
+//!
+//! Beside the producer's statement pins, each own declaration has a meaning
+//! pin in `theories/binding_not_review/meaning_pins.json`: its meaning digest
+//! (`support/meaning_digest.rs`) over the package of the fixture family
+//! `binding_not_review` (the one module `BindingNotReview`), which moves when
+//! a definition or inductive type its statement or body reaches changes, not
+//! only its own statement. This test does not write that file either: it
+//! refuses to run with `CLEAN_REPIN_STATEMENT_PINS` set, and on a difference it
+//! fails and leaves what it measured, in the committed format, at
+//! `$CARGO_TARGET_TMPDIR/theories__binding_not_review__meaning_pins.json`
+//! (each digest is also printed as `binding-not-meaning-pin <name> <digest>`).
+//! A re-pin copies that file over the committed one by hand, with a decision
+//! entry, and the next run confirms it. Until the first measurement (on
+//! 2026-11-19 the test stops earlier, at its stock build input list), the
+//! committed file is the empty map, which the comparison refuses.
 
 #[path = "binding_not_review/artifact.rs"]
 mod artifact;
@@ -16,6 +31,8 @@ mod data;
 mod guards;
 #[path = "binding_not_review/identity.rs"]
 mod identity;
+#[path = "support/meaning_digest.rs"]
+mod meaning_digest;
 #[path = "binding_not_review/stock.rs"]
 mod stock;
 
@@ -29,6 +46,7 @@ use clean_olean::{
     load_module_with_deps, read_artifact, reference_base_closed, require_pinned_lean_lib_path,
     ArtifactDepth,
 };
+use meaning_digest::{MeaningDigests, Package};
 use serde_json::json;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
@@ -53,6 +71,7 @@ fn qualify() {
     for flag in [
         "CLEAN_NATIVE_FOLD_REPIN",
         "CLEAN_NATIVE_FOLD_BOOTSTRAP_LOAD",
+        meaning_digest::REPIN_VARIABLE,
     ] {
         assert!(std::env::var_os(flag).is_none(), "{flag} must be absent");
     }
@@ -68,6 +87,7 @@ fn qualify() {
     let census_path = package.join("lean_census.json");
     let closure_path = package.join("axiom_closures.json");
     let pin_path = package.join("statement_pins.json");
+    let meaning_path = package.join("meaning_pins.json");
     let manifest = data::read(&manifest_path);
     let census = data::read(&census_path);
     let closures = data::read(&closure_path);
@@ -303,6 +323,63 @@ fn qualify() {
     );
     eprintln!("binding-not fenced {}", checked.report.verdict_sentence());
     let mut kernel = checked.into_kernel().expect("complete fenced admissions");
+    // Meaning pins: measured over what the fenced entry admitted, compared
+    // with the committed file and never written by this test.
+    let meaning_package =
+        Package::of_fixture(&compiled, "binding_not_review", &["binding_not_review"]);
+    let measured_meaning: BTreeMap<String, String> = {
+        let digests = MeaningDigests::new(kernel.environment(), &meaning_package);
+        let measured: BTreeMap<String, String> = targets
+            .iter()
+            .map(|subject| {
+                let digest = digests
+                    .digest(subject)
+                    .unwrap_or_else(|error| panic!("meaning pin {subject}: {error}"));
+                eprintln!("binding-not-meaning-pin {subject} {digest}");
+                (subject.to_string(), digest)
+            })
+            .collect();
+        let roots: Vec<Name> = targets.iter().cloned().collect();
+        eprintln!(
+            "{}",
+            digests
+                .describe(&meaning_package, &roots)
+                .unwrap_or_else(|error| panic!("{error}"))
+        );
+        measured
+    };
+    let committed_meaning: BTreeMap<String, String> = serde_json::from_str(
+        &std::fs::read_to_string(&meaning_path).expect("committed meaning pins"),
+    )
+    .expect("meaning pins JSON");
+    book.insert(meaning_path.clone(), data::file_sha(&meaning_path));
+    if let Err(failure) = meaning_digest::check_pins(
+        &measured_meaning,
+        &committed_meaning,
+        "theories/binding_not_review/meaning_pins.json",
+    ) {
+        panic!("own declarations' meaning pins: {failure}");
+    }
+    let mut wrong_meaning = committed_meaning.clone();
+    let first_meaning = wrong_meaning
+        .values_mut()
+        .next()
+        .expect("nonempty meaning pins");
+    let flipped = if first_meaning.starts_with('0') {
+        "1"
+    } else {
+        "0"
+    };
+    first_meaning.replace_range(0..1, flipped);
+    assert!(
+        meaning_digest::check_pins(
+            &measured_meaning,
+            &wrong_meaning,
+            "theories/binding_not_review/meaning_pins.json",
+        )
+        .is_err_and(|failure| failure.contains("meaning changed [")),
+        "a changed meaning pin is refused"
+    );
     let allowed: BTreeSet<_> = AX0.map(str::to_owned).into();
     let mut actual_closures = BTreeMap::new();
     for (i, subject) in targets.iter().enumerate() {

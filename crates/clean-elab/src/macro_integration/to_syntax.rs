@@ -123,21 +123,21 @@ pub fn surface_to_syntax(expr: &SurfaceExpr) -> Syntax {
             Syntax::mk_hole_with_info(clean_macro::SourceInfo::new(span.start, span.end))
         }
 
-        // The macro `Syntax` hole node carries no name, so a `?name` degrades to
-        // an anonymous hole across a macro roundtrip. This is only reachable for
-        // named holes that flow *through* macro expansion; `refine`'s named-hole
-        // path intercepts `NamedHole` in `elaborate()` before expansion, so its
-        // goal tag is never lost. Degrading to an anonymous hole here is sound —
-        // the goal is still created and must be closed.
-        SurfaceExpr::NamedHole(span, _) => {
-            Syntax::mk_hole_with_info(clean_macro::SourceInfo::new(span.start, span.end))
-        }
+        SurfaceExpr::NamedHole(span, name) => Syntax::mk_synthetic_hole_with_info(
+            clean_macro::SourceInfo::new(span.start, span.end),
+            name,
+        ),
 
         SurfaceExpr::Ascription(_, expr, ty) => {
             let expr_syn = surface_to_syntax(expr);
             let ty_syn = surface_to_syntax(ty);
             Syntax::node(SyntaxKind::app("ascription"), vec![expr_syn, ty_syn])
         }
+
+        SurfaceExpr::Borrowed(_, inner) => Syntax::node(
+            SyntaxKind::app("borrowedType"),
+            vec![surface_to_syntax(inner)],
+        ),
 
         SurfaceExpr::OutParam(_, inner) => {
             let inner_syn = surface_to_syntax(inner);

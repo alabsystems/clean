@@ -671,49 +671,69 @@ impl ElabCtx<'_> {
     /// open goal. One with no instance refuses (`lean_order_ground_refusal`):
     /// Lean's typing needs an instance that does not exist (`[5].head! :
     /// Int` asks for `Inhabited Int`, which the prelude may lack), and the
-    /// eager order would only retype the term. Goals still open stay open.
+    /// eager order would only retype the term. A heterogeneous operator with known
+    /// inputs may determine its output. Goals with undetermined inputs keep waiting.
     fn resolve_ground_instance_args(&mut self, term: &Expr) -> Result<(), ElabError> {
         let term = self.metas.instantiate(term);
         let mut metas: Vec<FVarId> = self.collect_meta_fvars(&term).into_iter().collect();
         metas.sort_by_key(|fvar| fvar.as_u64());
-        for fvar in metas {
-            let Some(meta_id) = MetaState::from_fvar(fvar) else {
-                continue;
-            };
-            if self.metas.is_assigned(meta_id) {
-                continue;
-            }
-            let Some(var) = self.metas.get(meta_id) else {
-                continue;
-            };
-            if var.span.is_some() {
-                continue;
-            }
-            let goal = self.metas.instantiate(&var.ty);
-            let is_class_goal = crate::instances::extract_class_app(&goal)
-                .is_some_and(|(class, _)| self.instances.is_class(&class));
-            if !is_class_goal || self.has_metavars(&goal) {
-                continue;
-            }
-            // A goal over a local the scope has already closed (a `for`
-            // body's loop variable, `Decidable (i < 3)`) cannot be resolved
-            // out here; the eager order resolves it in place, so that order
-            // is taken instead (no refusal).
-            if self.mentions_closed_local(&goal) {
-                return Err(ElabError::CannotInfer);
-            }
-            let goal_whnf = self.whnf(&goal);
-            let solved = self
-                .resolve_instance(&goal_whnf)
-                .is_some_and(|inst| self.metas.assign(meta_id, inst));
-            if !solved {
-                let err = ElabError::FailedToSynthesizeInstance {
-                    goal: crate::error_render::term(&goal),
-                    detail: self.instance_failure_detail(&goal),
+        // Resolving a known pair of inputs can determine a parent operator's
+        // carrier. Retry waiting parents only after assigning an actual instance.
+        loop {
+            let mut pending = Vec::new();
+            let mut solved_one = false;
+            for fvar in metas {
+                let Some(meta_id) = MetaState::from_fvar(fvar) else {
+                    continue;
                 };
-                self.lean_order_ground_refusal = Some(err.clone());
-                return Err(err);
+                if self.metas.is_assigned(meta_id) {
+                    continue;
+                }
+                let Some(var) = self.metas.get(meta_id) else {
+                    continue;
+                };
+                if var.span.is_some() {
+                    continue;
+                }
+                let goal = self.metas.instantiate(&var.ty);
+                let is_class_goal = crate::instances::extract_class_app(&goal)
+                    .is_some_and(|(class, _)| self.instances.is_class(&class));
+                if !is_class_goal {
+                    continue;
+                }
+                let open = self.has_metavars(&goal);
+                if open && !self.hetero_binop_goal_is_determined(&goal) {
+                    pending.push(fvar);
+                    continue;
+                }
+                // A goal over a local the scope has already closed (a `for`
+                // body's loop variable, `Decidable (i < 3)`) cannot be resolved
+                // out here; the eager order resolves it in place, so that order
+                // is taken instead (no refusal).
+                if self.mentions_closed_local(&goal) {
+                    return Err(ElabError::CannotInfer);
+                }
+                let goal_whnf = self.whnf(&goal);
+                let solved = self
+                    .resolve_instance(&goal_whnf)
+                    .is_some_and(|inst| self.metas.assign(meta_id, inst));
+                if solved {
+                    solved_one = true;
+                } else if open {
+                    pending.push(fvar);
+                } else {
+                    let err = ElabError::FailedToSynthesizeInstance {
+                        goal: crate::error_render::term(&goal),
+                        detail: self.instance_failure_detail(&goal),
+                    };
+                    self.lean_order_ground_refusal = Some(err.clone());
+                    return Err(err);
+                }
             }
+            if !solved_one || pending.is_empty() {
+                break;
+            }
+            metas = pending;
         }
         Ok(())
     }

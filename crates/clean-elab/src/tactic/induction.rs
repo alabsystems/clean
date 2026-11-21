@@ -104,7 +104,7 @@ pub fn induction_using(
 /// `Ok(None)` when `tactic.customEliminators` is `false`, when the target is
 /// not a hypothesis (the recursor path reports that), when its type is not
 /// headed by a constant, or when nothing is registered for that constant.
-fn registered_induction_eliminator(
+pub(super) fn registered_induction_eliminator(
     state: &mut ProofState,
     hyp_name: &SurfaceName,
 ) -> Result<Option<Name>, TacticError> {
@@ -316,6 +316,52 @@ pub fn induction_using_alts(
     assemble_induction_proof(state, &ctx, cases)
 }
 
+/// Specialize the registered recursor's minor premises at the same universes,
+/// parameters and motive as the assembled proof. A standard recursor's minor
+/// types can depend on these arguments but never on an earlier minor proof.
+fn induction_minor_types(
+    state: &ProofState,
+    ctx: &InductionCtx<'_>,
+) -> Result<Vec<Expr>, TacticError> {
+    let malformed = || {
+        TacticError::GoalMismatch(format!(
+            "induction: cannot specialize the minor premises of '{}'",
+            ctx.rec_name
+        ))
+    };
+    let levels = recursor_levels(state, ctx.goal, ctx.levels, ctx.rec_info.level_params.len());
+    if levels.len() != ctx.rec_info.level_params.len() {
+        return Err(malformed());
+    }
+    let mut ty = ctx
+        .rec_info
+        .type_
+        .instantiate_level_params_direct(&ctx.rec_info.level_params, &levels);
+    for argument in ctx
+        .args
+        .iter()
+        .take(ctx.ind_info.num_params as usize)
+        .chain(std::iter::once(ctx.motive))
+    {
+        let ExprKind::Pi(_, _, body) = ty.kind() else {
+            return Err(malformed());
+        };
+        ty = body.instantiate(argument);
+    }
+    let mut minors = Vec::with_capacity(ctx.ind_info.constructor_names.len());
+    for _ in &ctx.ind_info.constructor_names {
+        let ExprKind::Pi(_, minor, body) = ty.kind() else {
+            return Err(malformed());
+        };
+        if minor.has_loose_bvars() {
+            return Err(malformed());
+        }
+        minors.push(minor.as_ref().clone());
+        ty = body.as_ref().clone();
+    }
+    Ok(minors)
+}
+
 /// Build one `InductionCase` per constructor, including field fvars and induction hypotheses.
 ///
 /// REQUIRES: `ctx.ind_info.constructor_names` is non-empty
@@ -351,6 +397,7 @@ fn build_induction_cases(
     let branch_fvar_base = state.goal_binder_base(ctx.goal);
     let mut branch_fvar_max = branch_fvar_base;
 
+    let minors = induction_minor_types(state, ctx)?;
     for (ctor_idx, ctor_name) in ctx.ind_info.constructor_names.iter().enumerate() {
         // Reset so this branch allocates from the same base as branch 0.
         state.next_fvar = branch_fvar_base;
@@ -379,7 +426,7 @@ fn build_induction_cases(
         );
         let ih_fvars = build_induction_hypotheses(
             state,
-            ctx,
+            &minors[ctor_idx],
             &mut new_ctx,
             ctor_name,
             &field_fvars,
@@ -516,28 +563,32 @@ fn extract_ctor_fields(
     (field_fvars, ctor_ty)
 }
 
-/// Build induction hypotheses for recursive fields of a constructor.
-///
-/// REQUIRES: `field_fvars` and `recursive_fields` correspond to the same constructor
-/// ENSURES: IH decls are added to `new_ctx` for each recursive field
-/// ENSURES: returned vec has same length as `field_fvars`
-///
-/// # Errors
-/// [`TacticError::GoalMismatch`] when the family is indexed and a recursive
-/// field's own type is not a direct application of it (a reflexive/nested
-/// occurrence such as `(Nat → T …)`): the induction hypothesis would need that
-/// field's index arguments and there are none to read, so this fails closed
-/// rather than emit an ill-typed hypothesis.
+/// Read each IH from the constructor's real minor premise after instantiating
+/// its fields. For a recursive field `children : (i : I) → T`, the recursor
+/// binds `(i : I) → motive (children i)`. Earlier fields and earlier IHs may
+/// appear in later binder types, so specialize them in the recursor's order.
 fn build_induction_hypotheses(
     state: &mut ProofState,
-    ctx: &InductionCtx<'_>,
+    minor: &Expr,
     new_ctx: &mut Vec<LocalDecl>,
     ctor_name: &Name,
     field_fvars: &[FVarId],
     recursive_fields: &[bool],
 ) -> Result<Vec<Option<FVarId>>, TacticError> {
+    let malformed = || {
+        TacticError::GoalMismatch(format!(
+            "induction: inconsistent field or induction hypothesis binders for '{ctor_name}'"
+        ))
+    };
+    let mut binders = minor.clone();
+    for field in field_fvars {
+        let ExprKind::Pi(_, _, body) = binders.kind() else {
+            return Err(malformed());
+        };
+        binders = body.instantiate(&Expr::fvar(*field));
+    }
     let mut ih_fvars = Vec::new();
-    for (i, fvar) in field_fvars.iter().enumerate() {
+    for i in 0..field_fvars.len() {
         if i < recursive_fields.len() && recursive_fields[i] {
             let tag = SurfaceName::from_name(ctor_name.clone()).last_component();
             let base = super::case_field_names::generated_case_field_name(
@@ -546,42 +597,18 @@ fn build_induction_hypotheses(
                 super::case_field_names::CaseFieldKind::InductionHypothesis,
             );
             let ih_name = super::pattern::util::generate_fresh_hyp_name(new_ctx, &base);
-            let ih_ty = if ctx.index_args.is_empty() {
-                // Non-indexed family: unchanged from before indices were handled.
-                state
-                    .metas
-                    .instantiate(&ctx.goal.target.subst_fvar(ctx.hyp_fvar, &Expr::fvar(*fvar)))
-            } else {
-                // Indexed family: the IH is `motive field_indices… field`, and
-                // the field's indices come from its OWN declared type — they
-                // differ from the major premise's (that is the whole point of an
-                // index).
-                let field_ty = new_ctx
-                    .iter()
-                    .find(|d| d.fvar == *fvar)
-                    .map(|d| d.ty.clone())
-                    .ok_or_else(|| {
-                        TacticError::GoalMismatch(format!(
-                            "induction: recursive field {i} of '{ctor_name}' is missing from the \
-                             branch context"
-                        ))
-                    })?;
-                let field_indices =
-                    applied_index_args(ctx.ind_info, &field_ty).ok_or_else(|| {
-                        TacticError::GoalMismatch(format!(
-                        "induction: recursive field {i} of '{ctor_name}' does not have a direct \
-                         '{}' type, so no induction hypothesis can be formed for the indexed \
-                         family",
-                        ctx.ind_info.name
-                    ))
-                    })?;
-                let mut applied = field_indices;
-                applied.push(Expr::fvar(*fvar));
-                state.metas.instantiate(&beta_apply(ctx.motive, &applied))
+            let ExprKind::Pi(binder_info, domain, body) = binders.kind() else {
+                return Err(malformed());
             };
+            let binder_info = *binder_info;
+            // Specialization leaves a direct field as `(fun child => motive_body) field`.
+            // Preserve the exposed proposition that local rewrite tactics consume. A
+            // pointwise IH begins with a Pi, so its dependent binder stays intact.
+            let ih_ty = super::op_projection::head_beta(&state.metas.instantiate(domain));
             let ih_fvar = state.fresh_fvar();
+            binders = body.instantiate(&Expr::fvar(ih_fvar));
             new_ctx.push(LocalDecl {
-                binder_info: Default::default(),
+                binder_info,
                 fvar: ih_fvar,
                 name: ih_name,
                 ty: ih_ty,

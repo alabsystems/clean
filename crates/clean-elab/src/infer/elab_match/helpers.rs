@@ -9,6 +9,7 @@
 
 use super::super::*;
 use crate::stack_safe;
+use std::borrow::Cow;
 use std::ops::Range;
 
 /// The existing nested-aux marker is a component boundary, never a dot inside
@@ -1084,12 +1085,12 @@ impl<'a> ElabCtx<'a> {
     /// positions the surface syntax omits; it never drops or reorders a
     /// user-written pattern, and a genuinely wrong *explicit* arity still errors
     /// (now reported against the explicit-field count the user actually writes).
-    pub(in crate::infer) fn expand_implicit_ctor_field_patterns(
+    pub(in crate::infer) fn expand_implicit_ctor_field_patterns<'p>(
         &self,
         context: &str,
         full_ctor: &SurfaceName,
-        sub_pats: &[SurfacePattern],
-    ) -> Result<Vec<SurfacePattern>, ElabError> {
+        sub_pats: &'p [SurfacePattern],
+    ) -> Result<Cow<'p, [SurfacePattern]>, ElabError> {
         // A trailing `..` ellipsis (`.Ctor x ..`) stands for "the remaining
         // explicit fields are all wildcards". Detect it here; the leading
         // user-written patterns are everything before the marker.
@@ -1111,8 +1112,7 @@ impl<'a> ElabCtx<'a> {
         // With a trailing `..`, the leading patterns must not exceed the explicit
         // field count; the ellipsis fills the rest. Pad up to `num_explicit` and
         // fall through to the implicit-field interleaving below.
-        let owned_pats: Vec<SurfacePattern>;
-        let sub_pats: &[SurfacePattern] = if has_ellipsis {
+        let sub_pats = if has_ellipsis {
             super::ensure_ctor_pattern_arity_at_most(
                 context,
                 full_ctor,
@@ -1121,10 +1121,9 @@ impl<'a> ElabCtx<'a> {
             )?;
             let mut padded = explicit_user_pats.to_vec();
             padded.resize(num_explicit, SurfacePattern::Wildcard);
-            owned_pats = padded;
-            &owned_pats
+            Cow::Owned(padded)
         } else {
-            sub_pats
+            Cow::Borrowed(sub_pats)
         };
 
         // Idempotence: a list that is already `num_fields` long with a
@@ -1145,7 +1144,7 @@ impl<'a> ElabCtx<'a> {
                 matches!(info, BinderInfo::Default) || matches!(pat, SurfacePattern::Wildcard)
             })
         {
-            return Ok(sub_pats.to_vec());
+            return Ok(sub_pats);
         }
 
         // No implicit fields: explicit count == num_fields, so the historical
@@ -1153,7 +1152,7 @@ impl<'a> ElabCtx<'a> {
         // byte-for-byte (preserving every previously-working shape).
         if num_explicit == num_fields {
             super::ensure_ctor_pattern_arity(context, full_ctor, Some(num_fields), sub_pats.len())?;
-            return Ok(sub_pats.to_vec());
+            return Ok(sub_pats);
         }
 
         // Narrowed check: the user writes one pattern per *explicit* field. This
@@ -1180,7 +1179,7 @@ impl<'a> ElabCtx<'a> {
                 expanded.push(SurfacePattern::Wildcard);
             }
         }
-        Ok(expanded)
+        Ok(Cow::Owned(expanded))
     }
 
     /// Resolve a match-pattern constructor name to its fully-qualified form.

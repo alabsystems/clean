@@ -293,12 +293,8 @@ fn register_core_nullary(registry: &mut TacticRegistry) {
         // core of Lean's `subst_eqs`, so it serves as the handler.
         nullary("subst_eqs", super::subst_vars),
         nullary("admit", super::sorry),
-        // `classical`: make classical reasoning available for the rest of the
-        // block. A structural no-op in Clean (classical primitives are always
-        // in the env; `by_cases`/`by_contra` use `Classical.em` directly), so it
-        // recognizes Mathlib's single most common block opener and lets those
-        // proofs elaborate instead of aborting on an unknown tactic. See
-        // `existential::classical` for the honest scope (no Decidable fallback).
+        // The tactic bridge scopes classical instance search. The primitive
+        // checks for the classical foundation without changing the goal.
         nullary("classical", super::classical),
         nullary("auto_cascade", super::auto_cascade),
         // `infer_instance`: synthesize a type-class instance for the goal
@@ -528,7 +524,24 @@ fn register_phase3c_wave2(registry: &mut TacticRegistry) {
         term_arg("refine", super::term_close::refine),
         term_arg("change", super::term_close::change),
         term_arg("trans", super::trans),
-        hyp_arg("injection", super::injection),
+        TacticEntry {
+            name: "injection".into(),
+            pattern: TacticArgPattern::ExprList,
+            handler: Arc::new(|ps, args| {
+                let (scrutinee, fields) =
+                    args.split_first()
+                        .ok_or_else(|| TacticError::MissingArgument {
+                            tactic: "injection".into(),
+                            expected: "a hypothesis argument".into(),
+                        })?;
+                let hyp_name = term_hyp_name(ps, scrutinee)?;
+                let names = fields
+                    .iter()
+                    .map(|arg| expr_to_hyp_name(ps, arg))
+                    .collect::<Result<Vec<_>, _>>()?;
+                super::inductive_reasoning::injection_with_names(ps, &hyp_name, &names)
+            }),
+        },
         // `absurd h hn`: given `h : a` and `hn : ¬a`, close any goal. The two
         // terms are elaborated separately and handed to the kernel-checked
         // `eval_absurd`, which builds `absurd h hn` / `False.elim (hn h)`.

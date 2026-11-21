@@ -558,7 +558,9 @@ class BumpAyPinTests(unittest.TestCase):
             def agh_run(self, args, *, cwd):
                 self.agh_calls.append(list(args))
                 if args != ["repo", "fetch", "alabsystems/ay", str(cwd),
-                            "--ref", NEW, "--into", "refs/agh/pin-authority"]:
+                            "--ref", NEW, "--into", "refs/agh/pin-authority", "--checkout-closure",
+                            *(["--checkout-cache", str(self.ay_checkout_cache)]
+                              if getattr(self, "ay_checkout_cache", None) is not None else [])]:
                     raise AssertionError(f"unexpected authority Agh operation: {args}")
                 if self.mutation == "Agh refusal":
                     raise m.Refusal("Agh refused source access")
@@ -572,6 +574,12 @@ class BumpAyPinTests(unittest.TestCase):
             self.assertFalse(any("main" in args for args in commands.calls))
             self.assertEqual(len(commands.agh_calls), 1)
             self.assertFalse(any("fetch" in args for args in commands.calls))
+            cached = FakeGit()
+            cached.ay_checkout_cache = root / "untrusted-data"
+            cached.ay_checkout_cache.mkdir()
+            with_cache = m.Authority(cached, root / "cached", NEW)
+            self.assertEqual(with_cache.revision, NEW)
+            self.assertEqual(cached.agh_calls[0][-2:], ["--checkout-cache", str(cached.ay_checkout_cache)])
             for mutation in ("wrong commit", "rewrite", "symlink", "Agh refusal"):
                 with self.subTest(mutation=mutation), self.assertRaises(m.Refusal):
                     candidate = m.Authority(FakeGit(mutation), root / mutation.replace(" ", "-"), NEW)
@@ -933,6 +941,60 @@ class BumpAyPinTests(unittest.TestCase):
         self.assertEqual(rewritten, {"Cargo.toml": expected["Cargo.toml"]})
         self.assertEqual(rewritten["Cargo.toml"].count(b'version = "0.28.0"'), 7)
         self.assertEqual(rewritten["Cargo.toml"].count(NEW.encode()), 7)
+
+    def test_patch_selection_is_explicit_forward_and_stable_within_reviewed_line(self) -> None:
+        m = self.writer
+        zero, three = m.Current(OLD, "0.28.0", TY), m.Current(NEW, "0.28.3", TY)
+        self.assertEqual(m.selected_version(zero, None), "0.28.0")
+        self.assertEqual(m.selected_version(zero, "0.28.3"), "0.28.3")
+        self.assertEqual(m.selected_version(three, None), "0.28.3")
+        self.assertEqual(m.selected_version(three, "0.28.4"), "0.28.4")
+        for requested in ("0.28.0", "0.28.2", "0.29.0", "1.28.4", "0.28", "^0.28.4",
+                          "0.28.04", "0.28.4-beta", "0.28.4+build", " 0.28.4", "0.28.4\n"):
+            with self.subTest(requested=requested), self.assertRaises(m.Refusal):
+                m.selected_version(three, requested)
+
+    def test_patch_move_rechecks_all_five_graphs_and_rolls_back_each_failure(self) -> None:
+        m = self.writer
+        for fail_at in (0, 1, 3, 6, 10):
+            with self.subTest(call=fail_at), tempfile.TemporaryDirectory(prefix="clean-ay-patch-") as temporary:
+                root = Path(temporary).resolve()
+                self.transaction_fixture(root)
+                write_fixture(root, fixture(version="0.28.0"))
+                before = m.snapshot(root)
+                commands = FakeCommands(m, root, NEW, version="0.28.3", fail_at=fail_at)
+                authority = empty_authority(m, version="0.28.3")
+                with patch.object(m, "target", return_value=authority):
+                    if fail_at:
+                        with self.assertRaises(m.Refusal):
+                            m.transaction(root, NEW, commands, "0.28.3")
+                        self.assertEqual(m.snapshot(root), before)
+                    else:
+                        m.transaction(root, NEW, commands, "0.28.3")
+                        self.assertEqual(len(commands.calls), 10)
+                        self.assertTrue(all("--locked" in args for args in commands.calls[5:]))
+                        self.assertEqual(m.current(root, m.snapshot(root)), m.Current(NEW, "0.28.3", TY))
+
+    def test_patch_authority_still_requires_exact_workspace_and_member_versions(self) -> None:
+        m = self.writer
+        docs = {"Cargo.toml": {"workspace": {"package": {"version": "0.28.3"},
+                "members": ["crates/" + name for name in ROOT_NAMES]}}}
+        docs.update({f"crates/{name}/Cargo.toml": {
+            "package": {"name": name, "version": {"workspace": True}}} for name in ROOT_NAMES})
+
+        class Authority:
+            def __init__(self, *args): pass
+            def read(self, path): return docs[path]
+            def read_optional(self, path): return docs.get(path)
+
+        state = m.Current(OLD, "0.28.0", TY)
+        with patch.object(m, "Authority", Authority):
+            with self.assertRaises(m.Refusal):
+                m.target(None, Path("/unused"), state, NEW)
+            self.assertEqual(m.target(None, Path("/unused"), state, NEW, "0.28.3").version, "0.28.3")
+            docs["crates/ay-core/Cargo.toml"]["package"]["version"] = "0.28.2"
+            with self.assertRaises(m.Refusal):
+                m.target(None, Path("/unused"), state, NEW, "0.28.3")
 
     def test_version_migration_preserves_every_non_ay_node_and_resolved_edge(self) -> None:
         m = self.writer

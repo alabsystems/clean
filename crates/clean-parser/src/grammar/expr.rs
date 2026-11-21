@@ -623,26 +623,33 @@ impl Parser {
         base: Option<Box<SurfaceExpr>>,
     ) -> Result<SurfaceExpr, ParseError> {
         // Parse field assignments, bare-ident abbreviations, and dotted paths.
-        let mut raw_fields: Vec<(Span, Vec<SurfaceName>, SurfaceExpr)> = Vec::new();
-        let mut any_nested = false;
-        while self.is_struct_or_abbrev_field_start() || self.is_struct_field_path_start() {
-            let field_span = self.current_span();
-            let path = self.parse_struct_field_path()?;
-            if path.len() > 1 {
-                any_nested = true;
+        // Lean's `structInst` parses them with `sepByIndent`, which is
+        // `withPosition`: the first field's column is saved, so `checkColGt`
+        // in a value stops at the next field (`{ T := Type` ⏎ `n := 4 }` is
+        // two fields, not `Type n`).
+        let (raw_fields, any_nested) = self.with_position("structure instance fields", |p| {
+            let mut raw_fields: Vec<(Span, Vec<SurfaceName>, SurfaceExpr)> = Vec::new();
+            let mut any_nested = false;
+            while p.is_struct_or_abbrev_field_start() || p.is_struct_field_path_start() {
+                let field_span = p.current_span();
+                let path = p.parse_struct_field_path()?;
+                if path.len() > 1 {
+                    any_nested = true;
+                }
+                let field_val = if p.eat(&TokenKind::ColonEq) {
+                    p.struct_field_value_expr()?
+                } else {
+                    // Bare-ident abbreviation: `x` ≡ `x := x` (single component).
+                    SurfaceExpr::Ident(field_span, path[path.len() - 1].clone())
+                };
+
+                raw_fields.push((field_span, path, field_val));
+
+                // Comma between fields is optional
+                p.eat(&TokenKind::Comma);
             }
-            let field_val = if self.eat(&TokenKind::ColonEq) {
-                self.struct_field_value_expr()?
-            } else {
-                // Bare-ident abbreviation: `x` ≡ `x := x` (single component).
-                SurfaceExpr::Ident(field_span, path[path.len() - 1].clone())
-            };
-
-            raw_fields.push((field_span, path, field_val));
-
-            // Comma between fields is optional
-            self.eat(&TokenKind::Comma);
-        }
+            Ok((raw_fields, any_nested))
+        })?;
 
         // Optional ellipsis `..` (Lean structInst `optEllipsis`): remaining
         // fields are filled by defaults / elaboration. Nothing to record at the
@@ -726,55 +733,13 @@ impl Parser {
 
     /// Parse struct update syntax: `{ s with x := val, ... }`
     fn parse_struct_update(&mut self, start_span: Span) -> Result<SurfaceExpr, ParseError> {
-        // Parse the base expression (everything up to `with`)
-        let base_expr = self.struct_update_base_expr()?;
-
-        // Consume the `with` keyword
+        // Lean's structInst source is an ordinary term, including postfix
+        // universe instantiations on the head or on an argument.
+        let base_expr = self.expr()?;
         self.expect(&TokenKind::With)?;
 
         // Parse field assignments (may be empty for `{ s with }`)
         self.parse_struct_literal_fields(start_span, Some(Box::new(base_expr)))
-    }
-
-    /// Parse the base expression in a struct update, stopping before `with`.
-    /// This handles expressions like `s`, `foo.bar`, `f x`, etc.
-    fn struct_update_base_expr(&mut self) -> Result<SurfaceExpr, ParseError> {
-        // Parse atoms and applications until we hit `with`
-        // Start with a single atom
-        let mut expr = self.atom_expr()?;
-
-        // Allow projections: s.field.subfield
-        while self.check(&TokenKind::Dot) {
-            if self.peek_kind(1) == Some(&TokenKind::With) {
-                // .with is not a projection, stop here
-                break;
-            }
-            self.advance(); // consume dot
-            let proj_span = self.current_span();
-            let field_name = self.ident()?;
-            expr = SurfaceExpr::Proj(proj_span, Box::new(expr), Projection::Named(field_name));
-        }
-
-        // Allow simple function application: f x y (but stop before `with`)
-        loop {
-            // Stop if next token is `with`
-            if self.check(&TokenKind::With) {
-                break;
-            }
-            // Stop if we hit end of brace content
-            if self.check(&TokenKind::RBrace) {
-                break;
-            }
-            // Try to parse another argument using atom_expr
-            if !self.is_atom_start() {
-                break;
-            }
-            let arg = self.atom_expr()?;
-            let span = expr.span().merge(arg.span());
-            expr = SurfaceExpr::App(span, Box::new(expr), vec![SurfaceArg::positional(arg)]);
-        }
-
-        Ok(expr)
     }
 
     /// Check if brace content is struct update syntax: `{ expr with field := val ... }`

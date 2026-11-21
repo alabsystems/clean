@@ -76,12 +76,25 @@ fn source_origins_declaration_names_are_actual_tokens_without_universe_suffix() 
 }
 
 #[test]
-fn source_origins_application_roles_and_full_source_ranges_preserve_legacy_spans() {
+fn source_origins_keep_anonymous_and_named_hole_kinds() {
+    for (source, kind) in [
+        ("_", OriginKind::Hole),
+        ("?_", OriginKind::Hole),
+        ("?goal", OriginKind::NamedHole),
+    ] {
+        let (expr, origins, root) = expression(source);
+        assert_eq!(origins.node(&root).expect("hole").kind(), kind);
+        assert!(origins.pass_through(&root, &expr).is_some());
+    }
+}
+
+#[test]
+fn source_origins_application_roles_and_full_source_ranges_match_parser_spans() {
     let (expr, origins, root) = expression("f (g x) 7");
     assert_eq!(
         expr.span(),
-        Span::new(0, 1),
-        "legacy AST span stays unchanged"
+        Span::new(0, 9),
+        "canonical AST span covers the full application"
     );
     assert_eq!(origins.node(&root).expect("root").span(), Span::new(0, 9));
     assert_eq!(origins.text(&root), Some("f (g x) 7"));

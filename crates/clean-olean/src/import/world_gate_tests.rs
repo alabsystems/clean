@@ -236,7 +236,7 @@ fn test_world_gate_environment_binding_over_the_real_table() {
 
 #[test]
 fn recent_native_worlds_require_exact_declarations_and_keep_universe_profile() {
-    for version in ["v4.35.0", "v4.36.0-rc2"] {
+    for version in ["v4.35.0", "v4.36.0-rc2", "v4.36.0"] {
         let bytes = fixture(&format!(
             "tests/fixtures/olean/{version}/matcher-metadata/MatcherParity.olean"
         ));
@@ -265,7 +265,12 @@ fn recent_native_worlds_require_exact_declarations_and_keep_universe_profile() {
 
 #[test]
 fn recent_native_worlds_refuse_mixed_and_unmeasured_headers() {
-    for (version, other) in [("v4.35.0", "v4.36.0-rc2"), ("v4.36.0-rc2", "v4.35.0")] {
+    for (version, other) in [
+        ("v4.35.0", "v4.36.0-rc2"),
+        ("v4.36.0-rc2", "v4.35.0"),
+        ("v4.36.0-rc2", "v4.36.0"),
+        ("v4.36.0", "v4.36.0-rc2"),
+    ] {
         let bytes = fixture(&format!(
             "tests/fixtures/olean/{version}/matcher-metadata/MatcherParity.olean"
         ));

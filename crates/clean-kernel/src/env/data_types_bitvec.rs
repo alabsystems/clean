@@ -585,6 +585,30 @@ impl Environment {
         Ok(())
     }
 
+    /// Expose the existing checked equality decision to instance synthesis.
+    /// Its declaration has the unfolded DecidableEq type, so index it by its
+    /// terminal Decidable class, as for the genuine Fin decision instance.
+    pub(crate) fn register_bitvec_dec_eq_instance(&mut self) -> Result<(), EnvError> {
+        if self.suppress_lossy_structure_stubs {
+            return Ok(());
+        }
+        let name = Name::from_string("instDecidableEqBitVec");
+        let Some(ty) = self.get_const(&name).map(|info| info.type_.clone()) else {
+            return Err(EnvError::InitializationConflict {
+                name,
+                detail: "BitVec equality declaration must precede its instance registration"
+                    .to_string(),
+            });
+        };
+        self.ensure_exact_instance(super::KernelInstanceInfo {
+            name: name.clone(),
+            class_name: Name::from_string("Decidable"),
+            priority: super::LEAN_DEFAULT_INSTANCE_PRIORITY,
+            type_: Some(ty),
+            value: Some(Expr::const_(name, vec![])),
+        })
+    }
+
     /// `BitVec.decEq` — parameterized (over `w`) rec-destructure decEq on the
     /// `Fin (2^w)` payloads via `instDecidableEqFin`. Axiom-free; value-def-eq to
     /// the v4.30 oracle by proof-irrelevance on the `Decidable` witnesses.

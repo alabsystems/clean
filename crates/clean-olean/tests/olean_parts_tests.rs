@@ -202,6 +202,37 @@ fn test_parse_module_parts_module_system_recovers_private_proof_values() {
     );
 }
 
+#[test]
+fn stable_lean_parts_carry_ordinary_proof_and_module_private_values() {
+    let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/olean/v4.36.0");
+    let plain = clean_olean::parse_module_file(fixtures.join("plain/StablePlain.olean"))
+        .expect("official stable ordinary module");
+    assert!(plain.constants.iter().any(|constant| {
+        constant.name == "StablePlain.successor_zero" && constant.value.is_some()
+    }));
+
+    let parts = parse_module_parts(&fixtures.join("module-ir/StableFixture/Defs.olean"))
+        .expect("official stable module-system parts");
+    assert_eq!(
+        parts.iter().map(|part| part.level).collect::<Vec<_>>(),
+        [
+            OLeanLevel::Exported,
+            OLeanLevel::Server,
+            OLeanLevel::Private
+        ]
+    );
+    assert!(parts[0]
+        .module
+        .constants
+        .iter()
+        .any(|constant| constant.name == "StableFixture.zeroRefl" && constant.value.is_none()));
+    assert!(parts[2]
+        .module
+        .constants
+        .iter()
+        .any(|constant| constant.name == "StableFixture.zeroRefl" && constant.value.is_some()));
+}
+
 /// R113 (finding B3): a `CLEANENV` payload trailer appended to a part Lean's
 /// own compiler wrote is refused at decode. Only Clean's exporter writes that
 /// trailer, and only onto its own layout; `lean` never reads it, so a re-check

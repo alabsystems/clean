@@ -59,6 +59,155 @@ fn malformed(name: &Name) -> EnvExtensionEntry {
     }
 }
 
+#[test]
+fn source_matcher_effects_agree_across_independent_siblings() {
+    let mut base = Environment::new();
+    let left = matcher_definition(&mut base, "Left.f.match_1", 3);
+    let right = matcher_definition(&mut base, "Right.g.match_1", 3);
+    let branches = MatcherInfo {
+        num_params: 0,
+        num_discrs: 1,
+        alt_num_params: vec![1, 1],
+        u_elim_pos: None,
+        discr_names: vec![None],
+        details: Some(MatcherDetails {
+            alt_infos: vec![
+                MatcherAltInfo {
+                    num_fields: 0,
+                    num_overlaps: 0,
+                    has_unit_thunk: true,
+                },
+                MatcherAltInfo {
+                    num_fields: 1,
+                    num_overlaps: 0,
+                    has_unit_thunk: false,
+                },
+            ],
+            overlaps: Vec::new(),
+        }),
+    };
+    let mut alone = base.clone();
+    alone
+        .register_matcher_info(right.clone(), branches.clone())
+        .unwrap();
+    let own = alone.effect_since(&base);
+    let mut sibling = base.clone();
+    sibling
+        .register_matcher_info(left.clone(), branches.clone())
+        .unwrap();
+    let difference = |after: &Environment| own.disagreement(&after.effect_since(&sibling), after);
+    let key = matcher_storage_key();
+    let mut together = sibling.clone();
+    together
+        .register_matcher_info(right.clone(), branches.clone())
+        .unwrap();
+    assert_eq!(together.get_matcher_info(&right), Some(&branches));
+    assert_eq!(difference(&together), None);
+    assert_eq!(
+        own.disagreement(&together.effect_since(&together), &together),
+        None
+    );
+    assert!(difference(&sibling).is_some());
+
+    // A row for another name is independent only when the sibling already
+    // contributed it. Adding it as part of this replay is a divergence.
+    let mut extra = together.clone();
+    extra.add_persistent_extension_entries(&key, 0, vec![malformed(&left)]);
+    assert!(difference(&extra).is_some());
+
+    // Identical duplicates still differ in raw multiplicity, even when lookup
+    // agrees. The extension's opaque state and module buckets are observed too.
+    let mut duplicate = together.clone();
+    duplicate.add_persistent_extension_entries(&key, 0, vec![encoded(&right, &branches)]);
+    assert_eq!(duplicate.get_matcher_info(&right), Some(&branches));
+    assert!(difference(&duplicate).is_some());
+    let mut storage = together.persistent_extensions.get(&key).unwrap().clone();
+    storage.state.push(1);
+    let mut changed_header = together.clone();
+    changed_header
+        .persistent_extensions
+        .set_state(&key, Some(storage));
+    assert!(difference(&changed_header).is_some());
+    let mut moved = sibling.clone();
+    moved.add_persistent_extension_entries(&key, 1, vec![encoded(&right, &branches)]);
+    assert!(difference(&moved).is_some());
+
+    let mut changed = sibling.clone();
+    let mut other = branches.clone();
+    other.details = None;
+    changed
+        .register_matcher_info(right.clone(), other.clone())
+        .unwrap();
+    assert!(difference(&changed).is_some());
+    assert!(together
+        .register_matcher_info(right.clone(), other.clone())
+        .is_err());
+    together.add_persistent_extension_entries(&key, 0, vec![encoded(&right, &other)]);
+    assert!(together.get_matcher_info(&right).is_none());
+    assert!(difference(&together).is_some());
+}
+
+#[test]
+fn removing_the_last_matcher_row_requires_its_final_table() {
+    let mut base = Environment::new();
+    let name = matcher_definition(&mut base, "M.f.match_1", 2);
+    let mut registered = base.clone();
+    registered
+        .register_matcher_info(name.clone(), info(2))
+        .unwrap();
+    let mut removed = registered.clone();
+    assert!(removed.forget_decl(&name));
+    let own = removed.effect_since(&registered);
+    let mut absent = base.clone();
+    assert!(absent.forget_decl(&name));
+    assert!(removed
+        .persistent_extensions
+        .get(&matcher_storage_key())
+        .is_some());
+    assert!(absent
+        .persistent_extensions
+        .get(&matcher_storage_key())
+        .is_none());
+    assert!(own
+        .disagreement(&absent.effect_since(&base), &absent)
+        .is_some());
+    assert_eq!(
+        own.disagreement(&removed.effect_since(&removed), &removed),
+        None
+    );
+
+    // An opaque header change made only beside a stranger still diverges
+    // even when that change restores the expected final header.
+    let key = matcher_storage_key();
+    let mut different = registered.clone();
+    let mut storage = registered.persistent_extensions.get(&key).unwrap().clone();
+    storage.state.push(7);
+    different
+        .persistent_extensions
+        .set_state(&key, Some(storage));
+    assert!(own
+        .disagreement(&removed.effect_since(&different), &removed)
+        .is_some());
+}
+
+#[test]
+fn other_persistent_extensions_still_compare_the_whole_state() {
+    let base = Environment::new();
+    let key = Name::from_string("unrelated.extension");
+    let left = malformed(&Name::from_string("L"));
+    let right = malformed(&Name::from_string("R"));
+    let mut alone = base.clone();
+    alone.add_persistent_extension_entries(&key, 0, vec![right.clone()]);
+    let mut sibling = base.clone();
+    sibling.add_persistent_extension_entries(&key, 0, vec![left]);
+    let mut together = sibling.clone();
+    together.add_persistent_extension_entries(&key, 0, vec![right]);
+    assert!(alone
+        .effect_since(&base)
+        .disagreement(&together.effect_since(&sibling), &together)
+        .is_some());
+}
+
 fn decoded_storage(env: &Environment) -> MatcherIndex {
     MatcherIndex::decode(env.persistent_extensions.get(&matcher_storage_key()))
 }

@@ -268,6 +268,9 @@ impl IrPrinter {
             IRLiteral::UInt64(n) => format!("{}u64", n),
             IRLiteral::USize(n) => format!("{}usize", n),
             IRLiteral::NatBig(n) => format!("{}nat", n),
+            IRLiteral::NatLimbs(limbs) => {
+                format!("{}nat", clean_kernel::BigNat::from_limbs(limbs.clone()))
+            }
             IRLiteral::Float32(f) => format!("{:.1}f32", f),
             IRLiteral::Float64(f) => format!("{:.1}f64", f),
         }

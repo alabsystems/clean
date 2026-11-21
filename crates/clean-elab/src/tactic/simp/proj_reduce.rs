@@ -81,7 +81,7 @@ use crate::tactic::core::{Goal, ProofState};
 ///   node, its structure argument is not constant-headed, that argument does
 ///   not weak-head-normalise to a constructor application at reducible +
 ///   instances transparency, or the field index is out of range.
-pub(super) fn reduce_proj(state: &ProofState, goal: &Goal, expr: &Expr) -> Option<Expr> {
+pub(in crate::tactic) fn reduce_proj(state: &ProofState, goal: &Goal, expr: &Expr) -> Option<Expr> {
     let ExprKind::Proj(_struct_name, idx, inner) = expr.kind() else {
         return None;
     };
@@ -118,4 +118,31 @@ pub(super) fn reduce_proj(state: &ProofState, goal: &Goal, expr: &Expr) -> Optio
     // locals, so the chained spelling does not borrow-check.
     let args = structure.get_app_args();
     args.get(field_idx).copied().cloned()
+}
+
+/// Simplify a registered field application once its receiver exposes a
+/// constructor. Class projections on a named instance require an explicit
+/// unfold request, handled by the ordinary named-unfold path.
+pub(super) fn reduce_field_app(state: &ProofState, goal: &Goal, expr: &Expr) -> Option<Expr> {
+    // The simplifier treats an OfNat literal as atomic, including its instance.
+    if super::expr::is_of_nat_nat_lit(expr) {
+        return None;
+    }
+    let env = state.env();
+    let (owner, index, param_count, binder) =
+        crate::structure_cmd::named_field_accessor(env, expr)?;
+    let args = expr.get_app_args();
+    let receiver = *args.get(param_count)?;
+    if binder == clean_kernel::BinderInfo::InstImplicit || env.is_class(owner) {
+        let ExprKind::Const(head, _) = receiver.get_app_fn().kind() else {
+            return None;
+        };
+        env.get_constructor(head)?;
+    }
+    let projection = Expr::proj(owner.clone(), index, receiver.clone());
+    let value = reduce_proj(state, goal, &projection)?;
+    Some(Expr::apps(
+        value,
+        args.iter().skip(param_count + 1).copied().cloned(),
+    ))
 }

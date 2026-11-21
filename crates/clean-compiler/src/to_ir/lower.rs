@@ -35,7 +35,11 @@ pub(super) fn lower_literal(lit: &Literal) -> Result<(IRLiteral, IRType), Compil
                     let v = ((hi as u128) << 64) | (lo as u128);
                     Ok((IRLiteral::NatBig(v), IRType::Object))
                 } else {
-                    Err(CompilerError::UnsupportedLiteral { kind: "Nat" })
+                    let mut canonical = limbs.to_vec();
+                    while canonical.len() > 3 && canonical.last() == Some(&0) {
+                        canonical.pop();
+                    }
+                    Ok((IRLiteral::NatLimbs(canonical), IRType::Object))
                 }
             }
         }
@@ -83,10 +87,16 @@ pub(super) fn lower_param(
     state: &mut ToIRState,
 ) -> Result<(VarId, IRType), CompilerError> {
     let var_id = state.bind_var(param.fvar_id);
-    let ty = expr_to_ir_type(&param.ty)?;
+    let ty = if state.is_checked_void_type(&param.ty) {
+        IRType::Void
+    } else {
+        expr_to_ir_type(&param.ty)?
+    };
 
     // Mark erased params
-    if ty == IRType::Erased || ty == IRType::Void {
+    if ty == IRType::Void {
+        state.bind_world_token(param.fvar_id);
+    } else if ty == IRType::Erased {
         state.bind_erased(param.fvar_id);
     }
 

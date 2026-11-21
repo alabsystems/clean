@@ -1067,7 +1067,7 @@ fn upsert_binding(bindings: &mut Vec<Binding>, name: &SurfaceName, replacement: 
 // A user tactic declared with a single TRAILING repetition variable —
 //
 //     elab "intros2" xs:ident* : tactic => intro xs
-//     elab "exactFirst" x:term ys:term,* : tactic => exact x   -- (fixed + rep)
+//     elab "exactFirst" x:term ys:term* : tactic => exact x   -- (fixed + rep)
 //
 // is VARIADIC: the call site supplies any number of trailing arguments
 // (`intros2 a b c`). The repetition variable `xs` binds the entire variadic

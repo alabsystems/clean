@@ -313,9 +313,17 @@ impl<'a> ElabCtx<'a> {
     ///
     /// Processes left-to-right, threading the monadic context through each element.
     pub(super) fn elab_do_elems(&mut self, elems: &[DoElem]) -> Result<Expr, ElabError> {
+        self.with_do_head_scope(elems.first(), |this| this.elab_do_elems_inner(elems))
+    }
+
+    pub(super) fn with_do_head_scope(
+        &mut self,
+        head: Option<&DoElem>,
+        elaborate: impl FnOnce(&mut Self) -> Result<Expr, ElabError>,
+    ) -> Result<Expr, ElabError> {
         let saved = self.do_active_mut_vars.clone();
         let result = (|| {
-            if let Some(elem) = elems.first() {
+            if let Some(elem) = head {
                 elab_do_shadow::check_do_head_shadowing(elem, &self.do_active_mut_vars)?;
                 if let DoElem::LetMut(_, binder, _) = elem {
                     if !binder.name.is_unescaped_component("_") {
@@ -323,7 +331,7 @@ impl<'a> ElabCtx<'a> {
                     }
                 }
             }
-            self.elab_do_elems_inner(elems)
+            elaborate(self)
         })();
         self.do_active_mut_vars = saved;
         result
@@ -338,7 +346,13 @@ impl<'a> ElabCtx<'a> {
             // === Terminal (single) elements ===
             // #3517: use expected type so fresh implicits unify.
             [DoElem::Expr(_, expr)] => {
-                let exp = self.current_expected_type.clone();
+                let exp = if self.do_loop_ctx.is_some() {
+                    // This source action runs before the enclosing callback yields.
+                    let (u, _, m) = self.get_or_create_monad_info();
+                    Some(Expr::app(m, self.fresh_meta(Expr::sort(Level::succ(u)))))
+                } else {
+                    self.current_expected_type.clone()
+                };
                 let r = self.elaborate_with_expected_type(expr, exp)?;
                 self.maybe_yield_wrap(r)
             }

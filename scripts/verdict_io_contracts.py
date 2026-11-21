@@ -145,11 +145,12 @@ EFFECT_RULES: tuple[tuple[str, str, str], ...] = (
         r"|:\s*std::io::ErrorKind\b"
         r"|\bmmap:\s*Mmap\b"
         r"|:\s*Mmap\s*[,)]"
-        r"|std::process::(?:ExitStatus|Output)\b",
+        r"|std::process::(?:ExitStatus|Output)\b"
+        r"|^\s*(?:pub\s*(?:\([^)]*\)\s*)?)?[a-z_][a-z0-9_]*\s*:[\w\s:<>]*\bstd::(?:io::BufWriter|fs::File)\b[\w\s:<>]*,\s*$",
         "declaration-type",
     ),
     ("E-ERRVAL", r"std::io::ErrorKind::|std::io::Error::new", "error-value"),
-    ("E-NOIO", r"io::Cursor|\bmap_anon\s*\(", "in-memory-no-io"),
+    ("E-NOIO", r"io::Cursor|\bmap_anon\s*\(|\bio::sink\s*\(\s*\)", "in-memory-no-io"),
     ("E-FNITEM", r"\bfs::DirEntry::[a-z_]+\b(?!\s*\()", "fn-item-path"),
     ("E-ENV", r"\benv::var(?:_os)?\s*\(", "read-env"),
     ("E-PID", r"std::process::id\s*\(", "read-ambient"),
@@ -178,10 +179,13 @@ EFFECT_RULES: tuple[tuple[str, str, str], ...] = (
 EFFECT_RULE_DOC: dict[str, str] = {
     "E-USE": "a `use` item — the module names a type; no syscall is issued here",
     "E-TYPE": "a TYPE position (error-enum field, `#[from]`, return type, closure/fn parameter) — "
-    "`std::io::Error`, `Mmap` and `std::process::{ExitStatus,Output}` as types, not operations",
+    "`std::io::Error`, `Mmap` and `std::process::{ExitStatus,Output}` as types, not operations; and a "
+    "struct field whose type holds a `std::io::BufWriter` or `std::fs::File` (no call on the line, so "
+    "the file is opened and written at sites classified on their own)",
     "E-ERRVAL": "an io::Error VALUE is constructed or inspected (`ErrorKind::…`, `Error::new`) — "
     "error plumbing, no syscall",
-    "E-NOIO": "an in-memory buffer wearing an IO name (`io::Cursor`, `MmapMut::map_anon`) — no file",
+    "E-NOIO": "an in-memory buffer wearing an IO name (`io::Cursor`, `MmapMut::map_anon`) or a "
+    "writer that discards every byte (`io::sink()`, used to measure what a writer would emit) — no file",
     "E-FNITEM": "a function ITEM named as a value (`sort_by_key(fs::DirEntry::file_name)`) — the path "
     "mentions an IO type but issues no syscall; the call form is deliberately NOT matched, so writing "
     "one aborts the derivation as unclassified rather than inheriting this rule",
@@ -1436,6 +1440,33 @@ def self_test() -> int:
             _ok("row ids distinguish two `mod.rs` members in different modules")
         else:
             failures.append("member_id collides on `mod.rs` basenames")
+
+        # A discarding writer is not a write: `std::io::sink()` issues no syscall
+        # (found 2026-11-17: the NDJSON writer's second pass measures its output
+        # into a sink). The control keeps a real writer on the write rule.
+        sink_line = "let again = write_declarations(&meta, decls, names, std::io::sink())?;"
+        file_line = "let again = write_declarations(&meta, decls, names, File::create(p)?)?;"
+        if classify_effect(sink_line) == ("E-NOIO", "in-memory-no-io") and (
+            classify_effect(file_line) == ("E-WRITE", "write-file")
+        ):
+            _ok("`io::sink()` classifies as in-memory-no-io; a `File::create` writer stays write-file")
+        else:
+            failures.append(
+                f"sink rule wrong: sink={classify_effect(sink_line)} file={classify_effect(file_line)}"
+            )
+        # A struct field TYPED as a file writer opens nothing (found 2026-11-17 in
+        # recheck_closed/reference_base.rs); the control is the same field in a
+        # struct LITERAL, whose value really creates the file.
+        field_line = "    checkpoint: Option<std::io::BufWriter<std::fs::File>>,"
+        value_line = "    checkpoint: Some(std::io::BufWriter::new(std::fs::File::create(p)?)),"
+        if classify_effect(field_line) == ("E-TYPE", "declaration-type") and (
+            classify_effect(value_line) == ("E-WRITE", "write-file")
+        ):
+            _ok("a field typed as a file writer is a declaration; a literal that creates one is a write")
+        else:
+            failures.append(
+                f"field rule wrong: field={classify_effect(field_line)} value={classify_effect(value_line)}"
+            )
 
         # --- mutation arms ----------------------------------------------------
         _expect_raises(

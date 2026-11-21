@@ -191,36 +191,44 @@ pub(crate) fn import_open_term(
     elab_metas: &MetaState,
     pending_goals: &[RefinePendingGoal],
 ) -> Result<(Expr, Vec<Goal>), TacticError> {
-    let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
-    let pending_goals = pending_goals
-        .iter()
-        .map(|goal| PendingRefineGoal {
-            meta_id: goal.meta_id,
-            locals: goal.locals.clone(),
-            tag: goal.tag.clone(),
-        })
-        .collect::<Vec<_>>();
-    let (mapping, new_goals) = import_pending_goals(state, &goal, elab_metas, &pending_goals)?;
-    let translated_term = remap_elab_metas(&term, &mapping, elab_metas)?;
-    Ok((translated_term, new_goals))
-}
-
-/// Translate each pending elaborator metavariable into a tactic-scope one
-/// (context: `goal`'s plus the locals it captured) and return the mapping
-/// with the goals those metavariables stand for.
-fn import_pending_goals(
-    state: &mut ProofState,
-    goal: &Goal,
-    elab_metas: &MetaState,
-    pending_goals: &[PendingRefineGoal],
-) -> Result<(HashMap<MetaId, MetaId>, Vec<Goal>), TacticError> {
-    import_pending_goals_with(
+    import_term_with(
         state,
-        goal,
+        term,
         elab_metas,
         pending_goals,
         PendingLocalIds::Fresh,
     )
+}
+
+/// Import a value whose lifted goals occur under the value's own binders.
+pub(crate) fn import_lifted_term(
+    state: &mut ProofState,
+    term: Expr,
+    elab_metas: &MetaState,
+    pending_goals: &[RefinePendingGoal],
+) -> Result<(Expr, Vec<Goal>), TacticError> {
+    import_term_with(
+        state,
+        term,
+        elab_metas,
+        pending_goals,
+        PendingLocalIds::ByDepth,
+    )
+}
+
+fn import_term_with(
+    state: &mut ProofState,
+    term: Expr,
+    elab_metas: &MetaState,
+    pending_goals: &[RefinePendingGoal],
+    ids: PendingLocalIds,
+) -> Result<(Expr, Vec<Goal>), TacticError> {
+    let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
+    let pending_goals = tagged_pending_goals(pending_goals, &[])?;
+    let (mapping, new_goals) =
+        import_pending_goals_with(state, &goal, elab_metas, &pending_goals, ids)?;
+    let translated_term = remap_elab_metas(&term, &mapping, elab_metas)?;
+    Ok((translated_term, new_goals))
 }
 
 /// How the tactic FVar of a pending goal's captured local is chosen.

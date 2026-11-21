@@ -199,8 +199,8 @@ pub(crate) fn run_clean_file_threaded(source: &str) -> GateRunResult {
 pub(crate) fn synthetic_sorry_probe() -> (Expr, GateTrustSummary) {
     sample_gate_trust(true, || {
         let mut env = Environment::default();
-        env.init_bool()
-            .expect("Bool init should make synthetic sorryAx available");
+        env.init_admission_stub_theory()
+            .expect("synthetic sorry probe needs the admission stub theory");
         clean_kernel::sorry::create_sorry_term(&env, &Expr::prop())
     })
 }
@@ -208,8 +208,8 @@ pub(crate) fn synthetic_sorry_probe() -> (Expr, GateTrustSummary) {
 pub(crate) fn explicit_sorry_probe() -> (Expr, GateTrustSummary) {
     sample_gate_trust(true, || {
         let mut env = Environment::default();
-        env.init_bool()
-            .expect("Bool init should make explicit sorryAx available");
+        env.init_admission_stub_theory()
+            .expect("explicit sorry probe needs the admission stub theory");
         clean_kernel::sorry::create_sorry_term_with_kind(
             &env,
             &Expr::prop(),

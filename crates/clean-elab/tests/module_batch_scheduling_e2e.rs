@@ -56,6 +56,60 @@ fn check(source: &str) -> Checked {
     }
 }
 
+#[test]
+fn a_later_tactic_respects_the_published_unfolding_boundary() {
+    let declaration = "def guardedBit (_ : Nat) : Bool := false";
+    let use_site = "theorem disjoint (n : Nat) (h : guardedBit n = true) : False := by cases h";
+    for reversed in [false, true] {
+        for (attribute, must_pass) in [("", true), ("@[irreducible] ", false)] {
+            let definition = format!("{attribute}{declaration}");
+            let source = if reversed {
+                format!("{use_site}\n{definition}")
+            } else {
+                format!("{definition}\n{use_site}")
+            };
+            let result = check(&source);
+            assert_eq!(result.committed, must_pass, "{}", result.rejections);
+            if !must_pass {
+                assert!(
+                    result.rejections.contains("dependent elimination"),
+                    "{}",
+                    result.rejections
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn named_arguments_use_the_published_binders_in_either_source_order() {
+    let declaration = "def Model.bind {α β : Type} (left : α) (right : β) : α := left";
+    let use_site =
+        "def Model.client : Nat := Model.bind (right := false) (β := Bool) (left := 17) (α := Nat)";
+    for (first, second) in [(declaration, use_site), (use_site, declaration)] {
+        let source = format!("{first}\n{second}\ntheorem Model.value : Model.client = 17 := rfl\n");
+        let checked = check(&source);
+        assert!(checked.committed, "{}", checked.rejections);
+        assert!(checked
+            .env
+            .get_const(&Name::from_string("Model.value"))
+            .is_some());
+    }
+
+    let invalid = use_site.replace("right :=", "absent :=");
+    let checked = check(&format!("{declaration}\n{invalid}\n"));
+    assert!(!checked.committed);
+    assert!(
+        checked.rejections.contains("absent"),
+        "{}",
+        checked.rejections
+    );
+    assert!(checked
+        .env
+        .get_const(&Name::from_string("Model.client"))
+        .is_none());
+}
+
 /// MUST FAIL. `ping` and `pong` call each other and are not written as one
 /// `mutual` block. Clean has no supported form for that, so the batch is
 /// refused — and the diagnostic must say which declarations and what to do,

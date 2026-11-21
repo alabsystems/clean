@@ -389,7 +389,7 @@ fn resolve_decl(
             val: Box::new(resolve_expr(val, opened, known, count)),
             attrs: attrs.clone(),
             termination: termination.clone(),
-            modifiers: *modifiers,
+            modifiers: modifiers.clone(),
             where_decls: where_decls.clone(),
         },
         SurfaceDecl::Theorem {
@@ -412,7 +412,7 @@ fn resolve_decl(
             proof: Box::new(resolve_expr(proof, opened, known, count)),
             attrs: attrs.clone(),
             termination: termination.clone(),
-            modifiers: *modifiers,
+            modifiers: modifiers.clone(),
             where_decls: where_decls.clone(),
         },
         _ => decl.clone(),

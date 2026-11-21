@@ -46,6 +46,7 @@ pub(crate) use extensions::{
 pub(crate) use extensions_structure::is_structure_extension_name;
 
 use crate::expr::ParsedExpr;
+use clean_kernel::name::Name;
 
 /// Import declaration from an .olean file.
 #[derive(Debug, Clone)]
@@ -75,6 +76,9 @@ pub struct ParsedConstant {
     pub constructor_val: Option<ConstructorValData>,
     /// Extra data for recursors
     pub recursor_val: Option<RecursorValData>,
+    /// Ordered source names in an ordinary declaration's mutual group (`all`).
+    /// Absent on other kinds and in layouts that omit the list.
+    pub mutual_declarations: Option<Vec<Name>>,
     /// Reducibility hints (for definitions only)
     pub hints: Option<ReducibilityHintsData>,
     /// Declaration safety metadata.

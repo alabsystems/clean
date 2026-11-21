@@ -21,8 +21,9 @@ impl Parser {
     // Tactic-specific sub-parsers
     // =========================================================================
 
-    /// Parse tactic-mode `let` in both of its surface forms:
+    /// Parse a tactic-mode `let` binding:
     ///   `let h : T := val`   — named, optionally typed
+    ///   `let _ : T := val`   — inaccessible, optionally typed
     ///   `let ⟨a, b⟩ := e`    — anonymous-constructor destructuring
     ///
     /// The destructuring form is desugared to [`SurfaceTactic::Obtain`],
@@ -41,9 +42,13 @@ impl Parser {
         if matches!(self.current_kind(), TokenKind::LAngle) {
             return self.parse_tactic_obtain(start);
         }
-        let name = self.expect_ident("let")?;
+        let name = if self.eat(&TokenKind::Underscore) {
+            super::tactic::inaccessible_hypothesis()
+        } else {
+            self.expect_ident("let")?
+        };
         let ty = if self.eat(&TokenKind::Colon) {
-            Some(Box::new(self.parse_tactic_expr()?))
+            Some(Box::new(self.parse_tactic_binding_type()?))
         } else {
             None
         };
@@ -154,7 +159,7 @@ impl Parser {
             (None, Vec::new())
         } else {
             let using_recursor = self.parse_induction_using_clause()?;
-            let generalizing = self.parse_induction_generalizing_clause();
+            let generalizing = self.parse_induction_generalizing_clause()?;
             (using_recursor, generalizing)
         };
 
@@ -203,21 +208,26 @@ impl Parser {
         }
     }
 
-    /// Parse an optional `generalizing <ident>+` clause for `induction`.
-    ///
-    /// The identifiers name hypotheses reverted into the goal before running the
-    /// recursor and re-introduced per case. Returns an empty vec when no
-    /// `generalizing` clause is present. Stops at the `with` keyword and at any
-    /// tactic keyword / non-identifier, per `parse_ident_list`.
-    fn parse_induction_generalizing_clause(&mut self) -> Vec<crate::SurfaceName> {
-        if !self.current().ident_escaped
-            && matches!(self.current_kind(), TokenKind::Ident(name) if name == "generalizing")
+    /// Collect local names in Lean's indentation-delimited `generalizing` clause.
+    /// A tactic spelling such as `right` is a legal local name in this position.
+    fn parse_induction_generalizing_clause(
+        &mut self,
+    ) -> Result<Vec<crate::SurfaceName>, ParseError> {
+        if self.current().ident_escaped
+            || !matches!(self.current_kind(), TokenKind::Ident(name) if name == "generalizing")
         {
-            self.advance();
-            self.parse_ident_list()
-        } else {
-            Vec::new()
+            return Ok(Vec::new());
         }
+        self.advance();
+        let names = self.parse_indented_ident_list()?;
+        if names.is_empty() {
+            return Err(ParseError::UnexpectedToken {
+                line: self.current_line(),
+                col: self.current().col as usize,
+                message: "expected a local variable after generalizing".to_string(),
+            });
+        }
+        Ok(names)
     }
 
     /// Parse `| name args => tac_seq` alternatives for cases/induction
@@ -374,7 +384,7 @@ impl Parser {
                 });
             }
             let tac = self.tactic()?;
-            tactics.push(tac);
+            tactics.push(self.parse_seq_focus_tail(tac)?);
             after_semicolon = self.eat(&TokenKind::Semicolon);
             while self.eat(&TokenKind::Semicolon) {}
         }

@@ -459,38 +459,14 @@ impl<'a> ElabCtx<'a> {
 
     /// Lower `for x in xs do <body>; rest` in the pure state lane.
     ///
-    /// The loop's accumulators are the `let mut` variables bound **outside**
-    /// the loop that the body reassigns. One accumulator (the most common
-    /// shape, `s := s + f x`) threads directly as the `ForIn` accumulator `β`
-    /// — the original B23 lowering, preserved term-for-term. Several (B93)
-    /// pack into a single right-nested `Prod` accumulator in sorted-name
-    /// order:
+    /// The loop calls the selected `ForIn` instance with the mutable variables
+    /// as its accumulator. One variable travels directly. Several travel in a
+    /// right-nested `Prod`, in sorted-name order. A nested loop resolves its
+    /// own iterator and accumulator in the local scope at its position.
     ///
-    /// ```text
-    /// Bind.bind (List.forIn-fold xs ⟦pack s₁ … sₙ⟧ (fun x acc => ⟦bodyₛ⟧))
-    ///           (fun acc => let s₁ := acc.1; …; let sₙ := acc.2.….2; ⟦rest⟧)
-    /// ```
-    ///
-    /// Body statements are limited to reassignment / plain `let` / `let mut`
-    /// / `if` / `break` / `continue` / nested `for`. A `let mut` declared
-    /// inside the body is **not** an accumulator — it is fresh per iteration
-    /// and threads by the same `let`-shadowing as the accumulators. A nested
-    /// `for` lowers recursively through the same core, its own accumulators
-    /// resolved in the scope at its position. The loop lowers to the inlined
-    /// `List.forIn` recursion (`build_list_forin_fold`) — the exact
-    /// kernel-registered body of `List.forIn` (`data_for_in.rs`).
-    ///
-    /// `break`/`continue` inside the body lower to `ForInStep.done`/`.yield`
-    /// over the packed current values. The emitted term uses Clean's
-    /// simplified `Bind.bind`/`Pure.pure` (which the B07 materialization pass
-    /// rewrites to computing instance-projected form) and kernel
-    /// `Expr::proj` for the unpacking (which reduces on `Prod.mk`), so `rfl`
-    /// value pins over `Option`/`Id` compute.
-    ///
-    /// The registered `ForIn.forIn`/`List.forIn` carry a `[Monad m]` binder
-    /// (Lean-fidelity, olean import — commit A4) that Clean's opaque `Monad`
-    /// axiom carrier cannot satisfy with a real term, so this lane inlines
-    /// `List.forIn`'s recursion directly rather than applying the projection.
+    /// Each body step returns `ForInStep.done` for a break or `ForInStep.yield`
+    /// to continue. Bundled Array and String values can use their backing list
+    /// when the bootstrap environment has no iterator instance for them.
     ///
     /// Early `return e` inside the body (B96) tunnels through an `Option R`
     /// slot prepended to the accumulator (`R` = the do-block result type):
@@ -500,13 +476,6 @@ impl<'a> ElabCtx<'a> {
     /// `none →` rebind muts and continue). A nested loop's `return` tunnels
     /// onward through the ENCLOSING loop's `Option` slot.
     ///
-    /// Anything outside this fragment (non-`List` collections, monadic binds
-    /// in the body, unknown monad, accumulator types outside `Type _`) is
-    /// rejected LOUD with a typed [`ElabError::Unsupported`].
-    ///
-    /// Ground truth: Lean 4 `src/Lean/Elab/Do.lean` (`ForIn` lowering; the
-    /// tuple-packed mutable state; `doForToTerm`'s return tunneling), and
-    /// `clean-kernel` `data_for_in.rs` (`List.forIn` body being inlined).
     pub(super) fn elab_do_pure_for(
         &mut self,
         binder: &SurfaceBinder,
@@ -696,61 +665,53 @@ impl<'a> ElabCtx<'a> {
             }
         };
 
-        // Elaborate the collection with the do-block's `m β` expected type
-        // cleared (the collection is `List α`, not a monadic action). Only
-        // `List` collections are supported (the only registered `ForIn`
-        // instance shape).
+        // Select the iterator for this collection and monad before elaborating
+        // the loop binder; its type is the dictionary's element out-parameter.
         let saved_expected = self.current_expected_type.take();
         let coll_result = self.elaborate(collection);
         self.current_expected_type = saved_expected;
         let coll_expr = coll_result?;
         let coll_ty = self.infer_type(&coll_expr)?;
         let coll_ty = self.whnf(&self.metas.instantiate(&coll_ty));
-        let (alpha, coll_expr) = match coll_ty.kind() {
-            ExprKind::App(head, elem) if matches!(head.kind(), ExprKind::Const(n, _) if *n == Name::from_string("List")) => {
-                (elem.as_ref().clone(), coll_expr)
-            }
-            // B144: `for x in (arr : Array α)` iterates the backing list.
-            // `Array` wraps `List` (`Array.mk (data : List α)`, projection
-            // `Array.data α arr : List α`), and this pure lane lowers the loop
-            // to an inlined `List.rec` fold over a `List α` *term* — never a
-            // synthesized `ForIn` instance. So iterating an array is exactly
-            // iterating its backing list: feed `Array.data α arr` to the same
-            // fold. `Array.data` is a real reducing projection, so a literal
-            // `#[..]` (= `Array.mk (cons-chain)`) still computes; a variable
-            // array stays well-typed and symbolic. `do_u` is the element level
-            // the fold reconstructs `List.{do_u} α` at, so `Array.data` uses it
-            // too (keeping the projected list's `List` head level matched).
-            ExprKind::App(head, elem) if matches!(head.kind(), ExprKind::Const(n, _) if *n == Name::from_string("Array")) =>
+        let (alpha, coll_expr, instance) = match self.resolve_loop_instance(&m, &coll_ty) {
+            Ok((alpha, instance)) => (alpha, coll_expr, Some(instance)),
+            Err(err @ ElabError::FailedToSynthesize { .. })
+                if matches!(
+                    self.env.get_constant_origin(&Name::from_string("ForIn")),
+                    None | Some(clean_kernel::env::ConstantOrigin::Kernel { .. })
+                ) =>
             {
-                let alpha = elem.as_ref().clone();
-                let data_const = Expr::const_(Name::from_string("Array.data"), vec![do_u.clone()]);
-                let as_list = Expr::apps(data_const, [alpha.clone(), coll_expr]);
-                (alpha, as_list)
+                match coll_ty.kind() {
+                    // The bundled prelude also represents arrays and strings as lists.
+                    // Preserve their built-in iteration when it supplies no dictionary.
+                    ExprKind::App(head, elem) if matches!(head.kind(), ExprKind::Const(n, _) if *n == Name::from_string("Array")) =>
+                    {
+                        let alpha = elem.as_ref().clone();
+                        let data_const =
+                            Expr::const_(Name::from_string("Array.data"), vec![do_u.clone()]);
+                        let as_list = Expr::apps(data_const, [alpha.clone(), coll_expr]);
+                        (alpha, as_list, None)
+                    }
+                    // R144: `for c in (s : String)` iterates the backing `List Char`.
+                    // `String` is a NON-polymorphic structure (`String.mk (data : List
+                    // Char)`, projection `String.data s : List Char` — no level params,
+                    // element `Char : Type 0`), so its collection type is a bare
+                    // `Const("String")`, not an `App`. Exactly as the `Array` case,
+                    // feed the backing list `String.data s` to the same inlined
+                    // `List.rec` fold; the fold reconstructs `List.{do_u} Char`, which
+                    // matches `String.data`'s `List.{0} Char` in the ordinary case
+                    // (`do_u = 0`, e.g. an `Id`/`Option`/`IO` do-block), and otherwise
+                    // the `infer_type(&fold)` backstop below rejects LOUD.
+                    ExprKind::Const(n, _) if *n == Name::from_string("String") => {
+                        let alpha = Expr::const_(Name::from_string("Char"), vec![]);
+                        let data_const = Expr::const_(Name::from_string("String.data"), vec![]);
+                        let as_list = Expr::app(data_const, coll_expr);
+                        (alpha, as_list, None)
+                    }
+                    _ => return Err(err),
+                }
             }
-            // R144: `for c in (s : String)` iterates the backing `List Char`.
-            // `String` is a NON-polymorphic structure (`String.mk (data : List
-            // Char)`, projection `String.data s : List Char` — no level params,
-            // element `Char : Type 0`), so its collection type is a bare
-            // `Const("String")`, not an `App`. Exactly as the `Array` case,
-            // feed the backing list `String.data s` to the same inlined
-            // `List.rec` fold; the fold reconstructs `List.{do_u} Char`, which
-            // matches `String.data`'s `List.{0} Char` in the ordinary case
-            // (`do_u = 0`, e.g. an `Id`/`Option`/`IO` do-block), and otherwise
-            // the `infer_type(&fold)` backstop below rejects LOUD.
-            ExprKind::Const(n, _) if *n == Name::from_string("String") => {
-                let alpha = Expr::const_(Name::from_string("Char"), vec![]);
-                let data_const = Expr::const_(Name::from_string("String.data"), vec![]);
-                let as_list = Expr::app(data_const, coll_expr);
-                (alpha, as_list)
-            }
-            _ => {
-                return Err(ElabError::Unsupported {
-                    feature: "`for` loops in a mutating `do` block are only supported \
-                              over `List`, `Array`, and `String` collections (B23)"
-                        .into(),
-                })
-            }
+            Err(err) => return Err(err),
         };
 
         let loop_var_ty = match &binder.ty {
@@ -789,13 +750,16 @@ impl<'a> ElabCtx<'a> {
         // bindings, prefixed by `Option.none R` when tunneling (B96).
         let var_vals: Vec<Expr> = var_fvars.iter().map(|f| Expr::fvar(*f)).collect();
         let init = self.pack_full_acc(&accs, &var_vals, None)?;
-        let fold = self.build_list_forin_fold(
-            &alpha, &accs.beta, &m, &do_u, &do_v, &coll_expr, &init, &step_lam,
-        );
+        let fold = match instance {
+            Some(instance) => self.apply_loop_instance(
+                &instance, &m, &accs.beta, &coll_expr, &init, &step_lam,
+            )?,
+            None => self.build_list_forin_fold(
+                &alpha, &accs.beta, &m, &do_u, &do_v, &coll_expr, &init, &step_lam,
+            ),
+        };
 
-        // Defensive: the inlined fold must type-check to `m β`. If it does not
-        // (a shape we did not anticipate), reject LOUD rather than ship a term
-        // the kernel would reject with a confusing message.
+        // Check the completed loop before constructing its continuation.
         if self.infer_type(&fold).is_err() {
             return Err(ElabError::Unsupported {
                 feature: "the `for` loop desugaring did not type-check; this shape \
@@ -1177,7 +1141,21 @@ impl<'a> ElabCtx<'a> {
         do_u: &Level,
         do_v: &Level,
     ) -> Result<Expr, ElabError> {
-        stack_safe(|| match elems {
+        self.with_do_head_scope(elems.first(), |this| {
+            this.elab_do_for_step_value_inner(elems, accs, m, do_u, do_v)
+        })
+    }
+
+    fn elab_do_for_step_value_inner(
+        &mut self,
+        elems: &[DoElem],
+        accs: &ForAccState,
+        m: &Expr,
+        do_u: &Level,
+        do_v: &Level,
+    ) -> Result<Expr, ElabError> {
+        stack_safe(|| {
+            match elems {
             // Fall-through: yield the current accumulator values.
             [] => {
                 let acc = self.pack_step_acc(accs, None)?;
@@ -1329,6 +1307,36 @@ impl<'a> ElabCtx<'a> {
                     false,
                 ))
             }
+            [DoElem::Expr(_, expr), rest @ ..] => {
+                let alpha = self.fresh_meta(Expr::sort(Level::succ(do_u.clone())));
+                let action_ty = Expr::app(m.clone(), alpha.clone());
+                let action = self.elaborate_with_expected_type(expr, Some(action_ty.clone()))?;
+                self.enforce_expr_type(&action, &action_ty)?;
+                let alpha = self.metas.instantiate(&alpha);
+                // The effect sequences before the rest of the iteration. The
+                // result is discarded, while the current accumulator stays in scope.
+                let ignored = self.push_local(SurfaceName::generated_path("_"), alpha.clone());
+                let remaining = self.elab_do_for_step_value(rest, accs, m, do_u, do_v);
+                self.pop_local();
+                let remaining = self.metas.instantiate(&remaining?);
+                let continuation =
+                    Expr::lam(BinderInfo::Default, alpha.clone(), remaining.abstract_fvar(ignored));
+                let step = Expr::const_(Name::from_string("ForInStep"), vec![do_u.clone()]);
+                let beta = Expr::app(step, accs.beta.clone());
+                Ok(self.mk_bind_term(do_u.clone(), do_v.clone(), m.clone(), alpha, beta, action, continuation))
+            }
+            [DoElem::Match(_, discrs, arms)] => {
+                let [discr] = discrs.as_slice() else {
+                    return Err(ElabError::Unsupported {
+                        feature: "mutable for loop match with several discriminants".into(),
+                    });
+                };
+                let step = Expr::const_(Name::from_string("ForInStep"), vec![do_u.clone()]);
+                let result_ty = Expr::app(m.clone(), Expr::app(step, accs.beta.clone()));
+                self.elab_do_for_ctor_match(discr, arms, &result_ty, |this, body| {
+                    this.elab_do_for_step_value(body, accs, m, do_u, do_v)
+                })
+            }
             [DoElem::If(_, cond, then_branch, else_branch), rest @ ..] => {
                 let cond_expr = self.elaborate_with_expected_type(cond, None)?;
 
@@ -1363,10 +1371,11 @@ impl<'a> ElabCtx<'a> {
             }
             _ => Err(ElabError::Unsupported {
                 feature: "unsupported statement in a `for` loop body over mutable \
-                          state (B23/B93 supports reassignment, `let`, `let mut`, \
-                          `if`, `break`, `continue`, nested `for`)"
+                          state (supports actions, single-arm product matches, reassignment, `let`, \
+                          `let mut`, `if`, `break`, `continue`, nested `for`)"
                     .into(),
             }),
+        }
         })
     }
 

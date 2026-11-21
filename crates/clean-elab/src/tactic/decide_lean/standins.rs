@@ -26,7 +26,7 @@ use clean_kernel::{Expr, ExprKind, TypeChecker};
 
 use super::super::core::{Goal, ProofState};
 use super::plan::Verdict;
-use super::{head_is, reducer, resolve_class, Reduction};
+use super::{head_is, reducer, Reduction};
 
 /// Most reduction steps one equation may spend reaching constructor values.
 const GROUND_BUDGET: u32 = 100_000;
@@ -263,7 +263,7 @@ fn collect_parameter_instances(
             Expr::const_(Name::from_string("DecidableEq"), vec![level.clone()]),
             arg.clone(),
         );
-        match resolve_class(state, goal, &class) {
+        match state.synthesize_class_in_goal(goal, &class, None) {
             Some(instance) => found.push(ParameterInstance {
                 ty: arg.clone(),
                 instance,

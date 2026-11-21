@@ -68,6 +68,7 @@ pub(super) fn write_declaration<W: Write>(
             value,
             hints,
             safety,
+            all,
         } => {
             let mut fields = header(emitter, &scope, h)?;
             fields.push(("value", Json::Nat(emitter.expr(&scope, value)?)));
@@ -87,24 +88,29 @@ pub(super) fn write_declaration<W: Write>(
                 DefinitionSafety::Partial => "partial",
             };
             fields.push(("safety", Json::Str(safety.to_owned())));
-            fields.push(("all", Json::nats(&[emitter.name(&h.name)?])));
+            fields.push(("all", Json::nats(&emitter.names(all)?)));
             ("def", fields)
         }
-        ExportDeclaration::Theorem { header: h, value } => {
+        ExportDeclaration::Theorem {
+            header: h,
+            value,
+            all,
+        } => {
             let mut fields = header(emitter, &scope, h)?;
             fields.push(("value", Json::Nat(emitter.expr(&scope, value)?)));
-            fields.push(("all", Json::nats(&[emitter.name(&h.name)?])));
+            fields.push(("all", Json::nats(&emitter.names(all)?)));
             ("thm", fields)
         }
         ExportDeclaration::Opaque {
             header: h,
             value,
             is_unsafe,
+            all,
         } => {
             let mut fields = header(emitter, &scope, h)?;
             fields.push(("value", Json::Nat(emitter.expr(&scope, value)?)));
             fields.push(("isUnsafe", Json::Bool(*is_unsafe)));
-            fields.push(("all", Json::nats(&[emitter.name(&h.name)?])));
+            fields.push(("all", Json::nats(&emitter.names(all)?)));
             ("opaque", fields)
         }
         ExportDeclaration::Quot { header: h, kind } => {

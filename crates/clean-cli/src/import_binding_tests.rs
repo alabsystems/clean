@@ -130,6 +130,19 @@ fn assert_not_checked_against(outcome: &FileCheckOutcome, why: &str, what: &str)
     );
 }
 
+fn assert_rewritten_artifact_refused(outcome: &FileCheckOutcome, what: &str) {
+    assert_eq!(outcome.success_count, 0, "{what}: {outcome:#?}");
+    assert!(
+        outcome.errors.iter().any(|error| {
+            (error.contains("is not the build of its source")
+                && error.contains("artifact differs from what this builder wrote"))
+                || (error.contains("unresolved import `K1Lib`")
+                    && error.contains("invalid compiler context or declaration identity in Clean payload"))
+        }),
+        "{what}: {outcome:#?}"
+    );
+}
+
 #[test]
 fn a_bound_dependency_artifact_is_credited_with_no_disclosure() {
     let tmp = tempfile::tempdir().expect("tmp");
@@ -154,9 +167,8 @@ fn a_well_typed_value_swap_in_a_sourced_artifact_is_not_checked_against() {
     let (main, artifact) = sourced_dependency(tmp.path(), "q", DEF_LIB, CITE_V1);
     rewrite_payload(&artifact, |p| set_v(p, one));
     let outcome = check(&main);
-    assert_not_checked_against(
+    assert_rewritten_artifact_refused(
         &outcome,
-        "artifact differs from what this builder wrote",
         "K1Lib.v = 1 over a rewritten value",
     );
 }
@@ -280,13 +292,38 @@ fn nothing_is_checked_past_an_import_of_an_inconsistent_artifact() {
 
 // ── a toolchain module is identified by its digest, not by a file name ───────
 
-/// Put an EMPTY `Init/Prelude.olean` (and `Init/Core.olean`) beside `artifact`
-/// — the marker that used to make its whole search root "a toolchain root".
-fn plant_toolchain_marker(artifact: &Path) {
-    let init = artifact.parent().expect("lib root").join("Init");
-    fs::create_dir_all(&init).expect("Init dir");
-    fs::write(init.join("Prelude.olean"), b"").expect("empty Prelude.olean");
-    fs::write(init.join("Core.olean"), b"").expect("empty Core.olean");
+/// Share a pinned Init package with the neighbouring test artifact.
+/// A genuine Init still makes this root look like a toolchain directory.
+/// Empty markers would now shadow and break a real implicit Init before
+/// the consumer reached the artifact admission this test exercises.
+fn stage_pinned_init(artifact: &Path) {
+    let stdlib = clean_olean::require_pinned_lean_lib_path().expect("the pinned Lean library");
+    let root = artifact.parent().expect("artifact root");
+    let mut pending = fs::read_dir(stdlib)
+        .expect("read pinned Lean library")
+        .map(|entry| entry.expect("Lean library entry"))
+        .filter(|entry| {
+            let name = entry.file_name();
+            name == "Init" || name.to_string_lossy().starts_with("Init.")
+        })
+        .map(|entry| (entry.path(), root.join(entry.file_name())))
+        .collect::<Vec<_>>();
+    assert!(!pending.is_empty(), "the pinned SDK ships an Init package");
+    while let Some((source, destination)) = pending.pop() {
+        if source.is_dir() {
+            fs::create_dir_all(&destination).expect("Init fixture directory");
+            pending.extend(
+                fs::read_dir(source)
+                    .expect("read Init fixture sources")
+                    .map(|entry| {
+                        let entry = entry.expect("Init fixture entry");
+                        (entry.path(), destination.join(entry.file_name()))
+                    }),
+            );
+        } else if fs::hard_link(&source, &destination).is_err() {
+            fs::copy(&source, &destination).expect("copy pinned Init fixture");
+        }
+    }
 }
 
 /// Module-trust round 28, measured on `e3f696689`: with the marker planted
@@ -294,22 +331,21 @@ fn plant_toolchain_marker(artifact: &Path) {
 /// passed `clean check` with `artifact_imports: []` (and `export-cert` wrote a
 /// bundle `clean kernel cert verify` reported ALL PASSED).
 #[test]
-fn an_empty_prelude_beside_a_rewritten_artifact_does_not_exempt_it() {
+fn pinned_init_beside_a_rewritten_artifact_does_not_exempt_it() {
     let tmp = tempfile::tempdir().expect("tmp");
     let one = value_one(tmp.path());
     let (main, artifact) = sourced_dependency(tmp.path(), "q", DEF_LIB, CITE_V1);
     rewrite_payload(&artifact, |p| set_v(p, one));
-    plant_toolchain_marker(&artifact);
+    stage_pinned_init(&artifact);
     let outcome = check(&main);
-    assert_not_checked_against(
+    assert_rewritten_artifact_refused(
         &outcome,
-        "artifact differs from what this builder wrote",
         "K1Lib.v = 1 over a rewritten value, marker planted",
     );
 }
 
 #[test]
-fn an_empty_prelude_beside_a_stale_artifact_does_not_exempt_it() {
+fn pinned_init_beside_a_stale_artifact_does_not_exempt_it() {
     let tmp = tempfile::tempdir().expect("tmp");
     let (main, artifact) = sourced_dependency(tmp.path(), "q", DEF_LIB, CITE_V0);
     let source = artifact
@@ -319,7 +355,7 @@ fn an_empty_prelude_beside_a_stale_artifact_does_not_exempt_it() {
         .expect("package root")
         .join("K1Lib.lean");
     fs::write(&source, "def K1Lib.v : Nat := 1\n").expect("edit source");
-    plant_toolchain_marker(&artifact);
+    stage_pinned_init(&artifact);
     let outcome = check(&main);
     assert_not_checked_against(
         &outcome,
@@ -329,11 +365,11 @@ fn an_empty_prelude_beside_a_stale_artifact_does_not_exempt_it() {
 }
 
 #[test]
-fn an_empty_prelude_beside_an_unsourced_artifact_does_not_hide_its_disclosure() {
+fn pinned_init_beside_an_unsourced_artifact_does_not_hide_its_disclosure() {
     let tmp = tempfile::tempdir().expect("tmp");
     let lib = build_lib(tmp.path(), "lib", LIB);
     let main = consumer(tmp.path(), "use", &lib, CITE_TRUE, |_| {});
-    plant_toolchain_marker(
+    stage_pinned_init(
         &main
             .parent()
             .expect("consumer root")

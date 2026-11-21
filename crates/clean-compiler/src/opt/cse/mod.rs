@@ -128,6 +128,16 @@ fn normalize_let_value(value: &LetValue) -> Option<NormalizedValue> {
     }
 }
 
+/// Whether binding `value` at type `ty` runs an action (X4 R6): a call whose
+/// result is `IO α` or a relative, or a `Unit →` thunk of one, read
+/// syntactically (`to_lcnf::syntactic_action`; this pass has no environment
+/// to unfold with). Such a binding is never merged with an equal one and never
+/// made available to a later one.
+fn runs_an_action(ty: &Expr, value: &LetValue) -> bool {
+    matches!(value, LetValue::Const { .. } | LetValue::FVar { .. })
+        && crate::to_lcnf::syntactic_action(ty)
+}
+
 /// Normalize arguments.
 fn normalize_args(args: &[Arg]) -> Option<Vec<NormalizedArg>> {
     args.iter()
@@ -312,7 +322,16 @@ impl CodeFolder for CseFolder<'_> {
                 Code::Let(decl, body) => {
                     let new_value = apply_subst_to_value(&decl.value, self.ctx);
 
-                    if let Some(existing) = self.ctx.lookup(&new_value) {
+                    if runs_an_action(&decl.ty, &new_value) {
+                        // Under the eager IO model every binding of an
+                        // action runs it: two equal calls are two runs.
+                        pending_lets.push(LetDecl {
+                            fvar_id: decl.fvar_id,
+                            name: decl.name.clone(),
+                            ty: apply_subst_to_expr(&decl.ty, self.ctx),
+                            value: new_value,
+                        });
+                    } else if let Some(existing) = self.ctx.lookup(&new_value) {
                         // CSE hit: record substitution, skip this let binding
                         self.ctx.record_subst(decl.fvar_id, existing);
                     } else {
@@ -414,5 +433,7 @@ impl CodeFolder for CseFolder<'_> {
     }
 }
 
+#[cfg(test)]
+mod action_tests;
 #[cfg(test)]
 mod tests;

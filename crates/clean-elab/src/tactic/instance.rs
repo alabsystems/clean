@@ -8,55 +8,54 @@
 //! for resolution within the current goal's scope.
 
 use crate::instances::{extract_class_app, DEFAULT_PRIORITY};
-use crate::tactic::{have_, let_, ProofState, TacticError, TacticResult};
-use clean_kernel::{Expr, ExprKind, FVarId};
+use crate::tactic::{have_, let_, Goal, ProofState, TacticError, TacticResult};
+use clean_kernel::{Expr, ExprKind, FVarId, Name};
 
-/// Introduce a local instance for the current goal.
-///
-/// `letI` introduces a local instance that will be available for typeclass
-/// resolution within the current goal. Unlike `have`, it registers the
-/// value as an instance.
-///
-/// # Example
-/// ```text
-/// -- Goal: Decidable P → ...
-/// letI : Decidable P := Classical.dec P
-/// -- Instance Decidable P is now available
-/// ```
-///
-/// # Errors
-/// - `NoGoals` if there are no goals
-///
-/// REQUIRES: At least one goal exists in `state`.
-/// ENSURES: On `Ok`, a let-binding `name : ty := value` is added to the
-///   current goal's local context.
-/// ENSURES: If `ty` is a typeclass application and an instance table exists,
-///   the value is registered as an instance for that class.
+impl ProofState {
+    /// Synthesize `class_ty` the way Lean's `synthInstance` does inside the goal:
+    /// the goal's class-typed locals are local instances, tried first at every
+    /// sub-goal (a `∀`-typed local and a `DecidableEq` local included), and the
+    /// file's instance state applies — an `attribute [-instance]` erasure,
+    /// `local instance`s of an open section, `scoped instance`s of an open
+    /// namespace.
+    ///
+    /// The optional namespace is open only while this query runs.
+    /// ENSURES: on `Some(s)`, `s` mentions no unassigned metavariable.
+    pub(super) fn synthesize_class_in_goal(
+        &self,
+        goal: &Goal,
+        class_ty: &Expr,
+        open_namespace: Option<&Name>,
+    ) -> Option<Expr> {
+        let scope = crate::infer::TacticInstanceScope {
+            instances: self.instances.as_ref(),
+            namespace_state: self.namespace_state(),
+            visibility: self.instance_visibility.as_deref(),
+            rigid_levels: self.metas.rigid_level_params_snapshot(),
+            locals: self
+                .meta_scope_for_context(&goal.local_ctx)
+                .into_iter()
+                .map(|(name, fvar, ty)| {
+                    let ty = self.metas.instantiate(&ty);
+                    (name, fvar, ty)
+                })
+                .collect(),
+            next_fvar: self.next_fvar,
+            level_mint: self.level_mint.clone(),
+        };
+        crate::ElabCtx::synthesize_in_tactic_scope(&self.env, &scope, class_ty, open_namespace)
+    }
+}
+
+/// Introduce a transparent, goal-local definition and inline it in the final term.
+/// Goal-scoped typeclass search already considers class-typed local declarations.
 pub fn let_i(
     state: &mut ProofState,
     name: &clean_parser::SurfaceName,
     ty: Expr,
     value: Expr,
 ) -> TacticResult {
-    if state.goals.is_empty() {
-        return Err(TacticError::NoGoals);
-    }
-
-    // Extract class name for instance registration before ty is moved
-    let class_info = extract_class_app(&ty);
-
-    // Route the local let through the proof-carrying continuation boundary so
-    // the replacement goal metavariable captures the newly introduced FVar.
-    let_(state, name, ty.clone(), Some(value.clone()))?;
-
-    // Register in instance table if available (#2233)
-    if let Some((class_name, _)) = class_info {
-        if let Some(instances) = state.instances.as_mut() {
-            instances.add_instance(name.name().clone(), class_name, value, ty, DEFAULT_PRIORITY);
-        }
-    }
-
-    Ok(())
+    super::have_let::let_binding(state, name, ty, Some(value), true)
 }
 
 /// Introduce a local instance hypothesis for the current goal.

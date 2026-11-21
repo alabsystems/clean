@@ -81,24 +81,21 @@ pub(super) fn build_brec_on_minor(
         ctor_app = Expr::app(ctor_app, fv.clone());
     }
 
-    let mut below_witness_ty = Expr::const_(Name::from_string("PUnit"), vec![rlvl.clone()]);
-    let mut below_witness = Expr::const_(Name::from_string("PUnit.unit"), vec![rlvl.clone()]);
-    let mut ih_idx = ih_fvars.len();
-    for i in (0..num_fields as usize).rev() {
-        if i < recursive_flags.len() && recursive_flags[i] {
-            ih_idx -= 1;
-            let alpha_ty = ih_tys[ih_idx].clone();
-            below_witness = mk_pprod_mk(
-                alpha_ty.clone(),
-                below_witness_ty.clone(),
-                ih_fvars[ih_idx].clone(),
-                below_witness,
-                rlvl,
-                rlvl,
-            );
-            below_witness_ty = mk_pprod(alpha_ty, below_witness_ty, rlvl, rlvl);
-        }
-    }
+    // A singleton is the recursive hypothesis itself. Multiple hypotheses
+    // pack right-associatively, with no trailing unit.
+    let mut hypotheses = ih_tys.iter().cloned().zip(ih_fvars.iter().cloned()).rev();
+    let (last_ty, last_value) = hypotheses.next().unwrap_or_else(|| {
+        (
+            Expr::const_(Name::from_string("PUnit"), vec![rlvl.clone()]),
+            Expr::const_(Name::from_string("PUnit.unit"), vec![rlvl.clone()]),
+        )
+    });
+    let (below_witness_ty, below_witness) =
+        hypotheses.fold((last_ty, last_value), |(tail_ty, tail), (head_ty, head)| {
+            let ty = mk_pprod(head_ty.clone(), tail_ty.clone(), rlvl, rlvl);
+            let value = mk_pprod_mk(head_ty, tail_ty, head, tail, rlvl, rlvl);
+            (ty, value)
+        });
 
     let current = Expr::app(
         Expr::app(f_fv.clone(), ctor_app.clone()),
@@ -106,7 +103,7 @@ pub(super) fn build_brec_on_minor(
     );
     let pair = mk_pprod_mk(
         Expr::app(motive_fv.clone(), ctor_app.clone()),
-        Expr::app(below_app.clone(), ctor_app),
+        below_witness_ty,
         current,
         below_witness,
         motive_level,
@@ -158,32 +155,29 @@ pub(super) fn build_below_minor(
         field_tys.push(ft);
     }
 
-    // Bind IH arguments for recursive fields
+    // Bind an induction hypothesis and make its product for each recursive
+    // field.
+    let rlvl = sort_level(rlvl_sort);
     let mut ih_ids = Vec::new();
-    let mut ih_fvars = Vec::new();
-    for i in 0..num_fields as usize {
-        if i < recursive_flags.len() && recursive_flags[i] {
+    let mut pairs = Vec::new();
+    for (field, recursive) in field_fvars.iter().zip(recursive_flags) {
+        if *recursive {
             let (id, fv) = cb.fresh_local(rlvl_sort.clone());
             ih_ids.push(id);
-            ih_fvars.push(fv);
+            pairs.push(mk_pprod(
+                Expr::app(motive_fv.clone(), field.clone()),
+                fv,
+                motive_level,
+                &rlvl,
+            ));
         }
     }
 
-    // Build product of (motive field, ih) pairs
-    let rlvl = sort_level(rlvl_sort);
-    let punit = Expr::const_(Name::from_string("PUnit"), vec![rlvl.clone()]);
-    let mut result = punit;
-    let mut ih_idx = ih_fvars.len();
-
-    for i in (0..num_fields as usize).rev() {
-        if i < recursive_flags.len() && recursive_flags[i] {
-            ih_idx -= 1;
-            let motive_applied = Expr::app(motive_fv.clone(), field_fvars[i].clone());
-            let ih = ih_fvars[ih_idx].clone();
-            let pair = mk_pprod(motive_applied, ih, motive_level, &rlvl);
-            result = mk_pprod(pair, result, &rlvl, &rlvl);
-        }
-    }
+    let mut pairs = pairs.into_iter().rev();
+    let last = pairs
+        .next()
+        .unwrap_or_else(|| Expr::const_(Name::from_string("PUnit"), vec![rlvl.clone()]));
+    let mut result = pairs.fold(last, |tail, head| mk_pprod(head, tail, &rlvl, &rlvl));
 
     // Close IH binders
     for j in (0..ih_ids.len()).rev() {

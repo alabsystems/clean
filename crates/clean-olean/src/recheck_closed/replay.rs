@@ -8,11 +8,14 @@
 //! only compared.
 
 use clean_kernel::env::{ConstantInfo, ConstantKind, Declaration, Environment};
-use clean_kernel::inductive::{Constructor, InductiveDecl, InductiveType, RecursorRule};
+use clean_kernel::inductive::{
+    Constructor, InductiveDecl, InductiveType, RecursorRule, RecursorVal,
+};
 use clean_kernel::name::Name;
 use clean_kernel::tc::TypeChecker;
 use std::collections::BTreeMap;
 
+use super::cone_plan::is_exported_eliminator_definition;
 use super::drive::ReplayTarget;
 use super::{ClosedRecheckRefusal, FamilyIndex, ReplayStats, Unit};
 
@@ -164,12 +167,58 @@ pub(super) fn replay_family(
                 s.ends_with(".casesOn") || s.ends_with(".recOn")
             }
         });
+    // Source Clean stores a checked definition and an auxiliary native rule
+    // table under the same name. Validate both exact records independently
+    // of the producing environment. Only the definition goes to Lean's
+    // reference kernel, which never uses these native auxiliary rules.
+    let source_wrappers = if replay.check_source_eliminator_definitions() {
+        unit.members
+            .iter()
+            .filter(|name| {
+                env.get_recursor(name)
+                    .is_some_and(|rec| is_exported_eliminator_definition(env, rec))
+            })
+            .collect::<Vec<_>>()
+    } else {
+        Vec::new()
+    };
+    if !source_wrappers.is_empty() {
+        let mut generation = replay.env().clone();
+        if let Err(error) = generation.add_inductive(decl.clone()) {
+            refusals.push(ClosedRecheckRefusal::FamilyRefused {
+                family: head.to_string(),
+                error: format!("source eliminator reconstruction: {error}"),
+            });
+            return;
+        }
+        for name in &source_wrappers {
+            if let Err(mismatch) = check_source_eliminator(
+                &generation,
+                name,
+                env.get_const(name),
+                env.get_recursor(name),
+            ) {
+                refusals.push(mismatch);
+                return;
+            }
+        }
+    }
     if let Err(error) = replay.admit_family(decl, clean_built) {
         refusals.push(ClosedRecheckRefusal::FamilyRefused {
             family: head.to_string(),
             error,
         });
         return;
+    }
+    for name in &source_wrappers {
+        if replay.env().get_const(name).is_some() {
+            refusals.push(ClosedRecheckRefusal::MemberMismatch {
+                name: name.to_string(),
+                detail: "source eliminator collides with a reference primitive".into(),
+            });
+            return;
+        }
+        replay_constant(env, replay, name, stats, refusals);
     }
     let replay: &Environment = replay.env();
     stats.families_replayed += 1;
@@ -181,6 +230,12 @@ pub(super) fn replay_family(
 
     // Compare every imported member of the block against the regenerated one.
     for member in &unit.members {
+        if source_wrappers.contains(&member) {
+            // Its complete native record matched in the isolated comparison
+            // and its defining term was replayed through ordinary add_checked.
+            stats.family_members_compared += 1;
+            continue;
+        }
         if let Some(rec) = env.get_recursor(member) {
             let Some(regenerated) = replay.get_recursor(member) else {
                 refusals.push(ClosedRecheckRefusal::MemberNotRegenerated {
@@ -275,6 +330,77 @@ fn compare_member(
         name: name.to_string(),
         detail: "imported type is not definitionally equal to the regenerated one".to_string(),
     });
+}
+
+fn check_source_eliminator(
+    regenerated: &Environment,
+    name: &Name,
+    definition: Option<&ConstantInfo>,
+    mirror: Option<&RecursorVal>,
+) -> Result<(), ClosedRecheckRefusal> {
+    if definition.is_some()
+        && mirror.is_some()
+        && definition == regenerated.get_const(name)
+        && mirror == regenerated.get_recursor(name)
+    {
+        Ok(())
+    } else {
+        Err(ClosedRecheckRefusal::MemberMismatch {
+            name: name.to_string(),
+            detail: "source eliminator definition or native rule table differs from the regenerated family".into(),
+        })
+    }
+}
+
+#[cfg(test)]
+mod source_eliminator_controls {
+    use super::*;
+
+    #[test]
+    fn changed_wrapper_or_native_dispatch_refuses_source_eliminator() {
+        let mut generation = Environment::default();
+        let family = Name::from_string("Coin");
+        generation
+            .add_inductive(InductiveDecl {
+                level_params: vec![],
+                num_params: 0,
+                types: vec![InductiveType {
+                    name: family.clone(),
+                    type_: clean_kernel::Expr::type_(),
+                    constructors: ["Coin.heads", "Coin.tails"]
+                        .map(|value| Constructor {
+                            name: Name::from_string(value),
+                            type_: clean_kernel::Expr::const_(family.clone(), vec![]),
+                        })
+                        .to_vec(),
+                }],
+            })
+            .unwrap();
+        for key in ["Coin.casesOn", "Coin.recOn"] {
+            let n = Name::from_string(key);
+            let def = generation.get_const(&n).unwrap();
+            let rec = generation.get_recursor(&n).unwrap();
+            check_source_eliminator(&generation, &n, Some(def), Some(rec)).unwrap();
+            let mut changed = def.clone();
+            changed.value = Some(clean_kernel::Expr::const_(
+                Name::from_string("Coin.heads"),
+                vec![],
+            ));
+            let mut wrong_rule = rec.clone();
+            wrong_rule.rules.swap(0, 1);
+            for inputs in [
+                (Some(&changed), Some(rec)),
+                (Some(def), Some(&wrong_rule)),
+                (None, Some(rec)),
+                (Some(def), None),
+            ] {
+                assert!(
+                    matches!(check_source_eliminator(&generation,&n,inputs.0,inputs.1),
+                    Err(ClosedRecheckRefusal::MemberMismatch { name: actual, .. }) if actual==key)
+                );
+            }
+        }
+    }
 }
 
 /// Compare imported ι-rules against regenerated ones.

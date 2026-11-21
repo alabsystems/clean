@@ -63,7 +63,11 @@ impl<'a> ElabCtx<'a> {
         func: &SurfaceExpr,
         args: &[SurfaceArg],
     ) -> Result<Option<Expr>, ElabError> {
-        if self.do_monad_info.is_none() || args.len() != 1 {
+        if self.explicit_mode
+            || self.do_monad_info.is_none()
+            || args.len() != 1
+            || args[0].name.is_some()
+        {
             return Ok(None);
         }
         let name = match Self::unwrap_surface_parens(func) {

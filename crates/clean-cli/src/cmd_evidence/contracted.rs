@@ -1,0 +1,213 @@
+// Copyright 2026 Andrew Yates
+// Author: Andrew Yates <andrewyates.name@gmail.com>
+// SPDX-License-Identifier: Apache-2.0
+
+//! Figures whose record is a declared replacement-scorecard artifact.
+//!
+//! Each artifact is first assessed against the contract
+//! `cmd_replacement::evidence_contract` declares for its path, the same
+//! assessment `clean replacement status` applies. A vacuous or stub artifact
+//! makes the figure absent with the contract's reason; a missing one is
+//! unavailable and an invalid one is red. Only a present artifact is read.
+
+use super::read_json;
+use super::reading::{DenominatorReading, FreshnessReading, Outcome, Reading, NO_INPUT_DIGEST};
+use crate::cmd_replacement::{assess_evidence_in_root, EvidenceState};
+use crate::EvidenceCheckError;
+use serde::{Deserialize, Deserializer};
+use serde_json::json;
+use std::collections::BTreeMap;
+use std::path::Path;
+
+pub(super) const NATIVE_EXEC: &str = "reports/native-exec-battery.json";
+pub(super) const NATIVE_EXEC_FIGURE: &str = "frontend.native_exec_battery";
+pub(super) const TACTIC_PARITY: &str = "reports/tactic-parity-counts.json";
+pub(super) const TACTIC_PARITY_FIGURE: &str = "frontend.tactic_parity";
+
+/// `Ok(None)` when the artifact backs its row; otherwise the outcome or error
+/// that the contract assessment decides.
+fn assess(root: &Path, path: &str) -> Result<Option<Outcome>, EvidenceCheckError> {
+    let assessment = assess_evidence_in_root(root, path);
+    let detail = || {
+        assessment
+            .artifacts
+            .iter()
+            .filter_map(|artifact| artifact.detail.clone())
+            .collect::<Vec<_>>()
+            .join("; ")
+    };
+    match assessment.state {
+        EvidenceState::Present => Ok(None),
+        EvidenceState::Vacuous | EvidenceState::Stub => {
+            Ok(Some(Outcome::Absent { reason: detail() }))
+        }
+        EvidenceState::Missing => Err(EvidenceCheckError::Unavailable(format!(
+            "{path}: {}",
+            detail()
+        ))),
+        EvidenceState::Invalid | EvidenceState::SchemaName => {
+            Err(EvidenceCheckError::Invalid(format!("{path}: {}", detail())))
+        }
+    }
+}
+
+pub(super) fn tactic_parity(root: &Path) -> Result<Outcome, EvidenceCheckError> {
+    match assess(root, TACTIC_PARITY)? {
+        Some(outcome) => Ok(outcome),
+        None => Err(EvidenceCheckError::Invalid(format!(
+            "{TACTIC_PARITY} now backs its row, but no reader for its counts is registered"
+        ))),
+    }
+}
+
+#[derive(Deserialize)]
+struct NativeExecBattery {
+    generated_by: String,
+    claim: String,
+    lean: String,
+    #[serde(deserialize_with = "read_counts")]
+    counts: BTreeMap<String, u64>,
+    wrong_output_exit0: u64,
+    programs: Vec<Program>,
+}
+
+fn read_counts<'de, D: Deserializer<'de>>(input: D) -> Result<BTreeMap<String, u64>, D::Error> {
+    super::read_unique_map(input, "verdict")
+}
+
+#[derive(Deserialize)]
+struct Program {
+    name: String,
+    verdict: String,
+}
+
+pub(super) fn native_exec_battery(root: &Path) -> Result<Outcome, EvidenceCheckError> {
+    if let Some(outcome) = assess(root, NATIVE_EXEC)? {
+        return Ok(outcome);
+    }
+    let battery: NativeExecBattery = read_json(root, NATIVE_EXEC)?;
+    let mut recounted: BTreeMap<String, u64> = battery
+        .counts
+        .keys()
+        .map(|verdict| (verdict.clone(), 0))
+        .collect();
+    for program in &battery.programs {
+        let Some(count) = recounted.get_mut(&program.verdict) else {
+            return Err(EvidenceCheckError::Invalid(format!(
+                "{NATIVE_EXEC} program {:?} has undeclared verdict {:?}",
+                program.name, program.verdict
+            )));
+        };
+        *count += 1;
+    }
+    if recounted != battery.counts {
+        return Err(EvidenceCheckError::Invalid(format!(
+            "{NATIVE_EXEC} counts differ from its programs\nrecorded {:?}\nderived  {recounted:?}",
+            battery.counts
+        )));
+    }
+    let wrong_exit0 = recounted.get("WRONG_OUTPUT_EXIT0").copied().unwrap_or(0);
+    if wrong_exit0 != battery.wrong_output_exit0 {
+        return Err(EvidenceCheckError::Invalid(format!(
+            "{NATIVE_EXEC} wrong_output_exit0 is {} but {wrong_exit0} programs have that verdict",
+            battery.wrong_output_exit0
+        )));
+    }
+    let byte_equal = recounted.get("BYTE_EQUAL").copied().unwrap_or(0);
+    let mut reading = Reading::new(
+        json!({"byte_equal": byte_equal, "wrong_output_exit0": wrong_exit0, "verdicts": recounted}),
+        format!(
+            "{byte_equal} of {} programs byte-equal to pinned Lean; {wrong_exit0} wrong output with exit 0",
+            battery.programs.len()
+        ),
+        FreshnessReading::unknown(NO_INPUT_DIGEST),
+    );
+    reading.denominator = Some(DenominatorReading::counting(
+        "native-exec battery programs",
+        battery.programs.into_iter().map(|program| program.name),
+    )?);
+    reading.labels = vec![
+        battery.lean,
+        format!("generated by {}", battery.generated_by),
+    ];
+    reading.non_claims = vec![battery.claim];
+    Ok(Outcome::Measured(Box::new(reading)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    fn write(root: &Path, path: &str, bytes: &[u8]) {
+        let path = root.join(path);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, bytes).unwrap();
+    }
+
+    fn battery() -> serde_json::Value {
+        json!({
+            "schema_version": "clean-native-exec-battery-v1", "status": "passed",
+            "generated_by": "producer", "claim": "fail-closedness, not parity",
+            "lean": "Lean 4.30.0-rc2",
+            "counts": {"BYTE_EQUAL": 1, "REFUSED_BUILD": 1, "WRONG_OUTPUT_EXIT0": 0},
+            "wrong_output_exit0": 0,
+            "programs": [
+                {"name": "a", "verdict": "BYTE_EQUAL"},
+                {"name": "b", "verdict": "REFUSED_BUILD"}
+            ]
+        })
+    }
+
+    #[test]
+    fn test_native_exec_counts_are_recounted_from_programs() {
+        let root = tempfile::tempdir().unwrap();
+        write(
+            root.path(),
+            NATIVE_EXEC,
+            &serde_json::to_vec(&battery()).unwrap(),
+        );
+        let Outcome::Measured(reading) = native_exec_battery(root.path()).unwrap() else {
+            panic!("expected a reading");
+        };
+        assert_eq!(reading.value["byte_equal"], 1);
+        assert_eq!(reading.denominator.as_ref().unwrap().count, 2);
+
+        let mut raised = battery();
+        raised["counts"]["BYTE_EQUAL"] = json!(2);
+        write(
+            root.path(),
+            NATIVE_EXEC,
+            &serde_json::to_vec(&raised).unwrap(),
+        );
+        let error = native_exec_battery(root.path()).err().unwrap();
+        assert!(error.to_string().contains("counts differ"));
+    }
+
+    #[test]
+    fn test_native_exec_contract_failure_is_invalid_and_missing_unavailable() {
+        let root = tempfile::tempdir().unwrap();
+        let missing = native_exec_battery(root.path()).err().unwrap();
+        assert!(matches!(missing, EvidenceCheckError::Unavailable(_)));
+        let mut failed = battery();
+        failed["status"] = json!("failed");
+        write(
+            root.path(),
+            NATIVE_EXEC,
+            &serde_json::to_vec(&failed).unwrap(),
+        );
+        let error = native_exec_battery(root.path()).err().unwrap();
+        assert!(matches!(error, EvidenceCheckError::Invalid(_)));
+        assert!(error.to_string().contains("reports its own failure"));
+    }
+
+    #[test]
+    fn test_tactic_parity_vacuous_contract_reads_absent() {
+        let root = tempfile::tempdir().unwrap();
+        write(root.path(), TACTIC_PARITY, br#"{"rows": []}"#);
+        let Outcome::Absent { reason } = tactic_parity(root.path()).unwrap() else {
+            panic!("a vacuous artifact must read absent");
+        };
+        assert!(reason.starts_with("VACUOUS"));
+    }
+}

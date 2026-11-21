@@ -64,7 +64,13 @@ impl ImportBinding {
         self.examined.extend(fresh.iter().cloned());
         // A file whose project's Lean world is refused loaded no artifact.
         let search_paths = file_ctx.effective_import_search_paths().unwrap_or_default();
-        self.admitter.examine(fresh, &search_paths)
+        match file_ctx.declared_lean_world() {
+            Ok(world) => self.admitter.examine_in_world(fresh, &search_paths, world),
+            Err(error) => ImportBindingFindings {
+                refusals: vec![error.to_string()],
+                ..ImportBindingFindings::default()
+            },
+        }
     }
 }
 

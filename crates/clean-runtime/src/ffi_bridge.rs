@@ -287,7 +287,9 @@ fn builtin_string_append(args: &[Value]) -> Result<Value, FfiError> {
 fn builtin_string_length(args: &[Value]) -> Result<Value, FfiError> {
     const NAME: &str = "String.length";
     expect_arity(NAME, args, 1)?;
-    Ok(Value::Nat(expect_string(NAME, args, 0)?.len() as u64))
+    Ok(Value::Nat(
+        expect_string(NAME, args, 0)?.chars().count() as u64
+    ))
 }
 
 fn builtin_string_push(args: &[Value]) -> Result<Value, FfiError> {

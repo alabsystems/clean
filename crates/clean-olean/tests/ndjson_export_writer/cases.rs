@@ -312,7 +312,7 @@ fn test_export_writer_cic_l_is_accepted_by_lean_through_lean4exports_own_parser(
 }
 
 #[test]
-fn test_export_writer_full_export_matches_pinned_leans_environment_except_outparam_hint() {
+fn test_export_writer_full_export_matches_pinned_leans_environment() {
     let _heavy = HEAVY.lock().unwrap_or_else(PoisonError::into_inner);
     let minted = minted();
     let mut command = Command::new(repo_root().join("scripts/lean_export_replay.sh"));
@@ -326,7 +326,7 @@ fn test_export_writer_full_export_matches_pinned_leans_environment_except_outpar
     let out = command.output().expect("compare the FULL export with Lean");
     assert_eq!(
         out.status.code(),
-        Some(1),
+        Some(0),
         "{}",
         String::from_utf8_lossy(&out.stderr)
     );
@@ -339,20 +339,13 @@ fn test_export_writer_full_export_matches_pinned_leans_environment_except_outpar
     );
     assert_eq!(
         verdict["equal"].as_u64(),
-        Some(minted.summary.declarations as u64 - 1)
+        Some(minted.summary.declarations as u64)
     );
     assert_eq!(verdict["absent"], serde_json::json!([]));
-    assert_eq!(verdict["differing_count"], 1);
-    assert_eq!(
-        verdict["differing_by_field"],
-        serde_json::json!({"hints": 1})
-    );
-    assert_eq!(
-        verdict["differing"],
-        serde_json::json!([
-            {"name": "outParam", "fields": ["hints regular 1 vs abbrev"]}
-        ])
-    );
+    assert_eq!(verdict["verdict"], "equal");
+    assert_eq!(verdict["differing_count"], 0);
+    assert_eq!(verdict["differing_by_field"], serde_json::json!({}));
+    assert_eq!(verdict["differing"], serde_json::json!([]));
     eprintln!("Q1 FULL against Lean: {last}");
 }
 

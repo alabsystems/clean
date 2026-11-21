@@ -353,6 +353,10 @@ impl<'a> ElabCtx<'a> {
                 let new_val = Self::expand_nested_actions_expr(val, counter, lifted)?;
                 SurfaceExpr::NamedArg(*span, name.clone(), Box::new(new_val))
             }
+            SurfaceExpr::Borrowed(span, inner) => {
+                let new_inner = Self::expand_nested_actions_expr(inner, counter, lifted)?;
+                SurfaceExpr::Borrowed(*span, Box::new(new_inner))
+            }
             SurfaceExpr::OutParam(span, inner) => {
                 let new_inner = Self::expand_nested_actions_expr(inner, counter, lifted)?;
                 SurfaceExpr::OutParam(*span, Box::new(new_inner))

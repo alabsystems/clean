@@ -11,6 +11,56 @@ use super::*;
 // ── <;> sequential focus combinator tests ──────────────────────────────
 
 #[test]
+fn test_seq_focus_inside_alternatives_preserves_chain_and_siblings() {
+    let input = "by\n  induction xs with\n  | nil => cases b <;> simp <;> rfl; done\n  | cons x xs ih => exact ih";
+    let expr = Parser::parse_expr(input).unwrap();
+    let SurfaceExpr::ByTactic(_, tactics) = expr else {
+        panic!("expected tactic proof: {expr:?}");
+    };
+    let [SurfaceTactic::Induction { alts, .. }] = tactics.as_slice() else {
+        panic!("expected induction: {tactics:?}");
+    };
+    let [nil, cons] = alts.as_slice() else {
+        panic!("expected two arms: {alts:?}");
+    };
+    assert_eq!(nil.name, crate::SurfaceName::generated_path("nil"));
+    assert_eq!(cons.name, crate::SurfaceName::generated_path("cons"));
+    let [SurfaceTactic::SeqFocus(_, lhs, rhs), SurfaceTactic::Named { name, .. }] =
+        nil.tactics.as_slice()
+    else {
+        panic!(
+            "expected a chain and a semicolon sibling: {:?}",
+            nil.tactics
+        );
+    };
+    assert_eq!(name, "done");
+    assert!(matches!(rhs.as_ref(), SurfaceTactic::Named { name, .. } if name == "rfl"));
+    let SurfaceTactic::SeqFocus(_, first, middle) = lhs.as_ref() else {
+        panic!("expected a left-associated chain: {lhs:?}");
+    };
+    assert!(matches!(first.as_ref(), SurfaceTactic::Cases(..)));
+    assert!(matches!(middle.as_ref(), SurfaceTactic::Simp { .. }));
+    assert!(
+        matches!(cons.tactics.as_slice(), [SurfaceTactic::Named { name, .. }] if name == "exact")
+    );
+}
+
+#[test]
+fn test_seq_focus_inside_alternatives_requires_right_tactic() {
+    let input = "example (xs : List Nat) (b : Bool) : b = b := by\n  induction xs with\n  | nil => cases b <;>\n  | cons x xs ih => exact ih\n\ntheorem following : True := True.intro";
+    let report = Parser::parse_file_with_diagnostics(input).unwrap();
+    assert!(
+        report.diagnostics.iter().any(|diagnostic| {
+            diagnostic.recovery_start.line == 4 && diagnostic.message.contains("Pipe")
+        }),
+        "{:?}",
+        report.diagnostics
+    );
+    assert!(report.decls.iter().any(|decl| matches!(decl,
+        SurfaceDecl::Theorem { name, .. } if *name == crate::SurfaceName::generated_path("following"))));
+}
+
+#[test]
 fn test_parse_seq_focus_simple() {
     // `simp <;> ring` — apply simp, then ring to every resulting goal
     let expr = Parser::parse_expr("by simp <;> ring").unwrap();
@@ -283,6 +333,82 @@ fn test_parse_def_match_multi_arm() {
             }
         }
         other => panic!("Expected Def, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_grouped_declaration_equations_keep_complete_rows() {
+    let decl = Parser::parse_decl("def f | 0, 0 | 1, 1 => 2 | _, _ => 3").unwrap();
+    let SurfaceDecl::Def { val, .. } = decl else {
+        panic!("expected def: {decl:?}");
+    };
+    let SurfaceExpr::PatternMatchLambda(_, _, body) = *val else {
+        panic!("expected equation lambda: {val:?}");
+    };
+    let SurfaceExpr::Match(_, _, _, arms) = *body else {
+        panic!("expected match: {body:?}");
+    };
+    let [first, second, fallback] = arms.as_slice() else {
+        panic!("expected three ordered arms: {arms:?}");
+    };
+    let pair = crate::SurfaceName::generated_path("Prod.mk");
+    for (arm, n) in [(first, 0), (second, 1)] {
+        assert!(matches!(&arm.pattern, SurfacePattern::Ctor(name, fields)
+            if *name == pair && matches!(fields.as_slice(),
+                [SurfacePattern::Lit(SurfaceLit::Nat(a)), SurfacePattern::Lit(SurfaceLit::Nat(b))]
+                if *a == n && *b == n)));
+        assert!(matches!(arm.body, SurfaceExpr::Lit(_, SurfaceLit::Nat(2))));
+    }
+    assert_eq!(first.body.span(), second.body.span());
+    assert!(
+        matches!(&fallback.pattern, SurfacePattern::Ctor(name, fields)
+        if *name == pair && matches!(fields.as_slice(),
+            [SurfacePattern::Wildcard, SurfacePattern::Wildcard]))
+    );
+    assert!(matches!(
+        fallback.body,
+        SurfaceExpr::Lit(_, SurfaceLit::Nat(3))
+    ));
+}
+
+#[test]
+fn test_grouped_declaration_equations_keep_single_tuple_column() {
+    let decl = Parser::parse_decl("def f | (0, 0) | (1, 1) | (2, 2) => 3").unwrap();
+    let SurfaceDecl::Def { val, .. } = decl else {
+        panic!("expected def: {decl:?}");
+    };
+    let SurfaceExpr::PatternMatchLambda(_, _, body) = *val else {
+        panic!("expected equation lambda: {val:?}");
+    };
+    let SurfaceExpr::Match(_, _, _, arms) = *body else {
+        panic!("expected match: {body:?}");
+    };
+    let [arm] = arms.as_slice() else {
+        panic!("expected one arm: {arms:?}");
+    };
+    let SurfacePattern::Or(first, rest) = &arm.pattern else {
+        panic!("expected single-column alternative: {arm:?}");
+    };
+    let SurfacePattern::Or(second, third) = rest.as_ref() else {
+        panic!("expected right-associated alternatives: {rest:?}");
+    };
+    let pair = crate::SurfaceName::generated_path("Prod.mk");
+    for (pattern, n) in [(first, 0), (second, 1), (third, 2)] {
+        assert!(
+            matches!(pattern.as_ref(), SurfacePattern::Ctor(name, fields)
+            if *name == pair && matches!(fields.as_slice(),
+                [SurfacePattern::Lit(SurfaceLit::Nat(a)), SurfacePattern::Lit(SurfaceLit::Nat(b))]
+                if *a == n && *b == n))
+        );
+    }
+}
+
+#[test]
+fn test_grouped_declaration_equations_require_consistent_arity() {
+    for input in ["def f | 0, 0 | 1 => 2", "def f | 0, 0 | 1, 1 => 2 | _ => 3"] {
+        let error = Parser::parse_decl(input).expect_err("expected arity mismatch");
+        assert!(matches!(error, ParseError::UnexpectedToken { message, .. }
+            if message == "definition equation arity mismatch: expected 2 pattern(s), found 1"));
     }
 }
 

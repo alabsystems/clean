@@ -4,7 +4,7 @@
  "derivation": {
   "script": "scripts/verdict_io_contracts.py",
   "source_artifact": "data/verdict_set.json",
-  "source_artifact_sha256": "2fbf3a2fb5720cb43c4ad88cf629a28d08f980ecd2104eff2c4ccb33bc7e4811",
+  "source_artifact_sha256": "7d160fbafdfaa67cce4080fd0b46bbb7d19dd8b8b15fa9b4be8df9bfcd7ff849",
   "shared_denominator": "the site scan is IMPORTED from scripts/verdict_set.py (production_lines + IO_TOKENS) and re-run over the same members at the same pinned digests; a total that disagrees with the committed io_site_total aborts the mint",
   "axis_1_effect": {
    "what": "what the site actually does, decided by ordered lexical rules over the LEXED line (comments and literals blanked, #[cfg(test)] mod bodies removed); first match wins; a site matching no rule aborts the mint",
@@ -18,8 +18,8 @@
     {
      "id": "E-TYPE",
      "effect": "declaration-type",
-     "regex": "#\\[from\\]\\s*std::io::Error|source:\\s*std::io::Error|->\\s*std::io::Result|:\\s*std::io::Error\\b|:\\s*std::io::ErrorKind\\b|\\bmmap:\\s*Mmap\\b|:\\s*Mmap\\s*[,)]|std::process::(?:ExitStatus|Output)\\b",
-     "means": "a TYPE position (error-enum field, `#[from]`, return type, closure/fn parameter) \u2014 `std::io::Error`, `Mmap` and `std::process::{ExitStatus,Output}` as types, not operations"
+     "regex": "#\\[from\\]\\s*std::io::Error|source:\\s*std::io::Error|->\\s*std::io::Result|:\\s*std::io::Error\\b|:\\s*std::io::ErrorKind\\b|\\bmmap:\\s*Mmap\\b|:\\s*Mmap\\s*[,)]|std::process::(?:ExitStatus|Output)\\b|^\\s*(?:pub\\s*(?:\\([^)]*\\)\\s*)?)?[a-z_][a-z0-9_]*\\s*:[\\w\\s:<>]*\\bstd::(?:io::BufWriter|fs::File)\\b[\\w\\s:<>]*,\\s*$",
+     "means": "a TYPE position (error-enum field, `#[from]`, return type, closure/fn parameter) \u2014 `std::io::Error`, `Mmap` and `std::process::{ExitStatus,Output}` as types, not operations; and a struct field whose type holds a `std::io::BufWriter` or `std::fs::File` (no call on the line, so the file is opened and written at sites classified on their own)"
     },
     {
      "id": "E-ERRVAL",
@@ -30,8 +30,8 @@
     {
      "id": "E-NOIO",
      "effect": "in-memory-no-io",
-     "regex": "io::Cursor|\\bmap_anon\\s*\\(",
-     "means": "an in-memory buffer wearing an IO name (`io::Cursor`, `MmapMut::map_anon`) \u2014 no file"
+     "regex": "io::Cursor|\\bmap_anon\\s*\\(|\\bio::sink\\s*\\(\\s*\\)",
+     "means": "an in-memory buffer wearing an IO name (`io::Cursor`, `MmapMut::map_anon`) or a writer that discards every byte (`io::sink()`, used to measure what a writer would emit) \u2014 no file"
     },
     {
      "id": "E-FNITEM",
@@ -134,31 +134,31 @@
   "regenerate": "scripts/verdict_io_contracts.py     (--check to verify the committed file)"
  },
  "classification": {
-  "site_total": 326,
-  "sites_issuing_io": 217,
-  "sites_issuing_no_io": 109,
+  "site_total": 355,
+  "sites_issuing_io": 227,
+  "sites_issuing_no_io": 128,
   "by_effect": {
-   "read-file": 106,
-   "declaration-import": 48,
-   "write-file": 40,
-   "declaration-type": 36,
+   "read-file": 111,
+   "declaration-import": 61,
+   "write-file": 45,
+   "declaration-type": 41,
    "error-value": 23,
    "spawn-process": 23,
    "read-dir": 22,
    "read-env": 20,
-   "in-memory-no-io": 2,
+   "in-memory-no-io": 3,
    "process-stream": 2,
    "read-ambient": 2,
    "stat-file": 2
   },
   "by_dependence": {
-   "content-bearing": 177,
-   "verdict-irrelevant": 109,
-   "success-only": 40
+   "content-bearing": 182,
+   "verdict-irrelevant": 128,
+   "success-only": 45
   },
   "effect_by_dependence": {
    "content-bearing": {
-    "read-file": 106,
+    "read-file": 111,
     "spawn-process": 23,
     "read-dir": 22,
     "read-env": 20,
@@ -167,13 +167,13 @@
     "stat-file": 2
    },
    "success-only": {
-    "write-file": 40
+    "write-file": 45
    },
    "verdict-irrelevant": {
-    "declaration-import": 48,
-    "declaration-type": 36,
+    "declaration-import": 61,
+    "declaration-type": 41,
     "error-value": 23,
-    "in-memory-no-io": 2
+    "in-memory-no-io": 3
    }
   },
   "unclassified": 0,
@@ -506,6 +506,70 @@
     "verdict_irrelevant": 0,
     "declaration_only": false
    },
+   "crates/clean-olean/src/ndjson/mod.rs": {
+    "sites": 7,
+    "issuing_io": 5,
+    "content_bearing": 5,
+    "success_only": 0,
+    "verdict_irrelevant": 2,
+    "declaration_only": false
+   },
+   "crates/clean-olean/src/ndjson/reference.rs": {
+    "sites": 2,
+    "issuing_io": 0,
+    "content_bearing": 0,
+    "success_only": 0,
+    "verdict_irrelevant": 2,
+    "declaration_only": true
+   },
+   "crates/clean-olean/src/ndjson/source.rs": {
+    "sites": 2,
+    "issuing_io": 0,
+    "content_bearing": 0,
+    "success_only": 0,
+    "verdict_irrelevant": 2,
+    "declaration_only": true
+   },
+   "crates/clean-olean/src/ndjson/write/error.rs": {
+    "sites": 1,
+    "issuing_io": 0,
+    "content_bearing": 0,
+    "success_only": 0,
+    "verdict_irrelevant": 1,
+    "declaration_only": true
+   },
+   "crates/clean-olean/src/ndjson/write/mod.rs": {
+    "sites": 2,
+    "issuing_io": 0,
+    "content_bearing": 0,
+    "success_only": 0,
+    "verdict_irrelevant": 2,
+    "declaration_only": true
+   },
+   "crates/clean-olean/src/ndjson/write/records.rs": {
+    "sites": 2,
+    "issuing_io": 0,
+    "content_bearing": 0,
+    "success_only": 0,
+    "verdict_irrelevant": 2,
+    "declaration_only": true
+   },
+   "crates/clean-olean/src/ndjson/write/tables.rs": {
+    "sites": 2,
+    "issuing_io": 0,
+    "content_bearing": 0,
+    "success_only": 0,
+    "verdict_irrelevant": 2,
+    "declaration_only": true
+   },
+   "crates/clean-olean/src/recheck_closed/reference_base.rs": {
+    "sites": 11,
+    "issuing_io": 5,
+    "content_bearing": 0,
+    "success_only": 5,
+    "verdict_irrelevant": 6,
+    "declaration_only": false
+   },
    "crates/clean-verify/src/external_checker.rs": {
     "sites": 7,
     "issuing_io": 3,
@@ -533,12 +597,18 @@
   },
   "declaration_only_members": {
    "what": "members whose every IO token hit is a declaration / error value / in-memory buffer: they are IO-BEARING in the token scan and issue no IO at all. This is the measured half of lane (b)'s 'decode-pure separated from read-IO' obligation that needs no refactor \u2014 the split is already there, it had just never been measured.",
-   "count": 4,
+   "count": 10,
    "members": [
     "crates/clean-mathverse/src/error.rs",
     "crates/clean-mathverse/src/hol/error.rs",
     "crates/clean-olean/src/error.rs",
-    "crates/clean-olean/src/import/mod.rs"
+    "crates/clean-olean/src/import/mod.rs",
+    "crates/clean-olean/src/ndjson/reference.rs",
+    "crates/clean-olean/src/ndjson/source.rs",
+    "crates/clean-olean/src/ndjson/write/error.rs",
+    "crates/clean-olean/src/ndjson/write/mod.rs",
+    "crates/clean-olean/src/ndjson/write/records.rs",
+    "crates/clean-olean/src/ndjson/write/tables.rs"
    ]
   }
  },
@@ -550,8 +620,8 @@
     "read-file"
    ],
    "dependence": "content-bearing",
-   "site_count": 106,
-   "member_count": 28,
+   "site_count": 111,
+   "member_count": 29,
    "members": [
     "crates/clean-mathverse/src/artifacts.rs",
     "crates/clean-mathverse/src/attempt_log/mod.rs",
@@ -580,7 +650,8 @@
     "crates/clean-olean/src/import/load/graph_limit.rs",
     "crates/clean-olean/src/import/parse.rs",
     "crates/clean-olean/src/import/project_world.rs",
-    "crates/clean-olean/src/lean_ir/module_ir.rs"
+    "crates/clean-olean/src/lean_ir/module_ir.rs",
+    "crates/clean-olean/src/ndjson/mod.rs"
    ],
    "statement": "Every byte a verdict path consumes from a file is the byte its provenance was established over: the path names the file that was digested, the file is not substituted between the pin and the read, and a short or truncated read is refused rather than decoded.",
    "check_strength": "partial",
@@ -645,7 +716,8 @@
     "crates/clean-olean/src/import/load/graph_limit.rs": 2,
     "crates/clean-olean/src/import/parse.rs": 8,
     "crates/clean-olean/src/import/project_world.rs": 9,
-    "crates/clean-olean/src/lean_ir/module_ir.rs": 2
+    "crates/clean-olean/src/lean_ir/module_ir.rs": 2,
+    "crates/clean-olean/src/ndjson/mod.rs": 5
    },
    "sites_discarding_the_error": 6
   },
@@ -724,7 +796,7 @@
      "file": "crates/clean-olean/src/import/module_cache_direct.rs",
      "pattern": "Some\\(module\\) if module\\.identity == captured\\.identity",
      "lines": [
-      209
+      220
      ],
      "what": "the module cache's hit condition is CONTENT identity, not metadata: every lookup re-reads and re-hashes all three parts and compares blake3 digests, so no stat result can serve stale bytes"
     },
@@ -740,7 +812,7 @@
      "file": "crates/clean-olean/src/import/module_cache_direct/capture.rs",
      "pattern": "let metadata = file\\.metadata\\(\\)\\?;",
      "lines": [
-      195
+      183
      ],
      "what": "metadata is read from the opened descriptor, rather than re-resolving its path; this does not bind the earlier canonical pathname to that descriptor"
     },
@@ -748,7 +820,7 @@
      "file": "crates/clean-olean/src/import/module_cache_direct/capture.rs",
      "pattern": "if !metadata\\.is_file\\(\\)",
      "lines": [
-      196
+      184
      ],
      "what": "the opened descriptor must be a regular file before its admitted capture; this does not make separate part captures coherent"
     },
@@ -756,7 +828,7 @@
      "file": "crates/clean-olean/src/import/module_cache_direct/capture.rs",
      "pattern": "if Stamp::of\\(&current\\) != self\\.initial",
      "lines": [
-      219
+      206
      ],
      "what": "a descriptor stamp is checked before reading; on Unix it includes device, inode, mtime and ctime, so restoring only mtime does not defeat the instability check"
     },
@@ -764,7 +836,7 @@
      "file": "crates/clean-olean/src/import/module_cache_direct/capture.rs",
      "pattern": "if Stamp::of\\(&after\\) != self\\.initial",
      "lines": [
-      271
+      259
      ],
      "what": "the same descriptor is checked again after its bounded-length read and growth probe; separate parts still need not come from one filesystem state"
     }
@@ -774,7 +846,7 @@
      "file": "crates/clean-olean/src/import/module_cache_direct.rs",
      "pattern": "let base = capture::required\\(path, budget\\)\\?;",
      "lines": [
-      114
+      120
      ],
      "what": "the capture is NOT atomic: `canonicalize` resolves the key, then the base is read from the ORIGINAL path, then the two companions are captured separately, with optional IR captured later. The filesystem may move between them, so the key can name one object while the digests cover another, or the bundle can mix two generations"
     },
@@ -782,7 +854,7 @@
      "file": "crates/clean-olean/src/import/module_cache_direct/capture.rs",
      "pattern": "match std::fs::symlink_metadata\\(path\\)",
      "lines": [
-      317
+      306
      ],
      "what": "an absent file and a DANGLING SYMLINK are separated by a second syscall issued after the failed open, so the two answers are about two moments; a link created in between is reported as an unreadable companion and a link removed in between as an absent one"
     }
@@ -1030,8 +1102,8 @@
     "write-file"
    ],
    "dependence": "success-only",
-   "site_count": 40,
-   "member_count": 12,
+   "site_count": 45,
+   "member_count": 13,
    "members": [
     "crates/clean-mathverse/src/artifacts.rs",
     "crates/clean-mathverse/src/attempt_log/mod.rs",
@@ -1044,7 +1116,8 @@
     "crates/clean-mathverse/src/shard_verify/mod.rs",
     "crates/clean-mathverse/src/verify/incremental/mod.rs",
     "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs",
-    "crates/clean-olean/src/import/module_cache_direct/capture.rs"
+    "crates/clean-olean/src/import/module_cache_direct/capture.rs",
+    "crates/clean-olean/src/recheck_closed/reference_base.rs"
    ],
    "statement": "Every write either lands completely or reports an error; no partially written artifact is later read back as authoritative. The write's CONTENT needs no contract at all \u2014 the bytes were computed in memory before the call, so the verdict depends on the call's SUCCESS and on nothing that came back.",
    "check_strength": "partial",
@@ -1092,7 +1165,8 @@
     "crates/clean-mathverse/src/shard_verify/mod.rs": 1,
     "crates/clean-mathverse/src/verify/incremental/mod.rs": 2,
     "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs": 2,
-    "crates/clean-olean/src/import/module_cache_direct/capture.rs": 1
+    "crates/clean-olean/src/import/module_cache_direct/capture.rs": 1,
+    "crates/clean-olean/src/recheck_closed/reference_base.rs": 5
    },
    "sites_discarding_the_error": 5
   }
@@ -1121,36 +1195,36 @@
    "fn-item-path"
   ],
   "statement": "These sites matched the IO token table but perform no IO: they import a module, name a type or a function ITEM, construct or inspect an `io::Error` value, or wrap an in-memory buffer in an IO-shaped API. No verdict can turn on their result, so no contract is owed.",
-  "site_count": 109
+  "site_count": 128
  },
  "ledger": {
   "what": "the \u00a73.6 assumption ledger for lane (b): one row per (contract x member) that nothing fully checks, plus the rows this MODEL itself stands on. Each row carries a statement, a probe command, a discharge condition, a date and an owning job.",
   "pattern": "designs/2026-08-22-spine-and-lattice-program.md \u00a73.6",
   "destination": "data/spine_assumption_ledger.json, when that file exists; until then these rows live here and scripts/verdict_gate.sh reads them from here",
   "direction": "down",
-  "row_count": 73,
+  "row_count": 75,
   "rows_by_class": {
-   "content-bearing": 59,
+   "content-bearing": 60,
    "meta": 2,
-   "success-only": 12
+   "success-only": 13
   },
   "rows_by_contract": {
    "*": 1,
    "C-AMBIENT-NONCE": 2,
    "C-ENV-NEUTRAL": 9,
    "C-NONE": 1,
-   "C-READ-BYTES": 28,
+   "C-READ-BYTES": 29,
    "C-READ-SET": 12,
    "C-SPAWN-FAITHFUL": 1,
    "C-SPAWN-IDENTITY": 5,
    "C-STAT-FRESH": 2,
-   "C-WRITE-COMPLETE": 12
+   "C-WRITE-COMPLETE": 13
   },
   "row_ratchet": {
    "what": "assumption-ledger rows; may fall freely, may rise only through scripts/verdict_io_contracts.py --rebase-up '<reason>' (recorded below)",
    "direction": "down",
-   "baseline_rows": 73,
-   "measured_rows": 73,
+   "baseline_rows": 75,
+   "measured_rows": 75,
    "minted_utc": "2026-11-14T21:29:54Z",
    "rebases": [
     {
@@ -1194,6 +1268,12 @@
      "from": 72,
      "to": 73,
      "reason": "2026-11-14 UTC: actual canonical source61df Olean capture closureA158/B44 adds descriptor-capture per-member IO obligations; measured ledger72->73(+1). Existing contract statements/statuses and all historical rebase entries retained; C-STAT-FRESH remains partial with two real holes. No checker/classifier/default weakening."
+    },
+    {
+     "date": "2026-11-18",
+     "from": 73,
+     "to": 75,
+     "reason": "2026-11-17 p3lc-natrepr: the 8e7 source-epoch landing (18836c92d8) made two IO members verdict-bearing: crates/clean-olean/src/ndjson/mod.rs reads export bytes (L-READ-BYTES, content-bearing) and crates/clean-olean/src/recheck_closed/reference_base.rs writes a kcheck-trace checkpoint through a BufWriter (L-WRITE-COMPLETE, success-only). These are real assumptions of that code, recorded rather than hidden; discharging them belongs to the contracts' owning jobs (R2b-READ, the write-completeness job)."
     }
    ]
   },
@@ -1591,14 +1671,14 @@
     "member": "crates/clean-olean/src/import/artifact.rs",
     "site_count": 2,
     "lines": [
-     125,
-     125
+     137,
+     137
     ],
     "statement": "crates/clean-olean/src/import/artifact.rs assumes, without proof, that: Every byte a verdict path consumes from a file is the byte its provenance was established over: the path names the file that was digested, the file is not substituted between the pin and the read, and a short or truncated read is refused rather than decoded.",
     "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
     "probe": "scripts/verdict_io_contracts.py --sites C-READ-BYTES --member crates/clean-olean/src/import/artifact.rs",
     "discharge": "bind every content-bearing read to a digest the verdict's provenance already pins (the shard footer for shards; an artifact-lineage digest for manifests), and require the checksummed reader on any path that will MINT a verdict.",
-    "date": "2026-11-17",
+    "date": "2026-11-19",
     "owning_job": "R2b-READ"
    },
    {
@@ -1629,18 +1709,18 @@
     "member": "crates/clean-olean/src/import/load.rs",
     "site_count": 6,
     "lines": [
-     89,
-     89,
-     642,
-     642,
-     947,
-     947
+     91,
+     91,
+     644,
+     644,
+     960,
+     960
     ],
     "statement": "crates/clean-olean/src/import/load.rs assumes, without proof, that: Every byte a verdict path consumes from a file is the byte its provenance was established over: the path names the file that was digested, the file is not substituted between the pin and the read, and a short or truncated read is refused rather than decoded.",
     "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
     "probe": "scripts/verdict_io_contracts.py --sites C-READ-BYTES --member crates/clean-olean/src/import/load.rs",
     "discharge": "bind every content-bearing read to a digest the verdict's provenance already pins (the shard footer for shards; an artifact-lineage digest for manifests), and require the checksummed reader on any path that will MINT a verdict.",
-    "date": "2026-11-17",
+    "date": "2026-11-19",
     "owning_job": "R2b-READ"
    },
    {
@@ -1650,14 +1730,14 @@
     "member": "crates/clean-olean/src/import/load/graph_limit.rs",
     "site_count": 2,
     "lines": [
-     96,
-     96
+     102,
+     102
     ],
     "statement": "crates/clean-olean/src/import/load/graph_limit.rs assumes, without proof, that: Every byte a verdict path consumes from a file is the byte its provenance was established over: the path names the file that was digested, the file is not substituted between the pin and the read, and a short or truncated read is refused rather than decoded.",
     "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
     "probe": "scripts/verdict_io_contracts.py --sites C-READ-BYTES --member crates/clean-olean/src/import/load/graph_limit.rs",
     "discharge": "bind every content-bearing read to a digest the verdict's provenance already pins (the shard footer for shards; an artifact-lineage digest for manifests), and require the checksummed reader on any path that will MINT a verdict.",
-    "date": "2026-11-14",
+    "date": "2026-11-19",
     "owning_job": "R2b-READ"
    },
    {
@@ -1690,21 +1770,21 @@
     "member": "crates/clean-olean/src/import/project_world.rs",
     "site_count": 9,
     "lines": [
-     369,
-     369,
-     369,
-     487,
-     487,
-     487,
-     519,
-     519,
-     519
+     374,
+     374,
+     374,
+     498,
+     498,
+     498,
+     530,
+     530,
+     530
     ],
     "statement": "crates/clean-olean/src/import/project_world.rs assumes, without proof, that: Every byte a verdict path consumes from a file is the byte its provenance was established over: the path names the file that was digested, the file is not substituted between the pin and the read, and a short or truncated read is refused rather than decoded.",
     "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
     "probe": "scripts/verdict_io_contracts.py --sites C-READ-BYTES --member crates/clean-olean/src/import/project_world.rs",
     "discharge": "bind every content-bearing read to a digest the verdict's provenance already pins (the shard footer for shards; an artifact-lineage digest for manifests), and require the checksummed reader on any path that will MINT a verdict.",
-    "date": "2026-11-16",
+    "date": "2026-11-20",
     "owning_job": "R2b-READ"
    },
    {
@@ -1721,7 +1801,27 @@
     "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
     "probe": "scripts/verdict_io_contracts.py --sites C-READ-BYTES --member crates/clean-olean/src/lean_ir/module_ir.rs",
     "discharge": "bind every content-bearing read to a digest the verdict's provenance already pins (the shard footer for shards; an artifact-lineage digest for manifests), and require the checksummed reader on any path that will MINT a verdict.",
-    "date": "2026-11-14",
+    "date": "2026-11-19",
+    "owning_job": "R2b-READ"
+   },
+   {
+    "id": "L-READ-BYTES/clean-olean::ndjson::mod",
+    "contract": "C-READ-BYTES",
+    "class": "content-bearing",
+    "member": "crates/clean-olean/src/ndjson/mod.rs",
+    "site_count": 5,
+    "lines": [
+     118,
+     118,
+     118,
+     119,
+     119
+    ],
+    "statement": "crates/clean-olean/src/ndjson/mod.rs assumes, without proof, that: Every byte a verdict path consumes from a file is the byte its provenance was established over: the path names the file that was digested, the file is not substituted between the pin and the read, and a short or truncated read is refused rather than decoded.",
+    "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
+    "probe": "scripts/verdict_io_contracts.py --sites C-READ-BYTES --member crates/clean-olean/src/ndjson/mod.rs",
+    "discharge": "bind every content-bearing read to a digest the verdict's provenance already pins (the shard footer for shards; an artifact-lineage digest for manifests), and require the checksummed reader on any path that will MINT a verdict.",
+    "date": "2026-11-19",
     "owning_job": "R2b-READ"
    },
    {
@@ -1897,16 +1997,16 @@
     "member": "crates/clean-olean/src/import/path.rs",
     "site_count": 4,
     "lines": [
-     358,
-     358,
-     537,
-     537
+     425,
+     425,
+     623,
+     623
     ],
     "statement": "crates/clean-olean/src/import/path.rs assumes, without proof, that: A directory walk returns exactly the input set the verdict quantifies over: no entry appears or disappears during the walk, no entry is silently dropped for being a symlink, non-UTF-8 or unreadable, and enumeration order does not change the verdict.",
     "checked": "NOTHING in the tree checks this contract",
     "probe": "scripts/verdict_io_contracts.py --sites C-READ-SET --member crates/clean-olean/src/import/path.rs",
     "discharge": "quantify every walk over a committed manifest and refuse on set difference in BOTH directions (missing and unexpected), rather than over whatever the filesystem returned.",
-    "date": "2026-11-14",
+    "date": "2026-11-20",
     "owning_job": "R2b-SET"
    },
    {
@@ -1916,14 +2016,14 @@
     "member": "crates/clean-olean/src/import/project_world.rs",
     "site_count": 2,
     "lines": [
-     612,
-     612
+     622,
+     622
     ],
     "statement": "crates/clean-olean/src/import/project_world.rs assumes, without proof, that: A directory walk returns exactly the input set the verdict quantifies over: no entry appears or disappears during the walk, no entry is silently dropped for being a symlink, non-UTF-8 or unreadable, and enumeration order does not change the verdict.",
     "checked": "NOTHING in the tree checks this contract",
     "probe": "scripts/verdict_io_contracts.py --sites C-READ-SET --member crates/clean-olean/src/import/project_world.rs",
     "discharge": "quantify every walk over a committed manifest and refuse on set difference in BOTH directions (missing and unexpected), rather than over whatever the filesystem returned.",
-    "date": "2026-11-16",
+    "date": "2026-11-20",
     "owning_job": "R2b-SET"
    },
    {
@@ -1933,13 +2033,13 @@
     "member": "crates/clean-olean/src/import/module_cache_direct.rs",
     "site_count": 1,
     "lines": [
-     110
+     116
     ],
     "statement": "crates/clean-olean/src/import/module_cache_direct.rs assumes, without proof, that: When a metadata-only call (`symlink_metadata`, `canonicalize`) decides how a file is treated or what key it is stored under, the object it answered about is the same object whose CONTENT the surrounding capture reads.",
     "checked": "PARTIAL \u2014 6 cited check(s) for this contract, at least one inside this member; the member's other sites are not covered by it",
     "probe": "scripts/verdict_io_contracts.py --sites C-STAT-FRESH --member crates/clean-olean/src/import/module_cache_direct.rs",
     "discharge": "bind the cache key to the descriptor actually read, and bind the presence and bytes of every base, server, private and optional IR part to a coherent manifest or snapshot. Opening each part once does not by itself provide that multi-part coherence.",
-    "date": "2026-11-14",
+    "date": "2026-11-19",
     "owning_job": "R2b-STAT"
    },
    {
@@ -1949,13 +2049,13 @@
     "member": "crates/clean-olean/src/import/module_cache_direct/capture.rs",
     "site_count": 1,
     "lines": [
-     317
+     306
     ],
     "statement": "crates/clean-olean/src/import/module_cache_direct/capture.rs assumes, without proof, that: When a metadata-only call (`symlink_metadata`, `canonicalize`) decides how a file is treated or what key it is stored under, the object it answered about is the same object whose CONTENT the surrounding capture reads.",
     "checked": "PARTIAL \u2014 6 cited check(s) for this contract, at least one inside this member; the member's other sites are not covered by it",
     "probe": "scripts/verdict_io_contracts.py --sites C-STAT-FRESH --member crates/clean-olean/src/import/module_cache_direct/capture.rs",
     "discharge": "bind the cache key to the descriptor actually read, and bind the presence and bytes of every base, server, private and optional IR part to a coherent manifest or snapshot. Opening each part once does not by itself provide that multi-part coherence.",
-    "date": "2026-11-14",
+    "date": "2026-11-19",
     "owning_job": "R2b-STAT"
    },
    {
@@ -2055,13 +2155,13 @@
     "member": "crates/clean-olean/src/import/path.rs",
     "site_count": 1,
     "lines": [
-     357
+     424
     ],
     "statement": "crates/clean-olean/src/import/path.rs assumes, without proof, that: The ABSENCE of every environment variable is the safe default, and no value a caller can set either changes what a verdict depends on or escapes being recorded in that verdict's provenance.",
     "checked": "NOTHING in the tree checks this contract",
     "probe": "scripts/verdict_io_contracts.py --sites C-ENV-NEUTRAL --member crates/clean-olean/src/import/path.rs",
     "discharge": "commit a table of every variable name lane (b) reads with a declared disposition (`diagnostic-only` / `behaviour-changing`), enforce it here so an unlisted name aborts the mint, and require every behaviour-changing name to appear in the provenance of any verdict minted under it.",
-    "date": "2026-11-14",
+    "date": "2026-11-20",
     "owning_job": "R2b-ENV"
    },
    {
@@ -2071,13 +2171,13 @@
     "member": "crates/clean-olean/src/import/project_world.rs",
     "site_count": 1,
     "lines": [
-     611
+     621
     ],
     "statement": "crates/clean-olean/src/import/project_world.rs assumes, without proof, that: The ABSENCE of every environment variable is the safe default, and no value a caller can set either changes what a verdict depends on or escapes being recorded in that verdict's provenance.",
     "checked": "NOTHING in the tree checks this contract",
     "probe": "scripts/verdict_io_contracts.py --sites C-ENV-NEUTRAL --member crates/clean-olean/src/import/project_world.rs",
     "discharge": "commit a table of every variable name lane (b) reads with a declared disposition (`diagnostic-only` / `behaviour-changing`), enforce it here so an unlisted name aborts the mint, and require every behaviour-changing name to appear in the provenance of any verdict minted under it.",
-    "date": "2026-11-16",
+    "date": "2026-11-20",
     "owning_job": "R2b-ENV"
    },
    {
@@ -2471,13 +2571,33 @@
     "member": "crates/clean-olean/src/import/module_cache_direct/capture.rs",
     "site_count": 1,
     "lines": [
-     285
+     271
     ],
     "statement": "crates/clean-olean/src/import/module_cache_direct/capture.rs assumes, without proof, that: Every write either lands completely or reports an error; no partially written artifact is later read back as authoritative. The write's CONTENT needs no contract at all \u2014 the bytes were computed in memory before the call, so the verdict depends on the call's SUCCESS and on nothing that came back.",
     "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
     "probe": "scripts/verdict_io_contracts.py --sites C-WRITE-COMPLETE --member crates/clean-olean/src/import/module_cache_direct/capture.rs",
     "discharge": "tmp-write + rename for the writes whose output is read back as authoritative, and propagate (or explicitly justify discarding) every write error. This is the cheapest class in the model and should close first.",
-    "date": "2026-11-14",
+    "date": "2026-11-19",
+    "owning_job": "R2b-WRITE"
+   },
+   {
+    "id": "L-WRITE-COMPLETE/clean-olean::recheck_closed::reference_base",
+    "contract": "C-WRITE-COMPLETE",
+    "class": "success-only",
+    "member": "crates/clean-olean/src/recheck_closed/reference_base.rs",
+    "site_count": 5,
+    "lines": [
+     615,
+     615,
+     615,
+     617,
+     617
+    ],
+    "statement": "crates/clean-olean/src/recheck_closed/reference_base.rs assumes, without proof, that: Every write either lands completely or reports an error; no partially written artifact is later read back as authoritative. The write's CONTENT needs no contract at all \u2014 the bytes were computed in memory before the call, so the verdict depends on the call's SUCCESS and on nothing that came back.",
+    "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
+    "probe": "scripts/verdict_io_contracts.py --sites C-WRITE-COMPLETE --member crates/clean-olean/src/recheck_closed/reference_base.rs",
+    "discharge": "tmp-write + rename for the writes whose output is read back as authoritative, and propagate (or explicitly justify discarding) every write error. This is the cheapest class in the model and should close first.",
+    "date": "2026-11-19",
     "owning_job": "R2b-WRITE"
    },
    {
@@ -2488,8 +2608,8 @@
     "probe": "scripts/verdict_io_contracts.py --sites C-NONE",
     "discharge": "re-derive the classification from MIR/THIR rather than from source lines \u2014 the same whole-crate dump G-SPINE-SET waits on (data/spine_set.PENDING.md).",
     "owning_job": "R2b-LEX",
-    "date": "2026-11-17",
-    "site_count": 109
+    "date": "2026-11-18",
+    "site_count": 128
    },
    {
     "id": "L-DENOM",
@@ -2499,8 +2619,8 @@
     "probe": "scripts/verdict_io_contracts.py --describe   # prints the borrowed token table",
     "discharge": "derive sites from the call graph instead of from tokens; until then, every added token lands with a mutation arm proving the scan would have missed it before.",
     "owning_job": "R2b-DENOM",
-    "date": "2026-11-17",
-    "site_count": 326
+    "date": "2026-11-18",
+    "site_count": 355
    }
   ]
  },
@@ -5053,7 +5173,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/artifact.rs",
-   "line": 125,
+   "line": 137,
    "token": "fs::*",
    "rule": "E-READ",
    "effect": "read-file",
@@ -5063,7 +5183,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/artifact.rs",
-   "line": 125,
+   "line": 137,
    "token": "std::fs",
    "rule": "E-READ",
    "effect": "read-file",
@@ -5133,7 +5253,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/load.rs",
-   "line": 89,
+   "line": 91,
    "token": "fs::*",
    "rule": "E-READ",
    "effect": "read-file",
@@ -5143,7 +5263,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/load.rs",
-   "line": 89,
+   "line": 91,
    "token": "std::fs",
    "rule": "E-READ",
    "effect": "read-file",
@@ -5153,7 +5273,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/load.rs",
-   "line": 642,
+   "line": 644,
    "token": "fs::*",
    "rule": "E-READ",
    "effect": "read-file",
@@ -5163,7 +5283,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/load.rs",
-   "line": 642,
+   "line": 644,
    "token": "std::fs",
    "rule": "E-READ",
    "effect": "read-file",
@@ -5173,7 +5293,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/load.rs",
-   "line": 947,
+   "line": 960,
    "token": "fs::*",
    "rule": "E-READ",
    "effect": "read-file",
@@ -5183,7 +5303,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/load.rs",
-   "line": 947,
+   "line": 960,
    "token": "std::fs",
    "rule": "E-READ",
    "effect": "read-file",
@@ -5193,7 +5313,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/load/graph_limit.rs",
-   "line": 96,
+   "line": 102,
    "token": "fs::*",
    "rule": "E-READ",
    "effect": "read-file",
@@ -5203,22 +5323,13 @@
   },
   {
    "member": "crates/clean-olean/src/import/load/graph_limit.rs",
-   "line": 96,
+   "line": 102,
    "token": "std::fs",
    "rule": "E-READ",
    "effect": "read-file",
    "dependence": "content-bearing",
    "code": "let bytes = std::fs::read(&path).map_err(|source| ImportError::FileUnreadable {",
    "error_discarded": false
-  },
-  {
-   "member": "crates/clean-olean/src/import/mod.rs",
-   "line": 241,
-   "token": "std::io",
-   "rule": "E-TYPE",
-   "effect": "declaration-type",
-   "dependence": "verdict-irrelevant",
-   "code": "Io(#[from] std::io::Error),"
   },
   {
    "member": "crates/clean-olean/src/import/mod.rs",
@@ -5227,11 +5338,20 @@
    "rule": "E-TYPE",
    "effect": "declaration-type",
    "dependence": "verdict-irrelevant",
+   "code": "Io(#[from] std::io::Error),"
+  },
+  {
+   "member": "crates/clean-olean/src/import/mod.rs",
+   "line": 273,
+   "token": "std::io",
+   "rule": "E-TYPE",
+   "effect": "declaration-type",
+   "dependence": "verdict-irrelevant",
    "code": "source: std::io::Error,"
   },
   {
    "member": "crates/clean-olean/src/import/module_cache_direct.rs",
-   "line": 110,
+   "line": 116,
    "token": "std::fs",
    "rule": "E-STAT",
    "effect": "stat-file",
@@ -5267,7 +5387,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/module_cache_direct/capture.rs",
-   "line": 285,
+   "line": 271,
    "token": "OpenOptions",
    "rule": "E-WRITE",
    "effect": "write-file",
@@ -5277,7 +5397,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/module_cache_direct/capture.rs",
-   "line": 317,
+   "line": 306,
    "token": "std::fs",
    "rule": "E-STAT",
    "effect": "stat-file",
@@ -5366,7 +5486,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/path.rs",
-   "line": 177,
+   "line": 244,
    "token": "std::fs",
    "rule": "E-TYPE",
    "effect": "declaration-type",
@@ -5375,7 +5495,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/path.rs",
-   "line": 177,
+   "line": 244,
    "token": "std::io",
    "rule": "E-TYPE",
    "effect": "declaration-type",
@@ -5384,7 +5504,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/path.rs",
-   "line": 235,
+   "line": 302,
    "token": "std::fs",
    "rule": "E-TYPE",
    "effect": "declaration-type",
@@ -5393,7 +5513,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/path.rs",
-   "line": 235,
+   "line": 302,
    "token": "std::io",
    "rule": "E-TYPE",
    "effect": "declaration-type",
@@ -5402,7 +5522,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/path.rs",
-   "line": 292,
+   "line": 359,
    "token": "std::fs",
    "rule": "E-TYPE",
    "effect": "declaration-type",
@@ -5411,7 +5531,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/path.rs",
-   "line": 292,
+   "line": 359,
    "token": "std::io",
    "rule": "E-TYPE",
    "effect": "declaration-type",
@@ -5420,7 +5540,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/path.rs",
-   "line": 357,
+   "line": 424,
    "token": "env::var",
    "rule": "E-ENV",
    "effect": "read-env",
@@ -5431,7 +5551,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/path.rs",
-   "line": 358,
+   "line": 425,
    "token": "fs::*",
    "rule": "E-READDIR",
    "effect": "read-dir",
@@ -5441,7 +5561,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/path.rs",
-   "line": 358,
+   "line": 425,
    "token": "std::fs",
    "rule": "E-READDIR",
    "effect": "read-dir",
@@ -5451,7 +5571,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/path.rs",
-   "line": 537,
+   "line": 623,
    "token": "fs::*",
    "rule": "E-READDIR",
    "effect": "read-dir",
@@ -5461,7 +5581,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/path.rs",
-   "line": 537,
+   "line": 623,
    "token": "std::fs",
    "rule": "E-READDIR",
    "effect": "read-dir",
@@ -5471,7 +5591,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/project_world.rs",
-   "line": 369,
+   "line": 374,
    "token": "fs::*",
    "rule": "E-READ",
    "effect": "read-file",
@@ -5481,7 +5601,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/project_world.rs",
-   "line": 369,
+   "line": 374,
    "token": "read_to_string",
    "rule": "E-READ",
    "effect": "read-file",
@@ -5491,7 +5611,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/project_world.rs",
-   "line": 369,
+   "line": 374,
    "token": "std::fs",
    "rule": "E-READ",
    "effect": "read-file",
@@ -5501,7 +5621,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/project_world.rs",
-   "line": 485,
+   "line": 496,
    "token": "io::*",
    "rule": "E-USE",
    "effect": "declaration-import",
@@ -5510,7 +5630,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/project_world.rs",
-   "line": 485,
+   "line": 496,
    "token": "std::io",
    "rule": "E-USE",
    "effect": "declaration-import",
@@ -5519,7 +5639,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/project_world.rs",
-   "line": 487,
+   "line": 498,
    "token": "File::open/create",
    "rule": "E-READ",
    "effect": "read-file",
@@ -5529,7 +5649,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/project_world.rs",
-   "line": 487,
+   "line": 498,
    "token": "fs::*",
    "rule": "E-READ",
    "effect": "read-file",
@@ -5539,7 +5659,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/project_world.rs",
-   "line": 487,
+   "line": 498,
    "token": "std::fs",
    "rule": "E-READ",
    "effect": "read-file",
@@ -5549,7 +5669,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/project_world.rs",
-   "line": 519,
+   "line": 530,
    "token": "fs::*",
    "rule": "E-READ",
    "effect": "read-file",
@@ -5559,7 +5679,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/project_world.rs",
-   "line": 519,
+   "line": 530,
    "token": "read_to_string",
    "rule": "E-READ",
    "effect": "read-file",
@@ -5569,7 +5689,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/project_world.rs",
-   "line": 519,
+   "line": 530,
    "token": "std::fs",
    "rule": "E-READ",
    "effect": "read-file",
@@ -5579,7 +5699,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/project_world.rs",
-   "line": 611,
+   "line": 621,
    "token": "env::var",
    "rule": "E-ENV",
    "effect": "read-env",
@@ -5590,7 +5710,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/project_world.rs",
-   "line": 612,
+   "line": 622,
    "token": "fs::*",
    "rule": "E-READDIR",
    "effect": "read-dir",
@@ -5600,7 +5720,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/project_world.rs",
-   "line": 612,
+   "line": 622,
    "token": "std::fs",
    "rule": "E-READDIR",
    "effect": "read-dir",
@@ -5610,7 +5730,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/project_world.rs",
-   "line": 624,
+   "line": 634,
    "token": "std::fs",
    "rule": "E-TYPE",
    "effect": "declaration-type",
@@ -5619,7 +5739,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/project_world.rs",
-   "line": 624,
+   "line": 634,
    "token": "std::io",
    "rule": "E-TYPE",
    "effect": "declaration-type",
@@ -5644,6 +5764,277 @@
    "effect": "read-file",
    "dependence": "content-bearing",
    "code": "std::fs::read(path).map_err(|e| LeanIrError::MissingFile {",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-olean/src/ndjson/mod.rs",
+   "line": 76,
+   "token": "io::*",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::io::BufRead;"
+  },
+  {
+   "member": "crates/clean-olean/src/ndjson/mod.rs",
+   "line": 76,
+   "token": "std::io",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::io::BufRead;"
+  },
+  {
+   "member": "crates/clean-olean/src/ndjson/mod.rs",
+   "line": 118,
+   "token": "File::open/create",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "match std::fs::File::open(path) {",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-olean/src/ndjson/mod.rs",
+   "line": 118,
+   "token": "fs::*",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "match std::fs::File::open(path) {",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-olean/src/ndjson/mod.rs",
+   "line": 118,
+   "token": "std::fs",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "match std::fs::File::open(path) {",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-olean/src/ndjson/mod.rs",
+   "line": 119,
+   "token": "BufReader",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "Ok(file) => check_export_reader(std::io::BufReader::new(file), options),",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-olean/src/ndjson/mod.rs",
+   "line": 119,
+   "token": "std::io",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "Ok(file) => check_export_reader(std::io::BufReader::new(file), options),",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-olean/src/ndjson/reference.rs",
+   "line": 44,
+   "token": "io::*",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::io::BufRead;"
+  },
+  {
+   "member": "crates/clean-olean/src/ndjson/reference.rs",
+   "line": 44,
+   "token": "std::io",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::io::BufRead;"
+  },
+  {
+   "member": "crates/clean-olean/src/ndjson/source.rs",
+   "line": 23,
+   "token": "io::*",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::io::BufRead;"
+  },
+  {
+   "member": "crates/clean-olean/src/ndjson/source.rs",
+   "line": 23,
+   "token": "std::io",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::io::BufRead;"
+  },
+  {
+   "member": "crates/clean-olean/src/ndjson/write/error.rs",
+   "line": 19,
+   "token": "std::io",
+   "rule": "E-TYPE",
+   "effect": "declaration-type",
+   "dependence": "verdict-irrelevant",
+   "code": "Io(#[from] std::io::Error),"
+  },
+  {
+   "member": "crates/clean-olean/src/ndjson/write/mod.rs",
+   "line": 65,
+   "token": "std::io",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::io::{BufRead, Write};"
+  },
+  {
+   "member": "crates/clean-olean/src/ndjson/write/mod.rs",
+   "line": 279,
+   "token": "std::io",
+   "rule": "E-NOIO",
+   "effect": "in-memory-no-io",
+   "dependence": "verdict-irrelevant",
+   "code": "let again = write_declarations(&meta, declarations, source.written_names(), std::io::sink())?;"
+  },
+  {
+   "member": "crates/clean-olean/src/ndjson/write/records.rs",
+   "line": 15,
+   "token": "io::*",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::io::Write;"
+  },
+  {
+   "member": "crates/clean-olean/src/ndjson/write/records.rs",
+   "line": 15,
+   "token": "std::io",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::io::Write;"
+  },
+  {
+   "member": "crates/clean-olean/src/ndjson/write/tables.rs",
+   "line": 27,
+   "token": "io::*",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::io::Write;"
+  },
+  {
+   "member": "crates/clean-olean/src/ndjson/write/tables.rs",
+   "line": 27,
+   "token": "std::io",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::io::Write;"
+  },
+  {
+   "member": "crates/clean-olean/src/recheck_closed/reference_base.rs",
+   "line": 430,
+   "token": "BufWriter",
+   "rule": "E-TYPE",
+   "effect": "declaration-type",
+   "dependence": "verdict-irrelevant",
+   "code": "checkpoint: Option<std::io::BufWriter<std::fs::File>>,"
+  },
+  {
+   "member": "crates/clean-olean/src/recheck_closed/reference_base.rs",
+   "line": 430,
+   "token": "fs::*",
+   "rule": "E-TYPE",
+   "effect": "declaration-type",
+   "dependence": "verdict-irrelevant",
+   "code": "checkpoint: Option<std::io::BufWriter<std::fs::File>>,"
+  },
+  {
+   "member": "crates/clean-olean/src/recheck_closed/reference_base.rs",
+   "line": 430,
+   "token": "std::fs",
+   "rule": "E-TYPE",
+   "effect": "declaration-type",
+   "dependence": "verdict-irrelevant",
+   "code": "checkpoint: Option<std::io::BufWriter<std::fs::File>>,"
+  },
+  {
+   "member": "crates/clean-olean/src/recheck_closed/reference_base.rs",
+   "line": 430,
+   "token": "std::io",
+   "rule": "E-TYPE",
+   "effect": "declaration-type",
+   "dependence": "verdict-irrelevant",
+   "code": "checkpoint: Option<std::io::BufWriter<std::fs::File>>,"
+  },
+  {
+   "member": "crates/clean-olean/src/recheck_closed/reference_base.rs",
+   "line": 437,
+   "token": "io::*",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::io::Write;"
+  },
+  {
+   "member": "crates/clean-olean/src/recheck_closed/reference_base.rs",
+   "line": 437,
+   "token": "std::io",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::io::Write;"
+  },
+  {
+   "member": "crates/clean-olean/src/recheck_closed/reference_base.rs",
+   "line": 615,
+   "token": "File::open/create",
+   "rule": "E-WRITE",
+   "effect": "write-file",
+   "dependence": "success-only",
+   "code": ".map(std::fs::File::create)",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-olean/src/recheck_closed/reference_base.rs",
+   "line": 615,
+   "token": "fs::*",
+   "rule": "E-WRITE",
+   "effect": "write-file",
+   "dependence": "success-only",
+   "code": ".map(std::fs::File::create)",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-olean/src/recheck_closed/reference_base.rs",
+   "line": 615,
+   "token": "std::fs",
+   "rule": "E-WRITE",
+   "effect": "write-file",
+   "dependence": "success-only",
+   "code": ".map(std::fs::File::create)",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-olean/src/recheck_closed/reference_base.rs",
+   "line": 617,
+   "token": "BufWriter",
+   "rule": "E-WRITE",
+   "effect": "write-file",
+   "dependence": "success-only",
+   "code": ".map(std::io::BufWriter::new),",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-olean/src/recheck_closed/reference_base.rs",
+   "line": 617,
+   "token": "std::io",
+   "rule": "E-WRITE",
+   "effect": "write-file",
+   "dependence": "success-only",
+   "code": ".map(std::io::BufWriter::new),",
    "error_discarded": false
   },
   {

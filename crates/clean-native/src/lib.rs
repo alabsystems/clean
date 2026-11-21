@@ -28,6 +28,7 @@ mod native_eager_io_check;
 mod native_ffi_audit;
 mod native_kernel_bool;
 mod native_monad_inline;
+mod native_nat_display;
 mod native_opaque_audit;
 mod native_rec_split_audit;
 pub mod primitive_uses;

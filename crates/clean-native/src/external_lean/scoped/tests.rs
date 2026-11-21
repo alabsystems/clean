@@ -120,10 +120,9 @@ fn replace(program: &mut ExternalLeanScopedProgram, mutate: impl FnOnce(&mut Con
     let name = n("handoff");
     let mut info = program.program.env.get_const(&name).unwrap().clone();
     mutate(&mut info);
-    program.program.env.forget_decl(&name);
-    assert!(program
-        .program
-        .env
+    let env = Arc::make_mut(&mut program.program.env);
+    env.forget_decl(&name);
+    assert!(env
         .extend_constants_structural(std::iter::once(info))
         .is_empty());
 }
@@ -147,9 +146,7 @@ fn scoped_external_changed_rows_attributes_and_readiness_cannot_reuse_scope() {
         );
     }
     let mut changed = program(&[n("handoff")]).unwrap();
-    changed
-        .program
-        .env
+    Arc::make_mut(&mut changed.program.env)
         .register_extern(n("handoff"), "different_actual_runtime".into());
     assert!(
         matches!(changed.select(&n("handoff"), 0), Err(ExternalLeanError::Input(ref s)) if s.contains("scope changed"))
@@ -179,7 +176,7 @@ fn scoped_external_changed_rows_attributes_and_readiness_cannot_reuse_scope() {
 #[test]
 fn scoped_external_global_binding_order_policy_is_not_relaxed() {
     let mut program = program(&[n("handoff")]).unwrap();
-    program.program.env.record_compiled_before(vec![(
+    Arc::make_mut(&mut program.program.env).record_compiled_before(vec![(
         n("unrelated"),
         CompiledBefore {
             rebound: n("unrelated"),
@@ -188,7 +185,7 @@ fn scoped_external_global_binding_order_policy_is_not_relaxed() {
     )]);
     assert!(program.select(&n("handoff"), 0).is_err());
     program.select_in_runtime_closure(&n("handoff"), 0).unwrap();
-    program.program.env.record_compiled_before(vec![(
+    Arc::make_mut(&mut program.program.env).record_compiled_before(vec![(
         n("handoff"),
         CompiledBefore {
             rebound: n("handoff"),
@@ -202,11 +199,8 @@ fn scoped_external_global_binding_order_policy_is_not_relaxed() {
 fn scoped_external_actual435_full_init_retains_global_refusal_and_captures_exact_scope() {
     let dir = tempfile::tempdir().unwrap();
     let file = dir.path().join("Scoped435.lean");
-    std::fs::write(
-        &file,
-        "def query (x : Nat) : Nat := x\ndef outside (x : Nat) : Nat := x\n",
-    )
-    .unwrap();
+    let source = "def query (x : Nat) : Nat := x\ndef outside (x : Nat) : Nat := x\n";
+    std::fs::write(&file, source).unwrap();
     let program = ExternalLeanScopedProgram::elaborate(
         ExternalLeanInput {
             file: &file,
@@ -218,11 +212,7 @@ fn scoped_external_actual435_full_init_retains_global_refusal_and_captures_exact
         &[n("query")],
     )
     .expect("actual435 full-Init selected scope must fit unchanged default limits");
-    let global = program.source_capture();
-    assert!(!global.errors.is_empty());
-    assert!(!global.row_failures.is_empty());
-    assert!(!global.delta_complete);
-    assert!(global.snapshot_blake3.is_none());
+    assert!(program.program.custody.global_observation.get().is_none());
     let scoped = program.scoped_capture();
     assert!(scoped.is_complete());
     assert!(scoped.members().contains(&n("Nat")));
@@ -238,5 +228,16 @@ fn scoped_external_actual435_full_init_retains_global_refusal_and_captures_exact
     assert!(selected.runtime_replay_verdict().passed(false));
     let emitted = selected.emit(EmitFormat::C).unwrap();
     assert!(emitted.contains("l_query"));
+    assert!(program.program.custody.global_observation.get().is_none());
+    // Both handles share a single full observation of the retained original
+    // environments, even when that diagnostic is requested after emission.
+    std::fs::write(&file, "def laterEdit : Nat := 0\n").unwrap();
+    let global = selected.source_capture();
+    assert!(std::ptr::eq(global, program.source_capture()));
+    assert_eq!(global.sources[0].source, source);
+    assert!(!global.errors.is_empty());
+    assert!(!global.row_failures.is_empty());
+    assert!(!global.delta_complete);
+    assert!(global.snapshot_blake3.is_none());
     println!("actual435 full Init: global {} row failures/{} errors, absent digest/incomplete delta preserved; exact scoped {} members under64MiBtotal/16MiBrow passes replay+selection+existing C emission; no native execution claim", global.row_failures.len(), global.errors.len(), scoped.members().len());
 }

@@ -121,8 +121,9 @@ fn assert_tactic_theorem(name: &str, source: &str) {
 /// Assert the FALSE theorem `source` does NOT elaborate-and-register.
 fn assert_false_theorem_rejected(name: &str, source: &str) {
     let mut env = Environment::with_prelude();
-    let full = format!("{TWO_LAYER_PREAMBLE}\n{source}");
-    match try_elaborate_into(&mut env, &full) {
+    try_elaborate_into(&mut env, TWO_LAYER_PREAMBLE)
+        .unwrap_or_else(|e| panic!("false-goal setup must elaborate before `{name}`: {e}"));
+    match try_elaborate_into(&mut env, source) {
         Err(_) => {} // expected: the tactic could not (soundly) close the false goal.
         Ok(()) => {
             if let Some(info) = env.get_const(&Name::from_string(name)) {

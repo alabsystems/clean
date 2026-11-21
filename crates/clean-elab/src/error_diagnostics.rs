@@ -17,7 +17,9 @@ impl ElabError {
         match self {
             // Attribution is presentation, not classification: a wrapped
             // error keeps the machine diagnostics of the error it wraps.
-            Self::InTactic { source, .. } => source.agent_diagnostics(),
+            Self::InTactic { source, .. } | Self::AtBodyTerm { source, .. } => {
+                source.agent_diagnostics()
+            }
             Self::DerivingHandlerFailed { error, .. } => error.agent_diagnostics(),
             Self::UnknownIdentWithSuggestions { name, suggestions } => {
                 let mut diag = AgentDiagnostic::error(

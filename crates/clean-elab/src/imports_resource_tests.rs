@@ -14,6 +14,7 @@ fn resource_refusals_never_take_import_fallbacks() {
     for policy in [ImportPolicy::FailClosed, ImportPolicy::Permissive] {
         let resolution = ImportResolution {
             policy,
+            requires_artifact: false,
             satisfied_from_source: &satisfied,
         };
         let mut env = Environment::new();

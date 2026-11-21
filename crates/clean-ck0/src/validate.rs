@@ -378,11 +378,8 @@ impl Term {
     }
 }
 
-/// Recognizes kernel-generated recursor/eliminator names by their final
-/// component. These suffixes are reserved in Lean for kernel-derived
-/// eliminators and recursion machinery; in `ck0` they are never ordinary
-/// constants and must be lowered to [`RawExpr::Elim`] (design §4.2/§4.3, Codex
-/// A3). Matching on the *last* component only (`Nat.rec` -> `"rec"`).
+/// Recognizes a final component used by Lean's recursion machinery. Such a
+/// spelling alone is insufficient to authorize a raw constant reference.
 fn is_recursor_name(name: &Name) -> bool {
     matches!(
         name.last_str(),

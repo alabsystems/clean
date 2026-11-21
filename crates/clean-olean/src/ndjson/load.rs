@@ -35,6 +35,7 @@ use super::error::NdjsonError;
 use super::levels::LevelTaint;
 use super::source::ExportSource;
 use super::world::ExportMeta;
+use crate::import::export_fields::ExportFields;
 use crate::import::{
     infer_recursor_arg_order, is_aux_recursor_suffix, register_front_end_constants,
     ConvertedConstant, ExprSharingStats,
@@ -110,10 +111,11 @@ fn other(
     name: &Name,
     decl: Declaration,
     hints: Option<ReducibilityHintsData>,
+    all: Option<Vec<Name>>,
 ) -> ConvertedConstant {
     ConvertedConstant::Other(
         name.to_string(),
-        Ok((decl, hints)),
+        Ok((decl, ExportFields { hints, all })),
         ExprSharingStats::default(),
     )
 }
@@ -209,7 +211,7 @@ impl Loader {
                     level_params,
                     type_,
                 };
-                let converted = other(&name, decl, None);
+                let converted = other(&name, decl, None, None);
                 if name == Name::from_string("Quot.sound") {
                     self.quot_sound = Some((header, converted));
                 } else {
@@ -221,6 +223,7 @@ impl Loader {
                 value,
                 hints,
                 safety,
+                all,
             } => {
                 let ExportHeader {
                     name,
@@ -237,9 +240,10 @@ impl Loader {
                     value,
                     is_reducible: hints == ReducibilityHintsData::Abbrev,
                 };
-                self.converted.push(other(&name, decl, Some(hints)));
+                self.converted
+                    .push(other(&name, decl, Some(hints), Some(all)));
             }
-            ExportDeclaration::Theorem { header, value } => {
+            ExportDeclaration::Theorem { header, value, all } => {
                 let ExportHeader {
                     name,
                     level_params,
@@ -253,12 +257,13 @@ impl Loader {
                     type_,
                     value,
                 };
-                self.converted.push(other(&name, decl, None));
+                self.converted.push(other(&name, decl, None, Some(all)));
             }
             ExportDeclaration::Opaque {
                 header,
                 value,
                 is_unsafe,
+                all,
             } => {
                 let ExportHeader {
                     name,
@@ -274,7 +279,7 @@ impl Loader {
                     type_,
                     value,
                 };
-                self.converted.push(other(&name, decl, None));
+                self.converted.push(other(&name, decl, None, Some(all)));
             }
             ExportDeclaration::Quot { header, kind } => {
                 self.declare(&header.name, "quot", line);

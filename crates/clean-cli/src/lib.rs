@@ -30,6 +30,7 @@ mod cmd_compile;
 mod cmd_core;
 mod cmd_discover;
 mod cmd_drift;
+mod cmd_evidence;
 mod cmd_export_cert;
 mod cmd_extract;
 mod cmd_factory;
@@ -92,7 +93,7 @@ use clap::Parser;
 use clean_auto::cli::AutoCommands;
 #[cfg(not(target_arch = "wasm32"))]
 use clean_server::WebSocketConfig;
-use cli_args::{Cli, Commands, VerifyCommands};
+use cli_args::{Cli, Commands, EvidenceCommands, VerifyCommands};
 
 /// Pre-load .olean environment for --init or --stdlib server flags.
 #[cfg(not(target_arch = "wasm32"))]
@@ -259,6 +260,86 @@ fn dispatch_sync(command: Commands) -> anyhow::Result<()> {
         Commands::Release { command } => cmd_release::handle_release_command(command)?,
         Commands::Research { command } => cmd_research::handle_research_command(command)?,
         Commands::Replacement { command } => cmd_replacement::handle_replacement_command(command)?,
+        Commands::Evidence { command } => match command {
+            EvidenceCommands::Status {
+                json,
+                markdown,
+                scoreboard,
+                check,
+                write,
+                repo_root,
+            } => {
+                cmd_evidence::status(
+                    json,
+                    markdown.as_deref(),
+                    scoreboard,
+                    check,
+                    write,
+                    repo_root.as_deref(),
+                )?;
+            }
+            EvidenceCommands::MeaningDigest {
+                export,
+                module,
+                olean,
+                root,
+            } => {
+                let file = std::fs::File::open(&export).map_err(|error| {
+                    EvidenceCheckError::Unavailable(format!("{}: {error}", export.display()))
+                })?;
+                let measured = clean_olean::ndjson::meaning::measure(file, &module, &olean, &root)?;
+                serde_json::to_writer_pretty(std::io::stdout().lock(), &measured)?;
+                println!();
+            }
+            EvidenceCommands::List { json } => cmd_evidence::list(json)?,
+            EvidenceCommands::Check {
+                figures,
+                all,
+                repo_root,
+            } => {
+                cmd_evidence::run(&figures, all, repo_root.as_deref())?;
+            }
+            EvidenceCommands::CheckK3Sources { repo_root } => {
+                cmd_evidence::check_k3_sources(repo_root.as_deref())?;
+            }
+            EvidenceCommands::CheckRuleLeanReferences { repo_root } => {
+                cmd_evidence::check_rule_lean_references(repo_root.as_deref())?;
+            }
+            EvidenceCommands::CheckRuleCppAnchors {
+                repo_root,
+                coverage,
+            } => {
+                cmd_evidence::check_rule_cpp_anchors(repo_root.as_deref(), coverage)?;
+            }
+            EvidenceCommands::CheckRuleInventory {
+                repo_root,
+                require_complete,
+            } => {
+                cmd_evidence::check_rule_inventory(repo_root.as_deref(), require_complete)?;
+            }
+            EvidenceCommands::CheckK3Coverage { repo_root } => {
+                cmd_evidence::check_k3_coverage(repo_root.as_deref())?;
+            }
+            EvidenceCommands::CheckK3PacketSyntax(args) => {
+                cmd_evidence::check_k3_packet_syntax(args)?;
+            }
+            EvidenceCommands::CheckK3ExportSyntax {
+                check_names,
+                check_levels,
+                check_expressions,
+                repo_root,
+            } => {
+                cmd_evidence::check_k3_export_syntax(
+                    check_names,
+                    check_levels,
+                    check_expressions,
+                    repo_root.as_deref(),
+                )?;
+            }
+            EvidenceCommands::Explain { figure, repo_root } => {
+                cmd_evidence::explain(&figure, repo_root.as_deref())?;
+            }
+        },
         Commands::Factory { command } => cmd_factory::handle_factory_command(command)?,
         Commands::Math { command } => cmd_math::handle_math_command(command)?,
         Commands::MathMap { command } => cmd_math_map::handle_math_map_command(command)?,
@@ -371,6 +452,7 @@ fn run_check_on_large_stack(args: clean_kernel::cli::CheckArgs) -> anyhow::Resul
                     args.automation_budget,
                     &options,
                     args.lean_world,
+                    args.export_ndjson.as_deref(),
                 )
             }
         })
@@ -408,6 +490,7 @@ fn run_check_on_large_stack(args: clean_kernel::cli::CheckArgs) -> anyhow::Resul
             args.automation_budget,
             &options,
             args.lean_world,
+            args.export_ndjson.as_deref(),
         )
     }
 }
@@ -485,11 +568,30 @@ pub async fn run() -> anyhow::Result<()> {
     }
 }
 
-/// Return the process exit code requested by a command error: a forwarded
-/// child process status, or the 0/1/2 split of `clean olean replay` (2 when it
-/// declined to judge).
+#[derive(Clone, Debug, thiserror::Error)]
+pub(crate) enum EvidenceCheckError {
+    #[error("{0}")]
+    Invalid(String),
+    #[error("{0}")]
+    Usage(String),
+    #[error("{0}")]
+    Unavailable(String),
+}
+
+/// Return the process exit code requested by a command error. This includes
+/// forwarded child process status and the verdict codes of `clean olean replay`
+/// and `clean evidence check`.
 pub fn forwarded_exit_code(err: &anyhow::Error) -> Option<i32> {
-    cmd_lake::native_executable_exit_code(err).or_else(|| cmd_olean::olean_exit_code(err))
+    cmd_lake::native_executable_exit_code(err)
+        .or_else(|| cmd_olean::olean_exit_code(err))
+        .or_else(|| {
+            err.downcast_ref::<EvidenceCheckError>()
+                .map(|error| match error {
+                    EvidenceCheckError::Invalid(_) => 1,
+                    EvidenceCheckError::Usage(_) => 2,
+                    EvidenceCheckError::Unavailable(_) => 3,
+                })
+        })
 }
 
 #[cfg(test)]
@@ -742,6 +844,11 @@ pub mod __test_support {
             name: "clean_cli::cmd_research::FEATURES",
             slice: crate::cmd_research::FEATURES,
             allowed_roots: &["research"],
+        },
+        FeatureSource {
+            name: "clean_cli::registry::EVIDENCE_FEATURES",
+            slice: crate::registry::EVIDENCE_FEATURES,
+            allowed_roots: &["evidence"],
         },
         FeatureSource {
             name: "clean_cli::cmd_factory::FEATURES",

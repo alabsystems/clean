@@ -63,7 +63,7 @@ fn recent_world(world: LeanWorld) {
         ] {
             let mut env = initial.clone();
             let result = check_source(&mut env, &choice, source);
-            if world != LeanWorld::Lean436Rc2 && source.contains(" variable") {
+            if !world.variable_visibility() && source.contains(" variable") {
                 assert!(result.is_err(), "{world}: {source}");
                 continue;
             }
@@ -88,7 +88,7 @@ fn recent_world(world: LeanWorld) {
             }
             assert_eq!(checked, 1, "one actual declaration must be checked: {source}");
         }
-        if world == LeanWorld::Lean436Rc2 {
+        if world.variable_visibility() {
             for source in [
                 "private variable (x : Nat)\npublic def bad : Bool := x\n",
                 "section\nprivate variable (x : Nat)\npublic def fromSection : Nat := x\nend\nset_option autoImplicit false\ndef outside : Nat := x\n",
@@ -111,6 +111,11 @@ fn selected_world_435_uses_genuine_init_and_keeps_old_variable_refusal() {
 #[test]
 fn selected_world_436rc2_preserves_actual_variable_scope_and_public_signatures() {
     recent_world(LeanWorld::Lean436Rc2);
+}
+
+#[test]
+fn selected_stable_436_preserves_actual_variable_scope_and_public_signatures() {
+    recent_world(LeanWorld::Lean436);
 }
 
 #[test]

@@ -1,0 +1,1 @@
+def audit_collision_bad_existing_ctor : FreshCtorDecls env_freshness_first env_freshness_two (env_freshness_ctors env_freshness_one) := @Eq.refl Bool Bool.true

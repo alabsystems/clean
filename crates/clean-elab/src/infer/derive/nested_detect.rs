@@ -54,6 +54,7 @@ fn surface_mentions_name(expr: &SurfaceExpr, ind_name: &Name) -> bool {
         }
         SurfaceExpr::Paren(_, inner)
         | SurfaceExpr::Ascription(_, inner, _)
+        | SurfaceExpr::Borrowed(_, inner)
         | SurfaceExpr::OutParam(_, inner)
         | SurfaceExpr::SemiOutParam(_, inner)
         | SurfaceExpr::Explicit(_, inner) => surface_mentions_name(inner, ind_name),

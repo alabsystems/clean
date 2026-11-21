@@ -104,16 +104,16 @@ impl Specification {
                     format!("redw_tsc_{tag}_blind"),
                     format!(
                         "def redw_tsc_{tag}_blind (e : KExpr) : \
-                         Eq Type (RedW {one} {term} e) (whnf_acc e) := \
-                         Eq.refl Type (whnf_acc e)"
+                         @Eq Type (RedW {one} {term} e) (whnf_acc e) := \
+                         @Eq.refl Type (whnf_acc e)"
                     ),
                 ),
                 (
                     format!("redw_tsc_{tag}_pi"),
                     format!(
                         "def redw_tsc_{tag}_pi (e : KExpr) : \
-                         Eq Type (RedW {one} {term} e) {clause} := \
-                         Eq.refl Type {clause}",
+                         @Eq Type (RedW {one} {term} e) {clause} := \
+                         @Eq.refl Type {clause}",
                         clause = pi_clause("e"),
                     ),
                 ),
@@ -158,7 +158,7 @@ impl Specification {
             "redw_tsc_control_pi_at_index_one".to_string(),
             format!(
                 "def redw_tsc_control_pi_at_index_one (e : KExpr) : \
-                 Eq Type (RedW {one} {pi} e) {clause} := Eq.refl Type {clause}",
+                 @Eq Type (RedW {one} {pi} e) {clause} := @Eq.refl Type {clause}",
                 clause = pi_clause("e"),
             ),
         ));
@@ -220,7 +220,7 @@ impl Specification {
         );
         // The `pi` clause built at index `j`, from `h`.
         let build = format!(
-            "(AndType.intro (whnf_acc e) \
+            "(@AndType.intro (whnf_acc e) \
              (forall (x : KExpr), RedW j {s0} x -> RedW j {s0} (KExpr.app e x)) \
              (h Nat.zero) \
              (fun (x : KExpr) (hx : RedW j {s0} x) => \
@@ -238,7 +238,7 @@ impl Specification {
                 format!(
                     "def redw_sort_to_acc : forall (k : Nat) (y : KExpr), \
                      RedW k {s0} y -> whnf_acc y := \
-                     Nat.rec (fun (kk : Nat) => forall (y : KExpr), \
+                     @Nat.rec (fun (kk : Nat) => forall (y : KExpr), \
                      RedW kk {s0} y -> whnf_acc y) \
                      (fun (y : KExpr) (h0 : RedW Nat.zero {s0} y) => h0) \
                      (fun (n : Nat) (_ih : forall (y : KExpr), \
@@ -251,7 +251,7 @@ impl Specification {
                 format!(
                     "def redw_acc_to_sort : forall (k : Nat) (y : KExpr), \
                      whnf_acc y -> RedW k {s0} y := \
-                     Nat.rec (fun (kk : Nat) => forall (y : KExpr), \
+                     @Nat.rec (fun (kk : Nat) => forall (y : KExpr), \
                      whnf_acc y -> RedW kk {s0} y) \
                      (fun (y : KExpr) (h0 : whnf_acc y) => h0) \
                      (fun (n : Nat) (_ih : forall (y : KExpr), \
@@ -265,8 +265,8 @@ impl Specification {
                 "redw_r1_reaches_pi_at_succ_succ".to_string(),
                 format!(
                     "def redw_r1_reaches_pi_at_succ_succ (m : Nat) (e : KExpr) : \
-                     Eq Type (RedW (Nat.succ (Nat.succ m)) {r1} e) {cl} := \
-                     Eq.refl Type {cl}",
+                     @Eq Type (RedW (Nat.succ (Nat.succ m)) {r1} e) {cl} := \
+                     @Eq.refl Type {cl}",
                     cl = clause_at("(Nat.succ m)", "e"),
                 ),
             ),
@@ -276,7 +276,7 @@ impl Specification {
                     "def redw_typestep_fwd_at_redwstep_for_the_refuting_pair \
                      (e : KExpr) (h : RedWStep {r1} e) : RedWStep {pi} e := \
                      fun (n : Nat) => \
-                     Nat.rec (fun (k : Nat) => RedW k {pi} e) (h Nat.zero) \
+                     @Nat.rec (fun (k : Nat) => RedW k {pi} e) (h Nat.zero) \
                      (fun (j : Nat) (_ih : RedW j {pi} e) => {b}) n",
                     b = build,
                 ),
@@ -287,9 +287,9 @@ impl Specification {
                     "def redw_typestep_bwd_at_redwstep_for_the_refuting_pair \
                      (e : KExpr) (h : RedWStep {pi} e) : RedWStep {r1} e := \
                      fun (n : Nat) => \
-                     Nat.rec (fun (k : Nat) => RedW k {r1} e) (h Nat.zero) \
+                     @Nat.rec (fun (k : Nat) => RedW k {r1} e) (h Nat.zero) \
                      (fun (m : Nat) (_ih : RedW m {r1} e) => \
-                     Nat.rec (fun (j : Nat) => RedW (Nat.succ j) {r1} e) \
+                     @Nat.rec (fun (j : Nat) => RedW (Nat.succ j) {r1} e) \
                      (h Nat.zero) \
                      (fun (m2 : Nat) (_ih2 : RedW (Nat.succ m2) {r1} e) => {b2}) m) n",
                     b2 = build_at("(Nat.succ m2)"),

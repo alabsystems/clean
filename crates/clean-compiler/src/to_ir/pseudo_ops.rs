@@ -61,6 +61,35 @@ pub(super) fn lower_let(
         return Ok(lowered);
     }
 
+    let erased_projection = if let LetValue::Proj {
+        type_name,
+        idx,
+        structure,
+    } = &decl.value
+    {
+        let erased = state
+            .lookup_proj_meta(type_name)
+            .and_then(|meta| meta.field_types.get(*idx as usize))
+            .is_some_and(IRType::is_void);
+        if erased {
+            require_runtime_var(
+                state,
+                *structure,
+                type_name,
+                "projection receiver is erased",
+            )?;
+        }
+        erased
+    } else {
+        false
+    };
+    if erased_projection
+        || (matches!(&decl.value, LetValue::Erased) && state.is_checked_void_type(&decl.ty))
+    {
+        state.bind_world_token(decl.fvar_id);
+        return lower_code(body, state);
+    }
+
     // A ZERO-argument `LetValue::FVar` is a pure alias of an already-lowered
     // local (`let outer := inner`): the shape `to_lcnf::expr_to_let_value`
     // mints for a bare variable in value position (since 2026-09-15) and the
@@ -75,6 +104,10 @@ pub(super) fn lower_let(
     // erased source stays erased under its new name.
     if let LetValue::FVar { fvar, args } = &decl.value {
         if args.is_empty() {
+            if state.is_world_token(*fvar) {
+                state.bind_world_token(decl.fvar_id);
+                return lower_code(body, state);
+            }
             let source = state.get_var(*fvar)?;
             // RC insertion reasons about the alias's source type, while this
             // representation-preserving rename keeps the original IR variable.
@@ -408,6 +441,9 @@ fn lower_scalar_carrier_ctor(
         LetValue::Const { name, args, .. } | LetValue::Ctor { name, args, .. } => (name, args),
         _ => return Ok(None),
     };
+    if state.external_constructors.contains(name) {
+        return Ok(None);
+    }
     let Some(meta) = state.lookup_ctor_meta(name) else {
         return Ok(None);
     };
@@ -791,6 +827,9 @@ fn lower_rc_op(
     let s = name.to_string();
     if s == pseudo_op::INC {
         let fvar = expect_fvar_arg(args, 0, name, "expected _inc(x)")?;
+        if state.is_world_token(fvar) {
+            return lower_code(body, state);
+        }
         let var = require_runtime_var(state, fvar, name, "_inc target lowered to erased")?;
         let rest = lower_code(body, state)?;
         Ok(IRBody::Inc {
@@ -800,6 +839,9 @@ fn lower_rc_op(
         })
     } else if s == pseudo_op::DEC || s == pseudo_op::DEL {
         let fvar = expect_fvar_arg(args, 0, name, "expected one runtime operand")?;
+        if state.is_world_token(fvar) {
+            return lower_code(body, state);
+        }
         let var = require_runtime_var(state, fvar, name, "_dec/_del target lowered to erased")?;
         let rest = lower_code(body, state)?;
         Ok(IRBody::Dec {

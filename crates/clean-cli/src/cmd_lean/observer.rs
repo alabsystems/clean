@@ -34,12 +34,15 @@ use super::dialect::LeanDialect;
 use super::locate::{aux_name_start, command_keyword_range, decl_ref_range, LineIndex};
 use super::members::{flatten_members, member_at, Member, MemberKind};
 use super::message::{LeanMessage, RenderOptions, Severity, KIND_ANONYMOUS, KIND_HAS_SORRY};
-use clean_elab::module_driver::{surface_decl_span, BudgetReading, LeafOutcome, ModuleObserver};
+use clean_elab::module_driver::{
+    surface_decl_span, BudgetReading, CheckedLeanV2Source, LeafOutcome, ModuleObserver,
+};
 use clean_elab::{
     CommandOutput, ElabError, ElabResult, FileContext, MessageSeverity, RegisteredElabResult,
 };
 use clean_kernel::env::DeclarationTrustSummary;
 use clean_kernel::Environment;
+use clean_native::compile::CheckedNativeSource;
 use clean_parser::SurfaceDecl;
 use std::io::Write;
 
@@ -66,6 +69,10 @@ pub(crate) struct LeanObserver<'a> {
     pub(crate) error_logged: bool,
     /// The first write to `out` that failed, if any.
     pub(crate) write_error: Option<std::io::Error>,
+    /// Source declarations available to the stable native run.
+    pub(crate) native_source: Option<anyhow::Result<CheckedNativeSource>>,
+    export_decls: Option<&'a [SurfaceDecl]>,
+    pub(crate) export_source: Option<Result<CheckedLeanV2Source, ElabError>>,
     /// The start of every top-level declaration, ascending: a declaration's
     /// `where` clause can lie past its own span, but never past the next one.
     decl_starts: Vec<usize>,
@@ -78,6 +85,7 @@ impl<'a> LeanObserver<'a> {
         out: &'a mut dyn Write,
         recovery: Vec<(usize, String)>,
         decl_starts: Vec<usize>,
+        capture_native_source: bool,
     ) -> Self {
         Self {
             decl_starts,
@@ -93,7 +101,14 @@ impl<'a> LeanObserver<'a> {
             command_cursor: 0,
             error_logged: false,
             write_error: None,
+            native_source: capture_native_source.then(|| Ok(CheckedNativeSource::default())),
+            export_decls: None,
+            export_source: None,
         }
+    }
+
+    pub(crate) fn capture_export(&mut self, declarations: &'a [SurfaceDecl]) {
+        self.export_decls = Some(declarations);
     }
 
     fn dialect(&self) -> LeanDialect {
@@ -174,6 +189,10 @@ impl<'a> LeanObserver<'a> {
             && self.error_anchors.iter().any(|&at| at >= span_start)
         {
             // The parser's recovery note already reported this region.
+            return;
+        }
+        if let Some((span, text)) = error.body_type_diagnostic(self.source) {
+            self.log_error(span_start, (span.start, span.end), text);
             return;
         }
         let (range, text) = match error {
@@ -308,7 +327,7 @@ fn trust_messages(
     if own.has_explicit_sorry && !guarded && !(own.has_synthetic_sorry && has_error) {
         let text = match dialect {
             LeanDialect::V4_8_0 => "declaration uses 'sorry'",
-            LeanDialect::V4_30_0Rc2 => "declaration uses `sorry`",
+            LeanDialect::V4_30_0Rc2 | LeanDialect::V4_36_0 => "declaration uses `sorry`",
         };
         out.push((Severity::Warning, KIND_HAS_SORRY, text));
     }
@@ -333,6 +352,13 @@ fn span_of(decl: &SurfaceDecl) -> (usize, usize) {
 }
 
 impl ModuleObserver for LeanObserver<'_> {
+    fn before_body(&mut self, env: &Environment) {
+        if let Some(declarations) = self.export_decls {
+            let mut source = CheckedLeanV2Source::capture(env);
+            self.export_source = Some(source.observe_source(declarations).map(|()| source));
+        }
+    }
+
     fn before_decl(&mut self, _env: &Environment, _index: usize, decl: &SurfaceDecl) {
         let (_, end) = span_of(decl);
         self.members = flatten_members(decl);
@@ -354,6 +380,11 @@ impl ModuleObserver for LeanObserver<'_> {
     }
 
     fn leaf_checked(&mut self, env: &Environment, decl: &SurfaceDecl, outcome: &LeafOutcome<'_>) {
+        if let Some(Ok(source)) = &mut self.native_source {
+            if let Err(error) = source.record(env, outcome) {
+                self.native_source = Some(Err(error));
+            }
+        }
         let (start, end) = span_of(decl);
         match outcome {
             LeafOutcome::Failed {
@@ -385,7 +416,14 @@ impl ModuleObserver for LeanObserver<'_> {
                     .unwrap_or_else(|| Member::whole(decl, start, end));
                 for diagnostic in *source_diagnostics {
                     let anchor = diagnostic.span.map_or(member.start, |span| span.start);
-                    let range = decl_ref_range(self.source, anchor);
+                    let range = match (&diagnostic.error, diagnostic.span) {
+                        (
+                            ElabError::DocumentationLink { .. }
+                            | ElabError::DocumentationAttachment { .. },
+                            Some(span),
+                        ) => (span.start, span.end),
+                        _ => decl_ref_range(self.source, anchor),
+                    };
                     self.log_error(anchor, range, diagnostic.error.to_string());
                 }
                 if *kernel_failures_delta > 0 {

@@ -118,6 +118,46 @@ fn source_world_preserves_implicit_measured_refusal_and_default_binding() {
 }
 
 #[test]
+fn stable_project_pin_declares_only_the_exact_installed_world() {
+    let world = LeanWorld::Lean436;
+    let (root, file) = project(Some("leanprover/lean4:v4.36.0"));
+    let roots = [root.path().join("elan")];
+    let select = || source_world_for(lean_worlds(), &file, None, &roots);
+    let refusal = select().unwrap_err().to_string();
+    assert!(
+        refusal.contains("v4.36.0") && refusal.contains("not installed"),
+        "{refusal}"
+    );
+
+    install(root.path(), world.tag(), &recent_header());
+    let refusal = select().unwrap_err().to_string();
+    assert!(
+        refusal.contains("v4.36.0") && refusal.contains("another build"),
+        "{refusal}"
+    );
+
+    let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/fixtures/olean/v4.36.0/plain/StablePlain.olean");
+    let bytes = fs::read(fixture).expect("official stable fixture");
+    let lib = install(root.path(), world.tag(), &bytes[..HEADER_SIZE_V2]);
+    let selected = select().unwrap();
+    assert_eq!(selected.world(), world);
+    assert_eq!(selected.declared_world(), Some(world.tag()));
+    assert_eq!(
+        selected.imports(),
+        Ok(&ImportWorld::Project {
+            world: world.tag(),
+            lean_toolchain: root
+                .path()
+                .join("proj/lean-toolchain")
+                .canonicalize()
+                .unwrap(),
+            lib,
+        })
+    );
+}
+
+#[test]
 fn an_explicit_source_choice_does_not_admit_canary_artifacts() {
     static CANARY: &[LeanWorldRow] = &[LeanWorldRow {
         world: "v4.35.0",

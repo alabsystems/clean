@@ -32,6 +32,9 @@ SELFTEST_EXPORT = [
     {"natVal": "18446744073709551616", "ie": 6},
     {"in": 6, "str": {"pre": 0, "str": "f"}},
     {"in": 7, "str": {"pre": 0, "str": "g"}},
+    {"in": 8, "num": {"pre": 1, "i": 11}},
+    {"in": 9, "str": {"pre": 0, "str": "lemma"}},
+    {"in": 10, "str": {"pre": 0, "str": "sealed"}},
     {"inductive": {
         "types": [{"name": 1, "levelParams": [], "type": 0, "numParams": 0, "numIndices": 0, "all": [1],
                    "ctors": [2], "numNested": 0, "isRec": False, "isReflexive": False, "isUnsafe": False}],
@@ -45,9 +48,11 @@ SELFTEST_EXPORT = [
              "numMotives": 1, "numMinors": 1, "rules": [{"ctor": 2, "nfields": 0, "rhs": 4}], "k": False,
              "isUnsafe": False}]}},
     {"def": {"name": 6, "levelParams": [], "type": 2, "value": 5, "hints": {"regular": 1}, "safety": "safe",
-             "all": [6]}},
+             "all": [6, 8]}},
     {"def": {"name": 7, "levelParams": [], "type": 1, "value": 6, "hints": "abbrev", "safety": "safe",
              "all": [7]}},
+    {"thm": {"name": 9, "levelParams": [], "type": 1, "value": 1, "all": [8, 9]}},
+    {"opaque": {"name": 10, "levelParams": [], "type": 1, "value": 1, "all": [], "isUnsafe": False}},
 ]
 
 
@@ -75,14 +80,13 @@ def _selftest():
 
     # Normalized: these must compare equal.
     def binder_names(rs):
-        rs.append({"in": 8, "str": {"pre": 0, "str": "y"}})
+        rs.insert(1, {"in": 11, "str": {"pre": 0, "str": "y"}})
         for r in rs:
             for k in ("lam", "forallE"):
                 if k in r:
-                    r[k]["name"] = 8
+                    r[k]["name"] = 11
     same.append(("binder names", binder_names))
     same.append(("mdata payload", lambda rs: _find(rs, lambda r: "mdata" in r)["mdata"].update(data={})))
-    same.append(("def all", lambda rs: _find(rs, lambda r: "def" in r)["def"].update(all=[6, 7])))
     same.append(("recursor order", lambda rs: _find(rs, lambda r: "inductive" in r)["inductive"]["recs"].reverse()))
 
     def renumber(rs):
@@ -110,6 +114,23 @@ def _selftest():
         verdict = compare(base, _mutate(edit))
         if verdict["verdict"] != "different":
             failures.append(f"{label}: expected a difference, got equal")
+    # Compare the ordered names on all three ordinary declaration kinds.
+    # T.11 is valid metadata even though its declaration is outside this stream.
+    for kind, decl, changed in (("def", "f", [8, 6]), ("thm", "lemma", [9]),
+                                 ("opaque", "sealed", [10])):
+        verdict = compare(base, _mutate(lambda rs: _find(rs, lambda r: kind in r)[kind].update(all=changed)))
+        if (verdict["verdict"] != "different"
+                or verdict["differing"] != [{"declaration": decl, "fields": ["all"]}]
+                or verdict["only_left_count"] or verdict["only_right_count"]):
+            failures.append(f"{kind} all: expected an ordered metadata difference for {decl}, got {verdict}")
+    if base.name(8) in base.declared:
+        failures.append("ordinary all introduced an undeclared sibling into the cone")
+    for invalid in ([12], {}, [True]):
+        try:
+            _mutate(lambda rs: _find(rs, lambda r: "opaque" in r)["opaque"].update(all=invalid))
+            failures.append(f"accepted invalid opaque.all: {invalid}")
+        except Malformed:
+            pass
     # Binder information alone: listed apart, not among the differences.
     verdict = compare(base, _mutate(lambda rs: _find(rs, lambda r: "lam" in r)["lam"].update(binderInfo="implicit")))
     if (verdict["verdict"] != "equal_up_to_binder_info" or verdict["differing_count"] != 0
@@ -136,8 +157,7 @@ def _selftest():
             print("  " + f, file=sys.stderr)
         return 1
     print(f"lean_export_differential: selftest ok ({len(same)} normalized edits equal, "
-          f"{len(differ)} planted differences found, 2 binder-information cases listed apart, "
+          f"{len(differ)} planted differences found, 3 ordinary all differences and 3 malformed all fields checked, "
+          f"2 binder-information cases listed apart, "
           f"1 forward reference refused)")
     return 0
-
-

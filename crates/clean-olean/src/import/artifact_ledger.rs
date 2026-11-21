@@ -76,8 +76,12 @@ use clean_kernel::inductive::{ConstructorVal, InductiveVal, RecursorRule, Recurs
 use clean_kernel::name::Name;
 use hashbrown::{HashMap, HashSet};
 
+#[path = "artifact_axioms.rs"]
+mod axioms;
 #[path = "artifact_ledger_graph.rs"]
 mod graph;
+pub use axioms::is_authoritative_lean_axiom;
+pub(super) use axioms::observe_authoritative_axioms;
 use graph::{first_cycle, references};
 
 /// The artifact a part belongs to: its base module's name.
@@ -105,6 +109,8 @@ impl PersistentExtEntry for NoLedgerEntry {
 pub(crate) struct ArtifactLedger {
     /// Origin label (a part's module name) → the artifact it belongs to.
     parts: HashMap<Option<String>, ArtifactKey>,
+    /// Original axiom signatures observed at whole-artifact completion.
+    axioms: axioms::ImportedAxioms,
     /// Names some artifact referenced while nothing declared them, and the
     /// first artifact that did.
     unresolved: HashMap<Name, ArtifactKey>,
@@ -256,6 +262,10 @@ impl PersistentExtState for ArtifactLedger {
 
     fn add_entry(&mut self, _entry: &Self::Entry) {}
 
+    fn forget_declaration(&mut self, name: &Name) -> bool {
+        self.axioms.forget_declaration(name)
+    }
+
     fn export_entries(&self) -> Vec<EnvExtensionEntry> {
         Vec::new()
     }
@@ -371,6 +381,9 @@ pub(crate) fn begin_artifact_load(
 ) -> Result<(), ImportError> {
     let ledger = env.get_ext_state_mut::<ArtifactLedger>(ledger_idx());
     end_load(ledger)?;
+    if let Some(module) = artifact {
+        ledger.axioms.begin_load(module);
+    }
     ledger.load = Some(ArtifactLoad {
         artifact: artifact.clone(),
         module_system,
@@ -596,6 +609,19 @@ pub(crate) fn declaring_artifact(env: &Environment, name: &Name) -> Option<Artif
         .get_ext_state::<ArtifactLedger>(ledger_idx())
         .and_then(|ledger| ledger.parts.get(&label).cloned());
     Some(bound.unwrap_or(label))
+}
+
+/// Return the module that supplied a registered Lean-format declaration.
+/// A split part maps to its base artifact through the import ledger.
+#[must_use]
+pub fn lean_declaration_artifact(env: &Environment, name: &Name) -> Option<String> {
+    let ConstantOrigin::Olean { module, .. } = env.get_constant_origin(name)? else {
+        return None;
+    };
+    env.get_ext_state::<ArtifactLedger>(ledger_idx())?
+        .parts
+        .get(module)?
+        .clone()
 }
 
 /// The module of a different artifact that already declared `name`.

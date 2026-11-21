@@ -10,8 +10,8 @@ Usage: python3 scripts/bump_ay_pin.py <40-hex-AY-revision> --targo /path/to/targ
 
 The explicit immutable revision is the target, never AY's current remote main.
 Only Cargo.toml and the five existing AY-bearing locks are writable. Package
-versions stay fixed unless the explicit reviewed 0.27.0 -> 0.28.0 migration is
-selected. Registry additions require explicit named checksum-bound source
+versions stay fixed unless the explicit reviewed 0.27.0 -> 0.28.0 migration or
+a forward patch move within 0.28 is selected. Registry additions require explicit named checksum-bound source
 admission. Other non-AY resolution, features, predecessor pins and patches stay fixed.
 The reviewed ay-cdclt addition requires ay-dpll's immutable mandatory edge.
 Cargo generates locks; this script never rewrites lock source strings.
@@ -41,16 +41,15 @@ import check_ay_updates as pins
 import check_workspace_dependency_boundary as boundary
 import ay_exec_policy_owner as exec_policy
 import ay_registry_source_owner as registry_owner
+from ay_package_version import is_ay_028_patch, stable_version
 from resource_transport import resource_fds
 
 
 AY_URL = pins.AY_REPO_URL
-# A version is never inferred from an upstream tip. The one additional reviewed
-# migration requires an explicit target version and the same full source/graph
-# checks and consumer qualification as a revision move.
+# Versions never follow a tip. Forward patch moves require explicit selection
+# and the same immutable source, graph and consumer checks as revision moves.
 AY_VERSION = "0.27.0"
 AY_VERSION_MIGRATION = (AY_VERSION, "0.28.0")
-AY_SUPPORTED_VERSIONS = frozenset(AY_VERSION_MIGRATION)
 MANIFEST = "Cargo.toml"
 LOCKS = (
     "Cargo.lock",
@@ -67,7 +66,8 @@ ROSTERS = {
 }
 REVIEWED_PACKAGES = ROSTERS["Cargo.lock"] | {"ay-cdclt"}
 GUARDS = ("scripts/check_ay_updates.py", "scripts/check_workspace_dependency_boundary.py",
-          "scripts/ay_exec_policy_owner.py", "scripts/ay_registry_source_owner.py")
+          "scripts/ay_exec_policy_owner.py", "scripts/ay_registry_source_owner.py",
+          "scripts/ay_package_version.py")
 SHA = re.compile(r"[0-9a-f]{40}\Z")
 REGISTRY = "registry+https://github.com/rust-lang/crates.io-index"
 
@@ -168,8 +168,9 @@ def restore(root: Path, before: dict[str, Snapshot]) -> None:
 class Commands:
     """Same explicit frontend/child-stop discipline as the compiler pin transaction."""
 
-    def __init__(self, root: Path, targo: Path):
+    def __init__(self, root: Path, targo: Path, ay_checkout_cache: Path | None = None):
         self.root, self.targo = root, targo
+        self.ay_checkout_cache = ay_checkout_cache
         self.git = shutil.which("git")
         require(self.git is not None, "Git is required")
 
@@ -277,8 +278,12 @@ class Authority:
             require(len(fields) == 2 and not AY_URL.startswith(fields[1]),
                     "Git URL rewrite would substitute AY remote authority")
         commands.git_run(["remote", "add", "origin", AY_URL], cwd=directory)
-        commands.agh_run(["repo", "fetch", "alabsystems/ay", str(directory),
-                          "--ref", revision, "--into", "refs/agh/pin-authority"], cwd=directory)
+        fetch = ["repo", "fetch", "alabsystems/ay", str(directory),
+                 "--ref", revision, "--into", "refs/agh/pin-authority", "--checkout-closure"]
+        cache = getattr(commands, "ay_checkout_cache", None)
+        if cache is not None:
+            fetch.extend(["--checkout-cache", str(cache)])
+        commands.agh_run(fetch, cwd=directory)
         actual = commands.git_run(["rev-parse", "--verify", "refs/agh/pin-authority^{commit}"],
                                   cwd=directory).strip()
         require(actual == revision, "AY remote resolved a different commit")
@@ -347,7 +352,7 @@ def current(root: Path, files: dict[str, Snapshot]) -> Current:
         raise Refusal(str(error)) from error
     exact_sha(revision)
     require(evidence.ay_dependency_rev == revision, "AY validators disagree")
-    require(version in AY_SUPPORTED_VERSIONS,
+    require(version == AY_VERSION or is_ay_028_patch(version),
             "AY package-version migration requires separate review")
     doc = document(files[MANIFEST].data, MANIFEST)
     for url, table in doc.get("patch", {}).items():
@@ -405,9 +410,15 @@ def unused_vendor_declaration(authority: Authority, excludes: list[str], package
 
 def selected_version(state: Current, requested: str | None) -> str:
     version = state.version if requested is None else requested
-    require(version == state.version or (state.version, version) == AY_VERSION_MIGRATION,
+    previous, selected = stable_version(state.version), stable_version(version)
+    require(state.version == AY_VERSION or is_ay_028_patch(state.version),
+            "unsupported current AY package version")
+    patch_forward = (is_ay_028_patch(state.version) and is_ay_028_patch(version)
+                     and selected >= previous)
+    require(version == state.version or (state.version, version) == AY_VERSION_MIGRATION
+            or patch_forward,
             "unsupported AY package-version migration")
-    require(version in AY_SUPPORTED_VERSIONS, "unsupported AY target package version")
+    require(version == AY_VERSION or is_ay_028_patch(version), "unsupported AY target package version")
     return version
 
 
@@ -556,8 +567,8 @@ def target(commands: Commands, directory: Path, state: Current, revision: str,
     require(not active or "ay-cdclt" in declarations,
             "target ay-dpll requires missing ay-cdclt")
     names = ROSTERS["Cargo.lock"] | ({"ay-cdclt"} if active else set())
-    require(not has_exec_policy or version == "0.28.0",
-            "independent exec-policy source owner requires the reviewed AY 0.28.0 cohort")
+    require(not has_exec_policy or is_ay_028_patch(version),
+            "independent exec-policy source owner requires the reviewed AY 0.28 patch line")
     registry_owners = None
     if admit_registry:
         try:
@@ -881,8 +892,10 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("revision", help="explicit immutable AY commit; never follows remote main")
     parser.add_argument("--targo", required=True, help="explicit operational frontend; caller authenticates it")
-    parser.add_argument("--ay-version", choices=sorted(AY_SUPPORTED_VERSIONS),
-                        help="explicit reviewed package version; omitted preserves the current version")
+    parser.add_argument("--ay-version",
+                        help="explicit stable forward patch version (or reviewed 0.27.0 -> 0.28.0); omitted preserves current")
+    parser.add_argument("--ay-checkout-cache", type=Path,
+                        help="optional existing absolute Git object DATA hint; native source authentication is unchanged")
     parser.add_argument("--admit-registry-package", action="append", default=[],
                         choices=[registry_owner.SELECTION, registry_owner.REUSED_SELECTION,
                                  registry_owner.WAIT_SELECTION],
@@ -891,7 +904,10 @@ def main(argv=None) -> int:
     previous = signal.signal(signal.SIGTERM, interrupted)
     try:
         root = Path(__file__).resolve().parent.parent
-        transaction(root, exact_sha(args.revision), Commands(root, selected_targo(args.targo)),
+        if args.ay_checkout_cache is not None:
+            require(args.ay_checkout_cache.is_absolute() and args.ay_checkout_cache.is_dir(),
+                    "AY checkout cache must be an existing absolute directory")
+        transaction(root, exact_sha(args.revision), Commands(root, selected_targo(args.targo), args.ay_checkout_cache),
                     args.ay_version, tuple(args.admit_registry_package))
         return 0
     except (Refusal, OSError, KeyboardInterrupt) as error:

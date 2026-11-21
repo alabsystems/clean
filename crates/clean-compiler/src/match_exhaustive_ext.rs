@@ -131,6 +131,7 @@ enum LitKey {
     UInt64(u64),
     USize(u64),
     NatBig(u128),
+    NatLimbs(Vec<u64>),
     Float32(u32),
     Float64(u64),
 }
@@ -145,6 +146,7 @@ impl LitKey {
             IRLiteral::UInt64(v) => LitKey::UInt64(*v),
             IRLiteral::USize(v) => LitKey::USize(*v as u64),
             IRLiteral::NatBig(v) => LitKey::NatBig(*v),
+            IRLiteral::NatLimbs(limbs) => LitKey::NatLimbs(limbs.clone()),
             IRLiteral::Float32(v) => LitKey::Float32(v.to_bits()),
             IRLiteral::Float64(v) => LitKey::Float64(v.to_bits()),
         }
@@ -159,6 +161,10 @@ impl LitKey {
             LitKey::UInt64(v) => format!("__lit_u64_{v}"),
             LitKey::USize(v) => format!("__lit_usize_{v}"),
             LitKey::NatBig(v) => format!("__lit_natbig_{v}"),
+            LitKey::NatLimbs(limbs) => format!(
+                "__lit_natlimbs_{}",
+                clean_kernel::BigNat::from_limbs(limbs.clone())
+            ),
             LitKey::Float32(bits) => format!("__lit_f32_{bits}"),
             LitKey::Float64(bits) => format!("__lit_f64_{bits}"),
         }

@@ -1,0 +1,2 @@
+# The CLI fixture treats every input as exact bytes.
+* -text

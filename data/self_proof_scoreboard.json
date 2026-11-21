@@ -6,7 +6,7 @@
       "source": "data/kcheck_coverage.json"
     },
     "planted_false_mints_clean": {
-      "measured_commit": "d9a77480b66a685dce6b8858b3d0a0405d53c99d",
+      "measured_commit": "7aff86e6bf6c51b542b53986a817a92d75055d48",
       "minted_under_mutant": 17,
       "sites": 21,
       "source": "reports/self-proof-p3-2026-11-12/patched_kernel_control.json"
@@ -77,10 +77,10 @@
     },
     "lean_kernel_rule_families": {
       "families": 56,
-      "partial": 2,
+      "partial": 3,
       "source": "data/cic_l_rule_inventory.json",
       "specified": 49,
-      "unspecified": 5
+      "unspecified": 4
     }
   },
   "schema": "clean.self_proof_scoreboard.v1",

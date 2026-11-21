@@ -24,6 +24,7 @@ fn finish(
         outcome,
         ImportResolution {
             policy,
+            requires_artifact: false,
             satisfied_from_source: &satisfied,
         },
     )

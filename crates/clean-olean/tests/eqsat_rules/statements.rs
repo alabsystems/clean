@@ -5,6 +5,10 @@
 //! The pinned statements of the `eqsat_rules` gate: the rows of the family's
 //! `STATEMENTS` file, the theorems the sources declare, and the digest of what
 //! a theorem states on the replayed kernel environment.
+//!
+//! The `eqsat_decide` gate takes this module too (`#[path]`), with its own
+//! `PINNED_MODULES` and `SAT_LEMMAS`: nothing here names another module of the
+//! `eqsat_rules` gate.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
@@ -41,9 +45,21 @@ pub(super) fn statement_pins(text: &str) -> BTreeMap<String, String> {
     pins
 }
 
-/// The names a module's source declares with `theorem`, each under
-/// `namespace` (comments removed first, so a theorem named in prose is not
-/// counted).
+/// An open scope of a Lean source: a namespace, or a section (named or not).
+enum Scope {
+    Namespace(String),
+    Section(Option<String>),
+}
+
+/// The names a module's source declares with `theorem` (comments removed
+/// first, so a theorem named in prose is not counted), each with the
+/// namespaces open at its line: `namespace`, a namespace opened inside it
+/// (`namespace Packed` under `namespace EqsatDecide` names
+/// `EqsatDecide.Packed.…`) and the `end` that closes each are followed, and a
+/// section adds nothing to a name. Every theorem of the module is under
+/// `namespace`; one that is not, a modifier before `theorem`, an `end` that
+/// closes nothing or names another scope, and a scope left open are panics,
+/// never a theorem that goes unread.
 pub(super) fn source_theorems(module: &str, namespace: &str) -> BTreeSet<String> {
     let path = family_source_dir().join(format!("{module}.lean"));
     let text =
@@ -54,13 +70,36 @@ pub(super) fn source_theorems(module: &str, namespace: &str) -> BTreeSet<String>
             .any(|line| line.trim() == format!("namespace {namespace}")),
         "{module}.lean declares its theorems in namespace {namespace}"
     );
+    let mut scopes: Vec<Scope> = Vec::new();
     let mut names = BTreeSet::new();
     for line in code.lines() {
+        let words: Vec<&str> = line.split_whitespace().collect();
+        if words.contains(&"theorem") && !line.starts_with("theorem ") {
+            panic!("{module}.lean: a `theorem` that does not start its line is not read: {line}");
+        }
+        if line.starts_with(char::is_whitespace) {
+            continue;
+        }
+        match words.as_slice() {
+            ["namespace", name] => scopes.push(Scope::Namespace((*name).to_owned())),
+            ["section"] | ["noncomputable", "section"] => scopes.push(Scope::Section(None)),
+            ["section", name] | ["noncomputable", "section", name] => {
+                scopes.push(Scope::Section(Some((*name).to_owned())));
+            }
+            ["end"] => match scopes.pop() {
+                Some(Scope::Section(None)) => {}
+                _ => panic!("{module}.lean: a bare `end` that closes no unnamed section"),
+            },
+            ["end", name] => match scopes.pop() {
+                Some(Scope::Namespace(open) | Scope::Section(Some(open))) if open == *name => {}
+                _ => panic!("{module}.lean: `end {name}` does not close the scope open there"),
+            },
+            [first, ..] if matches!(*first, "namespace" | "section" | "end") => {
+                panic!("{module}.lean: a scope line that is not read: {line}")
+            }
+            _ => {}
+        }
         let Some(rest) = line.strip_prefix("theorem ") else {
-            assert!(
-                !line.trim_start().starts_with("theorem "),
-                "{module}.lean: an indented `theorem` is not read: {line}"
-            );
             continue;
         };
         let name: String = rest
@@ -69,51 +108,31 @@ pub(super) fn source_theorems(module: &str, namespace: &str) -> BTreeSet<String>
             .collect();
         assert!(!name.is_empty(), "{module}.lean: unnamed theorem: {line}");
         assert!(
-            names.insert(format!("{namespace}.{name}")),
-            "{module}.lean declares {name} twice"
+            !name.starts_with("_root_."),
+            "{module}.lean: a `_root_` theorem is not read: {line}"
         );
-    }
-    names
-}
-
-/// The rules of `EqsatIntRuleDefs.lean` that have a `where` clause and are
-/// not `fold_*` rules: the last line of a generated definition is its
-/// `Conds`.
-pub(super) fn conditioned_rules() -> BTreeSet<String> {
-    let path = family_source_dir().join("EqsatIntRuleDefs.lean");
-    let text =
-        std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
-    let code = lean_code_only(&text);
-    let mut rules = BTreeSet::new();
-    let mut seen = 0usize;
-    let mut lines = code.lines().peekable();
-    while let Some(line) = lines.next() {
-        let Some(rest) = line.strip_prefix("def ") else {
-            continue;
-        };
-        let name = rest
-            .strip_suffix(" : Rule :=")
-            .unwrap_or_else(|| panic!("EqsatIntRuleDefs.lean: not a generated definition: {line}"));
-        let mut body = Vec::new();
-        while let Some(next) = lines.peek() {
-            if next.trim().is_empty() {
-                break;
+        let mut full = String::new();
+        for scope in &scopes {
+            if let Scope::Namespace(open) = scope {
+                full.push_str(open);
+                full.push('.');
             }
-            body.push(lines.next().expect("peeked").trim());
         }
-        assert_eq!(body.len(), 5, "{name}: `Rule.mk` and four fields");
-        let conds = body[4];
+        full.push_str(&name);
         assert!(
-            conds == "Conds.nil" || conds.starts_with("(Conds.cons "),
-            "{name}: the last field is its Conds: {conds}"
+            full.starts_with(&format!("{namespace}.")),
+            "{module}.lean: {full} is declared outside namespace {namespace}"
         );
-        seen += 1;
-        if conds != "Conds.nil" && !name.starts_with("fold_") {
-            rules.insert(name.to_owned());
-        }
+        assert!(
+            names.insert(full.clone()),
+            "{module}.lean declares {full} twice"
+        );
     }
-    assert_eq!(seen, 76, "the integer rule set has 76 rules");
-    rules
+    assert!(
+        scopes.is_empty(),
+        "{module}.lean: a namespace or section is left open"
+    );
+    names
 }
 
 /// Every name the gate requires a pinned statement for.

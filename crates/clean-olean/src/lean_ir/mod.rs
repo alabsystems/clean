@@ -2,16 +2,9 @@
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 // SPDX-License-Identifier: Apache-2.0
 
-//! Lean's compiled IR (λRC), decoded from the `.olean`/`.ir` files the pinned
-//! toolchain and Lake write.
-//!
-//! Stock Lean runs every imported metaprogram — Mathlib's tactics, macros,
-//! elaborators and initializers — from this IR (compiled into the binary for
-//! core, through `ir_interpreter.cpp` for Mathlib, which has no shared
-//! library). Executing it is the route the 2026-09-24 replacement audit names
-//! for metaprogramming (`reports/lean4-replacement-audit-2026-09-24/`,
-//! `metaprogramming.json` move M1); this module is the first increment:
-//! decode, don't run.
+//! Lean's compiled IR (λRC), decoded from the `.olean` and IR files that
+//! Lean and Lake write. The same representation supports a census,
+//! imported-binding checks, and bounded evaluation of pure compiled code.
 //!
 //! * `types` — the IR data model, a faithful mirror of
 //!   `Lean/Compiler/IR/Basic.lean`.
@@ -22,6 +15,9 @@
 //! * `format_decl::format_decl` / `format::name_to_string` — Lean's own text rendering,
 //!   for comparison with what the pinned toolchain prints.
 //! * `census` — the per-module census behind `clean olean ir-census`.
+//! * `exported_term_eval` — execute a measured pure subset from the exported
+//!   base part with a numeral syntax invocation and typed host operations.
+//! * `nat_eval` — execute first-order Nat functions from captured split IR.
 //!
 //! # Why this model is not `clean_compiler::ir`
 //!
@@ -48,19 +44,28 @@
 //!
 //! # Visibility
 //!
-//! Everything here is crate-private. Its callers are `clean olean ir-census`
-//! (the `census`, compiled with the `cli` feature or for tests) and `.olean`
-//! import, which reads a module's IR to judge a late `@[implemented_by]`
-//! binding (`import::late_binding`, `docs/DECISIONS.md` R149).
+//! The decoded types are crate-private. The census and late
+//! `@[implemented_by]` judgement read them directly. The public term
+//! elaborator entry point takes captured bytes and returns a kernel
+//! expression for normal elaboration and verification. The Nat entry point
+//! takes a checked capture, an exported name and its Nat arguments.
 
 #[cfg(any(test, feature = "cli"))]
 pub(crate) mod census;
 mod decode;
 mod error;
-mod format;
+pub(crate) mod exported_term_eval;
+pub(crate) mod format;
 #[cfg(any(test, feature = "cli"))]
-mod format_decl;
+pub(crate) mod format_decl;
 pub(crate) mod module_ir;
+pub(crate) mod nat_eval;
+pub(crate) mod nat_program;
+pub(crate) mod native_char;
+pub(crate) mod native_io_error;
+pub(crate) mod native_nat_dictionary;
+pub(crate) mod native_owners;
+pub(crate) mod native_stdout;
 #[cfg(any(test, feature = "cli"))]
 mod profile;
 pub(crate) mod types;

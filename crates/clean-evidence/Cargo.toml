@@ -1,0 +1,21 @@
+[package]
+name = "clean-evidence"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Evidence formats and standalone source provenance checks for Clean"
+
+[lints]
+workspace = true
+
+[dependencies]
+regex = "1"
+serde.workspace = true
+serde_json = { workspace = true, features = ["float_roundtrip"] }
+sha2.workspace = true
+thiserror.workspace = true
+walkdir.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

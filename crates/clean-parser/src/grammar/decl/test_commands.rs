@@ -4,7 +4,7 @@
 
 //! Lean 4.8.0's testing and audit commands: `#guard e`, `#print axioms c` and
 //! `/-- expected -/ #guard_msgs (spec)? in cmd`; and Lean 4.30.0-rc2's
-//! `#reduce (proofs := true)? (types := true)? e`.
+//! `#reduce (proofs := true)? (types := true)? e` and `#print equations c`.
 //!
 //! Before these existed every one of them fell into `hash_command`'s
 //! unknown-command arm, which skipped to the next command and returned a
@@ -40,10 +40,24 @@ impl Parser {
         })
     }
 
-    /// Whether the current token is the `axioms` of `#print axioms c`.
-    pub(in crate::grammar) fn at_print_axioms_keyword(&self) -> bool {
+    /// `#print equations c` or `#print eqns c` (Lean 4.30.0-rc2's
+    /// `Lean.Parser.Command.printEqns`).
+    pub(in crate::grammar) fn print_equations_decl(
+        &mut self,
+        start_span: Span,
+    ) -> Result<SurfaceDecl, ParseError> {
+        self.advance();
+        let name = self.qualified_ident()?;
+        Ok(SurfaceDecl::PrintEquations {
+            span: start_span.merge(self.prev_span()),
+            name,
+        })
+    }
+
+    /// A contextual print keyword must be unescaped and have an operand.
+    pub(in crate::grammar) fn at_contextual_print_keyword(&self, keywords: &[&str]) -> bool {
         let current = self.current();
-        matches!(&current.kind, TokenKind::Ident(word) if word == "axioms")
+        matches!(&current.kind, TokenKind::Ident(word) if keywords.contains(&word.as_str()))
             && !current.ident_escaped
             && matches!(self.peek_kind(1), Some(TokenKind::Ident(_)))
     }
@@ -359,6 +373,51 @@ mod tests {
             "{decls:?}"
         );
         assert!(matches!(&decls[1], SurfaceDecl::Guard { .. }), "{decls:?}");
+    }
+
+    #[test]
+    fn test_parse_print_equations_both_spellings_and_following_command() {
+        let first = "#print equations CICL.BaseFamilies.Nat.term";
+        let input = format!("{first}\n#print eqns «a.b»\n#guard true\n");
+        let report = crate::parse_file_with_diagnostics(&input).expect("commands parse");
+        assert!(report.diagnostics.is_empty(), "{:?}", report.diagnostics);
+        let [SurfaceDecl::PrintEquations {
+            span,
+            name: first_name,
+        }, SurfaceDecl::PrintEquations {
+            name: second_name, ..
+        }, SurfaceDecl::Guard { .. }] = report.decls.as_slice()
+        else {
+            panic!(
+                "expected two equation commands and a guard: {:?}",
+                report.decls
+            );
+        };
+        assert_eq!(*span, Span::new(0, first.len()));
+        assert_eq!(
+            first_name,
+            &crate::parse_name("CICL.BaseFamilies.Nat.term").expect("qualified name")
+        );
+        assert!(second_name.same_syntax(&SurfaceName::component("a.b", true)));
+    }
+
+    #[test]
+    fn test_print_equations_contextual_keywords_preserve_ordinary_print() {
+        for word in ["equations", "eqns"] {
+            let input = format!("#print {word}\n#print «{word}»\n#print {word}.f\n#guard true\n");
+            let decls = parse(&input);
+            let [SurfaceDecl::Print { name: bare, .. }, SurfaceDecl::Print { name: escaped, .. }, SurfaceDecl::Print {
+                name: qualified, ..
+            }, SurfaceDecl::Guard { .. }] = decls.as_slice()
+            else {
+                panic!("expected three ordinary print commands and a guard: {decls:?}");
+            };
+            assert_eq!(bare, &SurfaceName::component(word, false));
+            assert!(escaped.same_syntax(&SurfaceName::component(word, true)));
+            let qualified_name = crate::parse_name(&format!("{word}.f")).expect("qualified name");
+            assert_eq!(qualified, &qualified_name);
+            assert!(super::Parser::parse_decl_exact(&format!("#print «{word}» f")).is_err());
+        }
     }
 
     #[test]

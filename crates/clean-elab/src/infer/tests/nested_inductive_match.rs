@@ -451,10 +451,11 @@ fn metadata_fail_closed_constructor_disagreement_rolls_back_match_state() {
     let meta_depth_before = ctx.metas.scope_depth();
     let meta_trail_before = ctx.metas.undo_trail_len_for_tests();
 
+    let user_patterns = [SurfacePattern::Var(SurfaceName::generated_path("n"))];
     let expansion = ctx.expand_implicit_ctor_field_patterns(
         "constructor dispatch regression",
         &SurfaceName::generated_path("Nat.succ"),
-        &[SurfacePattern::Var(SurfaceName::generated_path("n"))],
+        &user_patterns,
     );
     assert!(
         matches!(&expansion, Err(ElabError::InternalInvariant(message))

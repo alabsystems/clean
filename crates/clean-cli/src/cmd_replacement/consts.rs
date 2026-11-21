@@ -6,6 +6,8 @@
 
 use super::*;
 
+pub(crate) use clean_evidence::trustcore::{DIGEST_MODULE_SOURCE, DIGEST_SOURCE};
+
 pub(crate) const SCHEMA_VERSION: &str = "clean-replacement-status-v1";
 pub(crate) const TACTIC_PARITY_SCHEMA_VERSION: &str = "clean-tactic-parity-report-v1";
 pub(crate) const TACTIC_PARITY_COUNT_ARTIFACT_SCHEMA_VERSION: &str =
@@ -56,7 +58,7 @@ pub(crate) const KERNEL_SOUNDNESS_GATE_COMMAND: &str = "./scripts/kernel_soundne
 pub(crate) const KERNEL_SOUNDNESS_RUST_GATE_COMMAND: &str =
     "clean replacement trust-core-evidence --kernel-soundness";
 pub(crate) const KERNEL_SOUNDNESS_LAUNCH_EVIDENCE_SCHEMA_VERSION: &str =
-    "clean-kernel-soundness-launch-evidence-v1";
+    clean_evidence::trustcore::KERNEL_SCHEMA;
 pub(crate) const KERNEL_SOUNDNESS_LAUNCH_EVIDENCE_PATH: &str =
     "reports/kernel-soundness-launch-evidence.json";
 pub(crate) const KERNEL_SOUNDNESS_EXPECTED_STEPS: u32 = 3;
@@ -67,7 +69,7 @@ pub(crate) const DENY_SORRY_GATE_COMMAND: &str = "./scripts/deny_sorry_gate.sh";
 pub(crate) const DENY_SORRY_RUST_GATE_COMMAND: &str =
     "clean replacement trust-core-evidence --deny-sorry";
 pub(crate) const DENY_SORRY_LAUNCH_EVIDENCE_SCHEMA_VERSION: &str =
-    "clean-deny-sorry-launch-evidence-v1";
+    clean_evidence::trustcore::DENY_SORRY_SCHEMA;
 pub(crate) const DENY_SORRY_LAUNCH_EVIDENCE_PATH: &str = "reports/deny-sorry-launch-evidence.json";
 pub(crate) const DENY_SORRY_EXPECTED_STEPS: u32 = 6;
 pub(crate) const TRUST_CORE_RUST_SOURCE_PATH: &str = "crates/clean-cli/src/cmd_replacement.rs";
@@ -76,6 +78,22 @@ pub(crate) const TRUST_CORE_RUST_MODULE_DIR: &str = "crates/clean-cli/src/cmd_re
 /// `source_sha256` key for the digest of that directory's non-test `.rs` files.
 pub(crate) const TRUST_CORE_RUST_MODULE_TREE_KEY: &str =
     "crates/clean-cli/src/cmd_replacement/**/*.rs";
+// Both v2 receipts separately pin the shared digest's module entry point and
+// implementation. The existing module-tree key still covers only the
+// replacement command's subtree.
+pub(crate) const KERNEL_SOUNDNESS_LAUNCH_SOURCE_FILES: &[&str] = &[
+    TRUST_CORE_RUST_SOURCE_PATH,
+    LEAN4_BASELINE_PATH,
+    LEAN4_EXPRESSIONS_PATH,
+    DIGEST_MODULE_SOURCE,
+    DIGEST_SOURCE,
+];
+pub(crate) const DENY_SORRY_LAUNCH_SOURCE_FILES: &[&str] = &[
+    TRUST_CORE_RUST_SOURCE_PATH,
+    UNCHECKED_DECL_RATCHET_PATH,
+    DIGEST_MODULE_SOURCE,
+    DIGEST_SOURCE,
+];
 #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 pub(crate) const LINT_SORRY_BYPASS_PATH: &str = "scripts/lint_sorry_bypass.sh";
 #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.

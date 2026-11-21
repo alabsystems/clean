@@ -683,12 +683,7 @@ impl DeriveRegistry {
         ind: &InductiveVal,
         env: &mut Environment,
     ) -> Result<(), DeriveError> {
-        let handler = self
-            .handlers
-            .get(class_name)
-            .ok_or_else(|| DeriveError::NoHandler(class_name.to_owned()))?;
-
-        let decls = handler.derive(ind, env)?;
+        let decls = self.declarations_for(class_name, ind, env)?;
         let ind_name = ind.name.to_string();
 
         // Validate the complete batch before any candidate mutation. A later
@@ -724,6 +719,18 @@ impl DeriveRegistry {
         *env = candidate;
 
         Ok(())
+    }
+
+    pub(crate) fn declarations_for(
+        &self,
+        class_name: &str,
+        ind: &InductiveVal,
+        env: &Environment,
+    ) -> Result<Vec<Declaration>, DeriveError> {
+        self.handlers
+            .get(class_name)
+            .ok_or_else(|| DeriveError::NoHandler(class_name.to_owned()))?
+            .derive(ind, env)
     }
 
     /// List all registered handler class names.

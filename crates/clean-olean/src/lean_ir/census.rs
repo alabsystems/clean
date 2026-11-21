@@ -12,6 +12,7 @@ use std::path::PathBuf;
 
 use rayon::prelude::*;
 
+use super::decode::IrLayout;
 use super::error::{LeanIrError, LeanIrResult};
 use super::format::name_to_string;
 use super::format_decl::{format_decl, quote_string};
@@ -118,8 +119,7 @@ pub(crate) fn total_line(rows: &[CensusRow]) -> String {
 ///
 /// # Errors
 ///
-/// Refuses when any module of the closure is not on the search path or its
-/// import list cannot be read.
+/// Refuses a missing module, an unreadable import list or a mix of layouts.
 pub(crate) fn import_closure(
     roots: &[Name],
     search_paths: &[PathBuf],
@@ -127,12 +127,26 @@ pub(crate) fn import_closure(
     let mut seen: HashSet<Name> = HashSet::new();
     let mut queue: VecDeque<Name> = roots.iter().cloned().collect();
     let mut found: BTreeMap<String, (Name, PathBuf)> = BTreeMap::new();
+    let mut closure_layout: Option<IrLayout> = None;
     while let Some(module) = queue.pop_front() {
         if !seen.insert(module.clone()) {
             continue;
         }
         let olean = find_module_ir_olean(&module, search_paths)?;
-        for import in read_module_imports(&module, &olean)? {
+        let (layout, imports) = read_module_imports(&module, &olean)?;
+        let expected = closure_layout.get_or_insert(layout);
+        if *expected != layout {
+            return Err(LeanIrError::Module {
+                module: name_to_string(&module),
+                detail: format!(
+                    "{} uses the Lean {} IR layout, but the closure uses Lean {}",
+                    olean.display(),
+                    layout.version(),
+                    expected.version(),
+                ),
+            });
+        }
+        for import in imports {
             if !seen.contains(&import) {
                 queue.push_back(import);
             }

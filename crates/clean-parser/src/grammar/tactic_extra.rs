@@ -122,6 +122,20 @@ impl Parser {
         names
     }
 
+    /// Read names in an explicit argument list bounded by Lean's `colGt`.
+    /// Tactic dispatch names have no special meaning in an argument slot.
+    pub(super) fn parse_indented_ident_list(&mut self) -> Result<Vec<SurfaceName>, ParseError> {
+        let mut names = Vec::new();
+        while self.col_gt_saved_position() && !self.current().lean_keyword {
+            let TokenKind::Ident(text) = self.current_kind() else {
+                break;
+            };
+            names.push(self.name_token(text)?);
+            self.advance();
+        }
+        Ok(names)
+    }
+
     /// Check if an identifier is a tactic keyword that would start a new tactic
     pub(crate) fn is_tactic_keyword(&self, name: &str) -> bool {
         matches!(
@@ -188,6 +202,7 @@ impl Parser {
                 | "use"
                 | "exists"
                 | "by_cases"
+                | "letI"
                 | "classical"
                 | "specialize"
                 | "generalize"

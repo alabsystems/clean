@@ -168,15 +168,22 @@ fn assert_refused_at_the_recursor(text: &str, to_bool_needles: &[&str]) {
 
 /// The refusal is the one an ordinary `Prop` family gets: `clean check`'s
 /// report on `toBool` is byte-identical to its report on the twin where `B`
-/// is declared `: Prop` outright (measured 2026-10-16: "Type mismatch: …
-/// cannot unify a function type with an application: … -> Type vs … B.t", the
-/// motive `fun _ => Bool` against `B → Prop`). Before the fix `toBool`, `tf`
-/// and `bad` all checked.
+/// is declared `: Prop` outright. Measured 2026-11-18 on both files: "Type
+/// mismatch: expected B -> Prop, got universe level conflict: 1 vs 0", the
+/// motive `fun _ => Bool` (a `Sort 1` codomain) elaborated against `B.rec`'s
+/// motive type `B → Prop`, which is pinned Lean's reason. The 2026-10-16
+/// wording was "… cannot unify a function type with an application: … -> Type
+/// vs … B.t"; it changed between 32b7f68c35 (passed) and a0dbf9f310 (this
+/// wording), with the refusal and the twin's equality unchanged. Before the
+/// fix `toBool`, `tf` and `bad` all checked.
 #[test]
 fn delta_prop_false_derivation_is_refused_at_the_recursor() {
     let (ok, text) = check("DeltaProp.lean", DELTA_PROP);
     assert!(!ok, "clean check must fail:\n{text}");
-    assert_refused_at_the_recursor(&text, &["B.t", "-> Type"]);
+    assert_refused_at_the_recursor(
+        &text,
+        &["expected B -> Prop", "universe level conflict: 1 vs 0"],
+    );
     let (twin_ok, twin) = check("DeltaPropTwin.lean", &delta_prop_twin());
     assert!(!twin_ok, "the ordinary Prop twin must fail too:\n{twin}");
     assert_eq!(

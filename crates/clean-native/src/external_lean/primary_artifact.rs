@@ -323,11 +323,10 @@ impl ExternalLeanProgram {
         }
         let source = self
             .custody
-            .observation
             .sources
             .first()
             .ok_or(PrimaryArtifactError::MissingAssociation)?;
-        if self.custody.observation.sources.len() != 1 || source.source.len() as u64 != copy.bytes {
+        if self.custody.sources.len() != 1 || source.source.len() as u64 != copy.bytes {
             return Err(PrimaryArtifactError::MissingAssociation);
         }
         let mut remaining = limits.owned_input_bytes;
@@ -437,7 +436,7 @@ impl SourceCopyAssociation<'_, '_> {
         &self.view.capture.sdk_canonical
     }
     pub fn utf8(&self) -> &str {
-        &self.view.program.custody.observation.sources[0].source
+        &self.view.program.custody.sources[0].source
     }
     pub fn require_producer_path(
         &self,

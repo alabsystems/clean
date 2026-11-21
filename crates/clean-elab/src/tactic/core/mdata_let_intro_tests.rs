@@ -207,3 +207,44 @@ fn metadata_does_not_make_nonbinder_intro_succeed() {
         ExprKind::Lam(data, _, _) if *data == BinderData::from(BinderInfo::Implicit)
     ));
 }
+
+#[test]
+fn inline_let_checks_an_unused_value_for_scope_gaps() {
+    let bad = Expr::fvar(FVarId::new(4));
+    let marked = Expr::mdata(
+        crate::tactic::have_let::INLINE_LET_MARKER.clone(),
+        Expr::let_named(
+            Name::from_string("unused"),
+            nat(),
+            bad,
+            Expr::nat_lit(0),
+            false,
+        ),
+    );
+    let outcome = close_fvars::close_fvars_validated(&marked, 0, 0, 5);
+    assert!(outcome.error.is_some());
+    assert!(outcome.closed.has_fvar_quick());
+}
+
+#[test]
+fn inline_let_requires_solved_metas_in_its_type_and_value() {
+    let hole = Expr::fvar(MetaState::to_fvar(MetaId(7)));
+    for (ty, value) in [(nat(), hole.clone()), (hole, Expr::nat_lit(3))] {
+        let marked = Expr::mdata(
+            crate::tactic::have_let::INLINE_LET_MARKER.clone(),
+            Expr::let_named(
+                Name::from_string("unused"),
+                ty,
+                value,
+                Expr::nat_lit(0),
+                false,
+            ),
+        );
+        let outcome = close_fvars::close_fvars_validated(&marked, 0, 0, 1);
+        assert!(outcome
+            .error
+            .as_deref()
+            .is_some_and(|msg| msg.contains("unresolved metavariable")));
+        assert!(outcome.closed.has_fvar_quick());
+    }
+}

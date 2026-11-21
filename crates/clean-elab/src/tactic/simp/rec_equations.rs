@@ -430,10 +430,13 @@ fn beta_normal(e: &Expr) -> Option<Expr> {
     None
 }
 
-/// Sort level of a definition's result type, resolved through its head
-/// inductive: for `ty = T a…` with `T : Π …, Sort ℓ`, returns ℓ instantiated
-/// at `T`'s level arguments. `None` for any other head (fail-closed).
+/// Universe of the result type used as the carrier of the constructor equation.
+/// A sort lives in its successor. An inductive application uses the result
+/// universe of the inductive at its declared level arguments.
 fn sort_level_of_result_type(env: &Environment, ty: &Expr, declared: &[Name]) -> Option<Level> {
+    if let ExprKind::Sort(level) = ty.kind() {
+        return Some(Level::succ(level.clone()));
+    }
     let head = ty.get_app_fn();
     let ExprKind::Const(tname, tlevels) = head.kind() else {
         return None;

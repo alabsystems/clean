@@ -13,6 +13,7 @@ use super::{
 };
 use crate::error::{OleanError, OleanResult};
 use crate::region::{is_ptr, is_scalar, tags, unbox_scalar, CompactedRegion};
+use clean_kernel::name::Name;
 
 impl<'a> CompactedRegion<'a> {
     /// Read an array of ConstantInfo (v2 - based on actual structure)
@@ -144,6 +145,8 @@ impl<'a> CompactedRegion<'a> {
             _ => None,
         };
 
+        let mutual_declarations =
+            self.read_ordinary_mutual_declarations(&kind, val_offset, &val_header)?;
         Ok(ParsedConstant {
             name,
             kind,
@@ -155,6 +158,7 @@ impl<'a> CompactedRegion<'a> {
             recursor_val,
             hints,
             definition_safety,
+            mutual_declarations,
             quot_kind,
         })
     }
@@ -295,6 +299,23 @@ impl<'a> CompactedRegion<'a> {
             }
         }
         Ok(None)
+    }
+
+    /// Decode the stored ordinary mutual group without flattening Lean names.
+    /// Legacy Clean definitions store safety in the slot where Lean stores `all`.
+    pub(crate) fn read_ordinary_mutual_declarations(
+        &self,
+        kind: &ConstantKind,
+        val: usize,
+        header: &crate::region::ObjectHeader,
+    ) -> OleanResult<Option<Vec<Name>>> {
+        let offset = match (kind, header.other, header.cs_sz) {
+            (ConstantKind::Definition, 4, 48) | (ConstantKind::Opaque, 4, 0) => val + 32,
+            (ConstantKind::Theorem, 3, 0 | 32) | (ConstantKind::Opaque, 3, 40) => val + 24,
+            _ => return Ok(None),
+        };
+        self.read_kernel_name_list(self.read_u64_at(offset)?)
+            .map(Some)
     }
 
     /// Read ReducibilityHints for definition constants.

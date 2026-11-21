@@ -101,6 +101,16 @@ pub(crate) fn take_deferred_noncomputable_marks() -> Vec<Name> {
     DEFERRED_MARKS.with(|marks| std::mem::take(&mut *marks.borrow_mut()))
 }
 
+fn unknown_payload_compiler_context(env: &Environment, name: &Name) -> bool {
+    matches!(
+        env.get_constant_origin(name),
+        Some(clean_kernel::ConstantOrigin::CleanPayload { .. })
+    ) && env
+        .get_const(name)
+        .is_some_and(|info| !matches!(info.kind, clean_kernel::ConstantKind::Axiom))
+        && !clean_kernel::env::csimp::has_compilation_context(env, name)
+}
+
 /// A runtime reference with no executable implementation. Foreign-code
 /// exceptions and source-kind metadata belong to the persistent environment.
 fn has_no_code(env: &Environment, name: &Name) -> bool {
@@ -122,6 +132,9 @@ fn has_no_code(env: &Environment, name: &Name) -> bool {
     if env.get_constructor(name).is_some() || env.get_recursor(name).is_some() {
         return false;
     }
+    if unknown_payload_compiler_context(env, name) {
+        return true;
+    }
     matches!(
         crate::source_kind::get(env, name),
         Some(clean_kernel::env::ConstantKind::Axiom)
@@ -130,6 +143,9 @@ fn has_no_code(env: &Environment, name: &Name) -> bool {
 
 /// The code-generation diagnostic for the environment's declared Lean world.
 pub(crate) fn noncomputable_message(env: &Environment, name: &Name) -> String {
+    if unknown_payload_compiler_context(env, name) {
+        return format!("failed to compile definition: source compiler context for imported `{name}` is unavailable");
+    }
     if clean_olean::environment_world(env) == Some("v4.8.0") {
         return format!(
             "failed to compile definition, consider marking it as 'noncomputable' because it \
@@ -252,6 +268,7 @@ fn uncompilable_dependency_for(
         env,
         owner,
         csimp_names: HashMap::new(),
+        expansions: Vec::new(),
         tc: TypeChecker::new(env),
         erasure: Erasure::new(env),
         seen: HashSet::new(),
@@ -261,11 +278,42 @@ fn uncompilable_dependency_for(
     walk.visit(expr)
 }
 
+struct MacroExpansionFrame {
+    name: Name,
+    // These expressions are caller arguments, not recursive helper-body uses.
+    // Entering one restores the expansion context from before its helper.
+    arguments: Vec<Expr>,
+}
+
+impl MacroExpansionFrame {
+    fn enters_caller_argument(&self, expression: &Expr) -> bool {
+        // Substitution can put a caller's partial function in function position:
+        // `apply (apply f) x` expands to `(apply f) x`. The whole application is
+        // new, but its function prefix still belongs to the caller. Restore that
+        // context before expanding the prefix, just as for an unchanged argument.
+        let mut function = expression.strip_mdata();
+        loop {
+            if self
+                .arguments
+                .iter()
+                .any(|argument| argument.strip_mdata() == function)
+            {
+                return true;
+            }
+            match function.kind() {
+                ExprKind::App(head, _) => function = head.strip_mdata(),
+                _ => return false,
+            }
+        }
+    }
+}
+
 struct CodeWalk<'e> {
     evaluation: bool,
     env: &'e Environment,
     owner: Option<&'e Name>,
     csimp_names: HashMap<Name, Name>,
+    expansions: Vec<MacroExpansionFrame>,
     tc: TypeChecker<'e>,
     erasure: Erasure<'e>,
     seen: HashSet<usize>,
@@ -302,8 +350,44 @@ impl CodeWalk<'_> {
     }
 
     fn visit(&mut self, e: &Expr) -> Result<Option<Name>, CompilerError> {
+        let caller = self
+            .expansions
+            .iter()
+            .position(|frame| frame.enters_caller_argument(e));
+        let suspended = caller.map(|at| self.expansions.split_off(at));
+        let result = self.visit_inner(e);
+        if let Some(frames) = suspended {
+            self.expansions.extend(frames);
+        }
+        result
+    }
+
+    fn visit_inner(&mut self, e: &Expr) -> Result<Option<Name>, CompilerError> {
         if !self.seen.insert(std::ptr::from_ref(e) as usize) {
             return Ok(None);
+        }
+        if let Some(expansion) =
+            clean_compiler::expand_source_macro_inline(self.env, self.owner, e)?
+        {
+            if self
+                .expansions
+                .iter()
+                .any(|frame| frame.name == expansion.name)
+            {
+                return Err(CompilerError::InvalidExpr(format!(
+                    "cyclic macro_inline expansion of {}",
+                    expansion.name
+                )));
+            }
+            self.expansions.push(MacroExpansionFrame {
+                name: expansion.name,
+                arguments: e.get_app_args().into_iter().cloned().collect(),
+            });
+            let body = std::sync::Arc::new(expansion.body);
+            let result = self.visit(body.as_ref());
+            self.keep.push(body);
+            self.expansions.pop();
+            return result;
         }
         match e.kind() {
             ExprKind::Const(name, _) => self.unavailable_head(name, e),
@@ -553,6 +637,7 @@ pub(crate) fn eval_refusal(env: &Environment, expr: &Expr, ty: &Expr) -> Option<
 /// admission is retained on a compiler error, as in Lean's command elaborator.
 pub(crate) fn diagnose_registered(
     env: &mut Environment,
+    file_ctx: Option<&crate::FileContext>,
     result: crate::ElabResult,
     span: Option<clean_parser::Span>,
 ) -> crate::ElabResult {
@@ -564,11 +649,11 @@ pub(crate) fn diagnose_registered(
         return ElabResult::Multiple(
             results
                 .into_iter()
-                .map(|result| diagnose_registered(env, result, span))
+                .map(|result| diagnose_registered(env, file_ctx, result, span))
                 .collect(),
         );
     }
-    let compiled = match &result {
+    let (name, ty, value, modifiers) = match &result {
         ElabResult::Definition {
             name,
             ty,
@@ -582,34 +667,49 @@ pub(crate) fn diagnose_registered(
             val,
             modifiers,
             ..
-        } => Some((name, ty, val, modifiers)),
+        } => (name, ty, Some(val), modifiers),
         ElabResult::Opaque {
             name,
             ty,
-            val: Some(val),
+            val,
             modifiers,
             ..
-        } => Some((name, ty, val, modifiers)),
-        // A diagnosed inner leaf has already been checked in its own source
-        // scope. Do not erase its diagnostics or compile it a second time.
-        _ => None,
+        } => (name, ty, val.as_ref(), modifiers),
+        ElabResult::Axiom {
+            name,
+            ty,
+            modifiers,
+            ..
+        } if env.get_extern(name).is_some() => (name, ty, None, modifiers),
+        // A diagnosed inner leaf has already been checked in its own source scope.
+        _ => return result,
     };
-    let Some((name, ty, value, modifiers)) = compiled else {
-        return result;
-    };
-    if modifiers.is_noncomputable
-        || modifiers.is_partial
-        || env.is_noncomputable(name)
-        || env.get_extern(name).is_some()
-        || env.has_implemented_by(name)
-        || declaration_is_erased(env, ty)
-    {
+    if modifiers.is_noncomputable || env.is_noncomputable(name) {
         return result;
     }
-    let message = match uncompilable_dependency(env, name, value) {
-        Ok(Some(dependency)) => noncomputable_message(env, &dependency),
-        Err(error) => format!("failed to compile definition: {error}"),
-        Ok(None) => return result,
+    let external = env.get_extern(name).is_some();
+    let replaced = env.has_implemented_by(name);
+    let check_signature = name == &Name::interned("main")
+        && file_ctx
+            .is_some_and(|ctx| matches!(ctx.lean_world(), Ok(clean_kernel::LeanWorld::Lean436)))
+        && (external
+            || (!env.is_macro_inline(name) && !replaced && env.get_matcher_info(name).is_none()));
+    let body = value
+        .filter(|_| !modifiers.is_partial && !external && !replaced && !env.is_macro_inline(name));
+    if (!check_signature && body.is_none()) || declaration_is_erased(env, ty) {
+        return result;
+    }
+    let message = if check_signature
+        && clean_compiler::main_signature::MainSignature::from_type(ty).is_none()
+    {
+        clean_compiler::main_signature::INVALID_MAIN_TYPE.to_owned()
+    } else {
+        let Some(value) = body else { return result };
+        match uncompilable_dependency(env, name, value) {
+            Ok(Some(dependency)) => noncomputable_message(env, &dependency),
+            Err(error) => format!("failed to compile definition: {error}"),
+            Ok(None) => return result,
+        }
     };
     // A failed compiler task has no executable implementation. Lean retains
     // the logical declaration and marks it noncomputable for later callers.

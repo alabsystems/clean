@@ -4,8 +4,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """Quote trust-cg e-graph rule files as `EqsatRule.Rule` literals (PKG-U2).
 
-UNTRUSTED. This script is a convenience that writes the two generated modules
-of this fixture family; nothing relies on it being right. trust-cg builds the
+UNTRUSTED. This script is a convenience that writes the three generated modules
+and the lemma table of this fixture family; nothing relies on it being right. trust-cg builds the
 same literal in Rust from its checker's parsed rule and asks the kernel to
 accept a lemma of this family for it, so a literal written wrongly here is a
 kernel refusal there, never a proved rule.
@@ -23,7 +23,7 @@ per rule:
   `Pat::Var` and `Pat::ConstVar`); `(const INT)` is `Pat.lit neg mag` with
   `-0` normalised to `lit false 0`; `(eval OP ?a ...)` is OP over `Pat.cvar`s.
 
-Regenerate both modules from a trust-cg checkout (run from this directory):
+Regenerate the modules from a trust-cg checkout (run from this directory):
 
     R=origin/main:crates/trust-cg-eqsat
     git -C ~/trust-cg show $R/rules/integer_identities.rules > /tmp/integer_identities.rules
@@ -42,19 +42,39 @@ Regenerate both modules from a trust-cg checkout (run from this directory):
         --source "trust-cg crates/trust-cg-eqsat/tests/wrong_rules/" \\
         /tmp/wrong_rules/*.rules > EqsatIntWrongRuleDefs.lean
 
+    git -C ~/trust-cg show $R/rules/tier_s_integer.rules > /tmp/tier_s_integer.rules
+    python3 gen_rule_defs.py --module EqsatTierSRuleDefs --namespace TierSDefs \\
+        --source "trust-cg crates/trust-cg-eqsat/rules/tier_s_integer.rules" \\
+        /tmp/tier_s_integer.rules > EqsatTierSRuleDefs.lean
+
 `--check FILE` compares the output with FILE instead of printing it (add it to
-either command above to verify a committed module against the rule text).
+any command above to verify a committed module against the rule text).
 `--table` prints one `def-name direction kind domain` row per rule instead.
 `--lemmas` prints the family's `LEMMAS` file instead: one
 `rule scope kind lemma` row per rule and scope of the rule's domain, naming the
-lemma that scope needs (README, "Lemma names and the record term"):
+lemma that scope needs (README, "Lemma names and the record term").
+`--also NAMESPACE SOURCE FILE` adds a further rule file to the table, with the
+namespace its literals are generated in; its rows follow the first file's:
 
     python3 gen_rule_defs.py --module EqsatIntRuleDefs --namespace Defs \\
         --source "trust-cg crates/trust-cg-eqsat/rules/integer_identities.rules" \\
+        --also TierSDefs "trust-cg crates/trust-cg-eqsat/rules/tier_s_integer.rules" \\
+            /tmp/tier_s_integer.rules \\
         --lemmas /tmp/integer_identities.rules > LEMMAS
 
+The table is keyed by rule name, in one lemma namespace, whatever the rule
+file (trust-cg's registry reads it so). A rule name two rule files have gets
+one row, and the script refuses it unless the files give that name one
+literal, one kind and one domain: the row's lemma is stated on the first
+file's literal, and it is then a proof of the later file's statement too.
+Each rule file of a table is given once, under a namespace and a file name of
+its own: a namespace given twice, and a file whose name or whose bytes are
+those of another file of the table, are refused.
+
 `python3 gen_rule_defs.py --self-test` runs the reader's own controls (what it
-accepts and refuses beside the checker's tokenizer) and exits non-zero on a
+accepts and refuses beside the checker's tokenizer) and the command line's
+(a table and a module written from two rule files in a temporary directory,
+`--check` on each, and the command lines it refuses), and exits non-zero on a
 difference.
 
 Rule text is read as UTF-8, as the checker reads a `&str`: any character may
@@ -68,10 +88,13 @@ literals are the same term and not merely definitionally equal.
 """
 
 import argparse
+import contextlib
 import hashlib
+import io
 import os
 import re
 import sys
+import tempfile
 
 TYPES = ["i8", "i16", "i32", "i64", "i128", "isize",
          "u8", "u16", "u32", "u64", "u128", "usize", "bool"]
@@ -90,6 +113,8 @@ PRED = ["eq", "ne", "ult", "ule", "ugt", "uge", "slt", "sle", "sgt", "sge"]
 MAX_DEPTH = 64
 
 NAME = re.compile(r"[a-z][a-z0-9_]*\Z")
+# A Lean namespace component, for `--namespace` and `--also`.
+NAMESPACE = re.compile(r"[A-Z][A-Za-z0-9]*\Z")
 INT = re.compile(r"-?[0-9]+\Z")
 
 
@@ -436,6 +461,17 @@ def lean_conds(conds, rank):
     return out
 
 
+def lean_literal(rule):
+    """The lines of the `Rule` literal: what the rule's statement is about."""
+    return [
+        f"  Rule.mk Dir.{rule['direction']}",
+        f"    {lean_sorts(rule['vars'])}",
+        f"    {lean_pat(rule['lhs'], rule['rank'])}",
+        f"    {lean_pat(rule['rhs'], rule['rank'])}",
+        f"    {lean_conds(rule['conds'], rule['rank'])}",
+    ]
+
+
 def lean_def(rule, def_name, origin):
     variables = ", ".join(
         f"{v} = {i} ({sort}{', const' if const else ''})"
@@ -447,13 +483,8 @@ def lean_def(rule, def_name, origin):
     lines += [
         f"    Variables: {variables}. -/",
         f"def {def_name} : Rule :=",
-        f"  Rule.mk Dir.{rule['direction']}",
-        f"    {lean_sorts(rule['vars'])}",
-        f"    {lean_pat(rule['lhs'], rule['rank'])}",
-        f"    {lean_pat(rule['rhs'], rule['rank'])}",
-        f"    {lean_conds(rule['conds'], rule['rank'])}",
     ]
-    return "\n".join(lines)
+    return "\n".join(lines + lean_literal(rule))
 
 
 def lemma_rows(def_name, kind, domain):
@@ -472,9 +503,36 @@ def lemma_rows(def_name, kind, domain):
     return [(def_name, scope, kind, "-" if kind == "fold" else lemma) for scope, lemma in scopes]
 
 
-def lemmas_file(rows, source, inputs):
+def merged_lemma_rows(sets):
+    """The rows of a table over several rule files, given as
+    `(namespace, [(def_name, rule)])` in table order: every row of the first
+    file, then, for each later file, the rows of the rules no earlier file
+    has. A rule name an earlier file has gets no second row, and is refused
+    unless both files give it one literal and the same rows (so one kind and
+    one domain): the earlier row's lemma is stated on the earlier file's
+    literal, and two literals that are one term have one statement."""
+    rows, first = [], {}
+    for namespace, entries in sets:
+        for def_name, rule in entries:
+            own = lemma_rows(def_name, rule["kind"], rule["domain"])
+            if def_name not in first:
+                first[def_name] = (namespace, lean_literal(rule), own)
+                rows += own
+                continue
+            earlier, literal, earlier_rows = first[def_name]
+            if lean_literal(rule) != literal:
+                raise Refused(f"{namespace}.{def_name} is not the literal of "
+                              f"{earlier}.{def_name}: one rule name, two statements")
+            if own != earlier_rows:
+                raise Refused(f"{namespace}.{def_name} and {earlier}.{def_name} are one literal "
+                              "with two kinds or two domains: one rule name, two sets of rows")
+    return rows
+
+
+def lemmas_file(rows, source, inputs, also=()):
     """The text of `LEMMAS`. Refuses two rows that name one lemma (a rule
-    `x_bool` beside the bool instance of a rule `x`)."""
+    `x_bool` beside the bool instance of a rule `x`). `also` lists each
+    further rule file of the table as `(namespace, source, inputs)`."""
     named = [row[3] for row in rows if row[3] != "-"]
     twice = sorted({name for name in named if named.count(name) > 1})
     if twice:
@@ -488,6 +546,21 @@ def lemmas_file(rows, source, inputs):
         "# (SHA-256):",
     ]
     header += [f"#   {name}  {digest}" for name, digest in inputs]
+    for namespace, also_source, also_inputs in also:
+        header += [
+            f"# and from {also_source}",
+            f"# (SHA-256), its literals in namespace {namespace}:",
+        ]
+        header += [f"#   {name}  {digest}" for name, digest in also_inputs]
+    if also:
+        header += [
+            "# A later rule file's rows follow the first's, and the lemma of such a row",
+            "# is stated on that file's literal (`Sound <its namespace>.<rule> ...`). A",
+            "# rule name an earlier file has gets no second row: the generator refuses it",
+            "# unless both files give it one literal, one kind and one domain, so the",
+            "# earlier row's lemma, stated on the earlier file's literal, is a proof of",
+            "# the later file's statement too (the gate asserts the entry accepts it).",
+        ]
     header += [
         "#",
         "# One `rule scope kind lemma` row per rule and scope of the rule's domain.",
@@ -586,14 +659,221 @@ def self_test():
         failures.append("lemma rows: one lemma named by two rows was accepted")
     except Refused:
         pass
+    # A table over two rule files (`--also`): a rule only the later file has
+    # follows the first file's rows, a rule name both have is one row, and the
+    # header records both files. A shared name with another literal, another
+    # kind or another domain is refused.
+    def one(text):
+        return [(r["name"], r) for r in read_rules(text.encode(), reader)]
+
+    comm = ("(rule add_comm (direction equiv) (domain u8) "
+            "(lhs (add ?x ?y)) (rhs (add ?y ?x)) (where))\n")
+    try:
+        merged = merged_lemma_rows([("Defs", one(rule)), ("Later", one(comm + rule))])
+        want = [("add_zero", "u8", "plain", "EqsatInt.add_zero_u8"),
+                ("add_comm", "u8", "plain", "EqsatInt.add_comm_u8")]
+        if merged != want:
+            failures.append(f"a table over two rule files: {merged}")
+        text = lemmas_file(merged, "the first file", [("a.rules", "0" * 64)],
+                           [("Later", "the later file", [("b.rules", "1" * 64)])])
+        for line in ["# Read from the first file", "#   a.rules  " + "0" * 64,
+                     "# and from the later file",
+                     "# (SHA-256), its literals in namespace Later:", "#   b.rules  " + "1" * 64,
+                     "add_zero u8 plain EqsatInt.add_zero_u8",
+                     "add_comm u8 plain EqsatInt.add_comm_u8"]:
+            if line not in text.split("\n"):
+                failures.append(f"a table over two rule files lacks the line {line!r}")
+        if "# and from" in lemmas_file(merged, "the first file", [("a.rules", "0" * 64)]):
+            failures.append("a table over one rule file names a second")
+    except Refused as e:
+        failures.append(f"a table over two rule files: refused ({e})")
+    mul_mul = ("(rule r (direction equiv) (domain u8) (lhs (mul (mul ?x (const ?a)) (const ?b))) "
+               "(rhs (mul ?x {})) (where))\n")
+    for what, earlier, later in [
+        ("another literal", rule, rule.replace("(const 0)", "(const 1)")),
+        ("another direction", rule, rule.replace("equiv", "refines")),
+        ("another domain", rule, rule.replace("(domain u8)", "(domain u8 u16)")),
+        ("another kind (eval against the same operator on constants)",
+         mul_mul.format("(eval mul ?a ?b)"), mul_mul.format("(mul (const ?a) (const ?b))")),
+    ]:
+        try:
+            merged_lemma_rows([("Defs", one(earlier)), ("Later", one(later))])
+            failures.append(f"a rule name in two files with {what}: accepted")
+        except Refused:
+            pass
+    failures += command_line_failures(rule, comm)
     if failures:
         sys.exit("gen_rule_defs.py --self-test: " + "; ".join(failures))
     print("gen_rule_defs.py --self-test: ok (4 accepted, 7 refused, 1 literal control, "
-          "5 lemma-row controls, 1 refused lemma table)")
+          "5 lemma-row controls, 1 refused lemma table, 1 table over two rule files, "
+          "4 refused shared rule names, 4 accepted command lines over two rule files, "
+          "9 refused command lines)")
 
 
-def main():
-    if sys.argv[1:] == ["--self-test"]:
+def run_main(argv):
+    """`main` on `argv`, its output captured: `(exit, stdout)`, where `exit` is
+    `None` for a return and otherwise what `sys.exit` was given."""
+    out = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(out):
+            main(argv)
+    except SystemExit as e:
+        return (0 if e.code is None else e.code), out.getvalue()
+    return None, out.getvalue()
+
+
+def command_line_failures(rule, comm):
+    """The self-test's controls on the command line itself (`main` and
+    `read_set`, which the controls on in-script rule text do not reach): a
+    table and a module written from two rule files in a temporary directory,
+    `--check` on each, and the command lines that are refused. `rule` is the
+    text of one rule and `comm` of another."""
+    failures = []
+    with tempfile.TemporaryDirectory() as tmp:
+        def write(name, text):
+            path = os.path.join(tmp, name)
+            with open(path, "wb") as f:
+                f.write(text.encode("utf-8"))
+            return path
+
+        def sha(path):
+            with open(path, "rb") as f:
+                return hashlib.sha256(f.read()).hexdigest()
+
+        first = write("first.rules", rule)
+        later = write("later.rules", comm + rule)
+        table = ["--module", "M", "--namespace", "Defs", "--source", "the first file",
+                 "--also", "Later", "the later file", later, "--lemmas", first]
+        module = ["--module", "M", "--namespace", "Later", "--source", "the later file", later]
+
+        # Accepted: the table over both files, with each file's own digest in
+        # the header; the later file's module; and `--check` on each.
+        status, text = run_main(table)
+        if status is not None:
+            failures.append(f"the command line of a table over two rule files: {status}")
+        for line in ["# Read from the first file", f"#   first.rules  {sha(first)}",
+                     "# and from the later file",
+                     "# (SHA-256), its literals in namespace Later:",
+                     f"#   later.rules  {sha(later)}",
+                     "add_zero u8 plain EqsatInt.add_zero_u8",
+                     "add_comm u8 plain EqsatInt.add_comm_u8"]:
+            if line not in text.split("\n"):
+                failures.append(f"the command line's table lacks the line {line!r}")
+        if text.count(" plain ") != 2:
+            failures.append("the command line's table has a row per file for a shared rule name")
+        committed = write("LEMMAS", text)
+        if run_main(table + ["--check", committed]) != (None, ""):
+            failures.append("--check refuses the table the same command line wrote")
+        status, lean = run_main(module)
+        if status is not None:
+            failures.append(f"the command line of the later file's module: {status}")
+        for line in ["namespace EqsatRule.Later", "def add_comm : Rule :=",
+                     "def add_zero : Rule :=", f"     later.rules  {sha(later)}",
+                     "end EqsatRule.Later"]:
+            if line not in lean.split("\n"):
+                failures.append(f"the command line's module lacks the line {line!r}")
+        generated = write("M.lean", lean)
+        if run_main(module + ["--check", generated]) != (None, ""):
+            failures.append("--check refuses the module the same command line wrote")
+
+        # Refused, each for its own reason and with nothing printed.
+        def refused(what, argv, needle):
+            status, printed = run_main(argv)
+            if status is None or status == 0:
+                failures.append(f"{what}: accepted")
+            elif needle not in str(status):
+                failures.append(f"{what}: refused for another reason ({status})")
+            elif printed:
+                failures.append(f"{what}: refused, and printed output")
+
+        stale = "is not what the rule text generates"
+        refused("--check of a table with one row edited",
+                table + ["--check", write("LEMMAS.edited", text.replace("add_comm_u8", "x"))],
+                stale)
+        refused("--check of a table against one rule file only",
+                ["--module", "M", "--namespace", "Defs", "--source", "the first file",
+                 "--lemmas", first, "--check", committed], stale)
+        refused("--check of a module with one literal edited",
+                module + ["--check", write("M.edited", lean.replace("Pat.var", "Pat.cvar", 1))],
+                stale)
+        base = ["--module", "M", "--namespace", "Defs", "--source", "the first file"]
+        refused("--also under the first file's namespace",
+                base + ["--also", "Defs", "the later file", later, "--lemmas", first],
+                "namespace Defs is given twice")
+        other = write("other.rules", comm)
+        refused("two --also under one namespace",
+                base + ["--also", "Later", "the later file", later,
+                        "--also", "Later", "another file", other, "--lemmas", first],
+                "namespace Later is given twice")
+        refused("--also of the first file itself",
+                base + ["--also", "Later", "the later file", first, "--lemmas", first],
+                "a rule file is given once")
+        refused("--also of a file with the bytes of an earlier one",
+                base + ["--also", "Later", "the later file", later,
+                        "--also", "Other", "a copy", write("copy.rules", comm + rule),
+                        "--lemmas", first],
+                "has the bytes of later.rules")
+        refused("--also without --lemmas",
+                base + ["--also", "Later", "the later file", later, first], "needs --lemmas")
+        refused("a shared rule name with another literal, on the command line",
+                base + ["--also", "Later", "the later file",
+                        write("edited.rules", comm + rule.replace("(const 0)", "(const 1)")),
+                        "--lemmas", first],
+                "Later.add_zero is not the literal of Defs.add_zero")
+    return failures
+
+
+def read_set(paths, reader, name_from_file):
+    """One rule set: `(inputs, entries)`, each file's `(name, SHA-256)` and each
+    rule as `(def_name, rule, origin)` in the order read. A refused file and a
+    definition name used twice are `Refused`, with the file's path."""
+    inputs, entries, seen = [], [], set()
+    for path in paths:
+        with open(path, "rb") as f:
+            raw = f.read()
+        inputs.append((os.path.basename(path), hashlib.sha256(raw).hexdigest()))
+        try:
+            rules = read_rules(raw, reader)
+        except Refused as e:
+            raise Refused(f"{path}: {e}") from None
+        stem = os.path.splitext(os.path.basename(path))[0]
+        if name_from_file and len(rules) != 1:
+            raise Refused(f"{path}: --name-from-file needs exactly one rule per file")
+        for rule in rules:
+            def_name = stem if name_from_file else rule["name"]
+            if not NAME.match(def_name) or def_name in seen:
+                raise Refused(f"{path}: {def_name!r} is not a fresh [a-z][a-z0-9_]* name")
+            seen.add(def_name)
+            entries.append((def_name, rule, os.path.basename(path) if name_from_file else None))
+    return inputs, entries
+
+
+def repeated_rule_file(sets):
+    """Among the rule files of a table, given as `(namespace, inputs)` in table
+    order: the first file whose name or whose bytes an earlier file has, as a
+    message, or `None`. One rule file read twice would give a table whose
+    every later row is a shared rule name, and two files of one name cannot
+    both be recorded in the table's header."""
+    seen = []
+    for namespace, inputs in sets:
+        for name, digest in inputs:
+            for earlier, earlier_name, earlier_digest in seen:
+                if name == earlier_name:
+                    return (f"{namespace}: {name} is the name of a rule file of {earlier} "
+                            "too: a rule file is given once")
+                if digest == earlier_digest:
+                    return (f"{namespace}: {name} has the bytes of {earlier_name} of "
+                            f"{earlier}: a rule file is given once")
+            seen.append((namespace, name, digest))
+    return None
+
+
+def main(argv=None):
+    """The command line. `argv` is `sys.argv[1:]` when not given (the
+    self-test gives its own)."""
+    if argv is None:
+        argv = sys.argv[1:]
+    if argv == ["--self-test"]:
         self_test()
         return
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
@@ -613,38 +893,53 @@ def main():
     ap.add_argument("--lemmas", action="store_true",
                     help="print the family's LEMMAS file instead of Lean: one "
                          "`rule scope kind lemma` row per rule and scope of its domain")
-    args = ap.parse_args()
+    ap.add_argument("--also", nargs=3, action="append", default=[],
+                    metavar=("NAMESPACE", "SOURCE", "FILE"),
+                    help="with --lemmas: a further rule file of the table, the namespace "
+                         "its literals are generated in and where its text lives")
+    args = ap.parse_args(argv)
+    namespaces = [args.namespace] + [namespace for namespace, _, _ in args.also]
+    for value in namespaces:
+        if not NAMESPACE.match(value):
+            sys.exit(f"namespace {value!r} is not a namespace component [A-Z][A-Za-z0-9]*")
+    for value in namespaces:
+        if namespaces.count(value) > 1:
+            sys.exit(f"--also: namespace {value} is given twice: the literals of each rule "
+                     "file have a namespace of their own")
+    if args.also and not args.lemmas:
+        sys.exit("--also adds a rule file to the lemma table: it needs --lemmas")
+    if args.also and (args.name_from_file or args.allow_partial_ops):
+        sys.exit("--also is for rule files of the engine: not with --name-from-file or "
+                 "--allow-partial-ops")
 
     reader = Reader(args.allow_partial_ops)
-    defs, seen, inputs, rows, lemmas = [], set(), [], [], []
-    for path in args.files:
-        with open(path, "rb") as f:
-            raw = f.read()
-        inputs.append((os.path.basename(path), hashlib.sha256(raw).hexdigest()))
-        try:
-            rules = read_rules(raw, reader)
-        except Refused as e:
-            sys.exit(f"{path}: {e}")
-        stem = os.path.splitext(os.path.basename(path))[0]
-        if args.name_from_file and len(rules) != 1:
-            sys.exit(f"{path}: --name-from-file needs exactly one rule per file")
-        for rule in rules:
-            def_name = stem if args.name_from_file else rule["name"]
-            if not NAME.match(def_name) or def_name in seen:
-                sys.exit(f"{path}: {def_name!r} is not a fresh [a-z][a-z0-9_]* name")
-            seen.add(def_name)
-            origin = f"{os.path.basename(path)}" if args.name_from_file else None
-            defs.append(lean_def(rule, def_name, origin))
-            rows.append("\t".join(
-                [def_name, rule["direction"], rule["kind"], " ".join(rule["domain"])]))
-            lemmas += lemma_rows(def_name, rule["kind"], rule["domain"])
+    try:
+        inputs, entries = read_set(args.files, reader, args.name_from_file)
+        also = [(namespace, source) + read_set([path], reader, False)
+                for namespace, source, path in args.also]
+    except Refused as e:
+        sys.exit(str(e))
+    if args.also:
+        repeated = repeated_rule_file(
+            [(args.namespace, inputs)]
+            + [(namespace, also_inputs) for namespace, _, also_inputs, _ in also])
+        if repeated:
+            sys.exit(f"--also: {repeated}")
+    defs = [lean_def(rule, def_name, origin) for def_name, rule, origin in entries]
 
     if args.table:
-        sys.stdout.write("\n".join(rows) + "\n")
+        sys.stdout.write("".join(
+            "\t".join([def_name, rule["direction"], rule["kind"], " ".join(rule["domain"])]) + "\n"
+            for def_name, rule, _ in entries))
         return
     if args.lemmas:
         try:
-            out = lemmas_file(lemmas, args.source, inputs)
+            sets = [(args.namespace, [(def_name, rule) for def_name, rule, _ in entries])]
+            sets += [(namespace, [(def_name, rule) for def_name, rule, _ in also_entries])
+                     for namespace, _, _, also_entries in also]
+            out = lemmas_file(merged_lemma_rows(sets), args.source, inputs,
+                              [(namespace, source, also_inputs)
+                               for namespace, source, also_inputs, _ in also])
         except Refused as e:
             sys.exit(f"--lemmas: {e}")
         if args.check:

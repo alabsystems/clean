@@ -1,9 +1,9 @@
 {
  "schema": "clean.lean4lean-arena-reasons.v1",
  "checker_commit": "bce3448115f7819fc12d647fadd3bb090666637e",
- "binary_sha256": "6d2a0998bf2d2bf91a6db08bc4fd8ed4b35211cd57d2a9734aa21a9ffac87dd7",
- "observed_in": "reports/self-proof-q4-unanimity-2026-11-13/lean4lean-arena-observation.json",
- "observed_by": "scripts/lean4lean_recheck.py run+policy (ax0 off) over every arena case, 2026-11-14T01:38Z; 122 good accepted at the count model, 53 bad refused, 18 bad panicked",
+ "binary_sha256": "0dd916fd48fe6ce5fe0b618b85af0b14327d263af7894d97fc08f601420d7ebe",
+ "observed_in": "reports/self-proof-q4-corrected-reference-2026-11-18/native-epoch-1/verdict.json.gz",
+ "observed_by": "scripts/lean4lean_recheck.py native complete193, 2026-11-18T10:16Z: 122 accepted, 71 refused, zero panics/crashes/undecided; first gate exit1 because 18 old panic signatures differed; preserved original epoch",
  "fixtures": {
   "bad/bugs/constlevels.ndjson": {
    "failure": {
@@ -14,21 +14,17 @@
   },
   "bad/bugs/ctor-num-fields.ndjson": {
    "failure": {
-    "kind": "panic",
-    "location": "_private.Lean.Environment.0.Lean.EnvExtension.getStateImpl Lean.Environment:1375:4",
-    "reason": "invalid environment extension has been accessed",
-    "after_kernel_exception": true
+    "kind": "error",
+    "reason": "at _private.Test.0.h: (kernel) declaration type mismatch, '_private.Test.0.h' has type"
    },
-   "target_evidence": "Lean4Lean panicked in its error renderer after Lean4Lean.Replay.throwKernelException: the kernel raised an exception first, but the message is lost; recorded as a panic, never as a refusal"
+   "target_evidence": "Actual corrected-checker kernel refusal observed in native epoch 1; this alone does not prove that the fixture target was exercised."
   },
   "bad/bugs/k-rec-conv.ndjson": {
    "failure": {
-    "kind": "panic",
-    "location": "_private.Lean.Environment.0.Lean.EnvExtension.getStateImpl Lean.Environment:1375:4",
-    "reason": "invalid environment extension has been accessed",
-    "after_kernel_exception": true
+    "kind": "error",
+    "reason": "at bad: (kernel) declaration type mismatch, 'bad' has type"
    },
-   "target_evidence": "Lean4Lean panicked in its error renderer after Lean4Lean.Replay.throwKernelException: the kernel raised an exception first, but the message is lost; recorded as a panic, never as a refusal"
+   "target_evidence": "Actual corrected-checker kernel refusal observed in native epoch 1; this alone does not prove that the fixture target was exercised."
   },
   "bad/bugs/large-elim-param.ndjson": {
    "failure": {
@@ -46,30 +42,24 @@
   },
   "bad/bugs/level-imax-leq.ndjson": {
    "failure": {
-    "kind": "panic",
-    "location": "_private.Lean.Environment.0.Lean.EnvExtension.getStateImpl Lean.Environment:1375:4",
-    "reason": "invalid environment extension has been accessed",
-    "after_kernel_exception": true
+    "kind": "error",
+    "reason": "at down: (kernel) declaration type mismatch, 'down' has type"
    },
-   "target_evidence": "Lean4Lean panicked in its error renderer after Lean4Lean.Replay.throwKernelException: the kernel raised an exception first, but the message is lost; recorded as a panic, never as a refusal"
+   "target_evidence": "Actual corrected-checker kernel refusal observed in native epoch 1; this alone does not prove that the fixture target was exercised."
   },
   "bad/bugs/level-imax-normalization.ndjson": {
    "failure": {
-    "kind": "panic",
-    "location": "_private.Lean.Environment.0.Lean.EnvExtension.getStateImpl Lean.Environment:1375:4",
-    "reason": "invalid environment extension has been accessed",
-    "after_kernel_exception": true
+    "kind": "error",
+    "reason": "at down: (kernel) declaration type mismatch, 'down' has type"
    },
-   "target_evidence": "Lean4Lean panicked in its error renderer after Lean4Lean.Replay.throwKernelException: the kernel raised an exception first, but the message is lost; recorded as a panic, never as a refusal"
+   "target_evidence": "Actual corrected-checker kernel refusal observed in native epoch 1; this alone does not prove that the fixture target was exercised."
   },
   "bad/bugs/nat-rec-k-lie.ndjson": {
    "failure": {
-    "kind": "panic",
-    "location": "_private.Lean.Environment.0.Lean.EnvExtension.getStateImpl Lean.Environment:1375:4",
-    "reason": "invalid environment extension has been accessed",
-    "after_kernel_exception": true
+    "kind": "error",
+    "reason": "at k1: (kernel) declaration type mismatch, 'k1' has type"
    },
-   "target_evidence": "Lean4Lean panicked in its error renderer after Lean4Lean.Replay.throwKernelException: the kernel raised an exception first, but the message is lost; recorded as a panic, never as a refusal"
+   "target_evidence": "Actual corrected-checker kernel refusal observed in native epoch 1; this alone does not prove that the fixture target was exercised."
   },
   "bad/bugs/nat-rec-rules.ndjson": {
    "failure": {
@@ -122,12 +112,10 @@
   },
   "bad/bugs/rec-k-lie.ndjson": {
    "failure": {
-    "kind": "panic",
-    "location": "_private.Lean.Environment.0.Lean.EnvExtension.getStateImpl Lean.Environment:1375:4",
-    "reason": "invalid environment extension has been accessed",
-    "after_kernel_exception": true
+    "kind": "error",
+    "reason": "at bad: (kernel) declaration type mismatch, 'bad' has type"
    },
-   "target_evidence": "Lean4Lean panicked in its error renderer after Lean4Lean.Replay.throwKernelException: the kernel raised an exception first, but the message is lost; recorded as a panic, never as a refusal"
+   "target_evidence": "Actual corrected-checker kernel refusal observed in native epoch 1; this alone does not prove that the fixture target was exercised."
   },
   "bad/bugs/rec-missing-ih.ndjson": {
    "failure": {
@@ -138,12 +126,10 @@
   },
   "bad/bugs/rec-of-subst-prop.ndjson": {
    "failure": {
-    "kind": "panic",
-    "location": "Lean4Lean.toCtorWhenStruct Lean4Lean.Inductive.Reduce:63:43",
-    "reason": "unreachable code has been reached",
-    "after_kernel_exception": false
+    "kind": "error",
+    "reason": "at Issue.forallFalse: (kernel) type expected"
    },
-   "target_evidence": "Lean4Lean panicked before any kernel exception: no kernel verdict; recorded as a panic, never as a refusal"
+   "target_evidence": "Actual corrected-checker kernel refusal observed in native epoch 1; this alone does not prove that the fixture target was exercised."
   },
   "bad/other/extra-rec.ndjson": {
    "failure": {
@@ -154,12 +140,10 @@
   },
   "bad/other/nat-lit-add-bad.ndjson": {
    "failure": {
-    "kind": "panic",
-    "location": "_private.Lean.Environment.0.Lean.EnvExtension.getStateImpl Lean.Environment:1375:4",
-    "reason": "invalid environment extension has been accessed",
-    "after_kernel_exception": true
+    "kind": "error",
+    "reason": "at natAddLitBad: (kernel) declaration type mismatch, 'natAddLitBad' has type"
    },
-   "target_evidence": "Lean4Lean panicked in its error renderer after Lean4Lean.Replay.throwKernelException: the kernel raised an exception first, but the message is lost; recorded as a panic, never as a refusal"
+   "target_evidence": "Actual corrected-checker kernel refusal observed in native epoch 1; this alone does not prove that the fixture target was exercised."
   },
   "bad/other/orphan-ctor.ndjson": {
    "failure": {
@@ -177,30 +161,24 @@
   },
   "bad/perf/refute-cheap-first.ndjson": {
    "failure": {
-    "kind": "panic",
-    "location": "_private.Lean.Environment.0.Lean.EnvExtension.getStateImpl Lean.Environment:1375:4",
-    "reason": "invalid environment extension has been accessed",
-    "after_kernel_exception": true
+    "kind": "error",
+    "reason": "at kernel_refute_cheap_first: (kernel) declaration type mismatch, 'kernel_refute_cheap_first' has type"
    },
-   "target_evidence": "Lean4Lean panicked in its error renderer after Lean4Lean.Replay.throwKernelException: the kernel raised an exception first, but the message is lost; recorded as a panic, never as a refusal"
+   "target_evidence": "Actual corrected-checker kernel refusal observed in native epoch 1; this alone does not prove that the fixture target was exercised."
   },
   "bad/perf/refute-cheap-last.ndjson": {
    "failure": {
-    "kind": "panic",
-    "location": "_private.Lean.Environment.0.Lean.EnvExtension.getStateImpl Lean.Environment:1375:4",
-    "reason": "invalid environment extension has been accessed",
-    "after_kernel_exception": true
+    "kind": "error",
+    "reason": "at kernel_refute_cheap_last: (kernel) declaration type mismatch, 'kernel_refute_cheap_last' has type"
    },
-   "target_evidence": "Lean4Lean panicked in its error renderer after Lean4Lean.Replay.throwKernelException: the kernel raised an exception first, but the message is lost; recorded as a panic, never as a refusal"
+   "target_evidence": "Actual corrected-checker kernel refusal observed in native epoch 1; this alone does not prove that the fixture target was exercised."
   },
   "bad/tutorial/002_badDef.ndjson": {
    "failure": {
-    "kind": "panic",
-    "location": "_private.Lean.Environment.0.Lean.EnvExtension.getStateImpl Lean.Environment:1375:4",
-    "reason": "invalid environment extension has been accessed",
-    "after_kernel_exception": true
+    "kind": "error",
+    "reason": "at badDef: (kernel) declaration type mismatch, 'badDef' has type"
    },
-   "target_evidence": "Lean4Lean panicked in its error renderer after Lean4Lean.Replay.throwKernelException: the kernel raised an exception first, but the message is lost; recorded as a panic, never as a refusal"
+   "target_evidence": "Actual corrected-checker kernel refusal observed in native epoch 1; this alone does not prove that the fixture target was exercised."
   },
   "bad/tutorial/009_forallSortBad.ndjson": {
    "failure": {
@@ -393,57 +371,45 @@
   },
   "bad/tutorial/100_ruleKbad.ndjson": {
    "failure": {
-    "kind": "panic",
-    "location": "_private.Lean.Environment.0.Lean.EnvExtension.getStateImpl Lean.Environment:1375:4",
-    "reason": "invalid environment extension has been accessed",
-    "after_kernel_exception": true
+    "kind": "error",
+    "reason": "at ruleKbad: (kernel) declaration type mismatch, 'ruleKbad' has type"
    },
-   "target_evidence": "Lean4Lean panicked in its error renderer after Lean4Lean.Replay.throwKernelException: the kernel raised an exception first, but the message is lost; recorded as a panic, never as a refusal"
+   "target_evidence": "Actual corrected-checker kernel refusal observed in native epoch 1; this alone does not prove that the fixture target was exercised."
   },
   "bad/tutorial/101_ruleKAcc.ndjson": {
    "failure": {
-    "kind": "panic",
-    "location": "_private.Lean.Environment.0.Lean.EnvExtension.getStateImpl Lean.Environment:1375:4",
-    "reason": "invalid environment extension has been accessed",
-    "after_kernel_exception": true
+    "kind": "error",
+    "reason": "at ruleKAcc: (kernel) declaration type mismatch, 'ruleKAcc' has type"
    },
-   "target_evidence": "Lean4Lean panicked in its error renderer after Lean4Lean.Replay.throwKernelException: the kernel raised an exception first, but the message is lost; recorded as a panic, never as a refusal"
+   "target_evidence": "Actual corrected-checker kernel refusal observed in native epoch 1; this alone does not prove that the fixture target was exercised."
   },
   "bad/tutorial/105_proofIrrelevanceBad.ndjson": {
    "failure": {
-    "kind": "panic",
-    "location": "_private.Lean.Environment.0.Lean.EnvExtension.getStateImpl Lean.Environment:1375:4",
-    "reason": "invalid environment extension has been accessed",
-    "after_kernel_exception": true
+    "kind": "error",
+    "reason": "at proofIrrelevanceBad: (kernel) declaration type mismatch, 'proofIrrelevanceBad' has type"
    },
-   "target_evidence": "Lean4Lean panicked in its error renderer after Lean4Lean.Replay.throwKernelException: the kernel raised an exception first, but the message is lost; recorded as a panic, never as a refusal"
+   "target_evidence": "Actual corrected-checker kernel refusal observed in native epoch 1; this alone does not prove that the fixture target was exercised."
   },
   "bad/tutorial/111_indexedUnitEta.ndjson": {
    "failure": {
-    "kind": "panic",
-    "location": "_private.Lean.Environment.0.Lean.EnvExtension.getStateImpl Lean.Environment:1375:4",
-    "reason": "invalid environment extension has been accessed",
-    "after_kernel_exception": true
+    "kind": "error",
+    "reason": "at indexedUnitEta: (kernel) declaration type mismatch, 'indexedUnitEta' has type"
    },
-   "target_evidence": "Lean4Lean panicked in its error renderer after Lean4Lean.Replay.throwKernelException: the kernel raised an exception first, but the message is lost; recorded as a panic, never as a refusal"
+   "target_evidence": "Actual corrected-checker kernel refusal observed in native epoch 1; this alone does not prove that the fixture target was exercised."
   },
   "bad/tutorial/113_indexedStructEta.ndjson": {
    "failure": {
-    "kind": "panic",
-    "location": "_private.Lean.Environment.0.Lean.EnvExtension.getStateImpl Lean.Environment:1375:4",
-    "reason": "invalid environment extension has been accessed",
-    "after_kernel_exception": true
+    "kind": "error",
+    "reason": "at indexedStructEta: (kernel) declaration type mismatch, 'indexedStructEta' has type"
    },
-   "target_evidence": "Lean4Lean panicked in its error renderer after Lean4Lean.Replay.throwKernelException: the kernel raised an exception first, but the message is lost; recorded as a panic, never as a refusal"
+   "target_evidence": "Actual corrected-checker kernel refusal observed in native epoch 1; this alone does not prove that the fixture target was exercised."
   },
   "bad/tutorial/116_funEtaBad.ndjson": {
    "failure": {
-    "kind": "panic",
-    "location": "_private.Lean.Environment.0.Lean.EnvExtension.getStateImpl Lean.Environment:1375:4",
-    "reason": "invalid environment extension has been accessed",
-    "after_kernel_exception": true
+    "kind": "error",
+    "reason": "at funEtaBad: (kernel) declaration type mismatch, 'funEtaBad' has type"
    },
-   "target_evidence": "Lean4Lean panicked in its error renderer after Lean4Lean.Replay.throwKernelException: the kernel raised an exception first, but the message is lost; recorded as a panic, never as a refusal"
+   "target_evidence": "Actual corrected-checker kernel refusal observed in native epoch 1; this alone does not prove that the fixture target was exercised."
   },
   "bad/tutorial/117_reflOccLeft.ndjson": {
    "failure": {
@@ -461,12 +427,10 @@
   },
   "bad/tutorial/125_accRecNoEta.ndjson": {
    "failure": {
-    "kind": "panic",
-    "location": "_private.Lean.Environment.0.Lean.EnvExtension.getStateImpl Lean.Environment:1375:4",
-    "reason": "invalid environment extension has been accessed",
-    "after_kernel_exception": true
+    "kind": "error",
+    "reason": "at accRecNoEta: (kernel) declaration type mismatch, 'accRecNoEta' has type"
    },
-   "target_evidence": "Lean4Lean panicked in its error renderer after Lean4Lean.Replay.throwKernelException: the kernel raised an exception first, but the message is lost; recorded as a panic, never as a refusal"
+   "target_evidence": "Actual corrected-checker kernel refusal observed in native epoch 1; this alone does not prove that the fixture target was exercised."
   },
   "bad/tutorial/132_dup_defs.ndjson": {
    "failure": {

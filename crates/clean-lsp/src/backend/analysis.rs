@@ -149,6 +149,7 @@ pub(crate) fn collect_used_idents(expr: &clean_parser::SurfaceExpr, used: &mut H
             }
         }
         SurfaceExpr::Paren(_, inner)
+        | SurfaceExpr::Borrowed(_, inner)
         | SurfaceExpr::OutParam(_, inner)
         | SurfaceExpr::SemiOutParam(_, inner)
         | SurfaceExpr::Explicit(_, inner) => collect_used_idents(inner, used),
@@ -450,6 +451,7 @@ pub(crate) fn collect_ident_locations(
         }
         // Single inner expression to recurse into
         SurfaceExpr::Paren(_, inner)
+        | SurfaceExpr::Borrowed(_, inner)
         | SurfaceExpr::OutParam(_, inner)
         | SurfaceExpr::SemiOutParam(_, inner)
         | SurfaceExpr::Explicit(_, inner) => collect_ident_locations(inner, locations),

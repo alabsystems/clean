@@ -27,6 +27,21 @@ def erased_equality_bound : Prop :=
     (shape : statement.toExpr (Metadata := Unit) 0 under =
       (Base.eqApp level type left right).toExpr 0 under), max 1 (level.eval levels + 1) ≤ height
 
+def member_endpoints : Prop :=
+  ∀ {height : Nat} {tower : UniverseTower.{u} height}
+    (b : Base tower) {E : Env} (headers : EqHeaders E) (valid : E.Valid b)
+    (values : List Nat) (slot : Term) {member : RawSet.{u}}
+    (typed : Mem member (closedValue (E.assignment b) values slot))
+    (cites : slot.CitesWithin E (pad values) height)
+    (arguments : List RawSet.{u})
+    (tele : InTele ((E.assignment b).withLevels (pad values)) (fun _ => RawSet.empty) 0 slot arguments)
+    (level : Level) (type left right : Term)
+    (shape : (slot.dropPis arguments.length).toExpr (Metadata := Unit) 0 arguments.length =
+      (Base.eqApp level type left right).toExpr 0 arguments.length),
+    let A := (E.assignment b).withLevels (pad values)
+    let env := pushAll arguments (fun _ => RawSet.empty)
+    RawSet.Related (value A env 0 arguments.length left) (value A env 0 arguments.length right)
+
 def entry_endpoints : Prop :=
   ∀ {height : Nat} {tower : UniverseTower.{u} height}
     (b : Base tower) {E : Env} (headers : EqHeaders E) (valid : E.Valid b)
@@ -100,6 +115,20 @@ def check_sound : Prop :=
     E'.families = E.families ++ [KCheckBoolIsland.family] ∧
     ∃ out : KCheckBoolAdmission.Outputs, out.Payloads ∧ out.covered = true ∧
       E' = KCheckBoolAdmission.install E out ∧ result = KCheckBoolAdmission.receipt out
+
+def omittedMemberTyping : Prop :=
+  ∀ {height : Nat} {tower : UniverseTower.{u} height}
+    (b : Base tower) {E : Env} (headers : EqHeaders E) (valid : E.Valid b)
+    (values : List Nat) (slot : Term) {member : RawSet.{u}}
+    (cites : slot.CitesWithin E (pad values) height)
+    (arguments : List RawSet.{u})
+    (tele : InTele ((E.assignment b).withLevels (pad values)) (fun _ => RawSet.empty) 0 slot arguments)
+    (level : Level) (type left right : Term)
+    (shape : (slot.dropPis arguments.length).toExpr (Metadata := Unit) 0 arguments.length =
+      (Base.eqApp level type left right).toExpr 0 arguments.length),
+    let A := (E.assignment b).withLevels (pad values)
+    let env := pushAll arguments (fun _ => RawSet.empty)
+    RawSet.Related (value A env 0 arguments.length left) (value A env 0 arguments.length right)
 
 def omittedInitial : Prop :=
   ∀ {height : Nat} {tower : UniverseTower.{u} height} {b : Base tower}

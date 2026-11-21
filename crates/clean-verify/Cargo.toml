@@ -62,8 +62,10 @@ clean-olean = { path = "../clean-olean" }
 # used only to POSE questions the Clean kernel answers, so a wrong parse or a
 # wrong interpretation yields a spurious RED, never a spurious GREEN.
 # `default-features = false` drops the ~330-symbol request/bundle re-export
-# block, which this differential does not touch.
-trust-ir = { git = "https://github.com/alabsystems/trust-ir.git", rev = "8bae728257b123d6394b2dc049b3573ad885049f", default-features = false, features = ["parser", "fmt"] }
+# block, which this differential does not touch. `clean-expr-codec` (codecs
+# only; replay authority stays behind trust-ir's `clean-expr`) lets the
+# shift-boundary tests round-trip their proofs through the consumer's carrier.
+trust-ir = { git = "https://github.com/alabsystems/trust-ir.git", rev = "899d46e7a303fad2b706a88a7a8eda41ec47dcfe", default-features = false, features = ["parser", "fmt", "clean-expr-codec"] }
 
 # Self-dependency to enable test-utils + cli during cargo test. The `sat-verify`
 # feature gates the `cli` module (and its behavioral tests); enabling it here

@@ -1,8 +1,10 @@
+// Modified in Clean: typed array-lambda dialect and explicit lambda export refusal.
 //! A parser for the Alethe proof format.
 //! Clean downstream changes: optional, declaration-aware `bv2nat` compatibility; the optional
 //! `zero_extend` reading of Clean's Alethe dialect (`expand_zero_extend`); checked bit-vector
 //! result widths. See third-party/carcara/DOWNSTREAM.md.
 
+mod array_lambda;
 mod datatypes;
 mod error;
 mod lexer;
@@ -30,6 +32,15 @@ use std::{collections::HashMap, iter::Iterator, str::FromStr, sync::Arc};
 
 pub use error::{ParserError, SortError};
 pub use lexer::{Position, Reserved, Token};
+
+/// Grammar selection belongs to the existing checker dialect, not a user
+/// workaround or a global Function/Array compatibility relation.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+enum ArrayLambdaDialect {
+    #[default]
+    FunctionsOnly,
+    TypedArrayContexts,
+}
 
 /// Configuration for [`Parser`].
 #[derive(Debug, Clone, Copy, Default, GenerateSetters)]
@@ -89,6 +100,8 @@ pub struct Config {
 
     /// Modified in Clean: the rule is stated in third-party/carcara/DOWNSTREAM.md § Dialect.
     expand_zero_extend: bool,
+    #[skip_setter]
+    array_lambda_dialect: ArrayLambdaDialect,
 }
 
 impl Config {
@@ -107,15 +120,19 @@ impl Config {
             allow_legacy_tester_syntax: false,
             allow_legacy_bv2nat: false,
             expand_zero_extend: false,
+            array_lambda_dialect: ArrayLambdaDialect::FunctionsOnly,
         }
     }
 
     /// Modified in Clean: the configuration of Clean's Alethe dialect, every option a
     /// `### Dialect:` entry of third-party/carcara/DOWNSTREAM.md states, and no other.
     pub const fn clean_dialect() -> Self {
-        Self::new()
-            .allow_legacy_bv2nat(true)
-            .expand_zero_extend(true)
+        Self {
+            array_lambda_dialect: ArrayLambdaDialect::TypedArrayContexts,
+            ..Self::new()
+                .allow_legacy_bv2nat(true)
+                .expand_zero_extend(true)
+        }
     }
 }
 
@@ -456,6 +473,10 @@ pub struct Parser<'p, 's> {
     state: ParserState,
     is_real_only_logic: bool,
     problem: Option<Problem>,
+    // One original-deadline role plan per outer term; nested parses only read it.
+    lambda_term_depth: usize,
+    lambda_array_positions: std::collections::HashSet<Position>,
+    lambda_expected: Option<Rc<Sort>>,
 }
 
 /// Added in Clean: records in `depths` the depth of `root` (one more than its deepest child, as
@@ -521,6 +542,9 @@ impl<'p, 's> Parser<'p, 's> {
             state: ParserState::default(),
             is_real_only_logic: false,
             problem: None,
+            lambda_term_depth: 0,
+            lambda_array_positions: std::collections::HashSet::new(),
+            lambda_expected: None,
         })
     }
 
@@ -2616,7 +2640,21 @@ impl<'p, 's> Parser<'p, 's> {
     /// Modified in Clean: a term more than `MAX_TERM_DEPTH` deep is refused.
     pub fn parse_term(&mut self) -> CarcaraResult<Rc<Term>> {
         let position = self.current_position;
-        let term = self.parse_term_here()?;
+        let outer = self.lambda_term_depth == 0;
+        if outer {
+            let expected = self.lambda_expected.take();
+            self.lambda_array_positions.clear();
+            if self.config.array_lambda_dialect == ArrayLambdaDialect::TypedArrayContexts {
+                let frame = array_lambda::TermFrame::enter(self, false)?;
+                let planned = array_lambda::plan(&mut *frame.parser, expected);
+                drop(frame);
+                self.lambda_array_positions = planned?;
+            }
+        }
+        let frame = array_lambda::TermFrame::enter(self, outer)?;
+        let parsed = frame.parser.parse_term_here();
+        drop(frame);
+        let term = parsed?;
         self.check_term_depth(&term)
             .map_err(|err| Error::Parser(err, position))?;
         Ok(term)
@@ -2733,6 +2771,9 @@ impl<'p, 's> Parser<'p, 's> {
     /// Parses a term and checks that its sort matches the expected sort. If not, returns an error.
     fn parse_term_expecting_sort(&mut self, expected_sort: &Sort) -> CarcaraResult<Rc<Term>> {
         let pos = self.current_position;
+        if self.lambda_term_depth == 0 {
+            self.lambda_expected = Some(self.pool.add_sort(expected_sort.clone()));
+        }
         let term = self.parse_term()?;
         self.check_sort_eq(expected_sort, &self.pool.sort(&term))
             .map_err(|e| Error::Parser(e.into(), pos))?;
@@ -2760,11 +2801,17 @@ impl<'p, 's> Parser<'p, 's> {
             )?)
         };
         let term = match binder {
-            Binder::Lambda => self.parse_term()?,
+            Binder::Lambda | Binder::ArrayLambda => self.parse_term()?,
             _ => self.parse_term_expecting_sort(&Sort::Bool)?,
         };
         self.state.symbol_table.pop_scope();
         self.expect_token(Token::CloseParen)?;
+        if binder == Binder::ArrayLambda && bindings.len() != 1 {
+            return Err(Error::Parser(
+                ParserError::InvalidArrayLambda,
+                self.current_position,
+            ));
+        }
         Ok(self.pool.add(Term::Binder(binder, bindings, term)))
     }
 
@@ -3232,7 +3279,14 @@ impl<'p, 's> Parser<'p, 's> {
                     Reserved::Exists => self.parse_binder(Binder::Exists),
                     Reserved::Forall => self.parse_binder(Binder::Forall),
                     Reserved::Choice => self.parse_binder(Binder::Choice),
-                    Reserved::Lambda => self.parse_binder(Binder::Lambda),
+                    Reserved::Lambda => {
+                        let binder = if self.lambda_array_positions.contains(&head_pos) {
+                            Binder::ArrayLambda
+                        } else {
+                            Binder::Lambda
+                        };
+                        self.parse_binder(binder)
+                    }
                     Reserved::Bang => self.parse_annotated_term(),
                     Reserved::Let => self.parse_let_term(),
                     Reserved::Cl => {

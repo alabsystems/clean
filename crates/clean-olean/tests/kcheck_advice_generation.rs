@@ -282,9 +282,8 @@ fn automatic_candidates_replay_with_beta_zeta_and_local_definition_guards() {
             ),
         ),
     );
-    // The two functions below differ, but both applications reduce to P.
-    // Structural APP/LAM search first emits a failing prefix; only rollback
-    // followed by the real beta steps can yield replayable declaration advice.
+    // The two functions differ, but both applications reduce to P. The
+    // resulting declaration advice must replay despite their different bodies.
     let rollback_type = pi(
         prop.clone(),
         pi(

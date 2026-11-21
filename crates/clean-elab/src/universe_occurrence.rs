@@ -277,6 +277,7 @@ impl Walk {
             }
             SurfaceExpr::Paren(_, e)
             | SurfaceExpr::Explicit(_, e)
+            | SurfaceExpr::Borrowed(_, e)
             | SurfaceExpr::OutParam(_, e)
             | SurfaceExpr::SemiOutParam(_, e)
             | SurfaceExpr::LiftMethod(_, e)

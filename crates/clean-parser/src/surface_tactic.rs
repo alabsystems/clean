@@ -8,7 +8,7 @@
 //! These are used by [`SurfaceExpr::ByTactic`], [`SurfaceExpr::CalcBlock`],
 //! and [`SurfaceExpr::Do`] variants in the surface syntax.
 
-use crate::surface::{Span, SurfaceExpr, SurfaceName};
+use crate::surface::{Span, SurfaceExpr, SurfaceName, SurfacePattern};
 use crate::surface_tactic_types::{SurfaceCalcStep, TacticMatchArm};
 
 /// A rewrite rule in `rw [rule1, rule2, ...]` syntax
@@ -115,6 +115,9 @@ pub struct SurfaceRCasesTarget {
 /// argument types retain dedicated variants for parser fidelity.
 #[derive(Debug, Clone)]
 pub enum SurfaceTactic {
+    /// Introduce an argument using a constructor pattern whose locals scope over later tactics.
+    IntroPattern(Span, SurfacePattern),
+
     /// `cases (h :)? e with | alt1 => ... | alt2 => ...`
     ///
     /// The second field is the optional `h :` of Lean's `casesTarget`
@@ -194,6 +197,14 @@ pub enum SurfaceTactic {
         Box<SurfaceExpr>,
     ),
 
+    /// `letI h : T := val` introduces a local whose value is inlined in the proof.
+    LetI(
+        Span,
+        SurfaceName,
+        Option<Box<SurfaceExpr>>,
+        Box<SurfaceExpr>,
+    ),
+
     /// `replace h : T := proof` (Lean's `replace letDecl`): the wrapped
     /// declaration (a [`Self::Have`]) runs, then the older hypothesis of the
     /// same name is cleared when nothing depends on it.
@@ -229,6 +240,9 @@ pub enum SurfaceTactic {
 
     /// `repeat tacticSeq` - repeat a tactic sequence until it fails
     Repeat(Span, Vec<SurfaceTactic>),
+
+    /// `repeat' tacticSeq` - repeat independently on each goal and its children.
+    RepeatAll(Span, Vec<SurfaceTactic>),
 
     /// `tac1 <;> tac2` - apply tac2 to all goals produced by tac1
     SeqFocus(Span, Box<SurfaceTactic>, Box<SurfaceTactic>),
@@ -387,15 +401,17 @@ impl SurfaceTactic {
             | SurfaceTactic::Induction { span: s, .. }
             | SurfaceTactic::Simp { span: s, .. }
             | SurfaceTactic::Have(s, _, _, _) | SurfaceTactic::Let(s, _, _, _)
+            | SurfaceTactic::LetI(s, _, _, _)
             | SurfaceTactic::Suffices(s, _, _, _) | SurfaceTactic::Replace(s, _)
             | SurfaceTactic::Case(s, _, _, _) | SurfaceTactic::AllGoals(s, _)
             | SurfaceTactic::AnyGoals(s, _) | SurfaceTactic::Try(s, _)
-            | SurfaceTactic::First(s, _) | SurfaceTactic::Repeat(s, _)
+            | SurfaceTactic::First(s, _) | SurfaceTactic::Repeat(s, _) | SurfaceTactic::RepeatAll(s, _)
             | SurfaceTactic::SeqFocus(s, _, _) | SurfaceTactic::Paren(s, _)
             | SurfaceTactic::FocusBlock(s, _) | SurfaceTactic::Focus(s, _)
             | SurfaceTactic::Conv(s, _, _) | SurfaceTactic::ConvArg(s, _)
             | SurfaceTactic::ConvEnter(s, _)
             | SurfaceTactic::SimpRw(s, _, _) | SurfaceTactic::Calc(s, _)
+            | SurfaceTactic::IntroPattern(s, _)
             | SurfaceTactic::Match(s, _, _, _)
             | SurfaceTactic::Simpa { span: s, .. }
             | SurfaceTactic::Obtain { span: s, .. }

@@ -15,6 +15,12 @@ use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
+mod custody;
+#[cfg(test)]
+mod entry_tests;
+mod source_context;
+pub use source_context::{open_source_context, CheckedSourceContext};
+
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Parts {
@@ -83,6 +89,32 @@ pub fn open_replay(
     {
         return Err("invalid compiled frame theorem cohort".into());
     }
+    custody::validate_artifact_census(directory, &expected)?;
+    let env = load_expected(directory, &expected, root_modules)?;
+    let options = ClosedRecheckOptions {
+        max_closure: Some(100_000),
+        ..ClosedRecheckOptions::default()
+    };
+    let replay = reference_base_closed(&env, &roots, &options).map_err(|e| e.to_string())?;
+    if !replay.entry_refusals.is_empty()
+        || !replay.report.passed()
+        || !replay.report.extension_bindings_pinned
+        || !roots.is_subset(&replay.admitted)
+    {
+        return Err(format!(
+            "frame theorem dependency replay refused: {} {:?}",
+            replay.report.verdict_sentence(),
+            replay.entry_refusals
+        ));
+    }
+    Ok((replay, hash(manifest.as_bytes())))
+}
+
+fn load_expected(
+    directory: &Path,
+    expected: &Manifest,
+    root_modules: &[&str],
+) -> Result<Environment, String> {
     let root = directory.canonicalize().map_err(|e| e.to_string())?;
     let mut env = Environment::for_lean_replay();
     let mut seen = BTreeSet::new();
@@ -113,6 +145,7 @@ pub fn open_replay(
             || actual.server != wanted.server
             || actual.private != wanted.private
             || actual.ir != wanted.ir
+            || bytes.ir_signature.is_some()
         {
             return Err(refusal(name, "captured frame module bytes differ"));
         }
@@ -135,23 +168,7 @@ pub fn open_replay(
     if seen != expected.modules.keys().cloned().collect() {
         return Err("compiled frame cohort has missing or extra module rows".into());
     }
-    let options = ClosedRecheckOptions {
-        max_closure: Some(100_000),
-        ..ClosedRecheckOptions::default()
-    };
-    let replay = reference_base_closed(&env, &roots, &options).map_err(|e| e.to_string())?;
-    if !replay.entry_refusals.is_empty()
-        || !replay.report.passed()
-        || !replay.report.extension_bindings_pinned
-        || !roots.is_subset(&replay.admitted)
-    {
-        return Err(format!(
-            "frame theorem dependency replay refused: {} {:?}",
-            replay.report.verdict_sentence(),
-            replay.entry_refusals
-        ));
-    }
-    Ok((replay, hash(manifest.as_bytes())))
+    Ok(env)
 }
 
 #[cfg(test)]

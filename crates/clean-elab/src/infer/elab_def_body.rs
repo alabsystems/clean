@@ -5,7 +5,6 @@
 //! Definition body elaboration: binder processing for def/theorem/axiom declarations.
 
 use crate::stack_safe;
-use crate::unify::MetaState;
 use crate::ElabError;
 use clean_kernel::{BinderInfo, Expr};
 use clean_parser::{QAntiquotContent, SurfaceBinder, SurfaceExpr, SurfacePattern};
@@ -25,6 +24,21 @@ struct DefinitionHeaderLocals {
 }
 
 impl<'a> ElabCtx<'a> {
+    fn attribute_body_mismatch(&self, body: &SurfaceExpr, error: ElabError) -> ElabError {
+        let span = body.span();
+        if self.source_world == Some(clean_kernel::LeanWorld::Lean436)
+            && span.start < span.end
+            && matches!(error, ElabError::TypeMismatch { .. })
+        {
+            ElabError::AtBodyTerm {
+                span,
+                source: Box::new(error),
+            }
+        } else {
+            error
+        }
+    }
+
     fn binder_contains_retry_sensitive_surface(binder: &SurfaceBinder) -> bool {
         binder
             .ty
@@ -67,7 +81,9 @@ impl<'a> ElabCtx<'a> {
 
     pub(super) fn contains_retry_sensitive_surface(expr: &SurfaceExpr) -> bool {
         match expr {
-            SurfaceExpr::Ident(_, name) => name.is_unescaped_component("sorry"),
+            SurfaceExpr::Ident(_, name) => {
+                name.imported_term_kind().is_some() || name.is_unescaped_component("sorry")
+            }
             SurfaceExpr::SyntheticSorry(_)
             | SurfaceExpr::ByTactic(..)
             | SurfaceExpr::CalcBlock(..)
@@ -107,6 +123,7 @@ impl<'a> ElabCtx<'a> {
                     || Self::contains_retry_sensitive_surface(body)
             }
             SurfaceExpr::Paren(_, inner)
+            | SurfaceExpr::Borrowed(_, inner)
             | SurfaceExpr::OutParam(_, inner)
             | SurfaceExpr::SemiOutParam(_, inner)
             | SurfaceExpr::Proj(_, inner, _)
@@ -179,87 +196,6 @@ impl<'a> ElabCtx<'a> {
             // open scoped Classical in ite_id _`, measured 2026-09-12). Like a
             // `by` block, it must reach its own bypass intact.
             SurfaceExpr::OpenIn { .. } => true,
-        }
-    }
-
-    fn try_elab_def_value_without_expected(
-        &mut self,
-        val: &SurfaceExpr,
-        ty_expr: &Expr,
-    ) -> Result<Option<Expr>, ElabError> {
-        // A `match` body must see its expected type so the recursor motive is
-        // built from the declared return type, not from the first arm's
-        // inferred type. Without the expected type, a first arm that is a
-        // decidable `Prop` (used where the declared return is `Bool`) would
-        // fix the motive to `Prop`, and the whole-match `decide` coercion the
-        // speculative no-expected lane would then apply is the wrong reading
-        // (it must be per-arm). Defer such bodies to the expected-type lane.
-        // (Track PP)
-        if matches!(val, SurfaceExpr::Match(..)) {
-            return Ok(None);
-        }
-        let saved_expected = self.current_expected_type.clone();
-        let term_info_mark = self.term_contexts.len();
-        // The postponed open-carrier instance goals this lane queues name ITS
-        // metavariables. A failed lane pops their scope, which also rolls the
-        // id counter back (`MetaState::pop_scope` replays `NextId`), so the
-        // expected-type lane re-mints those ids for different metavariables;
-        // a queued goal left behind then pinned its carrier into whichever
-        // one reused the id — `def f : Nat → Nat := fun x => x * x` lost its
-        // `HMul` instance to `Nat` and the kernel refused the term (integ/r5,
-        // 2026-10-16: lane X's real G46 scan made this lane fail for every
-        // term with a postponed instance). Roll the queue back with the metas.
-        let saved_postponed = self.postponed_open_carrier_instances.clone();
-        let saved_postponed_do_pure = self.do_pure_obligations.clone();
-        self.metas.push_scope();
-        self.current_expected_type = None;
-
-        let result: Result<Expr, ElabError> = (|| {
-            let val_expr = self.with_term_body_scope(|this| this.elaborate(val))?;
-            let val_expr =
-                self.apply_implicit_to_expected_type_for_surface(val, &val_expr, ty_expr)?;
-            // Apply (not merely check) any coercion — e.g. a Prop used where a
-            // Bool is expected becomes `@decide p inst`. Keeping the original
-            // term here would drop the coercion and fail the kernel check.
-            let val_expr = self.coerce_to_expected_type(&val_expr, ty_expr)?;
-            let val_expr = self.metas.instantiate(&val_expr);
-            let val_expr = self.metas.instantiate_levels(&val_expr);
-            // Reject a speculative term that still carries unsolved expression
-            // metavariables after full instantiation. Such metavars would be
-            // emitted to the kernel as free variables (an FVar leak) and fail the
-            // kernel check with a spurious mismatch. This is exactly what happens
-            // for a dependent / GADT `match` lowered *without* its expected type:
-            // the motive degrades to the constant first-arm type and the omitted
-            // index is left as an unconstrained metavar (e.g. `Eq.refl ?a` in
-            // `symm`). Returning the leak here makes the caller fall back to the
-            // expected-type-driven lane, which synthesizes the index-refining
-            // motive. A genuinely ground speculative term (the common case, e.g.
-            // `T.eval … := match … | T.t => Int`) is unaffected.
-            //
-            // A REAL scan (G46, ledger (116)): elaborator metas are bit-63
-            // FVars, which the kernel's `has_expr_mvar_quick` flag never sees,
-            // so until 2026-10-08 this guard was vacuous and a speculative term
-            // with an open `?m` was committed.
-            if MetaState::expr_has_meta(&val_expr) {
-                return Err(ElabError::CannotInfer);
-            }
-            Ok(val_expr)
-        })();
-
-        self.current_expected_type = saved_expected;
-        match result {
-            Ok(expr) => {
-                self.metas.commit();
-                self.commit_checked_body_info(term_info_mark, val.span(), &expr, ty_expr);
-                Ok(Some(expr))
-            }
-            Err(_) => {
-                self.metas.pop_scope();
-                self.postponed_open_carrier_instances = saved_postponed;
-                self.do_pure_obligations = saved_postponed_do_pure;
-                self.term_contexts.truncate(term_info_mark);
-                Ok(None)
-            }
         }
     }
 
@@ -499,61 +435,70 @@ impl<'a> ElabCtx<'a> {
                         // Set expected type for bidirectional type checking (#172)
                         // This enables anonymous constructor syntax ⟨...⟩ to determine
                         // the target structure from the type annotation.
+                        let term_info_mark = this.term_contexts.len();
                         let prev_expected = this.current_expected_type.take();
                         let val_expr = if ty.is_some() {
                             match val {
                                 // When we have `def foo : UInt8 := 1`, elaborate the literal
                                 // directly to the expected type using the type's constructor.
                                 SurfaceExpr::Lit(_, SurfaceLit::Nat(n)) => this
-                                    .elab_nat_literal_with_expected(
-                                        &clean_kernel::BigNat::from_u64(*n),
-                                        &ty_expr,
-                                    ),
-                                SurfaceExpr::Lit(_, SurfaceLit::BigNat(n)) => {
-                                    this.elab_nat_literal_with_expected(n, &ty_expr)
-                                }
+                                    .elaborate_capturing_term(
+                                        val,
+                                        Some(ty_expr.clone()),
+                                        |this| {
+                                            Ok(this.elab_nat_literal_with_expected(
+                                                &clean_kernel::BigNat::from_u64(*n),
+                                                &ty_expr,
+                                            ))
+                                        },
+                                    )?,
+                                SurfaceExpr::Lit(_, SurfaceLit::BigNat(n)) => this
+                                    .elaborate_capturing_term(
+                                        val,
+                                        Some(ty_expr.clone()),
+                                        |this| Ok(this.elab_nat_literal_with_expected(n, &ty_expr)),
+                                    )?,
                                 _ => {
-                                    // Explicit/synthetic `sorry` and tactic-style proofs
-                                    // record global trust counters during elaboration.
-                                    // A failed speculative pass would leak that debt into
-                                    // the successful retry, so elaborate these surfaces once.
-                                    if Self::contains_retry_sensitive_surface(val) {
-                                        let expected_ty = this
-                                            .metas
-                                            .instantiate_levels(&this.metas.instantiate(&ty_expr));
-                                        this.current_expected_type = Some(expected_ty.clone());
-                                        let result =
-                                            this.with_term_body_scope(|this| this.elaborate(val));
-                                        this.current_expected_type = prev_expected.clone();
-                                        let val_expr = result?;
-                                        this.apply_implicit_to_expected_type_for_surface(
-                                            val,
-                                            &val_expr,
-                                            &expected_ty,
-                                        )?
-                                    } else {
-                                        // Avoid pushing the full declaration type into every body
-                                        // expression up front. Application-valued bodies like
-                                        // `PEmpty.rec (fun _ => Nat)` and `id` should elaborate
-                                        // from their own type first, then be checked against the
-                                        // declaration type. If that lane fails, retry with the
-                                        // old expected-type-driven elaboration for forms that need it
-                                        // (`sorry`, anonymous constructors, untyped lambdas, ...).
-                                        if let Some(expr) =
-                                            this.try_elab_def_value_without_expected(val, &ty_expr)?
-                                        {
-                                            expr
+                                    // The declared result type guides literals, implicit
+                                    // carriers and eliminator motives before the body
+                                    // chooses a type. A later result coercion cannot
+                                    // recover that source meaning.
+                                    let expected_ty = this
+                                        .metas
+                                        .instantiate_levels(&this.metas.instantiate(&ty_expr));
+                                    this.current_expected_type = Some(expected_ty.clone());
+                                    // Lean elaborates the body against the
+                                    // declared result whatever the context
+                                    // holds, so a bare `x.casesOn` body may be
+                                    // elaborated as an eliminator against a
+                                    // metavariable-free declared result, as
+                                    // under a written ascription
+                                    // (`elab_dot_elim.rs`).
+                                    let ground = (!this.has_metavars(&expected_ty))
+                                        .then(|| expected_ty.clone());
+                                    let saved_dot =
+                                        this.dot_elim.arm_expected(val, ground.as_ref());
+                                    let result =
+                                        this.with_term_body_scope(|this| this.elaborate(val));
+                                    this.dot_elim.restore_expected(saved_dot);
+                                    this.current_expected_type = prev_expected.clone();
+                                    let val_expr = result.map_err(|error| {
+                                        // A bare identifier has no inner term to blame.
+                                        if matches!(val, SurfaceExpr::Ident(..)) {
+                                            this.attribute_body_mismatch(val, error)
                                         } else {
-                                            this.current_expected_type = Some(ty_expr.clone());
-                                            let result = this
-                                                .with_term_body_scope(|this| this.elaborate(val));
-                                            this.current_expected_type = prev_expected.clone();
-                                            let val_expr = result?;
-                                            this.apply_implicit_to_expected_type_for_surface(
-                                                val, &val_expr, &ty_expr,
-                                            )?
+                                            error
                                         }
-                                    }
+                                    })?;
+                                    this.apply_implicit_to_expected_type_for_surface(
+                                        val,
+                                        &val_expr,
+                                        &expected_ty,
+                                    )
+                                    .and_then(|term| {
+                                        this.coerce_to_expected_type(&term, &expected_ty)
+                                    })
+                                    .map_err(|error| this.attribute_body_mismatch(val, error))?
                                 }
                             }
                         } else if header_binders.is_some() {
@@ -565,6 +510,14 @@ impl<'a> ElabCtx<'a> {
                         };
 
                         this.current_expected_type = prev_expected;
+                        if ty.is_some() {
+                            this.commit_checked_body_info(
+                                term_info_mark,
+                                val.span(),
+                                &val_expr,
+                                &ty_expr,
+                            );
+                        }
                         Ok(val_expr)
                     },
                 )?;
@@ -625,7 +578,8 @@ impl<'a> ElabCtx<'a> {
                     // Nat) = some 2 := rfl` was rejected here.)
                     let gate_val = val_expr.clone();
                     let gate_ty = ty_expr.clone();
-                    self.reject_body_defeq_only_via_irreducible(&gate_val, &gate_ty)?;
+                    self.reject_body_defeq_only_via_irreducible(&gate_val, &gate_ty)
+                        .map_err(|error| self.attribute_body_mismatch(val, error))?;
                     // B18: `Term.ensureHasType` at the def-/theorem-body boundary.
                     // The `.default`-transparency unifier above could not equate
                     // the body's type with the declared type. If the kernel's own
@@ -636,7 +590,8 @@ impl<'a> ElabCtx<'a> {
                     // relocation-only — when the kernel WOULD accept (def-eq holds
                     // blind), this is a no-op and the term reaches the kernel
                     // unchanged, so no body the kernel accepts is newly rejected.
-                    self.reject_body_type_mismatch(&gate_val, &gate_ty)?;
+                    self.reject_body_type_mismatch(&gate_val, &gate_ty)
+                        .map_err(|error| self.attribute_body_mismatch(val, error))?;
                 }
 
                 if ty.is_none() {

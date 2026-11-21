@@ -1,3 +1,4 @@
+// Modified in Clean: typed array-lambda dialect and explicit lambda export refusal.
 use crate::{
     ast::*,
     benchmarking::CollectResults,
@@ -411,6 +412,7 @@ pub fn get_rule(
 
         // array rules
         "arrays_idx" => arrays::idx,
+        "arrays_lambda" if clean_dialect => arrays::lambda,
         "arrays_row" => arrays::row,
         "arrays_row_contra" => arrays::row_contra,
         "arrays_ext" => arrays::ext,

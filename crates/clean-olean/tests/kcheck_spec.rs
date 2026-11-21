@@ -9,7 +9,7 @@
 //!
 //! What a green run shows: a cold `lake build` of the package succeeds, and the
 //! lakefile Revision 3 landed (one root) fails cold; every constant the
-//! package's 105 ORDER modules declare is admitted by two kernels; each pinned
+//! package's 106 ORDER modules declare is admitted by two kernels; each pinned
 //! theorem's axiom closure is the committed one; each contract theorem proves
 //! the statement pinned for it and not `False`; seven selected proofs are also
 //! refused at forged statements; and the definitions units C2 and C3 are
@@ -520,7 +520,7 @@ fn kcheck_spec_rechecks_through_two_kernels_with_pinned_statements() {
     let stems = order_stems();
     assert_eq!(
         stems.len(),
-        105,
+        106,
         "module denominator of theories/kcheck_spec/ORDER"
     );
     let lib = require_pinned_lean_lib_path().expect("install the repository-pinned Lean toolchain");

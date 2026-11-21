@@ -476,8 +476,8 @@ pub fn assumption(state: &mut ProofState) -> TacticResult {
 ///
 /// REQUIRES: `state.goals` is non-empty
 /// REQUIRES: Goal target head (after WHNF) is a const referring to an inductive type
-/// ENSURES: On Ok, the first constructor of the inductive type is applied via `apply`
-/// ENSURES: On Err(GoalMismatch), target head is not an inductive type; state is unchanged
+/// ENSURES: On Ok, the first applicable constructor in declaration order is applied via `apply`
+/// ENSURES: On Err(GoalMismatch), target is not inductive or no constructor applies; state is unchanged
 pub fn constructor(state: &mut ProofState) -> TacticResult {
     let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
     let target = state.whnf(&goal, &goal.target);
@@ -494,16 +494,37 @@ pub fn constructor(state: &mut ProofState) -> TacticResult {
             super::connective::split_(state)
         }
         ExprKind::Const(name, levels) => {
-            // Look up the inductive type
-            if let Some(ind_info) = state.env.get_inductive(name) {
-                // Get the first constructor
-                if let Some(ctor_name) = ind_info.constructor_names.first() {
-                    let ctor = Expr::const_(ctor_name.clone(), levels.clone());
-                    return apply(state, ctor);
+            let constructors = state
+                .env
+                .get_inductive(name)
+                .ok_or_else(|| TacticError::GoalMismatch(format!("not an inductive type: {name}")))?
+                .constructor_names
+                .clone();
+            for ctor_name in constructors {
+                // An indexed constructor can allocate and solve argument metas before
+                // a later index mismatches. Each candidate starts from the same goal.
+                state.metas.push_scope();
+                match apply(state, Expr::const_(ctor_name, levels.clone())) {
+                    Ok(()) => {
+                        state.metas.commit();
+                        return Ok(());
+                    }
+                    Err(error) => {
+                        state.metas.pop_scope();
+                        state.invalidate_tc_cache();
+                        if !matches!(
+                            error,
+                            TacticError::TypeMismatch { .. }
+                                | TacticError::UnificationFailed(_)
+                                | TacticError::TypeCheckFailed(_)
+                        ) {
+                            return Err(error);
+                        }
+                    }
                 }
             }
             Err(TacticError::GoalMismatch(format!(
-                "not an inductive type: {name}"
+                "no applicable constructor for {name}"
             )))
         }
         _ => Err(TacticError::GoalMismatch(

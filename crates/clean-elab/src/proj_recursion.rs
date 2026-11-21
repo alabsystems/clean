@@ -189,6 +189,10 @@ pub(crate) fn desugar_projection_recursion(decl: &SurfaceDecl) -> Option<Vec<Sur
             new_arms,
         )),
     );
+    let mut aux_modifiers = modifiers.clone();
+    // This implementation helper has no source documentation attachment.
+    // The original declaration's wrapper retains and validates its doc once.
+    aux_modifiers.documentation = None;
     let aux_decl = SurfaceDecl::Def {
         span: *span,
         name: aux_name.clone(),
@@ -198,7 +202,7 @@ pub(crate) fn desugar_projection_recursion(decl: &SurfaceDecl) -> Option<Vec<Sur
         val: Box::new(aux_val),
         attrs: Vec::new(),
         termination: Default::default(),
-        modifiers: *modifiers,
+        modifiers: aux_modifiers,
         where_decls: Vec::new(),
     };
 
@@ -221,7 +225,7 @@ pub(crate) fn desugar_projection_recursion(decl: &SurfaceDecl) -> Option<Vec<Sur
         val: Box::new(wrapper_body),
         attrs: attrs.clone(),
         termination: Default::default(),
-        modifiers: *modifiers,
+        modifiers: modifiers.clone(),
         where_decls: Vec::new(),
     };
 

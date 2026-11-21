@@ -51,6 +51,7 @@ fn contains_hole(expr: &SurfaceExpr) -> bool {
         }
         SurfaceExpr::Paren(_, e)
         | SurfaceExpr::Explicit(_, e)
+        | SurfaceExpr::Borrowed(_, e)
         | SurfaceExpr::OutParam(_, e)
         | SurfaceExpr::SemiOutParam(_, e)
         | SurfaceExpr::Proj(_, e, _)
@@ -412,6 +413,7 @@ pub(super) fn rename_free(
         }
         SurfaceExpr::Paren(sp, e) => Ok(SurfaceExpr::Paren(*sp, Box::new(sub(e)?))),
         SurfaceExpr::Explicit(sp, e) => Ok(SurfaceExpr::Explicit(*sp, Box::new(sub(e)?))),
+        SurfaceExpr::Borrowed(sp, e) => Ok(SurfaceExpr::Borrowed(*sp, Box::new(sub(e)?))),
         SurfaceExpr::OutParam(sp, e) => Ok(SurfaceExpr::OutParam(*sp, Box::new(sub(e)?))),
         SurfaceExpr::SemiOutParam(sp, e) => Ok(SurfaceExpr::SemiOutParam(*sp, Box::new(sub(e)?))),
         SurfaceExpr::Proj(sp, e, p) => Ok(SurfaceExpr::Proj(*sp, Box::new(sub(e)?), p.clone())),

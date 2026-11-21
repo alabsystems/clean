@@ -33,12 +33,21 @@ impl<'a> ElabCtx<'a> {
         expr: &SurfaceExpr,
         expected_ty: Option<Expr>,
     ) -> Result<Expr, ElabError> {
+        self.elaborate_with_expected_and_projection(expr, expected_ty, None)
+    }
+
+    pub(super) fn elaborate_with_expected_and_projection(
+        &mut self,
+        expr: &SurfaceExpr,
+        expected_ty: Option<Expr>,
+        projection: Option<&mut DotHeadCapture>,
+    ) -> Result<Expr, ElabError> {
         if self.term_info_capture.is_some() {
             self.elaborate_capturing_term(expr, expected_ty.clone(), |ctx| {
-                ctx.elaborate_with_expected_type_core(expr, expected_ty)
+                ctx.elaborate_with_expected_type_core(expr, expected_ty, projection)
             })
         } else {
-            self.elaborate_with_expected_type_core(expr, expected_ty)
+            self.elaborate_with_expected_type_core(expr, expected_ty, projection)
         }
     }
 
@@ -46,6 +55,7 @@ impl<'a> ElabCtx<'a> {
         &mut self,
         expr: &SurfaceExpr,
         expected_ty: Option<Expr>,
+        projection: Option<&mut DotHeadCapture>,
     ) -> Result<Expr, ElabError> {
         // `@f a` is a genuine PARTIAL application: Lean's `finalize` ends it
         // with every unsupplied binder intact and `ensureHasType` then does a
@@ -76,7 +86,7 @@ impl<'a> ElabCtx<'a> {
         }
         let prev_expected = self.current_expected_type.clone();
         self.current_expected_type = expected_ty.clone();
-        let result = self.elaborate(expr);
+        let result = self.elaborate_with_projection_capture(expr, projection);
         self.current_expected_type = prev_expected;
         match result {
             Ok(expr) => {
@@ -424,20 +434,51 @@ impl<'a> ElabCtx<'a> {
             }
         }
 
-        let unify_result = {
+        // Observe assignments from this match without changing the historical
+        // failure-state policy: callers retain ownership of retry scopes.
+        self.metas.push_scope();
+        let mut unify_result = {
             let ctx = self.build_local_ctx();
             let mut unifier = Unifier::with_env(&mut self.metas, self.env, ctx);
             unifier.unify(&actual_ty, &expected_ty)
         };
+        if !matches!(unify_result, UnifyResult::Success) {
+            let actual = self
+                .metas
+                .instantiate_levels(&self.metas.instantiate(&actual_ty));
+            let expected = self
+                .metas
+                .instantiate_levels(&self.metas.instantiate(&expected_ty));
+            // Structural unification does not implement every kernel eta rule.
+            // Complete a ground comparison only after checking this match's
+            // assignments. No metavariable is solved by the kernel comparison.
+            if !MetaState::expr_has_meta(&actual)
+                && !MetaState::expr_has_meta(&expected)
+                && self.current_scope_assignments_are_well_typed()
+            {
+                let tc = TypeChecker::with_context(
+                    self.env,
+                    self.demand_local_ctx(&[&actual, &expected]),
+                );
+                // Keep elaboration's default transparency: irreducible bodies
+                // cannot justify a new successful source type match.
+                tc.set_honor_reducibility(true);
+                if tc.is_def_eq(&actual, &expected) {
+                    unify_result = UnifyResult::Success;
+                }
+            }
+        }
+        self.metas.commit();
         match unify_result {
             UnifyResult::Success => Ok(expr.clone()),
             UnifyResult::Failure(msg) => {
                 if let Some(coerced) = self.try_coerce(expr, &actual_ty, &expected_ty) {
                     return Ok(coerced);
                 }
+                tracing::debug!(reason = %msg, "expression type unification failed");
                 Err(ElabError::TypeMismatch {
                     expected: format!("{expected_ty}"),
-                    actual: format!("{actual_ty} ({msg})"),
+                    actual: format!("{actual_ty}"),
                 })
             }
             UnifyResult::Stuck => Err(ElabError::CannotInfer),

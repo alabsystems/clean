@@ -16,18 +16,22 @@ use super::syntax::{MacroArm, NotationItem, NotationKind, SyntaxPatternItem};
 /// A captured Lean 4 declaration documentation comment (`/-- ... -/`).
 ///
 /// Lean attaches a `/-- ... -/` doc comment to the declaration that
-/// immediately follows it. Clean captures these as a side-table during
-/// parsing (see [`crate::Parser::parse_file_with_docs`]) rather than as a
-/// field on every [`SurfaceDecl`] variant, so the capture is purely
-/// syntactic and has zero impact on how declarations elaborate.
+/// immediately follows it. The parser carries this metadata on actual
+/// declaration/member attachments; validation happens when they elaborate.
+/// [`crate::Parser::parse_file_with_docs`] also exposes the IDE side table.
 ///
 /// `/-! ... -/` *module/section* doc comments are intentionally NOT captured
 /// here — only the declaration-attaching `/-- ... -/` form is.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct DocComment {
     /// Source span of the entire comment, including the `/--` and `-/`
     /// delimiters.
     pub span: Span,
+    /// Original comment range, even when an IDE side table associates `span`
+    /// with a declaration. Link errors use these original byte coordinates.
+    pub comment_span: Span,
+    /// Untrimmed bytes between the opening and closing delimiters.
+    pub raw_text: String,
     /// The inner documentation text, with the `/--` opener and `-/` closer
     /// stripped and surrounding whitespace trimmed.
     pub text: String,
@@ -37,7 +41,12 @@ impl DocComment {
     /// Create a new doc comment from its span and already-stripped text.
     #[must_use]
     pub(crate) fn new(span: Span, text: String) -> Self {
-        Self { span, text }
+        Self {
+            span,
+            comment_span: span,
+            text: text.trim().to_owned(),
+            raw_text: text,
+        }
     }
 }
 
@@ -437,6 +446,10 @@ pub enum SurfaceDecl {
     /// report the axioms `c` depends on, as an information message.
     PrintAxioms { span: Span, name: SurfaceName },
 
+    /// `#print equations c` or `#print eqns c`: realize and report the
+    /// equations of `c`.
+    PrintEquations { span: Span, name: SurfaceName },
+
     /// `#guard e` (Lean 4.8.0 `Lean.Parser.Command.guardCmd`,
     /// `Init/Guard.lean`): `e` is elaborated at `Bool` and must evaluate to
     /// `true`.
@@ -463,7 +476,7 @@ pub enum SurfaceDecl {
     /// Syntax declaration: defines a new syntax pattern
     ///
     /// ```text
-    /// syntax [name] [prec:num]? term "+" term : term
+    /// syntax:65 (name := myAdd) term "+" term : term
     /// syntax:20 term "+" term : term  -- with precedence
     /// ```
     Syntax {
@@ -473,7 +486,7 @@ pub enum SurfaceDecl {
         /// Optional precedence level
         precedence: Option<u32>,
         /// Optional priority for disambiguation
-        priority: Option<u32>,
+        priority: Option<clean_kernel::BigNat>,
         /// The syntax pattern (sequence of atoms, idents, category refs)
         pattern: Vec<SyntaxPatternItem>,
         /// The syntax category this extends (e.g., "term", "command", "tactic")
@@ -623,6 +636,46 @@ pub enum SurfaceDecl {
 }
 
 impl SurfaceDecl {
+    /// Declaration prefix metadata. Administrative commands and `#guard_msgs`
+    /// do not attach their comments to an environment declaration here.
+    pub fn modifiers_mut(&mut self) -> Option<&mut DeclModifiers> {
+        match self {
+            Self::Def { modifiers, .. }
+            | Self::Alias { modifiers, .. }
+            | Self::Theorem { modifiers, .. }
+            | Self::Axiom { modifiers, .. }
+            | Self::Opaque { modifiers, .. }
+            | Self::Inductive { modifiers, .. }
+            | Self::Coinductive { modifiers, .. }
+            | Self::Codata { modifiers, .. }
+            | Self::Codef { modifiers, .. }
+            | Self::Structure { modifiers, .. }
+            | Self::Class { modifiers, .. }
+            | Self::Instance { modifiers, .. } => Some(modifiers),
+            _ => None,
+        }
+    }
+
+    /// Documentation on the declaration itself; field/constructor comments
+    /// remain on their own parsed members.
+    #[must_use]
+    pub fn documentation(&self) -> Option<&DocComment> {
+        match self {
+            Self::Def { modifiers, .. }
+            | Self::Alias { modifiers, .. }
+            | Self::Theorem { modifiers, .. }
+            | Self::Axiom { modifiers, .. }
+            | Self::Opaque { modifiers, .. }
+            | Self::Inductive { modifiers, .. }
+            | Self::Coinductive { modifiers, .. }
+            | Self::Codata { modifiers, .. }
+            | Self::Codef { modifiers, .. }
+            | Self::Structure { modifiers, .. }
+            | Self::Class { modifiers, .. }
+            | Self::Instance { modifiers, .. } => modifiers.documentation.as_ref(),
+            _ => None,
+        }
+    }
     /// Source span of this declaration.
     ///
     /// Every `SurfaceDecl` variant carries a leading `span` field; this
@@ -658,6 +711,7 @@ impl SurfaceDecl {
             | SurfaceDecl::Reduce { span, .. }
             | SurfaceDecl::Print { span, .. }
             | SurfaceDecl::PrintAxioms { span, .. }
+            | SurfaceDecl::PrintEquations { span, .. }
             | SurfaceDecl::Guard { span, .. }
             | SurfaceDecl::GuardMsgs { span, .. }
             | SurfaceDecl::Mutual { span, .. }
@@ -699,6 +753,11 @@ pub enum CodataBody {
 #[derive(Debug, Clone)]
 pub struct SurfaceCtor {
     pub span: Span,
+    /// Documentation attached to this member, not an enclosing command.
+    pub documentation: Option<DocComment>,
+    /// A second doc after `|`, when a leading doc already precedes `|`.
+    /// Lean diagnoses the duplicate but attaches the leading comment.
+    pub duplicate_documentation: Option<DocComment>,
     pub name: SurfaceName,
     pub ty: SurfaceExpr,
 }
@@ -707,6 +766,8 @@ pub struct SurfaceCtor {
 #[derive(Debug, Clone)]
 pub struct SurfaceField {
     pub span: Span,
+    /// Documentation attached to this member, not an enclosing command.
+    pub documentation: Option<DocComment>,
     /// Field name
     pub name: SurfaceName,
     /// Field type

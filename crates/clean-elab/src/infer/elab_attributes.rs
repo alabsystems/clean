@@ -148,7 +148,20 @@ impl<'a> ElabCtx<'a> {
                 // one wherever its namespace is open. Clean models only the
                 // global kind; dropping the modifier (or the attribute) would
                 // run `induction` with a different eliminator than Lean's.
-                Attribute::Local(_) | Attribute::Scoped(_) => {
+                Attribute::Local(inner) | Attribute::Scoped(inner) => {
+                    if let Some(mode) = crate::decl_attributes::inline_mode(inner) {
+                        let scope = if matches!(attr, Attribute::Local(_)) {
+                            "local"
+                        } else {
+                            "scoped"
+                        };
+                        return Err(ElabError::Unsupported {
+                            feature: format!(
+                                "attribute '{}' must be global, not {scope}",
+                                crate::decl_attributes::inline_attribute_name(mode)
+                            ),
+                        });
+                    }
                     if let Some(written) =
                         crate::tactic::custom_eliminator::scoped_eliminator_attr(attr)
                     {
@@ -236,11 +249,15 @@ impl<'a> ElabCtx<'a> {
                 | Attribute::MacroInline
                 | Attribute::InlineIfReduce
                 | Attribute::Specialize
-                | Attribute::Nospecialize => self.collect_compiler_attr(name, attr),
+                | Attribute::Nospecialize => self.collect_compiler_attr(name, attr, site, None),
 
                 Attribute::Extern(extern_name) => {
                     self.collected_extern
-                        .push((name.clone(), extern_name.clone(), site));
+                        .push((name.clone(), extern_name.clone().into(), site));
+                }
+                Attribute::ExternMetadata(metadata) => {
+                    self.collected_extern
+                        .push((name.clone(), metadata.clone(), site));
                 }
                 Attribute::Export(export_name) => {
                     self.collected_export
@@ -330,6 +347,14 @@ impl<'a> ElabCtx<'a> {
                         };
                         self.collected_definition_attrs.push(named);
                     }
+                }
+                Attribute::Local(inner) if crate::decl_attributes::inline_mode(inner).is_some() => {
+                    self.collect_compiler_attr(name, inner, site, Some("local"));
+                }
+                Attribute::Scoped(inner)
+                    if crate::decl_attributes::inline_mode(inner).is_some() =>
+                {
+                    self.collect_compiler_attr(name, inner, site, Some("scoped"));
                 }
                 Attribute::Local(inner) => {
                     if matches!(inner.as_ref(), Attribute::Csimp) {
@@ -426,13 +451,24 @@ impl<'a> ElabCtx<'a> {
     }
 
     /// Collect compiler/inlining attributes (inline, noinline, always_inline, etc.).
-    fn collect_compiler_attr(&mut self, name: &Name, attr: &Attribute) {
+    fn collect_compiler_attr(
+        &mut self,
+        name: &Name,
+        attr: &Attribute,
+        site: AttributeSite,
+        scope: Option<&'static str>,
+    ) {
+        if let Some(mode) = crate::decl_attributes::inline_mode(attr) {
+            self.collected_inline_attributes
+                .push(crate::decl_attributes::InlineAttributeUse {
+                    name: name.clone(),
+                    mode,
+                    site,
+                    scope,
+                });
+            return;
+        }
         match attr {
-            Attribute::Inline => self.collected_inline.push(name.clone()),
-            Attribute::Noinline => self.collected_noinline.push(name.clone()),
-            Attribute::AlwaysInline => self.collected_always_inline.push(name.clone()),
-            Attribute::MacroInline => self.collected_macro_inline.push(name.clone()),
-            Attribute::InlineIfReduce => self.collected_inline_if_reduce.push(name.clone()),
             Attribute::Specialize => self.collected_specialize.push(name.clone()),
             Attribute::Nospecialize => self.collected_nospecialize.push(name.clone()),
             _ => {}

@@ -174,6 +174,37 @@ fn emits_one_frame_per_pinned_export_declaration() {
     assert_eq!(empty_kind_counts.get("axiom"), Some(&1));
 }
 
+#[test]
+fn replay_candidate_cli_emits_the_observed_unit_conversion() {
+    let export = fixture_bytes();
+    let records = declaration_records(&export);
+    let unit = records
+        .iter()
+        .position(|r| *r == (543, "def"))
+        .expect("Unit.unit declaration line");
+    let temp = tempfile::tempdir().expect("temporary output directory");
+    let export_path = temp.path().join("prelude.ndjson");
+    let advice_path = temp.path().join("candidate.bin");
+    std::fs::write(&export_path, export).expect("write pinned fixture");
+    let output = Command::new(env!("CARGO_BIN_EXE_kcheck_advice_emit"))
+        .arg("--replay-candidates")
+        .arg(export_path)
+        .arg("--out")
+        .arg(&advice_path)
+        .output()
+        .expect("run replay candidate emitter");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let encoded = std::fs::read(advice_path).expect("read native candidate wire");
+    let frames = decode_frames(&encoded);
+    assert_eq!(frames.len(), records.len());
+    // DEPTH 100000, STOP at type formation, DELTA_R for Unit, then CONST.
+    assert_eq!(frames[unit], [0x01, 0xa0, 0x8d, 0x06, 0x16, 0x10, 0x04]);
+}
+
 /// The header and canonical Nat block used by P3, followed by its False block.
 fn p3_export_prefix() -> String {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -217,8 +248,20 @@ fn planted_theorem_and_atomic_records_have_empty_frames() {
         r#"{"in":14,"str":{"pre":0,"str":"planted"}}"#,
         r#"{"thm":{"all":[14],"levelParams":[],"name":14,"type":37,"value":6}}"#,
     );
-    let (frames, count) = clean_olean::ndjson::advice::export_advice_frames(Cursor::new(planted))
+    use clean_olean::ndjson::advice::{
+        export_advice_frames, export_advice_frames_from, AdviceFrameSource,
+    };
+
+    let (frames, count) = export_advice_frames(Cursor::new(planted.as_bytes()))
         .expect("the planted export is readable even though the fenced entry refuses its theorem");
+    let candidate =
+        export_advice_frames_from(Cursor::new(planted), AdviceFrameSource::ReplayCandidate)
+            .expect("the candidate producer can read the planted export");
+    assert_eq!(
+        candidate,
+        (frames.clone(), count),
+        "neither native mode emits a partial or refused frame"
+    );
     assert_eq!(count, 3);
     assert_eq!(frames.len(), 3);
     assert!(frames[0].is_empty(), "the Nat inductive frame is empty");

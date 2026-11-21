@@ -142,6 +142,13 @@ fn put_record<T: serde::Serialize>(
     Ok(())
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Reach {
+    Logical,
+    Source,
+    Code,
+}
+
 impl Environment {
     /// Whether any of the kernel's five declaration tables holds `name`
     /// (constants, including a lazily-served one; inductives; constructors;
@@ -156,33 +163,51 @@ impl Environment {
 
     /// The names one closure member reaches directly (see the module docs for
     /// the edge set).
-    fn closure_edges(&self, member: &Name) -> HashSet<Name> {
+    fn closure_edges(&self, member: &Name, reach: Reach) -> HashSet<Name> {
         let mut out = HashSet::new();
+        let add_type = |ty, out: &mut HashSet<_>| {
+            if reach != Reach::Code {
+                collect_const_refs(ty, out);
+            }
+        };
+        let add_value = |value: &crate::Expr, out: &mut HashSet<_>| {
+            if reach == Reach::Code {
+                let mut names = std::collections::HashSet::new();
+                value.used_constants_dag(crate::expr::UsedConstants::ValuePositions, &mut names);
+                out.extend(names);
+            } else {
+                collect_const_refs(value, out);
+            }
+        };
         if let Some(info) = self.get_const(member) {
-            collect_const_refs(&info.type_, &mut out);
-            if let Some(value) = &info.value {
-                collect_const_refs(value, &mut out);
+            add_type(&info.type_, &mut out);
+            if let Some(value) = info
+                .value
+                .as_ref()
+                .filter(|_| reach == Reach::Logical || !self.proof_body_is_erased(info))
+            {
+                add_value(value, &mut out);
             }
         }
         if let Some(inductive) = self.get_inductive(member) {
-            collect_const_refs(&inductive.type_, &mut out);
+            add_type(&inductive.type_, &mut out);
             out.extend(inductive.all_names.iter().cloned());
             out.extend(inductive.constructor_names.iter().cloned());
         }
         if let Some(constructor) = self.get_constructor(member) {
-            collect_const_refs(&constructor.type_, &mut out);
+            add_type(&constructor.type_, &mut out);
             out.insert(constructor.inductive_name.clone());
         }
         if let Some(recursor) = self.get_recursor(member) {
-            collect_const_refs(&recursor.type_, &mut out);
+            add_type(&recursor.type_, &mut out);
             out.insert(recursor.inductive_name.clone());
             for rule in &recursor.rules {
                 out.insert(rule.constructor_name.clone());
-                collect_const_refs(&rule.rhs, &mut out);
+                add_value(&rule.rhs, &mut out);
             }
         }
         if let Some(quot) = self.get_quot(member) {
-            collect_const_refs(&quot.type_, &mut out);
+            add_type(&quot.type_, &mut out);
         }
         out
     }
@@ -199,6 +224,53 @@ impl Environment {
     /// does not depend on hash iteration order), and
     /// [`ClosureDigestError::Encode`] when a name does not encode.
     pub fn dependency_closure(&self, name: &Name) -> Result<Vec<Name>, ClosureDigestError> {
+        self.walk_dependencies(name, Reach::Logical)
+    }
+
+    /// Whether the declaration has a proof type according to the kernel.
+    /// Failure to establish that sort keeps the body in the compiler dependency walk.
+    #[must_use]
+    pub fn proof_body_is_erased(&self, info: &crate::ConstantInfo) -> bool {
+        if !matches!(
+            info.kind,
+            crate::ConstantKind::Theorem | crate::ConstantKind::Definition
+        ) {
+            return false;
+        }
+        let tc = crate::TypeChecker::new(self);
+        tc.infer_type(&info.type_)
+            .is_ok_and(|sort| tc.whnf(&sort).is_prop())
+    }
+
+    /// Follow declarations and their types for native execution, omitting only the
+    /// bodies of checked theorem and definition proofs. Kernel digests always
+    /// use the complete logical dependency closure.
+    ///
+    /// # Errors
+    /// As [`Self::dependency_closure`] for the members visited.
+    pub fn execution_dependency_closure(
+        &self,
+        name: &Name,
+    ) -> Result<Vec<Name>, ClosureDigestError> {
+        self.walk_dependencies(name, Reach::Source)
+    }
+
+    /// Constants that can be reached from value positions and the families
+    /// required to lower their constructors and recursors. Binder domains,
+    /// declaration signatures and Pi expressions are checked source annotations.
+    /// Application arguments remain conservative, including possible proofs.
+    ///
+    /// # Errors
+    /// As [`Self::dependency_closure`] for the members visited.
+    pub fn execution_value_closure(&self, name: &Name) -> Result<Vec<Name>, ClosureDigestError> {
+        self.walk_dependencies(name, Reach::Code)
+    }
+
+    fn walk_dependencies(
+        &self,
+        name: &Name,
+        reach: Reach,
+    ) -> Result<Vec<Name>, ClosureDigestError> {
         if !self.declares_for_closure(name) {
             return Err(ClosureDigestError::UnknownDeclaration { name: name.clone() });
         }
@@ -212,7 +284,7 @@ impl Environment {
                 continue;
             }
             let mut edges: Vec<(Vec<u8>, Name)> = self
-                .closure_edges(&member)
+                .closure_edges(&member, reach)
                 .into_iter()
                 .map(|edge| encode(&edge, &member).map(|bytes| (bytes, edge)))
                 .collect::<Result<_, _>>()?;

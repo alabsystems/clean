@@ -8,7 +8,10 @@
 # rule files (`EqsatIntRuleDefs`, `EqsatIntWrongRuleDefs`), the lemmas of the
 # integer rule set (`EqsatIntSample`, then one module per lemma group:
 # `EqsatIntArith`, `EqsatIntCmpSelBool`, `EqsatIntBitwise`, `EqsatIntNegRot`) and
-# the refutations of the wrong rules (`EqsatIntControls`).
+# the refutations of the wrong rules (`EqsatIntControls`). Then the saturation
+# tier's rule set (PKG-U4c): the module GENERATED from its rule file
+# (`EqsatTierSRuleDefs`), its lemmas (`EqsatTierSInt`) and what it shares with
+# the integer rule set (`EqsatTierSControls`).
 from semr SemR
 EqsatRule
 EqsatBasics
@@ -21,3 +24,6 @@ EqsatIntCmpSelBool
 EqsatIntBitwise
 EqsatIntNegRot
 EqsatIntControls
+EqsatTierSRuleDefs
+EqsatTierSInt
+EqsatTierSControls

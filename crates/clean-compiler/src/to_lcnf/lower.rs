@@ -5,8 +5,11 @@
 //! LCNF lowering: erasure analysis, expression conversion, and recursion detection.
 
 use super::mentions::{code_called_constant_names, expr_called_constant_names};
-use super::scoped_application_type::infer_scoped_const_application;
-use super::sink_ih::sink_ih_bindings;
+use super::rec_ih::{self, GoTelescope};
+use super::rec_select::{self, SelectPlan, SelectShape};
+use super::scoped_application_type::{
+    infer_scoped_const_application, infer_scoped_expr_type, scoped_proof_value_type,
+};
 use super::LcnfContext;
 use crate::error::CompilerError;
 use crate::implemented_by::CodeMeaning;
@@ -117,7 +120,7 @@ pub(super) fn is_singleton_type(env: &Environment, ty: &Expr) -> bool {
     true
 }
 
-fn is_erased_constructor_field_type(env: &Environment, field_ty: &Expr) -> bool {
+pub(super) fn is_erased_constructor_field_type(env: &Environment, field_ty: &Expr) -> bool {
     if matches!(field_ty.kind(), ExprKind::Sort(_) | ExprKind::SProp) {
         return true;
     }
@@ -239,6 +242,9 @@ pub(super) fn classify_expr_arg(env: &Environment, expr: &Expr) -> ExprArgClass 
 /// Simple expressions (FVar, erased) become arguments directly.
 /// Complex expressions are let-bound first.
 pub(super) fn expr_to_arg(ctx: &mut LcnfContext<'_>, expr: &Expr) -> Result<Arg, CompilerError> {
+    if scoped_proof_value_type(ctx, expr).is_some() {
+        return Ok(Arg::Erased);
+    }
     match classify_expr_arg(ctx.env, expr) {
         ExprArgClass::Erased => return Ok(Arg::Erased),
         ExprArgClass::Type => return Ok(Arg::Type(expr.clone())),
@@ -254,12 +260,20 @@ pub(super) fn expr_to_arg(ctx: &mut LcnfContext<'_>, expr: &Expr) -> Result<Arg,
     }
 
     match expr.kind() {
+        // An induction hypothesis used as a value: a call (or partial
+        // application) of its recursive function, bound here (`rec_ih`).
+        ExprKind::FVar(id) if rec_ih::is_ih(ctx, *id) => {
+            Ok(Arg::FVar(rec_ih::ih_value(ctx, *id, Vec::new())?))
+        }
         // Free variable - direct reference
         ExprKind::FVar(id) => Ok(Arg::FVar(*id)),
 
         // Bound variable - look up in context
         ExprKind::BVar(idx) => {
             if let Some(fvar) = ctx.lookup_bvar(*idx) {
+                if rec_ih::is_ih(ctx, fvar) {
+                    return Ok(Arg::FVar(rec_ih::ih_value(ctx, fvar, Vec::new())?));
+                }
                 Ok(Arg::FVar(fvar))
             } else {
                 Err(CompilerError::InvalidExpr(format!(
@@ -286,19 +300,61 @@ pub(super) fn expr_to_arg(ctx: &mut LcnfContext<'_>, expr: &Expr) -> Result<Arg,
     }
 }
 
+fn is_erased_let_lambda(ctx: &LcnfContext<'_>, ty: &Expr, val: &Expr) -> bool {
+    if matches!(
+        classify_expr_arg(ctx.env, val),
+        ExprArgClass::Erased | ExprArgClass::Type
+    ) {
+        return true;
+    }
+    let resolved_ty = ctx.resolve_local_type(ty);
+    if crate::to_mono::is_type_former_type(&resolved_ty) {
+        return true;
+    }
+    if let Some(ty_sort) = infer_scoped_expr_type(ctx, ty, false) {
+        if ty_sort.is_prop() || matches!(ty_sort.kind(), ExprKind::SProp) {
+            return true;
+        }
+    }
+    false
+}
+
 fn expr_to_local_fun(ctx: &mut LcnfContext<'_>, expr: &Expr) -> Result<FunDecl, CompilerError> {
+    expr_to_local_fun_with_hint(ctx, expr, None)
+}
+
+fn expr_to_local_fun_with_hint(
+    ctx: &mut LcnfContext<'_>,
+    expr: &Expr,
+    ty_hint: Option<&Expr>,
+) -> Result<FunDecl, CompilerError> {
     let fvar = ctx.fresh_fvar();
     let mut params = Vec::new();
     let mut curr = expr;
+    let mut hinted = ty_hint.map(|t| ctx.resolve_local_type(t));
     let outer_pending = ctx.take_pending();
 
     while let ExprKind::Lam(_, ty, body) = curr.kind() {
+        let param_ty = if ty_hint.is_some() {
+            ctx.resolve_local_type(ty)
+        } else {
+            ty.as_ref().clone()
+        };
         let param_fvar = ctx.push_typed_binder(ty);
-        params.push(Param::new(param_fvar, Name::anon(), ty.as_ref().clone()));
+        params.push(Param::new(param_fvar, Name::anon(), param_ty));
+        if let Some(h) = hinted.take() {
+            let tc = TypeChecker::with_mode(ctx.env, ctx.env.mode());
+            let h_whnf = tc.whnf(&h);
+            if let ExprKind::Pi(_, _, cod) = h_whnf.kind() {
+                hinted = Some(cod.instantiate(&Expr::fvar(param_fvar)));
+            }
+        }
         curr = body.as_ref();
     }
 
-    let result_ty = infer_type_or_placeholder(ctx.env, curr);
+    let result_ty = hinted
+        .filter(|t| !is_type_placeholder(t))
+        .unwrap_or_else(|| infer_type_or_placeholder(ctx.env, curr));
     let body_result = lower_code(ctx, curr);
 
     for _ in &params {
@@ -327,7 +383,7 @@ fn expr_to_local_fun(ctx: &mut LcnfContext<'_>, expr: &Expr) -> Result<FunDecl, 
 ///
 /// Uses the kernel type checker. If inference fails (e.g., unbound variables,
 /// partial expressions), returns `Expr::const_str("_")` as a safe default.
-fn infer_type_or_placeholder(env: &Environment, expr: &Expr) -> Expr {
+pub(super) fn infer_type_or_placeholder(env: &Environment, expr: &Expr) -> Expr {
     let tc = TypeChecker::with_mode(env, env.mode());
     tc.infer_type(expr).unwrap_or_else(|_| Expr::const_str("_"))
 }
@@ -357,11 +413,33 @@ fn local_to_let_value(
     ))
 }
 
+/// [`local_to_let_value`], except that an induction-hypothesis placeholder
+/// becomes the value it stands for (`rec_ih::ih_value`), as an alias.
+fn local_or_ih_to_let_value(
+    ctx: &mut LcnfContext<'_>,
+    fvar: FVarId,
+) -> Result<(LetValue, Expr), CompilerError> {
+    if !rec_ih::is_ih(ctx, fvar) {
+        return local_to_let_value(ctx, fvar);
+    }
+    let bound = rec_ih::ih_value(ctx, fvar, Vec::new())?;
+    Ok((
+        LetValue::FVar {
+            fvar: bound,
+            args: Vec::new(),
+        },
+        Expr::const_str("_"),
+    ))
+}
+
 /// Convert a kernel expression to an L5CNF let-value and its type.
 pub(super) fn expr_to_let_value(
     ctx: &mut LcnfContext<'_>,
     expr: &Expr,
 ) -> Result<(LetValue, Expr), CompilerError> {
+    if let Some(ty) = scoped_proof_value_type(ctx, expr) {
+        return Ok((LetValue::Erased, ty));
+    }
     match expr.kind() {
         // A BARE local in value position, and these two arms are where it is
         // handled. Two of this file's own paths hand the funnel one: the `Let`
@@ -389,9 +467,9 @@ pub(super) fn expr_to_let_value(
             let fvar = ctx.lookup_bvar(*idx).ok_or_else(|| {
                 CompilerError::InvalidExpr(format!("Unbound variable: BVar({idx})"))
             })?;
-            local_to_let_value(ctx, fvar)
+            local_or_ih_to_let_value(ctx, fvar)
         }
-        ExprKind::FVar(id) => local_to_let_value(ctx, *id),
+        ExprKind::FVar(id) => local_or_ih_to_let_value(ctx, *id),
 
         // Literals
         ExprKind::Lit(lit) => {
@@ -461,7 +539,10 @@ pub(super) fn expr_to_let_value(
                 return lower_wf_rec_apply(ctx, expr, parts);
             }
             if let Some(parts) = rec_apply_parts(ctx.env, expr) {
-                return lower_rec_apply(ctx, expr, parts);
+                return lower_rec_apply(ctx, expr, parts, None);
+            }
+            if let Some(parts) = super::mutual_rec::mutual_rec_apply_parts(ctx.env, expr) {
+                return super::mutual_rec::lower_mutual_rec_apply(ctx, expr, parts);
             }
             let (head, args) = collect_app_args(expr);
 
@@ -503,21 +584,66 @@ pub(super) fn expr_to_let_value(
                 return expr_to_let_value(ctx, &reduct);
             }
 
+            // Match the original expression before lowering the instance
+            // into object operations. A rejected audit leaves both arguments
+            // on the ordinary application path.
+            let normalized = match (head.kind(), args.as_slice()) {
+                (ExprKind::Const(name, levels), [proposition, instance])
+                    if levels.is_empty()
+                        && *name == Name::from_string("decide")
+                        && !ctx.env.has_implemented_by(name)
+                        && !ctx.env.is_extern(name) =>
+                {
+                    super::uint_decision::normalize(ctx, proposition, instance)
+                }
+                _ => None,
+            };
+            let mut args = args;
+            if let Some(instance) = &normalized {
+                args[1] = instance;
+            }
             let lcnf_args = args
                 .into_iter()
                 .map(|a| expr_to_arg(ctx, a))
                 .collect::<Result<Vec<_>, _>>()?;
 
-            // Open constant spines need their real local typing telescope.
-            // Never let infer-only release inference turn a missing/mismatched
-            // local or a partial application into a scalar result guess.
+            // Open constant spines and local-function join-point calls need
+            // their real local typing telescope. Never let infer-only release
+            // inference turn a missing/mismatched local or a partial
+            // application into a scalar result guess.
+            let head_local_fun = match head.kind() {
+                ExprKind::FVar(id) => ctx.is_local_fun(*id),
+                ExprKind::BVar(idx) => ctx.lookup_bvar(*idx).is_some_and(|id| ctx.is_local_fun(id)),
+                _ => false,
+            };
             let app_ty = if matches!(head.kind(), ExprKind::Const(..))
                 && (expr.has_loose_bvars() || expr.has_fvar_quick())
             {
                 infer_scoped_const_application(ctx, expr).unwrap_or_else(|| Expr::const_str("_"))
+            } else if head_local_fun && (expr.has_loose_bvars() || expr.has_fvar_quick()) {
+                infer_scoped_expr_type(ctx, expr, true).unwrap_or_else(|| Expr::const_str("_"))
             } else {
                 infer_type_or_placeholder(ctx.env, expr)
             };
+
+            // An applied induction hypothesis is a call of its recursive
+            // function (`rec_ih::ih_value`), bound here.
+            let ih_head = match head.kind() {
+                ExprKind::FVar(id) => Some(*id),
+                ExprKind::BVar(idx) => ctx.lookup_bvar(*idx),
+                _ => None,
+            }
+            .filter(|fvar| rec_ih::is_ih(ctx, *fvar));
+            if let Some(ph) = ih_head {
+                let bound = rec_ih::ih_value(ctx, ph, lcnf_args)?;
+                return Ok((
+                    LetValue::FVar {
+                        fvar: bound,
+                        args: Vec::new(),
+                    },
+                    app_ty,
+                ));
+            }
 
             match head.kind() {
                 ExprKind::Const(name, levels) => {
@@ -573,6 +699,11 @@ pub(super) fn expr_to_let_value(
                 // the erased token (exactly Lean's own erasure), never a real
                 // indirect call, matching the erased-stub discipline.
                 ExprKind::Proj(..) => {
+                    if let Some(selected) =
+                        lower_selected_entry(ctx, expr, head, &lcnf_args, &app_ty)?
+                    {
+                        return Ok(selected);
+                    }
                     if is_erasable(ctx.env, expr) {
                         Ok((LetValue::Erased, Expr::const_str("_")))
                     } else {
@@ -639,9 +770,46 @@ pub(super) fn expr_to_let_value(
         // whole `do` block in an ARGUMENT position — so the one form that
         // stopped it was a `let` reached from here rather than from
         // `expr_to_code`.
+        ExprKind::Lam(_, _, _) => {
+            if matches!(
+                classify_expr_arg(ctx.env, expr),
+                ExprArgClass::Erased | ExprArgClass::Type
+            ) {
+                return Ok((LetValue::Erased, Expr::const_str("_")));
+            }
+            let lam_ty = infer_scoped_expr_type(ctx, expr, false)
+                .unwrap_or_else(|| infer_type_or_placeholder(ctx.env, expr));
+            let fun = expr_to_local_fun_with_hint(ctx, expr, Some(&lam_ty))?;
+            let fvar = fun.fvar_id;
+            let recorded_ty = if is_type_placeholder(&lam_ty) {
+                Expr::pi(
+                    clean_kernel::BinderInfo::Default,
+                    Expr::const_str("Object"),
+                    Expr::const_str("Object"),
+                )
+            } else {
+                lam_ty
+            };
+            ctx.record_local_type(fvar, &recorded_ty);
+            ctx.add_fun(fun);
+            local_to_let_value(ctx, fvar)
+        }
+
         ExprKind::Let(_, ty, val, body, _) => {
-            let (value, _) = expr_to_let_value(ctx, val)?;
-            let fvar = ctx.add_let(Name::anon(), ty.as_ref().clone(), value);
+            let fvar = if matches!(val.kind(), ExprKind::Lam(..)) {
+                if is_erased_let_lambda(ctx, ty, val) {
+                    ctx.add_let(Name::anon(), Expr::const_str("_"), LetValue::Erased)
+                } else {
+                    let fun = expr_to_local_fun_with_hint(ctx, val, Some(ty))?;
+                    let fvar = fun.fvar_id;
+                    ctx.record_local_type(fvar, ty);
+                    ctx.add_fun(fun);
+                    fvar
+                }
+            } else {
+                let (value, _) = expr_to_let_value(ctx, val)?;
+                ctx.add_let(Name::anon(), ty.as_ref().clone(), value)
+            };
 
             // Bind the let variable for the body, and pop it on BOTH exits —
             // an early `?` here would desynchronize `bvar_stack` from the
@@ -691,7 +859,7 @@ pub fn expr_to_code(ctx: &mut LcnfContext<'_>, expr: &Expr) -> Result<Code, Comp
 
 /// [`expr_to_code`] without its entry check: the recursion of a lowering an
 /// entry ([`expr_to_code`], [`constant_to_decl`]) already admitted.
-fn lower_code(ctx: &mut LcnfContext<'_>, expr: &Expr) -> Result<Code, CompilerError> {
+pub(super) fn lower_code(ctx: &mut LcnfContext<'_>, expr: &Expr) -> Result<Code, CompilerError> {
     // Normalize a valueless-recursor spine the casesOn-shaped recognizers below
     // cannot peel as-spelled (rung 1: eta-reduced bare-variable minors —
     // `<Ind>.recOn`'s `@Char.rec motive mk t`; rung 3: subsingleton transport —
@@ -703,11 +871,40 @@ fn lower_code(ctx: &mut LcnfContext<'_>, expr: &Expr) -> Result<Code, CompilerEr
         None
     };
     let expr = rec_norm.as_ref().unwrap_or(expr);
+    // A case analysis over-applied to an induction hypothesis (a `match`
+    // that generalises it) commutes into its alternatives, so the IH call
+    // lands in tail position (X4 R1.6, `rec_commute`).
+    if matches!(expr.kind(), ExprKind::App(_, _)) {
+        if let Some(commuted) = super::rec_commute::commute_over_applied_cases(ctx, expr)? {
+            return lower_code(ctx, &commuted);
+        }
+    }
+    // Keep conditional branches in separate scopes and choose the discriminant
+    // used by the actual Decidable family and its eliminator.
+    if let Some(parts) = dite_ite_parts(expr) {
+        if let Some(layout) =
+            super::decision_layout::for_conditional(ctx, matches!(parts.0, DiteKind::Ite))
+        {
+            return lower_dite_ite(ctx, expr, parts, layout);
+        }
+    }
     match expr.kind() {
         // Let binding: let x : T := val in body
         ExprKind::Let(_, ty, val, body, _) => {
-            let (value, _) = expr_to_let_value(ctx, val)?;
-            let fvar = ctx.add_let(Name::anon(), ty.as_ref().clone(), value);
+            let fvar = if matches!(val.kind(), ExprKind::Lam(..)) {
+                if is_erased_let_lambda(ctx, ty, val) {
+                    ctx.add_let(Name::anon(), Expr::const_str("_"), LetValue::Erased)
+                } else {
+                    let fun = expr_to_local_fun_with_hint(ctx, val, Some(ty))?;
+                    let fvar = fun.fvar_id;
+                    ctx.record_local_type(fvar, ty);
+                    ctx.add_fun(fun);
+                    fvar
+                }
+            } else {
+                let (value, _) = expr_to_let_value(ctx, val)?;
+                ctx.add_let(Name::anon(), ty.as_ref().clone(), value)
+            };
 
             // Push the let-bound variable for the body
             ctx.bvar_stack.push(fvar);
@@ -747,18 +944,6 @@ fn lower_code(ctx: &mut LcnfContext<'_>, expr: &Expr) -> Result<Code, CompilerEr
             let fvar = ctx.add_let(Name::anon(), Expr::const_str("_"), LetValue::Erased);
             Ok(ctx.wrap_lets(Code::ret(fvar)))
         }
-
-        // `if h : c then t else e` / `if c then t else e` elaborate to
-        // fully-applied `dite` / `ite`. Lower to a real `Cases` over the
-        // `Decidable` instance (which `to_mono`'s `dec_to_mono` turns into a
-        // `Bool` switch), instead of an opaque call to the compiled `l_dite`
-        // with the branches reified as CLOSURES. The closure spelling
-        // allocates two closure cells per evaluation, and the one the
-        // runtime applies is STRANDED by `clean_apply_n`'s borrow-lend
-        // protocol (it never releases the closure cell) — the `Char.ofNat`
-        // carrier leaked both per call (R3). See [`dite_ite_parts`] /
-        // [`lower_dite_ite`].
-        ExprKind::App(_, _) if dite_ite_parts(expr).is_some() => lower_dite_ite(ctx, expr),
 
         // Structural recursion over `Nat` (`Nat.rec motive zero succ major`) is
         // NOT special-cased here: it flows through the fallthrough arm into
@@ -1071,7 +1256,9 @@ enum DiteKind {
 /// branches are lambdas (so the proof binder can be peeled and bound
 /// erased); anything else declines to the generic constant-application path,
 /// fail-closed.
-fn dite_ite_parts(expr: &Expr) -> Option<(DiteKind, &Expr, &Expr, &Expr, &Expr)> {
+type ConditionalParts<'a> = (DiteKind, &'a Expr, &'a Expr, &'a Expr, &'a Expr);
+
+fn dite_ite_parts(expr: &Expr) -> Option<ConditionalParts<'_>> {
     let (head, args) = collect_app_args(expr);
     let ExprKind::Const(name, _) = head.kind() else {
         return None;
@@ -1091,21 +1278,15 @@ fn dite_ite_parts(expr: &Expr) -> Option<(DiteKind, &Expr, &Expr, &Expr, &Expr)>
     }
 }
 
-/// Lower a recognized `ite` / `dite` into a `Cases` over the `Decidable`
-/// instance (constructor-tag order: `isFalse` then `isTrue`), which
-/// `to_mono`'s `dec_to_mono` rewrites into a `Bool` switch. `dite` branch
-/// lambdas have their proof binder peeled and bound ERASED — the binder is a
-/// proof by `dite`'s own signature, so no field projection is ever read from
-/// the scrutinee.
-fn lower_dite_ite(ctx: &mut LcnfContext<'_>, expr: &Expr) -> Result<Code, CompilerError> {
-    let (kind, proposition, inst, then_expr, else_expr) = match dite_ite_parts(expr) {
-        Some(parts) => parts,
-        None => {
-            return Err(CompilerError::Unsupported(
-                "expected ite/dite application".into(),
-            ))
-        }
-    };
+/// Lower the conditional on its actual discriminator. In the two-constructor
+/// family this is the instance itself. In the one-constructor family it is
+/// the projected Bool that appears in the stored `dite` body.
+fn lower_dite_ite(
+    ctx: &mut LcnfContext<'_>,
+    expr: &Expr,
+    (kind, proposition, inst, then_expr, else_expr): ConditionalParts<'_>,
+    layout: super::decision_layout::DecisionLayout,
+) -> Result<Code, CompilerError> {
     // Clone out of the borrow on `expr` before mutating `ctx`.
     // A checked value equality may recover a scalar UInt decision even when
     // instance search selected an unfolded Nat decision. No source declaration
@@ -1117,8 +1298,22 @@ fn lower_dite_ite(ctx: &mut LcnfContext<'_>, expr: &Expr) -> Result<Code, Compil
         else_expr.clone(),
     );
 
+    let (scrutinee, family, no, yes) = match layout {
+        super::decision_layout::DecisionLayout::Constructors => {
+            (inst, "Decidable", "Decidable.isFalse", "Decidable.isTrue")
+        }
+        super::decision_layout::DecisionLayout::BoolField => (
+            Expr::apps(
+                Expr::const_str("Decidable.decide"),
+                [proposition.clone(), inst],
+            ),
+            "Bool",
+            "Bool.false",
+            "Bool.true",
+        ),
+    };
     // Bind the scrutinee; any lets it introduces must wrap the whole `Cases`.
-    let scrut_fvar = match expr_to_arg(ctx, &inst)? {
+    let scrut_fvar = match expr_to_arg(ctx, &scrutinee)? {
         Arg::FVar(id) => id,
         other => {
             return Err(CompilerError::InvalidExpr(format!(
@@ -1140,16 +1335,12 @@ fn lower_dite_ite(ctx: &mut LcnfContext<'_>, expr: &Expr) -> Result<Code, Compil
     };
 
     let cases = Code::Cases(Cases::new(
-        Name::from_string("Decidable"),
+        Name::interned(family),
         result_type,
         scrut_fvar,
         vec![
-            Alt::ctor(
-                Name::from_string("Decidable.isFalse"),
-                Vec::new(),
-                false_body,
-            ),
-            Alt::ctor(Name::from_string("Decidable.isTrue"), Vec::new(), true_body),
+            Alt::ctor(Name::interned(no), Vec::new(), false_body),
+            Alt::ctor(Name::interned(yes), Vec::new(), true_body),
         ],
     ));
     Ok(ctx.wrap_lets(cases))
@@ -1978,6 +2169,12 @@ fn lower_generic_cases(ctx: &mut LcnfContext<'_>, expr: &Expr) -> Result<Code, C
         .get_inductive(&ind_name)
         .ok_or_else(|| CompilerError::Unsupported(format!("inductive {ind_name} not found")))?;
     let ctor_names: Vec<Name> = ind.constructor_names.clone();
+    let num_params = ind.num_params as usize;
+    let (_, args) = collect_app_args(expr);
+    let parameters: Vec<Expr> = args[..num_params]
+        .iter()
+        .map(|arg| (*arg).clone())
+        .collect();
     if ctor_names.len() != minors.len() {
         return Err(CompilerError::Unsupported(format!(
             "casesOn for {ind_name}: {} constructors but {} minor premises",
@@ -1999,12 +2196,78 @@ fn lower_generic_cases(ctx: &mut LcnfContext<'_>, expr: &Expr) -> Result<Code, C
 
     let mut alts = Vec::with_capacity(ctor_names.len());
     for (ctor_name, minor) in ctor_names.iter().zip(minors.iter()) {
+        let fields = instantiated_constructor_field_types(ctx.env, ctor_name, &parameters)?;
+        let mut leading_lambdas = 0;
+        let mut remainder = minor;
+        while leading_lambdas < fields.len() {
+            let ExprKind::Lam(_, _, body) = remainder.kind() else {
+                break;
+            };
+            leading_lambdas += 1;
+            remainder = body;
+        }
+        // A minor may be an enclosing function parameter, or bind only some
+        // fields before returning another function. The branch lowerer expects
+        // a full field telescope: merely pushing its projections would capture
+        // the minor's original loose BVars and never apply it to those fields.
+        // Reuse the recursor eta construction, lifting all original references
+        // behind the new binders before applying the minor to each field.
+        let expanded;
+        let minor = if leading_lambdas < fields.len() {
+            if fields.len() - leading_lambdas > MAX_RUNTIME_APPLY_ARGS {
+                return Err(CompilerError::Unsupported(format!(
+                    "casesOn minor for {ctor_name} exceeds the runtime apply arity"
+                )));
+            }
+            expanded = eta_expand_minor(minor, &fields);
+            &expanded
+        } else {
+            minor
+        };
         let body = lower_ctor_branch(ctx, scrut_fvar, ctor_name, minor)?;
         alts.push(Alt::ctor(ctor_name.clone(), Vec::new(), body));
     }
 
     let cases = Code::Cases(Cases::new(ind_name, result_type, scrut_fvar, alts));
     Ok(ctx.wrap_lets(cases))
+}
+
+/// Field domains in the caller's actual parameter scope, retaining preceding
+/// field binders for dependent domains. A raw constructor telescope still
+/// contains its own parameter BVars and cannot type an eta-expanded minor.
+fn instantiated_constructor_field_types(
+    env: &Environment,
+    name: &Name,
+    parameters: &[Expr],
+) -> Result<Vec<Expr>, CompilerError> {
+    let ctor = env
+        .get_constructor(name)
+        .ok_or_else(|| CompilerError::Unsupported(format!("constructor {name} not found")))?;
+    if ctor.num_params as usize != parameters.len() {
+        return Err(CompilerError::Unsupported(format!(
+            "constructor parameter count differs for {name}"
+        )));
+    }
+    let mut telescope = ctor.type_.clone();
+    for parameter in parameters {
+        let ExprKind::Pi(_, _, body) = telescope.kind() else {
+            return Err(CompilerError::Unsupported(format!(
+                "constructor parameter telescope is malformed for {name}"
+            )));
+        };
+        telescope = body.instantiate(parameter);
+    }
+    let mut fields = Vec::with_capacity(ctor.num_fields as usize);
+    for _ in 0..ctor.num_fields {
+        let ExprKind::Pi(_, domain, body) = telescope.kind() else {
+            return Err(CompilerError::Unsupported(format!(
+                "constructor field telescope is malformed for {name}"
+            )));
+        };
+        fields.push(domain.as_ref().clone());
+        telescope = body.as_ref().clone();
+    }
+    Ok(fields)
 }
 
 /// Lower one constructor branch of a generic `casesOn` in an isolated pending
@@ -2131,7 +2394,7 @@ fn constructor_field_types(ctor_type: &Expr, num_params: u32) -> Vec<Expr> {
 /// dedicated handlers): `Int`, `Decidable`, `Array`, `BitVec`, and trivial
 /// structures generally. `Nat` (boxed integer) is special-shaped inside the
 /// R1 lowering; `Bool` is excluded by name (dedicated 2-alt path).
-const NON_HEAP_RUNTIME_REPR: &[&str] = &[
+pub(super) const NON_HEAP_RUNTIME_REPR: &[&str] = &[
     "Char",
     "UInt8",
     "UInt16",
@@ -2157,7 +2420,7 @@ const NON_HEAP_RUNTIME_REPR: &[&str] = &[
 /// this from 18 so `DivisionRing.casesOn`/`recOn` (arity-20 minor premise) and
 /// `Field.casesOn`/`recOn` (arity 21) lower; 32 is generous headroom over
 /// Field(21) for future wide classes.
-const MAX_RUNTIME_APPLY_ARGS: usize = 32;
+pub(super) const MAX_RUNTIME_APPLY_ARGS: usize = 32;
 
 /// A saturated application of a VALUELESS kernel recursor `<Ind>.rec`,
 /// decomposed for the R1 synthesized-recursive-function lowering
@@ -2185,31 +2448,34 @@ pub(super) struct RecApplyParts {
     /// `PartialApply` closure downstream. Only recognized for
     /// `MajorAfterMinors` recursors (major LAST), where a missing major is
     /// unambiguous.
-    major: Option<Expr>,
+    pub(super) major: Option<Expr>,
     /// The minor premises, in constructor-tag order.
     minors: Vec<Expr>,
     /// Per-constructor arm layout, in constructor-tag order (parallel to
     /// `minors`).
-    arms: Vec<RecArmSpec>,
+    pub(super) arms: Vec<RecArmSpec>,
     /// OVER-application arguments: a function-building motive (`List.foldl`'s
     /// `fun _ => β → β`) makes the recursor application return a closure that
     /// the spine immediately applies (`List.rec .. l init`). The synthesized
     /// call's result is closure-applied to these.
-    extras: Vec<Expr>,
+    pub(super) extras: Vec<Expr>,
     /// The recursor application PREFIX (the spine minus `extras`), used to
     /// type the synthesized function's return value.
     rec_app: Expr,
+    /// The motive argument: its body's Pi telescope caps how many of the
+    /// extras `go` takes itself (`rec_ih`).
+    pub(super) motive: Expr,
 }
 
 /// Constructor-arm layout for [`lower_rec_apply`].
-struct RecArmSpec {
+pub(super) struct RecArmSpec {
     ctor_name: Name,
-    fields: Vec<RecFieldSpec>,
-    strategy: RecMinorStrategy,
+    pub(super) fields: Vec<RecFieldSpec>,
+    pub(super) strategy: RecMinorStrategy,
 }
 
 /// How a constructor's minor premise is compiled into its `Cases` arm.
-enum RecMinorStrategy {
+pub(super) enum RecMinorStrategy {
     /// The minor syntactically binds all of the arm's `fields + IHs` (and
     /// its body consumes no erased field binder): the PEELED body is inlined
     /// into the arm, with projections / self-call IHs substituted for the
@@ -2232,7 +2498,7 @@ enum RecMinorStrategy {
 }
 
 /// One constructor field as seen by the synthesized recursive function.
-struct RecFieldSpec {
+pub(super) struct RecFieldSpec {
     /// Declared field type (from the constructor's Pi-chain, after params);
     /// may contain loose bound variables — used only as the `Proj` binding's
     /// type annotation, same convention as [`lower_ctor_branch`].
@@ -2242,7 +2508,7 @@ struct RecFieldSpec {
     erased: bool,
     /// Recursive field (direct `<Ind> ..` occurrence): the arm computes its
     /// induction hypothesis by a self-call on the projected component.
-    recursive: bool,
+    pub(super) recursive: bool,
 }
 
 /// Recognize a saturated VALUELESS-kernel-recursor application `<Ind>.rec
@@ -2477,6 +2743,7 @@ pub(super) fn rec_apply_parts(env: &Environment, expr: &Expr) -> Option<RecApply
         arms,
         extras: extras.iter().map(|extra| (*extra).clone()).collect(),
         rec_app: rec_app.clone(),
+        motive: args[num_params].clone(),
     })
 }
 
@@ -2492,8 +2759,13 @@ pub(super) fn rec_apply_parts(env: &Environment, expr: &Expr) -> Option<RecApply
 /// Everything else — bare-variable minors (`recOn` wrappers), partial
 /// lambdas, erased-binder-consuming bodies — is `Apply`.
 fn rec_minor_strategy(minor: &Expr, fields: &[RecFieldSpec]) -> RecMinorStrategy {
-    let num_ihs = fields.iter().filter(|f| f.recursive).count();
-    let needed = fields.len() + num_ihs;
+    let flags: Vec<(bool, bool)> = fields.iter().map(|f| (f.erased, f.recursive)).collect();
+    rec_minor_strategy_for(minor, &flags)
+}
+
+pub(super) fn rec_minor_strategy_for(minor: &Expr, flags: &[(bool, bool)]) -> RecMinorStrategy {
+    let num_ihs = flags.iter().filter(|(_, rec)| *rec).count();
+    let needed = flags.len() + num_ihs;
 
     // Peel exactly `needed` lambda binders.
     let mut body = minor;
@@ -2508,8 +2780,8 @@ fn rec_minor_strategy(minor: &Expr, fields: &[RecFieldSpec]) -> RecMinorStrategy
     // erased — recursive fields are guaranteed non-erased by the
     // recognizer). A body mentioning an erased field binder cannot be
     // inlined (the binder's slot is an erased dummy).
-    for (j, field) in fields.iter().enumerate() {
-        if field.erased {
+    for (j, (erased, _)) in flags.iter().enumerate() {
+        if *erased {
             let bvar_idx = (needed - 1 - j) as u32;
             if mentions_loose_bvar(body, bvar_idx) {
                 return RecMinorStrategy::Apply;
@@ -2561,6 +2833,7 @@ pub(super) fn lower_rec_apply(
     ctx: &mut LcnfContext<'_>,
     expr: &Expr,
     parts: RecApplyParts,
+    select: Option<(SelectPlan, Vec<Arg>)>,
 ) -> Result<(LetValue, Expr), CompilerError> {
     // Call-site lowering (current pending scope): the APPLY-strategy minors
     // in tag order, then the major. `rec_apply_parts` pre-classified all of
@@ -2613,52 +2886,115 @@ pub(super) fn lower_rec_apply(
     let scrut_ty = if parts.is_nat {
         Expr::const_str("Nat")
     } else {
-        match parts
-            .major
-            .as_ref()
-            .map(|major| infer_type_or_placeholder(ctx.env, major))
-        {
-            Some(ty) if !is_type_placeholder(&ty) => ty,
-            _ => Expr::const_str("Object"),
-        }
+        scrut_fvar
+            .and_then(|id| ctx.local_type(id))
+            .filter(|ty| !is_type_placeholder(ty))
+            .cloned()
+            .or_else(|| {
+                let major = parts.major.as_ref()?;
+                infer_scoped_expr_type(ctx, major, false).or_else(|| {
+                    let ty = infer_type_or_placeholder(ctx.env, major);
+                    (!is_type_placeholder(&ty)).then_some(ty)
+                })
+            })
+            .unwrap_or_else(|| Expr::const_str("Object"))
     };
     let scrut_param = Param::new(ctx.fresh_fvar(), Name::anon(), scrut_ty);
-    // The synthesized function returns the RECURSOR application's value; the
-    // whole (possibly over-applied) expression's type is the value we hand
-    // back to the caller. Both sit in return/let position downstream, where
-    // the `_` placeholder is accepted (boxed calling convention). For the
-    // no-major spelling the function's own result type is unknowable from
-    // the spine (`rec_app`'s type is the partial-application Pi), so it
-    // stays a placeholder.
-    let go_result_ty = if parts.major.is_some() {
+
+    // `go` takes `k` of the motive's arguments itself (`rec_ih`): the fewest
+    // leading `fun` binders any arm's minor has past its fields and IHs (an
+    // `Apply` arm has none), capped by the motive body's Pi telescope. The
+    // no-major spelling keeps `k = 0`: its value is the closure `go minors..`.
+    let want = if parts.major.is_none() || select.is_some() {
+        0
+    } else {
+        parts
+            .arms
+            .iter()
+            .map(|arm| match &arm.strategy {
+                RecMinorStrategy::Inline { body } => rec_ih::syntactic_arity(body),
+                RecMinorStrategy::Apply => 0,
+            })
+            .min()
+            .unwrap_or(0)
+    };
+    let motive = ctx.resolve_local_type(&parts.motive);
+    // A selector `go` (`rec_select`) takes every member's arguments in
+    // shared slots, after its selector.
+    let tele = match &select {
+        Some((plan, _)) => GoTelescope {
+            k: plan.width(),
+            arg_tys: plan.slot_tys.clone(),
+            call_ty: Expr::const_str("_"),
+            action: false,
+        },
+        None => rec_ih::go_telescope(ctx.env, &motive, want),
+    };
+    let sel_param = select
+        .as_ref()
+        .map(|_| Param::new(ctx.fresh_fvar(), Name::anon(), Expr::const_str("Nat")));
+    let arg_params: Vec<Param> = tele
+        .arg_tys
+        .iter()
+        .map(|ty| {
+            let fvar = ctx.fresh_fvar();
+            ctx.local_types.insert(fvar, ty.clone());
+            Param::new(fvar, Name::anon(), ty.clone())
+        })
+        .collect();
+    let arg_fvars: Vec<FVarId> = arg_params.iter().map(|p| p.fvar_id).collect();
+
+    // The synthesized function returns the motive's value after its `k`
+    // arguments; the whole (possibly over-applied) expression's type is the
+    // value we hand back to the caller. Both sit in return/let position
+    // downstream, where the `_` placeholder is accepted (boxed calling
+    // convention). For the no-major spelling the function's own result type
+    // is unknowable from the spine (`rec_app`'s type is the
+    // partial-application Pi), so it stays a placeholder.
+    let go_result_ty = if select.is_some() {
+        Expr::const_str("_")
+    } else if tele.k > 0 {
+        tele.call_ty.clone()
+    } else if parts.major.is_some() {
         infer_type_or_placeholder(ctx.env, &parts.rec_app)
     } else {
         Expr::const_str("_")
     };
-    let result_ty = if parts.extras.is_empty() && parts.major.is_some() {
+    let result_ty = if select.is_some() {
+        infer_type_or_placeholder(ctx.env, expr)
+    } else if parts.extras.len() == tele.k && parts.major.is_some() {
         go_result_ty.clone()
     } else {
         infer_type_or_placeholder(ctx.env, expr)
     };
 
     let minor_param_fvars: Vec<FVarId> = minor_params.iter().map(|p| p.fvar_id).collect();
-    let alts = build_rec_apply_alts(
-        ctx,
-        &parts,
-        go_fvar,
-        &minor_param_fvars,
-        &apply_param_of_tag,
-        scrut_param.fvar_id,
-    )?;
+    let go = GoShape {
+        go: go_fvar,
+        minor_params: &minor_param_fvars,
+        args: &arg_fvars,
+        tele: &tele,
+        select: select
+            .as_ref()
+            .zip(sel_param.as_ref())
+            .map(|((plan, _), sel)| SelectShape {
+                plan,
+                sel: sel.fvar_id,
+            }),
+    };
+    let alts = build_rec_apply_alts(ctx, &parts, &go, &apply_param_of_tag, scrut_param.fvar_id)?;
     let cases = Code::Cases(Cases::new(
         parts.ind_name.clone(),
         go_result_ty.clone(),
         scrut_param.fvar_id,
         alts,
     ));
+    rec_ih::refuse_placeholder_leak(ctx, &cases)?;
 
-    let mut params = minor_params;
+    let mut params: Vec<Param> = sel_param.into_iter().collect();
+    params.extend(minor_params);
     params.push(scrut_param);
+    params.extend(arg_params);
     ctx.add_fun(FunDecl::new(
         go_fvar,
         Name::from_string("_rec"),
@@ -2667,36 +3003,104 @@ pub(super) fn lower_rec_apply(
         cases,
     ));
 
-    let mut call_args: Vec<Arg> = apply_minor_fvars.into_iter().map(Arg::FVar).collect();
+    let mut call_args: Vec<Arg> = Vec::new();
+    if let Some((plan, _)) = &select {
+        let sel = ctx.add_let(
+            Name::anon(),
+            Expr::const_str("Nat"),
+            LetValue::nat(plan.entry as u64),
+        );
+        call_args.push(Arg::FVar(sel));
+    }
+    call_args.extend(apply_minor_fvars.into_iter().map(Arg::FVar));
     if let Some(scrut_fvar) = scrut_fvar {
         call_args.push(Arg::FVar(scrut_fvar));
+    }
+    // The extras `go` takes itself are its trailing arguments; with fewer
+    // extras than `k` the value is the partial application of `go`. No-major
+    // spelling: the value IS the partial application `go minors..` (one
+    // argument short of `go`'s arity) — lambda lifting rewrites it into an
+    // under-applied `Const`, i.e. a `PartialApply` closure downstream.
+    let (k, pads, mut extra_args) = match select {
+        Some((plan, extras)) => {
+            let k = plan.leaves[plan.entry].k;
+            (k, plan.width() - k, extras)
+        }
+        None => (
+            tele.k,
+            0,
+            parts
+                .extras
+                .iter()
+                .map(|extra| expr_to_arg(ctx, extra))
+                .collect::<Result<Vec<_>, _>>()?,
+        ),
+    };
+    let later = extra_args.split_off(k.min(extra_args.len()));
+    let full = extra_args.len() == k;
+    call_args.extend(extra_args);
+    if full {
+        call_args.extend(std::iter::repeat_n(Arg::Erased, pads));
     }
     let call_value = LetValue::FVar {
         fvar: go_fvar,
         args: call_args,
     };
-    // No-major spelling: the value IS the partial application `go minors..`
-    // (one argument short of `go`'s arity) — lambda lifting rewrites it into
-    // an under-applied `Const`, i.e. a `PartialApply` closure downstream.
-    if parts.extras.is_empty() {
+    if later.is_empty() {
         return Ok((call_value, result_ty));
     }
 
-    // Over-applied spine: bind the synthesized call, then closure-apply its
-    // result (a motive-built function) to the extra arguments.
-    let extra_args = parts
-        .extras
-        .iter()
-        .map(|extra| expr_to_arg(ctx, extra))
-        .collect::<Result<Vec<_>, _>>()?;
+    // Over-applied past `k`: bind the synthesized call, then closure-apply
+    // its result (a motive-built function) to the remaining extras.
     let call_fvar = ctx.add_let(Name::anon(), go_result_ty, call_value);
     Ok((
         LetValue::FVar {
             fvar: call_fvar,
-            args: extra_args,
+            args: later,
         },
         result_ty,
     ))
+}
+
+/// The synthesized `go` an arm of [`lower_rec_apply`] belongs to.
+struct GoShape<'a> {
+    go: FVarId,
+    /// `go`'s minor parameters (the `Apply`-strategy minors), in order.
+    minor_params: &'a [FVarId],
+    /// `go`'s uncurried motive arguments, after its scrutinee.
+    args: &'a [FVarId],
+    tele: &'a GoTelescope,
+    /// The selector of a lifted mutual block's `go` (`rec_select`).
+    select: Option<SelectShape<'a>>,
+}
+
+/// `Proj^path(rec_app) args` lowered through a selector `go` when
+/// [`rec_select::plan`] admits the block (X4 R1.3); `None` otherwise.
+fn lower_selected_entry(
+    ctx: &mut LcnfContext<'_>,
+    expr: &Expr,
+    head: &Expr,
+    args: &[Arg],
+    _app_ty: &Expr,
+) -> Result<Option<(LetValue, Expr)>, CompilerError> {
+    let mut path = Vec::new();
+    let mut cur = head.strip_mdata();
+    while let ExprKind::Proj(name, idx, inner) = cur.kind() {
+        if name != &Name::from_string("PProd") {
+            return Ok(None);
+        }
+        path.push(*idx);
+        cur = inner.strip_mdata();
+    }
+    path.reverse();
+    let Some(parts) = rec_apply_parts(ctx.env, cur) else {
+        return Ok(None);
+    };
+    let motive = ctx.resolve_local_type(&parts.motive);
+    let Some(plan) = rec_select::plan(ctx.env, &parts, &motive, &path, args.len()) else {
+        return Ok(None);
+    };
+    lower_rec_apply(ctx, expr, parts, Some((plan, args.to_vec()))).map(Some)
 }
 
 /// Count the leading lambda binders of an expression.
@@ -2726,20 +3130,20 @@ pub(super) struct WfRecParts {
     ///   passed as `box(0)` (`has_erased_hyp`).
     /// * `WellFounded.fix{,F}`'s `F : (x) ((y) -> r y x -> C y) -> C x` — two
     ///   runtime slots (value, IH), no erased middle.
-    step: Expr,
+    pub(super) step: Expr,
     /// The starting/decreasing value — the recursor INDEX. NEVER the erased
     /// `Acc` scrutinee.
-    index: Expr,
+    pub(super) index: Expr,
     /// `Acc.rec` interposes an erased accessibility-subproof slot between the
     /// value and the IH; `WellFounded.fix{,F}`'s `F` does not.
-    has_erased_hyp: bool,
+    pub(super) has_erased_hyp: bool,
     /// Over-application arguments (the eliminator's result is a function then
     /// applied further) — closure-applied to the synthesized call, mirroring
     /// [`RecApplyParts::extras`].
-    extras: Vec<Expr>,
+    pub(super) extras: Vec<Expr>,
     /// The saturated eliminator sub-expression (spine minus `extras`), used to
     /// type the synthesized call's result.
-    rec_app: Expr,
+    pub(super) rec_app: Expr,
 }
 
 /// Recognize a saturated application of a well-founded eliminator —
@@ -2855,6 +3259,10 @@ pub(super) fn lower_wf_rec_apply(
     expr: &Expr,
     parts: WfRecParts,
 ) -> Result<(LetValue, Expr), CompilerError> {
+    // A syntactic step is inlined into `go`, its IH a direct call (X4 R1.4).
+    if let Some(inlined) = super::rec_wf::lower_wf_rec_inline(ctx, expr, &parts)? {
+        return Ok(inlined);
+    }
     // Call-site values (outer scope): the step closure and the starting value.
     let step_fvar = match expr_to_arg(ctx, &parts.step)? {
         Arg::FVar(id) => id,
@@ -2956,31 +3364,21 @@ pub(super) fn lower_wf_rec_apply(
 fn build_rec_apply_alts(
     ctx: &mut LcnfContext<'_>,
     parts: &RecApplyParts,
-    go_fvar: FVarId,
-    minor_params: &[FVarId],
+    go: &GoShape<'_>,
     apply_param_of_tag: &[Option<usize>],
     scrut: FVarId,
 ) -> Result<Vec<Alt>, CompilerError> {
     let mut alts = Vec::with_capacity(parts.arms.len());
     for (tag, arm) in parts.arms.iter().enumerate() {
-        let apply_param = apply_param_of_tag[tag].map(|idx| minor_params[idx]);
-        let body = if parts.is_nat {
+        let apply_param = apply_param_of_tag[tag].map(|idx| go.minor_params[idx]);
+        let body = if parts.is_nat && tag == 1 {
             // Tag order pinned by the recognizer: 0 = Nat.zero (no fields),
             // 1 = Nat.succ (pred + IH via `Nat.sub`, no projections).
-            if tag == 0 {
-                build_rec_arm_body(ctx, go_fvar, minor_params, arm, apply_param, &[])?
-            } else {
-                build_nat_succ_arm_body(ctx, go_fvar, minor_params, arm, apply_param, scrut)?
-            }
+            build_nat_succ_arm_body(ctx, go, arm, apply_param, scrut)?
         } else {
-            build_rec_arm_body(
-                ctx,
-                go_fvar,
-                minor_params,
-                arm,
-                apply_param,
-                &[(scrut, &arm.ctor_name)],
-            )?
+            let proj_source = [(scrut, &arm.ctor_name)];
+            let proj_source: &[(FVarId, &Name)] = if parts.is_nat { &[] } else { &proj_source };
+            build_rec_arm_body(ctx, go, arm, apply_param, proj_source)?
         };
         if parts.is_nat && tag == 1 {
             alts.push(Alt::default(body));
@@ -2995,16 +3393,15 @@ fn build_rec_apply_alts(
 /// and projection key for field binding; empty for the `Nat.zero` arm (whose
 /// constructor has no fields).
 ///
-/// Field bindings (in order), then IH bindings (one per recursive field, a
-/// `go` self-call on the projected component — the ONLY self-call sites, so
-/// the recursion is structural by construction). The arm body is then either
-/// the minor's peeled body lowered in place (`Inline` — binders resolve to
-/// the field/IH fvars pushed on the bvar stack) or a closure application of
-/// the minor parameter (`Apply`).
+/// Field bindings come first. An `Inline` arm then lowers the minor's body
+/// past its fields, IHs and `go`'s `k` motive arguments, with each IH a
+/// placeholder that becomes a call of `go` where it occurs (`rec_ih`): the
+/// ONLY self-call sites, on projected fields, so the recursion is structural
+/// by construction. An `Apply` arm (`k = 0`) binds each IH as `go(field)`
+/// and closure-applies the minor parameter to the fields and IHs.
 fn build_rec_arm_body(
     ctx: &mut LcnfContext<'_>,
-    go_fvar: FVarId,
-    minor_params: &[FVarId],
+    go: &GoShape<'_>,
     arm: &RecArmSpec,
     apply_param: Option<FVarId>,
     proj_source: &[(FVarId, &Name)],
@@ -3026,6 +3423,9 @@ fn build_rec_arm_body(
         let Some((scrut, ctor_name)) = proj_source.first() else {
             // Unreachable by construction (only Nat.zero has no proj source,
             // and it has no fields); fail closed rather than panic.
+            for _ in 0..pushed {
+                ctx.bvar_stack.pop();
+            }
             ctx.abandon_pending(outer_pending);
             return Err(CompilerError::InvalidExpr(
                 "recursor arm with fields but no projection source".into(),
@@ -3044,51 +3444,59 @@ fn build_rec_arm_body(
         pushed += 1;
         field_slots.push((Some(field_fvar), field.recursive));
     }
-
-    // IHs: `ih := go(apply_minors.., field)` per recursive field, in field
-    // order (the recursor minor telescope lists fields first, then IHs).
-    let mut ih_fvars: Vec<FVarId> = Vec::new();
-    for (field_fvar, recursive) in &field_slots {
-        if !*recursive {
-            continue;
-        }
-        let Some(field_fvar) = field_fvar else {
-            continue;
-        };
-        let mut rec_args: Vec<Arg> = minor_params.iter().copied().map(Arg::FVar).collect();
-        rec_args.push(Arg::FVar(*field_fvar));
-        let ih_fvar = ctx.add_let(
-            Name::anon(),
-            Expr::const_str("_"),
-            LetValue::FVar {
-                fvar: go_fvar,
-                args: rec_args,
-            },
-        );
-        ctx.bvar_stack.push(ih_fvar);
-        pushed += 1;
-        ih_fvars.push(ih_fvar);
-    }
+    let recursive_fields: Vec<FVarId> = field_slots
+        .iter()
+        .filter(|(_, recursive)| *recursive)
+        .filter_map(|(fvar, _)| *fvar)
+        .collect();
 
     let result = match (&arm.strategy, apply_param) {
-        // Inline: lower the peeled minor body; its binders (fields, then
-        // IHs) resolve to the fvars pushed above.
+        // Inline: the IHs (in field order, after the fields in the minor's
+        // telescope) are placeholders, then `go`'s motive arguments; the
+        // peeled minor body is lowered with all of them in scope.
         (RecMinorStrategy::Inline { body }, _) => {
-            let body = body.clone();
-            lower_code(ctx, &body)
-        }
-        // Apply: closure-apply the minor parameter to fields then IHs
-        // (erased fields as boxed units); 0-binder arms return the minor
-        // value itself.
-        (RecMinorStrategy::Apply, Some(minor_param)) => {
-            let mut apply_args: Vec<Arg> = Vec::with_capacity(arm.fields.len() + ih_fvars.len());
-            for (field_fvar, _) in &field_slots {
-                match field_fvar {
-                    Some(fvar) => apply_args.push(Arg::FVar(*fvar)),
-                    None => apply_args.push(Arg::Erased),
+            let prefixes: Vec<Vec<FVarId>> = recursive_fields
+                .iter()
+                .map(|field| {
+                    let mut prefix = go.minor_params.to_vec();
+                    prefix.push(*field);
+                    prefix
+                })
+                .collect();
+            if let Some(select) = &go.select {
+                rec_select::lower_selected_arm(ctx, go.go, select, go.args, body, &prefixes)
+                    .map(|code| ctx.wrap_lets(code))
+            } else {
+                for prefix in prefixes {
+                    let ph = rec_ih::register_ih(ctx, go.go, prefix, go.tele);
+                    ctx.bvar_stack.push(ph);
+                    pushed += 1;
                 }
+                lower_inline_arm(ctx, go, body)
             }
-            apply_args.extend(ih_fvars.iter().copied().map(Arg::FVar));
+        }
+        // Apply: `ih := go(apply_minors.., field)` per recursive field, then
+        // closure-apply the minor parameter to fields then IHs (erased fields
+        // as boxed units); 0-binder arms return the minor value itself.
+        (RecMinorStrategy::Apply, Some(minor_param)) => {
+            let mut apply_args: Vec<Arg> = field_slots
+                .iter()
+                .map(|(fvar, _)| fvar.map_or(Arg::Erased, Arg::FVar))
+                .collect();
+            for field in &recursive_fields {
+                let mut rec_args: Vec<Arg> =
+                    go.minor_params.iter().copied().map(Arg::FVar).collect();
+                rec_args.push(Arg::FVar(*field));
+                let ih = ctx.add_let(
+                    Name::anon(),
+                    Expr::const_str("_"),
+                    LetValue::FVar {
+                        fvar: go.go,
+                        args: rec_args,
+                    },
+                );
+                apply_args.push(Arg::FVar(ih));
+            }
             if apply_args.is_empty() {
                 Ok(ctx.wrap_lets(Code::Return(minor_param)))
             } else {
@@ -3114,11 +3522,7 @@ fn build_rec_arm_body(
     match result {
         Ok(body) => {
             ctx.restore_pending(outer_pending);
-            // The IH bindings above sit at the head of the arm, ahead of every
-            // effect the minor premise performs. Under the eager-effect `IO`
-            // model that is a REORDERED effect, not a pre-computed value — put
-            // each one back where the source put it. See `sink_ih`.
-            Ok(sink_ih_bindings(body, &ih_fvars))
+            Ok(body)
         }
         Err(err) => {
             ctx.abandon_pending(outer_pending);
@@ -3127,15 +3531,38 @@ fn build_rec_arm_body(
     }
 }
 
+/// Lower an `Inline` minor's peeled body (fields and IHs already on the
+/// binder stack) past `go`'s `k` motive arguments, which the minor binds as
+/// its next `k` `fun` binders.
+fn lower_inline_arm(
+    ctx: &mut LcnfContext<'_>,
+    go: &GoShape<'_>,
+    body: &Expr,
+) -> Result<Code, CompilerError> {
+    let Some(body) = rec_ih::peel_lams(body, go.args.len()) else {
+        return Err(CompilerError::InvalidExpr(format!(
+            "recursor minor has fewer than the {} motive binder(s) its recursive function \
+             takes",
+            go.args.len()
+        )));
+    };
+    ctx.bvar_stack.extend_from_slice(go.args);
+    let result = lower_code(ctx, &body);
+    for _ in go.args {
+        ctx.bvar_stack.pop();
+    }
+    result
+}
+
 /// Build the `Nat` successor arm (the `Default` alternative): binds
-/// `pred := n - 1` (the boxed-integer stand-in for the constructor field)
-/// and `ih := go(apply_minors.., pred)`, then inlines the minor's peeled
-/// body or closure-applies the minor parameter to `(pred, ih)` — the
+/// `pred := n - 1` (the boxed-integer stand-in for the constructor field),
+/// then inlines the minor's peeled body with the IH a placeholder for
+/// `go(apply_minors.., pred, ..)` (`rec_ih`), or binds `ih := go(.., pred)`
+/// and closure-applies the minor parameter to `(pred, ih)` — the
 /// boxed-integer discipline of [`lower_nat_cases`].
 fn build_nat_succ_arm_body(
     ctx: &mut LcnfContext<'_>,
-    go_fvar: FVarId,
-    minor_params: &[FVarId],
+    go: &GoShape<'_>,
     arm: &RecArmSpec,
     apply_param: Option<FVarId>,
     scrut: FVarId,
@@ -3154,31 +3581,35 @@ fn build_nat_succ_arm_body(
             args: vec![Arg::FVar(scrut), Arg::FVar(one_fvar)],
         },
     );
-
-    // ih := go(apply_minors.., pred)
-    let mut rec_args: Vec<Arg> = minor_params.iter().copied().map(Arg::FVar).collect();
-    rec_args.push(Arg::FVar(pred_fvar));
-    let ih_fvar = ctx.add_let(
-        Name::anon(),
-        Expr::const_str("_"),
-        LetValue::FVar {
-            fvar: go_fvar,
-            args: rec_args,
-        },
-    );
+    let mut prefix = go.minor_params.to_vec();
+    prefix.push(pred_fvar);
 
     let result = match (&arm.strategy, apply_param) {
         (RecMinorStrategy::Inline { body }, _) => {
-            let body = body.clone();
             // De Bruijn order in the peeled body: BVar 1 = pred, BVar 0 = ih.
             ctx.bvar_stack.push(pred_fvar);
-            ctx.bvar_stack.push(ih_fvar);
-            let result = lower_code(ctx, &body);
-            ctx.bvar_stack.pop();
+            let result = if let Some(select) = &go.select {
+                rec_select::lower_selected_arm(ctx, go.go, select, go.args, body, &[prefix])
+                    .map(|code| ctx.wrap_lets(code))
+            } else {
+                let ih = rec_ih::register_ih(ctx, go.go, prefix, go.tele);
+                ctx.bvar_stack.push(ih);
+                let result = lower_inline_arm(ctx, go, body);
+                ctx.bvar_stack.pop();
+                result
+            };
             ctx.bvar_stack.pop();
             result
         }
         (RecMinorStrategy::Apply, Some(minor_param)) => {
+            let ih_fvar = ctx.add_let(
+                Name::anon(),
+                Expr::const_str("_"),
+                LetValue::FVar {
+                    fvar: go.go,
+                    args: prefix.into_iter().map(Arg::FVar).collect(),
+                },
+            );
             let result_fvar = ctx.add_let(
                 Name::anon(),
                 Expr::const_str("_"),
@@ -3197,8 +3628,7 @@ fn build_nat_succ_arm_body(
     match result {
         Ok(body) => {
             ctx.restore_pending(outer_pending);
-            // Same eager-effect reordering as the generic arm; see `sink_ih`.
-            Ok(sink_ih_bindings(body, &[ih_fvar]))
+            Ok(body)
         }
         Err(err) => {
             ctx.abandon_pending(outer_pending);

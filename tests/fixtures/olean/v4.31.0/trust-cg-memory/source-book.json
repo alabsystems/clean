@@ -1,0 +1,58 @@
+{
+  "source_repository": "https://github.com/alabsystems/trust-cg",
+  "current_compared_commit": "7e54ef60ec47938565d15db3831cca1da095f4b4",
+  "scope": "Literal source definitions/frame lemmas; the new fixture is producer input, not an imported or qualified original Machine module.",
+  "sources": {
+    "Trust/A64/Machine.lean": {
+      "bytes": 38355,
+      "sha256": "3be40513a09713b4c18b698e1e1009197fe67cfb14a7b7ab3ae7851f668cd10e"
+    },
+    "Trust/A64/GcdCallerRecordMemory.lean": {
+      "commit": "7e54ef60ec47938565d15db3831cca1da095f4b4",
+      "git_blob": "fa20fdcc894c2e645acb6e57445ba1be3b27287c",
+      "bytes": 15784,
+      "sha256": "e4d213c7ff1933ba6a4f194c612692f2aedc3d62b5a3e02bcadeb2384d912f60"
+    },
+    "Trust/A64/Encoding.lean": {
+      "commit": "7e54ef60ec47938565d15db3831cca1da095f4b4",
+      "git_blob": "f1747992636c8facf16a7f16c9020d3235cb1659",
+      "bytes": 31466,
+      "sha256": "fc20e8c287552f8900903ff90f7abd45649c6874484351ada4fbb256c6651bf7"
+    }
+  },
+  "literal_excerpts": {
+    "MachState_definitions": {
+      "bytes": 1809,
+      "sha256": "816287aaa28a16251ce6968497ad1daf850b21e6f68ca742859971a2e3fa6706",
+      "start_line": 48,
+      "end_line": 100
+    },
+    "original_frame_lemmas": {
+      "bytes": 1212,
+      "sha256": "1a7d9d2a592901646ff47ce096fa892c43a4aa9044b5307ca60b05ca3920622f",
+      "start_line": 28,
+      "end_line": 55
+    },
+    "readMem_congr_bytes": {
+      "bytes": 677,
+      "sha256": "2b29d11176e86a2ce8a940db40e25b860da2b227b0376924ef2f99d459208b9a",
+      "start_line": 82,
+      "end_line": 96,
+      "literal_present_in_MachineFetch431": true
+    },
+    "Reg_alias": {
+      "text": "abbrev Reg := Fin 32",
+      "start_line": 68,
+      "sha256": "d4e93c6d983003f157e887213387ce1f3f5e7292f6ce7f6aa38eb41333f17793"
+    }
+  },
+  "literal_source_fragments_present": true,
+  "input_sha256": "5590bdb452283cdf836c91f1ec63408c74f2ce1ccabd6c702ecf63c2e1a1377d",
+  "history_snapshot": {
+    "frame_source_bytes": 13782,
+    "frame_source_sha256": "7319ff847e3d3d020dcc55c837516f4edcf8ccad5d4025ad095eee49cfc23008",
+    "note": "Earlier preserved source snapshot. Its selected3 lemma fragment remains literal in the authenticated current source, while unrelated later lemmas were added."
+  },
+  "original3_frame_lemmas_remain_literal_in_current_source": true,
+  "fetch_input_sha256": "9c956d91e01d3379517c3a5a946a834e955b19c1c0d35f538851cb1d9f823db5"
+}

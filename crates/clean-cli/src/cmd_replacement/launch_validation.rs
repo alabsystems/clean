@@ -148,11 +148,7 @@ pub(crate) fn validate_kernel_soundness_launch_evidence(
         ));
     }
 
-    for path in [
-        TRUST_CORE_RUST_SOURCE_PATH,
-        LEAN4_BASELINE_PATH,
-        LEAN4_EXPRESSIONS_PATH,
-    ] {
+    for &path in KERNEL_SOUNDNESS_LAUNCH_SOURCE_FILES {
         let expected_sha = sha256_repo_artifact(path).map_err(|error| error.to_string())?;
         match artifact.source_sha256.get(path) {
             Some(actual_sha) if actual_sha == &expected_sha => {}
@@ -166,9 +162,10 @@ pub(crate) fn validate_kernel_soundness_launch_evidence(
     }
     validate_trust_core_module_tree_sha(&artifact.source_sha256)?;
 
-    if artifact.source_sha256.len() != 4 {
+    let source_count = KERNEL_SOUNDNESS_LAUNCH_SOURCE_FILES.len() + 1;
+    if artifact.source_sha256.len() != source_count {
         return Err(format!(
-            "source_sha256 must contain exactly 4 source artifacts, got {}",
+            "source_sha256 must contain exactly {source_count} source artifacts, got {}",
             artifact.source_sha256.len()
         ));
     }
@@ -307,7 +304,7 @@ pub(crate) fn validate_deny_sorry_launch_evidence(
         ));
     }
 
-    for path in [TRUST_CORE_RUST_SOURCE_PATH, UNCHECKED_DECL_RATCHET_PATH] {
+    for &path in DENY_SORRY_LAUNCH_SOURCE_FILES {
         let expected_sha = sha256_repo_artifact(path).map_err(|error| error.to_string())?;
         match artifact.source_sha256.get(path) {
             Some(actual_sha) if actual_sha == &expected_sha => {}
@@ -321,9 +318,10 @@ pub(crate) fn validate_deny_sorry_launch_evidence(
     }
     validate_trust_core_module_tree_sha(&artifact.source_sha256)?;
 
-    if artifact.source_sha256.len() != 3 {
+    let source_count = DENY_SORRY_LAUNCH_SOURCE_FILES.len() + 1;
+    if artifact.source_sha256.len() != source_count {
         return Err(format!(
-            "source_sha256 must contain exactly 3 source artifacts, got {}",
+            "source_sha256 must contain exactly {source_count} source artifacts, got {}",
             artifact.source_sha256.len()
         ));
     }

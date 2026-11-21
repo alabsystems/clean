@@ -318,3 +318,16 @@ theorem poly_shape (n : Nat) : n = n := by
     let (env, results) = elab(code);
     assert_registered(&env, "poly_shape", &results);
 }
+
+#[test]
+fn test_induction_using_eliminator_infers_closed_carrier_abbreviation() {
+    let code = r#"
+def listElim {α : Type u} {P : List α → Prop} (xs : List α) (h : ∀ ys, P ys) : P xs := h xs
+abbrev NatList := List Nat
+theorem list_alias (xs : NatList) : xs = xs := by
+  induction xs using listElim with
+  | h ys => rfl
+"#;
+    let (env, results) = elab(code);
+    assert_registered(&env, "list_alias", &results);
+}

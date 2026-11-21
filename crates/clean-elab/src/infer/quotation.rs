@@ -400,6 +400,10 @@ impl<'a> ElabCtx<'a> {
             }
 
             // OutParam - output parameter marker
+            SurfaceExpr::Borrowed(span, inner) => {
+                let new_inner = self.process_qq_antiquots(inner)?;
+                Ok(SurfaceExpr::Borrowed(*span, Box::new(new_inner)))
+            }
             SurfaceExpr::OutParam(span, inner) => {
                 let new_inner = self.process_qq_antiquots(inner)?;
                 Ok(SurfaceExpr::OutParam(*span, Box::new(new_inner)))

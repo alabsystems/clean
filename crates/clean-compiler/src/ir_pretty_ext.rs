@@ -641,6 +641,9 @@ impl ExtIrPrinter {
             IRLiteral::UInt64(v) => format!("{v}u64"),
             IRLiteral::USize(v) => format!("{v}usize"),
             IRLiteral::NatBig(v) => format!("{v}nat"),
+            IRLiteral::NatLimbs(limbs) => {
+                format!("{}nat", BigNat::from_limbs(limbs.clone()))
+            }
             IRLiteral::Float32(v) => format!("{v}f32"),
             IRLiteral::Float64(v) => format!("{v}f64"),
         }

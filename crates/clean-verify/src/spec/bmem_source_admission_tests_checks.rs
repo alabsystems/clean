@@ -208,6 +208,12 @@ pub(super) fn original_red(
         binders.is_empty(),
         "RED must remain the original closed declaration"
     );
+    require!(
+        event.source == row.source
+            && event.kind == "def"
+            && event.header == name.name().to_string(),
+        "original RED source/actual-call join mismatch"
+    );
     let ts = ty.span();
     let vs = val.span();
     let goal = spec
@@ -271,19 +277,16 @@ pub(super) fn original_red(
         error.location().is_none(),
         "independent mismatch is not at the unlabelled top level"
     );
-    // Ordinary add_decl labels this same top-level error with the declaration.
-    // Use public constructors; never widen checker configuration visibility.
-    let error = error.with_location(Some(Box::new(
-        clean_kernel::tc::ExprLocation::with_decl_name(name.name().clone()),
-    )));
-    // The normal API's observed error must bind to this exact top-level error.
-    // No guessed or pre-filled receipt. A different current diagnostic remains
-    // a qualification loss and is printed for an owner to investigate.
+    // Source elaboration refuses this body before declaration registration.
+    // For these closed nonprivate terms, its renderer is ordinary Expr Display.
+    // Bind both typed fields exactly to the independent terms; this observed
+    // elaboration refusal is distinct from the kernel rejection required above.
     match event.elaborator_error.as_ref() {
-        Some(ElabError::KernelCheckFailed {
-            name: failed,
-            detail,
-        }) if failed == name.name() && detail == &error.to_string() => Ok(()),
+        Some(ElabError::TypeMismatch { expected, actual })
+            if expected == &goal.to_string() && actual == &inferred.to_string() =>
+        {
+            Ok(())
+        }
         _ => Err(format!(
             "UNQUALIFIED original RED diagnostic; actual={:?}; independently replayed={error:?}",
             event.elaborator_error

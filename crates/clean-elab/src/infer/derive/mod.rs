@@ -51,6 +51,7 @@ mod decidable_eq_recursive;
 #[cfg(test)]
 mod failure_tests;
 mod hashable;
+mod standalone;
 mod inductive;
 mod inductive_ext;
 mod inhabited_nonempty;
@@ -364,7 +365,7 @@ impl<'a> ElabCtx<'a> {
         field_names: &[Name],
         class_name: &SurfaceName,
     ) -> Result<Option<DerivedInstance>, ElabError> {
-        if let Some(instance) = self.try_user_defined_handler(struct_name, binders, class_name)? {
+        if let Some(instance) = self.try_user_defined_handler(struct_name, binders.len(), class_name)? {
             return Ok(Some(instance));
         }
 
@@ -511,7 +512,7 @@ impl<'a> ElabCtx<'a> {
         ctor_names: &[Name],
         class_name: &SurfaceName,
     ) -> Result<Option<DerivedInstance>, ElabError> {
-        if let Some(instance) = self.try_user_defined_handler(ind_name, binders, class_name)? {
+        if let Some(instance) = self.try_user_defined_handler(ind_name, binders.len(), class_name)? {
             return Ok(Some(instance));
         }
 
@@ -770,7 +771,7 @@ impl<'a> ElabCtx<'a> {
     fn try_user_defined_handler(
         &mut self,
         type_name: &Name,
-        binders: &[SurfaceBinder],
+        num_params: usize,
         class_name: &SurfaceName,
     ) -> Result<Option<DerivedInstance>, ElabError> {
         let class = class_name.name().clone();
@@ -809,7 +810,7 @@ impl<'a> ElabCtx<'a> {
             }
 
             let decl_param_fvars: Vec<FVarId> =
-                (0..binders.len()).map(|_| self.fresh_fvar()).collect();
+                (0..num_params).map(|_| self.fresh_fvar()).collect();
             let target_type = self.build_open_target_type(type_name, &decl_param_fvars);
             let mut kept_binders = Vec::with_capacity(opened_binders.len().saturating_sub(1));
             let mut handler_args = Vec::with_capacity(opened_binders.len());

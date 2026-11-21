@@ -1238,4 +1238,194 @@ mod arc_eq_tests {
             "deep, independently allocated structural twins must compare equal"
         );
     }
+
+    fn assert_key_hash_contract(left: &Expr, fresh: &Expr) {
+        assert_eq!(left, fresh, "independent structural twins");
+        let expected = hash_to_u64(left);
+        assert_eq!(hash_to_u64(fresh), expected);
+        assert_eq!(hash_to_u64(&left.clone()), expected);
+        assert_eq!(hash_to_u64(&Expr::from_kind(left.kind.clone())), expected);
+
+        // The internal scalar is absent from both persisted encodings. Old
+        // kind bytes rebuild its value through Expr's ordinary constructor.
+        let json = serde_json::to_vec(left).expect("expression JSON");
+        assert_eq!(json, serde_json::to_vec(left.kind()).expect("kind JSON"));
+        let restored: Expr = serde_json::from_slice(&json).expect("expression from kind JSON");
+        assert_eq!(&restored, left);
+        assert_eq!(hash_to_u64(&restored), expected);
+        let cfg = bincode::config::standard();
+        let bytes = bincode::serde::encode_to_vec(left, cfg).expect("expression bincode");
+        assert_eq!(
+            bytes,
+            bincode::serde::encode_to_vec(left.kind(), cfg).expect("kind bincode")
+        );
+        let (restored, used): (Expr, _) =
+            bincode::serde::decode_from_slice(&bytes, cfg).expect("expression from kind bytes");
+        assert_eq!(used, bytes.len());
+        assert_eq!(&restored, left);
+        assert_eq!(hash_to_u64(&restored), expected);
+    }
+
+    #[test]
+    fn test_expr_key_hash_every_variant_preserves_structural_and_wire_contract() {
+        let left = one_of_each_variant();
+        let right = one_of_each_variant();
+        assert_eq!(left.len(), 25);
+        for (left, right) in left.iter().zip(&right) {
+            assert_key_hash_contract(left, right);
+        }
+    }
+
+    #[test]
+    fn test_expr_key_hash_all_zfc_variants_preserve_contract() {
+        let make = || {
+            use ZFCSetExpr as S;
+            vec![
+                S::Empty,
+                S::Singleton(leaf(1)),
+                S::Pair(leaf(2), leaf(3)),
+                S::Union(leaf(4)),
+                S::PowerSet(leaf(5)),
+                S::Separation {
+                    set: leaf(6),
+                    pred: leaf(7),
+                },
+                S::Replacement {
+                    set: leaf(8),
+                    func: leaf(9),
+                },
+                S::Infinity,
+                S::Choice(leaf(10)),
+            ]
+        };
+        let left = make();
+        let right = make();
+        assert_eq!(left.len(), 9);
+        for (left, right) in left.into_iter().zip(right) {
+            assert_key_hash_contract(
+                &Expr::from_kind(ExprKind::ZFCSet(left)),
+                &Expr::from_kind(ExprKind::ZFCSet(right)),
+            );
+        }
+    }
+
+    #[test]
+    fn test_expr_key_hash_names_levels_binders_and_metadata_preserve_contract() {
+        let name = Name::from_string("private").num(0).str("λ");
+        let u = Level::param(Name::from_string("u"));
+        let v = Level::param(Name::from_string("v"));
+        let mut values = vec![
+            Expr::const_(name.clone(), vec![Level::max(u.clone(), v.clone())]),
+            Expr::const_(name.clone(), vec![Level::imax(u, Level::succ(v))]),
+            Expr::from_kind(ExprKind::Lit(Literal::Nat(BigNat::Big(vec![0, 1])))),
+            Expr::str_lit("\0λ🦀"),
+            Expr::mdata(
+                vec![
+                    (Name::from_string("b"), MDataValue::Bool(false)),
+                    (Name::from_string("n"), MDataValue::Nat(u64::MAX)),
+                    (Name::from_string("s"), MDataValue::String(Arc::from("\0λ"))),
+                    (Name::from_string("name"), MDataValue::Name(name.clone())),
+                ],
+                Expr::bvar(0),
+            ),
+        ];
+        for info in [
+            BinderInfo::Default,
+            BinderInfo::Implicit,
+            BinderInfo::StrictImplicit,
+            BinderInfo::InstImplicit,
+        ] {
+            for mult in [Multiplicity::Zero, Multiplicity::One, Multiplicity::Many] {
+                let data = BinderData::new(info, mult);
+                values.push(Expr::lam(data, Expr::const_str("Nat"), Expr::bvar(0)));
+                values.push(Expr::pi(data, Expr::const_str("Nat"), Expr::bvar(0)));
+            }
+        }
+        for flag in [false, true] {
+            values.push(Expr::let_named(
+                name.clone(),
+                Expr::const_str("Nat"),
+                Expr::nat_lit(0),
+                Expr::bvar(0),
+                flag,
+            ));
+        }
+        for value in values {
+            // JSON creates independent names, level nodes, metadata values and
+            // Expr children, rather than relying on a shared-pointer hit.
+            let fresh: Expr = serde_json::from_slice(&serde_json::to_vec(&value).expect("JSON"))
+                .expect("fresh structural twin");
+            assert_key_hash_contract(&value, &fresh);
+        }
+    }
+
+    #[test]
+    fn test_expr_key_hash_forced_collision_still_uses_full_ordered_equality() {
+        let left = Expr::app(Expr::const_str("f"), Expr::nat_lit(0));
+        let mut right = Expr::app(Expr::const_str("f"), Expr::nat_lit(1));
+        // Synthetic collisions of both cached words are not declarations or
+        // evidence about their validity. They force the structural fallback.
+        right.fvar_bound_or_closed_hash = left.fvar_bound_or_closed_hash;
+        right.meta = left.meta;
+        assert_eq!(hash_to_u64(&left), hash_to_u64(&right));
+        assert_ne!(left, right);
+        let mut map = std::collections::HashMap::new();
+        map.insert(left.clone(), 1);
+        map.insert(right.clone(), 2);
+        assert_eq!(map.len(), 2);
+        assert_eq!(map.get(&left), Some(&1));
+        assert_eq!(map.get(&right), Some(&2));
+
+        // Exercise the public type-cache path, including TypeCheckId's own
+        // hash fields, under the same forced closed-expression collision.
+        let left_type = Expr::prop();
+        let right_type = Expr::type_();
+        let mut cache = crate::cache::TypeCheckCache::new();
+        cache.insert(&left, left_type.clone());
+        cache.insert(&right, right_type.clone());
+        assert_eq!(cache.len(), 2);
+        assert_eq!(cache.get(&left), Some(&left_type));
+        assert_eq!(cache.get(&right), Some(&right_type));
+    }
+
+    #[test]
+    fn test_expr_key_hash_deep_shared_dag_construction_is_stack_safe() {
+        let make = || {
+            let mut value = Arc::new(Expr::bvar(0));
+            for _ in 0..12_000 {
+                value = Arc::new(Expr::app_arc(value.clone(), value));
+            }
+            value
+        };
+        let left = make();
+        let right = make();
+        assert_eq!(hash_to_u64(&left), hash_to_u64(&right));
+        assert_eq!(left, right);
+    }
+
+    #[test]
+    fn test_expr_key_hash_mixed_open_closed_parents_and_open_collisions() {
+        let make = || {
+            let unknown = Expr::from_kind(ExprKind::ZFCSet(ZFCSetExpr::Empty));
+            Expr::app(
+                Expr::fvar(FVarId::new(42)),
+                Expr::app(unknown, Expr::nat_lit(0)),
+            )
+        };
+        assert_key_hash_contract(&make(), &make());
+        let left = make();
+        let mut right = Expr::app(Expr::fvar(FVarId::new(42)), Expr::nat_lit(1));
+        assert!(left.has_fvar_quick() && right.has_fvar_quick());
+        // The open mode still uses the original metadata hash. Force that
+        // bucket collision and require the unchanged structural fallback.
+        right.meta = left.meta;
+        assert_eq!(hash_to_u64(&left), hash_to_u64(&right));
+        assert_ne!(left, right);
+        let mut map = std::collections::HashMap::new();
+        map.insert(left.clone(), 1);
+        map.insert(right.clone(), 2);
+        assert_eq!(map.len(), 2);
+        assert_eq!(map.get(&left), Some(&1));
+        assert_eq!(map.get(&right), Some(&2));
+    }
 }

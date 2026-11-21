@@ -10,11 +10,12 @@
 
 use super::census::CensusRow;
 use super::error::LeanIrError;
-use super::format::name_to_string;
-use super::format_decl::{format_decl, nat_to_string, quote_string};
+use super::format::{name_to_string, nat_to_string};
+use super::format_decl::{format_decl, quote_string};
 use super::module_ir::{
-    find_module_ir_olean, load_module_ir_at, InterpSource, MainSource, ModuleIr, DECL_MAP_EXT,
-    MEASURED_LEAN_VERSION,
+    find_module_ir_olean, load_module_ir_at, load_module_ir_captured, load_module_ir_names_at,
+    load_module_ir_names_captured, CapturedIrInput, InterpSource, MainSource, ModuleIr,
+    DECL_MAP_EXT, LEAN430_IR_VERSION,
 };
 use super::types;
 use crate::expr::BigNat;
@@ -90,23 +91,17 @@ fn test_name_to_string_inaccessible_and_hygienic_names_print_raw() {
 
 #[test]
 fn test_nat_to_string_multi_limb_is_decimal() {
-    assert_eq!(nat_to_string(&BigNat::from_u64(0)), "0");
-    assert_eq!(
-        nat_to_string(&BigNat::from_u64(u64::MAX)),
-        "18446744073709551615"
-    );
-    assert_eq!(
-        nat_to_string(&BigNat::from_limbs(vec![0, 1])),
-        "18446744073709551616"
-    );
+    assert_eq!(nat_to_string(&[0]), "0");
+    assert_eq!(nat_to_string(&[u64::MAX]), "18446744073709551615");
+    assert_eq!(nat_to_string(&[0, 1]), "18446744073709551616");
     // 2^128 - 1
     assert_eq!(
-        nat_to_string(&BigNat::from_limbs(vec![u64::MAX, u64::MAX])),
+        nat_to_string(&[u64::MAX, u64::MAX]),
         "340282366920938463463374607431768211455"
     );
     // 10^19 * 2^64: a zero-padded inner chunk
     assert_eq!(
-        nat_to_string(&BigNat::from_limbs(vec![0, 10_000_000_000_000_000_000])),
+        nat_to_string(&[0, 10_000_000_000_000_000_000]),
         "184467440737095516160000000000000000000"
     );
 }
@@ -453,8 +448,7 @@ fn test_load_module_ir_missing_private_part_is_refused() {
     );
 }
 
-/// The IR layout is measured for exactly one Lean version; a file written by
-/// any other is refused before a single object is read.
+/// An unsupported IR layout is refused before a single object is read.
 #[test]
 fn test_load_module_ir_other_lean_version_is_refused() {
     let dir = crate::test_support::compiled_fixture_dir("ir_census");
@@ -463,11 +457,11 @@ fn test_load_module_ir_other_lean_version_is_refused() {
     let path = tmp.path().join("IrPlain.olean");
     let mut bytes = std::fs::read(&path).expect("read");
     let at = bytes
-        .windows(MEASURED_LEAN_VERSION.len())
-        .position(|w| w == MEASURED_LEAN_VERSION.as_bytes())
+        .windows(LEAN430_IR_VERSION.len())
+        .position(|w| w == LEAN430_IR_VERSION.as_bytes())
         .expect("the header carries the Lean version");
     assert!(at < 88, "the version string is in the v2 header");
-    let last = at + MEASURED_LEAN_VERSION.len() - 1;
+    let last = at + LEAN430_IR_VERSION.len() - 1;
     bytes[last] = b'9';
     std::fs::write(&path, &bytes).expect("write");
     let name = parse_module_name("IrPlain").expect("name");
@@ -476,6 +470,184 @@ fn test_load_module_ir_other_lean_version_is_refused() {
         matches!(result, Err(LeanIrError::Module { ref detail, .. }) if detail.contains("measured only")),
         "got {result:?}"
     );
+}
+
+fn lean436_fixture(relative: &str) -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/fixtures/olean/v4.36.0")
+        .join(relative)
+}
+
+#[test]
+fn lean436_ir_census_refuses_an_older_dependency_layout() {
+    let dir = tempfile::tempdir().expect("scope for mixed fixture");
+    let root = dir.path();
+    std::fs::create_dir(root.join("Init")).expect("dependency directory");
+    std::fs::copy(
+        lean436_fixture("plain/StablePlain.olean"),
+        root.join("StablePlain.olean"),
+    )
+    .expect("stable root");
+    let old = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/fixtures/olean/v4.30.0/closure_cache/Init.olean");
+    std::fs::copy(old, root.join("Init/Prelude.olean")).expect("foreign dependency");
+
+    let error = super::census::import_closure(
+        &[parse_module_name("StablePlain").expect("module name")],
+        &[root.to_path_buf()],
+    )
+    .expect_err("a stable root cannot use an older dependency layout");
+    assert!(
+        error.to_string().contains("4.30.0-rc2") && error.to_string().contains("4.36.0"),
+        "{error}"
+    );
+}
+
+#[test]
+fn lean436_ir_plain_and_matcher_modules_decode() {
+    for (module, fixture, count) in [
+        ("StablePlain", "plain/StablePlain.olean", 2),
+        ("MatcherParity", "matcher-metadata/MatcherParity.olean", 50),
+    ] {
+        let name = parse_module_name(module).expect("valid module name");
+        let path = lean436_fixture(fixture);
+        let decoded = load_module_ir_at(&name, &path).expect("genuine Lean 4.36 IR");
+        assert_eq!(decoded.main_source, MainSource::Olean);
+        assert_eq!(decoded.interp_source, InterpSource::MainData);
+        assert_eq!(decoded.olean_decls.len(), count);
+        for decl in &decoded.olean_decls {
+            assert!(matches!(
+                decl,
+                types::Decl::FDecl { info, .. } if info.index_bounds.is_some()
+            ));
+        }
+    }
+
+    let name = parse_module_name("StablePlain").expect("valid module name");
+    let decoded = load_module_ir_at(&name, &lean436_fixture("plain/StablePlain.olean"))
+        .expect("genuine Lean 4.36 IR");
+    let decl = find(decoded.ir_decls(), "StablePlain.successor");
+    assert!(matches!(
+        decl,
+        types::Decl::FDecl { info, .. }
+            if info.index_bounds == Some(types::LocalIndexBounds { max_jp: 0, max_var: 3 })
+    ));
+}
+
+#[test]
+fn lean436_ir_module_names_and_bodies_share_the_signature_region() {
+    let name = parse_module_name("StableFixture.Defs").expect("valid module name");
+    let path = lean436_fixture("module-ir/StableFixture/Defs.olean");
+    let decoded = load_module_ir_at(&name, &path).expect("genuine Lake split IR");
+    assert_eq!(decoded.main_source, MainSource::OleanPrivate);
+    assert_eq!(decoded.interp_source, InterpSource::IrFile);
+    assert_eq!(decoded.olean_decls.len(), 20);
+    assert_eq!(decoded.ir_decls().len(), 27);
+    let names = load_module_ir_names_at(&name, &path).expect("genuine Lake split names");
+    assert_eq!(
+        names.iter().collect::<Vec<_>>(),
+        decoded
+            .ir_decls()
+            .iter()
+            .map(types::Decl::name)
+            .collect::<Vec<_>>()
+    );
+    assert!(names.contains(&n(&["StableFixture", "addOffset"])));
+
+    // Resolve against captured bytes even with a different or empty filesystem.
+    let read = |ext| {
+        std::fs::read(path.with_extension(ext))
+            .expect("fixture part")
+            .into()
+    };
+    let mut captured = CapturedIrInput {
+        base: read("olean"),
+        server: Some(read("olean.server")),
+        private: Some(read("olean.private")),
+        ir: Some(read("ir")),
+        ir_signature: Some(read("ir.sig")),
+    };
+    let empty = tempfile::tempdir().expect("empty search directory");
+    let absent_path = empty.path().join("Defs.olean");
+    assert_eq!(
+        load_module_ir_names_captured(&name, &absent_path, &captured).expect("captured Lake names"),
+        names
+    );
+    assert_eq!(
+        load_module_ir_captured(&name, &absent_path, &captured)
+            .expect("captured Lake bodies")
+            .ir_decls(),
+        decoded.ir_decls()
+    );
+
+    // A signature absent from the capture cannot be supplied by the genuine
+    // sibling now on disk. The census falls back to the main data, while
+    // the names-only check still requires the complete compilation evidence.
+    let signature = captured.ir_signature.take();
+    let fallback = load_module_ir_captured(&name, &path, &captured).expect("main data fallback");
+    assert_eq!(fallback.interp_source, InterpSource::MainData);
+    assert_eq!(fallback.ir_decls(), decoded.olean_decls.as_slice());
+    assert!(matches!(
+        load_module_ir_names_captured(&name, &path, &captured),
+        Err(LeanIrError::MissingFile { path: missing, .. }) if missing == path.with_extension("ir.sig")
+    ));
+
+    let mut corrupt_signature = signature.as_deref().expect("signature").to_vec();
+    let root = crate::header::HEADER_SIZE_V2;
+    corrupt_signature[root..root + 8].copy_from_slice(&(u64::MAX & !7).to_le_bytes());
+    captured.ir_signature = Some(corrupt_signature.into());
+    assert!(matches!(
+        load_module_ir_captured(&name, &path, &captured),
+        Err(LeanIrError::Olean(_))
+    ));
+    assert!(matches!(
+        load_module_ir_names_captured(&name, &path, &captured),
+        Err(LeanIrError::Olean(_))
+    ));
+
+    captured.ir_signature = signature;
+    captured.ir = None;
+    assert!(matches!(
+        load_module_ir_captured(&name, &path, &captured),
+        Err(LeanIrError::MissingFile { path: missing, .. }) if missing == path.with_extension("ir")
+    ));
+    assert!(matches!(
+        load_module_ir_names_captured(&name, &path, &captured),
+        Err(LeanIrError::MissingFile { path: missing, .. }) if missing == path.with_extension("ir")
+    ));
+}
+
+#[test]
+fn lean436_ir_refuses_mislabeled_artifact_headers() {
+    let name = parse_module_name("StablePlain").expect("valid module name");
+    let path = lean436_fixture("plain/StablePlain.olean");
+    let base = std::fs::read(&path).expect("fixture");
+    let mut wrong_identity = base.clone();
+    wrong_identity[40] = if wrong_identity[40] == b'0' {
+        b'1'
+    } else {
+        b'0'
+    };
+    let mut wrong_version = base;
+    wrong_version[7..40].fill(0);
+    wrong_version[7..7 + LEAN430_IR_VERSION.len()].copy_from_slice(LEAN430_IR_VERSION.as_bytes());
+    for bytes in [wrong_identity, wrong_version] {
+        let captured = CapturedIrInput {
+            base: bytes.into(),
+            server: None,
+            private: None,
+            ir: None,
+            ir_signature: None,
+        };
+        assert!(matches!(
+            load_module_ir_captured(&name, &path, &captured),
+            Err(LeanIrError::Module { .. })
+        ));
+        assert!(matches!(
+            load_module_ir_names_captured(&name, &path, &captured),
+            Err(LeanIrError::Module { .. })
+        ));
+    }
 }
 
 /// The construct profile of the fixtures reads the flags the renderer never

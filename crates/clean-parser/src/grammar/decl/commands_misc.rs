@@ -75,9 +75,8 @@ impl Parser {
         })
     }
 
-    /// Parse hash commands: `#check`, `#eval`, `#reduce`, `#print`, `#print
-    /// axioms`, `#guard` and `#guard_msgs` (the last four in
-    /// `test_commands.rs`).
+    /// Parse hash commands: `#check`, `#eval`, `#reduce`, `#print`,
+    /// `#print axioms`, `#print equations`, `#guard` and `#guard_msgs`.
     ///
     /// Entered with the `#` token consumed.
     pub(in crate::grammar) fn hash_command(
@@ -89,7 +88,12 @@ impl Parser {
             TokenKind::Ident(cmd) => {
                 self.advance();
                 match cmd.as_str() {
-                    "print" if self.at_print_axioms_keyword() => self.print_axioms_decl(start_span),
+                    "print" if self.at_contextual_print_keyword(&["axioms"]) => {
+                        self.print_axioms_decl(start_span)
+                    }
+                    "print" if self.at_contextual_print_keyword(&["equations", "eqns"]) => {
+                        self.print_equations_decl(start_span)
+                    }
                     "guard" => self.guard_decl(start_span),
                     "guard_msgs" => self.guard_msgs_decl(start_span, hash_index),
                     "check" => {

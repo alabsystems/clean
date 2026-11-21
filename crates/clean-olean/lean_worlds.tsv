@@ -20,3 +20,4 @@ v4.13.0	historical	leanprover/lean4:v4.13.0	tests/fixtures/olean/v4.13.0/stdlib/
 v4.8.0	frontend-only	leanprover/lean4:v4.8.0	tests/fixtures/olean/v4.8.0/witness/FactLib.olean
 v4.35.0	measured	leanprover/lean4:v4.35.0	tests/fixtures/olean/v4.35.0/matcher-metadata/MatcherParity.olean
 v4.36.0-rc2	measured	leanprover/lean4:v4.36.0-rc2	tests/fixtures/olean/v4.36.0-rc2/matcher-metadata/MatcherParity.olean
+v4.36.0	measured	leanprover/lean4:v4.36.0	tests/fixtures/olean/v4.36.0/matcher-metadata/MatcherParity.olean tests/fixtures/olean/v4.36.0/plain/StablePlain.olean tests/fixtures/olean/v4.36.0/module-ir/StableFixture/Defs.olean tests/fixtures/olean/v4.36.0/module-ir/StableFixture/Defs.olean.server tests/fixtures/olean/v4.36.0/module-ir/StableFixture/Defs.olean.private

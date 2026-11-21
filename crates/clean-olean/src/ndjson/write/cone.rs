@@ -4,25 +4,23 @@
 
 //! A cone's units as export declarations, read off the kernel's own records.
 //!
-//! The source is an [`Environment`]: the kernel's `ConstantInfo`,
-//! `InductiveVal`, `ConstructorVal`, `RecursorVal` and `QuotVal`, nothing
-//! parsed from a file. What Lean's records state and the kernel does not hold
-//! is derived or refused, never guessed:
+//! The writer reads declaration terms and family rows from the resident
+//! [`Environment`]. Imports preserve two additional ordinary-declaration fields.
 //!
-//! - `hints`: the kernel keeps an unfolding priority (`Reducibility`), not
-//!   Lean's hint. `Reducible` is written `abbrev`, `Regular(h)` as
-//!   `{"regular": h}`, and `Opaque` or `Irreducible` as `opaque`. Lean's kernel
-//!   reads a hint only to choose which side of a definitional-equality
-//!   problem to unfold first (`lazy_delta_reduction_step`); whether a
-//!   definition unfolds is decided by its having a value. A hint the `.olean`
-//!   loader adjusted (an attribute, a projection function) is therefore
-//!   written as the kernel holds it, not as Lean stored it.
+//! - A definition's source hint is written as stored, including when import
+//!   changes its operational transparency.
+//! - The ordinary mutual group (`all`) preserves the source order and references
+//!   sibling names independently of which declarations the cone contains.
+//! - For declarations without import metadata, including native declarations
+//!   and restored kernel snapshots, the writer derives the hint from resident
+//!   reducibility and uses a singleton mutual group.
 //! - `numNested`: the number of the block's auxiliary recursors
 //!   (`<first type>.rec_<i>`), which is how Lean numbers them; it must agree
 //!   with the kernel's `is_nested`.
 //! - a block's recursors: `<type>.rec` for each type in the block's order,
-//!   then `<first type>.rec_1 ..`. Any other recursor (the `casesOn`/`recOn`
-//!   of a Clean-built family) has no record in Lean's format and is refused.
+//!   then `<first type>.rec_1 ..`. A Clean-built family's value-bearing
+//!   `casesOn` and `recOn` are emitted as ordinary definitions when reached.
+//!   Other primitive recursor names have no wire representation and are refused.
 //! - `unsafe` and `partial` declarations are refused: the writer exports the
 //!   fragment Lean's replay checks.
 
@@ -113,26 +111,39 @@ fn constant(env: &Environment, name: &Name) -> Result<ExportDeclaration, ExportW
                 kind,
             })
     };
+    let fields = crate::import::export_fields::ExportFields::for_constant(env, name);
+    let all = || {
+        fields
+            .and_then(|f| f.all.clone())
+            .unwrap_or_else(|| vec![name.clone()])
+    };
     Ok(match info.kind {
         ConstantKind::Axiom => ExportDeclaration::Axiom {
             header,
             is_unsafe: false,
         },
         ConstantKind::Definition => ExportDeclaration::Definition {
+            all: all(),
             header,
             value: value("def")?,
-            hints: match info.reducibility {
-                Reducibility::Reducible => ReducibilityHintsData::Abbrev,
-                Reducibility::Regular(height) => ReducibilityHintsData::Regular(height),
-                Reducibility::Opaque | Reducibility::Irreducible => ReducibilityHintsData::Opaque,
-            },
+            hints: fields
+                .and_then(|f| f.hints)
+                .unwrap_or(match info.reducibility {
+                    Reducibility::Reducible => ReducibilityHintsData::Abbrev,
+                    Reducibility::Regular(height) => ReducibilityHintsData::Regular(height),
+                    Reducibility::Opaque | Reducibility::Irreducible => {
+                        ReducibilityHintsData::Opaque
+                    }
+                }),
             safety: DefinitionSafety::Safe,
         },
         ConstantKind::Theorem => ExportDeclaration::Theorem {
+            all: all(),
             header,
             value: value("thm")?,
         },
         ConstantKind::Opaque => ExportDeclaration::Opaque {
+            all: all(),
             header,
             value: value("opaque")?,
             is_unsafe: false,

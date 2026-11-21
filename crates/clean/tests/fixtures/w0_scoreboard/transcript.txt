@@ -1,0 +1,10 @@
+kcheck-run-interim	1
+checker	kcheck_labelled	KCheck.kcheckBytes	soundness=not-claimed-by-this-run
+loader	interim	proved=false	reprint=absent	recs=dropped-unchecked
+base	Eq	PUnit	Nat
+decl	12	def	accepted	bound=1;0+1 iota=0 k=0 lparams=1	[s2:id]
+stmt	12	(pi (sort (p 0)) (pi (b 0) (b 1)))	(lam (sort (p 0)) (lam (b 0) (b 0)))
+decl	14	axiom	outside	axiomDecl	[s2:ax]
+decl	17	def	refused	KCheck.Refusal.sort	[s4:user]
+decl	20	def	outside	literal	[s3:lit]
+summary	declarations=4	accepted=1	recognised=0	outside=2	refused=1

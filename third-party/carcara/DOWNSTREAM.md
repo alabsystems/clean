@@ -3410,3 +3410,42 @@ stack/occupancy state fits 16 KiB. No private heap, maps, arbitrary integer clon
 intermediate terms, SAT or polynomial solver are used. Existing proof admission,
 expensive-BV and promotion policies remain unchanged. The separate finite-model
 battery dialect is `clean-bv-reconstruct-v1`; the old dialect stays unchanged.
+
+### Dialect: typed unary array lambdas (`array_lambda_dialect`, `arrays_lambda`)
+
+Clean's existing parser/checker `Config::clean_dialect()` enables this extension;
+the default/upstream configuration retains ordinary function lambdas and rejects
+the `arrays_lambda` rule. This is a Clean dialect capability, not upstream Alethe
+parity or a proved-kernel claim.
+
+`Binder::ArrayLambda` is distinct from `Binder::Lambda`. Its one bound index has
+its actual parsed domain sort and its body has the actual range sort; the pool
+computes `Array(domain, range)`, never a Function/Array sort equivalence. Before
+one outer term is parsed, a finite constructor-unification pass over immutable
+native lexer tokens derives lambda-role hints by exact token position. It reads
+real declaration sorts and lexical binder/parallel-let identities; equality
+orientation, select/store, declared parameters/results, ITE and match-result
+constraints propagate through the same graph. Native sort syntax is read by the
+existing sort parser under an input-cursor restoration guard. The ordinary typed
+parser independently validates all of it. Genuine Function constraints remain
+Function; incompatible uses refuse. Unconstrained lambdas retain their existing
+Function interpretation, including an unconstrained nested lambda range. No new
+CLI flag, source assumption, default/epsilon axiom or reset budget is introduced.
+The pass and actual parse share the original deadline and written-depth limits.
+
+`arrays_lambda` checks only a unit equality
+`(= (select (lambda ((x I)) body) index) result)`, with no premises or arguments.
+The binder must be the typed ArrayLambda, index sort exactly `I`, and read/result
+sorts exactly the body range. Existing capture-avoiding `Substitution::single`
+and `apply` reconstruct the body with the actual index; alpha equivalence checks
+the result. A reverse equality uses the standard `symm` rule. Function application
+continues to use `beta_equiv`; a same-spelled declared function cannot act as the
+new binder or select operator. This rule supplies no array-default fact.
+
+Affected consumers: AST sort computation/printing, the parser's typed binder
+construction and role pass, generic binder substitution/free variables, and the
+non-quantifier branch of Boolean-function elimination. The Eunoia translator had
+no faithful lambda representation and used a TODO `exists` spelling. Both function
+and array lambda now retain explicit unsupported DATA; the existing fallible
+Eunoia printer propagates an Unsupported I/O error recursively instead of emitting
+that invented formula. This changes no Clean kernel/Lean proof authority.

@@ -30,7 +30,7 @@ impl Parser {
     /// 128 × 17 ≈ 2,176 frames, fits in 2MB proptest worker threads.
     /// 256 was too high and caused stack overflow in debug builds (#2961).
     /// Real Lean 4 code rarely exceeds 20-30 levels.
-    const MAX_EXPR_DEPTH: u32 = 128;
+    pub(super) const MAX_EXPR_DEPTH: u32 = 128;
     /// Debug builds have large parser frames; grow before the next recursive
     /// expression descent can exhaust small test-worker stacks.
     pub(super) const EXPR_STACK_RED_ZONE: usize = 512 * 1024;
@@ -125,8 +125,9 @@ impl Parser {
     /// absent, so every other parse is unchanged.
     pub(super) fn hom_expr(&mut self) -> Result<SurfaceExpr, ParseError> {
         let left = self.pipe_expr()?;
+        let left = self.postfix_before_builtin(left, &[TokenKind::HomArrow])?;
         if self.eat(&TokenKind::HomArrow) {
-            let right = self.hom_expr()?; // right-associative (infixr:10)
+            let right = self.low_postfix_operand(10, Self::hom_expr)?; // right-associative (infixr:10)
             let span = left.span().merge(right.span());
             Ok(SurfaceExpr::App(
                 span,
@@ -153,10 +154,12 @@ impl Parser {
     /// path rather than consumed here.
     pub(super) fn pipe_expr(&mut self) -> Result<SurfaceExpr, ParseError> {
         let left = self.fpipe_expr()?;
+        let left =
+            self.postfix_before_builtin(left, &[TokenKind::BackwardPipe, TokenKind::Dollar])?;
 
         // <| is right-associative: f <| g <| x = f <| (g <| x)
         if self.eat(&TokenKind::BackwardPipe) {
-            let right = self.pipe_expr()?; // Recursive for right-associativity
+            let right = self.low_postfix_operand(10, Self::pipe_expr)?; // Recursive for right-associativity
             let span = left.span().merge(right.span());
             // f <| x is equivalent to f x (low-precedence application)
             return Ok(SurfaceExpr::App(
@@ -170,7 +173,7 @@ impl Parser {
         // trailing space so quotation antiquotations `$x` keep their meaning.
         if self.dollar_is_low_prec_app() {
             self.advance(); // consume `$`
-            let right = self.pipe_expr()?;
+            let right = self.low_postfix_operand(10, Self::pipe_expr)?;
             let span = left.span().merge(right.span());
             return Ok(SurfaceExpr::App(
                 span,
@@ -207,6 +210,7 @@ impl Parser {
     /// (Brick 3, `docs/plans/ELAB_ARMS_AUDIT_2026-07-08.md` §3(a)).
     pub(super) fn orelse_expr(&mut self) -> Result<SurfaceExpr, ParseError> {
         let left = self.iff_expr()?;
+        let left = self.postfix_before_builtin(left, &[TokenKind::OrElse])?;
         if self.eat(&TokenKind::OrElse) {
             let lspan = left.span();
             let right = self.orelse_expr()?; // right-associative
@@ -259,7 +263,8 @@ impl Parser {
     /// is looser than `|>`) and *above* `iff_expr`.
     fn fpipe_expr(&mut self) -> Result<SurfaceExpr, ParseError> {
         // The 11–20 custom-infix band sits between `|>` (10) and `<|>`/`↔` (20).
-        let mut left = self.pipe_custom_infix_expr()?;
+        let left = self.pipe_custom_infix_expr()?;
+        let mut left = self.postfix_before_builtin(left, &[TokenKind::ForwardPipe])?;
 
         while self.eat(&TokenKind::ForwardPipe) {
             if self.check(&TokenKind::Dot) {
@@ -433,7 +438,8 @@ impl Parser {
     pub(super) fn iff_expr(&mut self) -> Result<SurfaceExpr, ParseError> {
         // The 21–30 custom-infix band — Mathlib's hom-arrow family (`→+`, `↪`,
         // `≃`, `⥤`, …) — sits between `↔` (20) and `∨` (30).
-        let mut left = self.iff_custom_infix_expr()?;
+        let left = self.iff_custom_infix_expr()?;
+        let mut left = self.postfix_before_builtin(left, &[TokenKind::Iff])?;
 
         // Inside an arrow codomain (`term:25`) a `↔` binds looser than the
         // enclosing `→` and belongs to the `iff_expr` above that arrow.
@@ -455,75 +461,61 @@ impl Parser {
         Ok(left)
     }
 
-    /// Or expressions: A ∨ B (Prop, prec 30) and A || B (Bool.or, infixr:30).
-    ///
-    /// Both `∨` (`Or`) and `||` (`Bool.or`) are declared `infixr:30` in Lean 4:
-    /// RIGHT-associative, so `a ∨ b ∨ c` parses as `a ∨ (b ∨ c)` (= `Or a (Or b c)`),
-    /// not `(a ∨ b) ∨ c`. We recurse on the right operand (mirroring `and_expr`)
-    /// rather than folding left. Right-nesting is what `rcases`/`obtain` Or-pattern
-    /// alternation relies on for `rcases h with hp | hq | hr` on `p ∨ q ∨ r`.
+    /// At precedence 30, Lean declares propositional `∨` right-associative
+    /// and Boolean `||` left-associative (Init/Notation.lean).
     pub(super) fn or_expr(&mut self) -> Result<SurfaceExpr, ParseError> {
-        // The 31–35 custom-infix band sits between `∨` (30) and `∧` (35).
         let left = self.or_custom_infix_expr()?;
-        let span = left.span();
-
+        let left = self.postfix_before_builtin(left, &[TokenKind::Or, TokenKind::PipePipe])?;
         if self.eat(&TokenKind::Or) {
-            let right = self.or_expr()?; // right-associative: a ∨ (b ∨ c)
-                                         // `∨` binds TIGHTER than `→` (30 > 25). When the right operand greedily
-                                         // swallowed a trailing `→` (e.g. `b → c` in `a ∨ b → c`), re-associate
-                                         // to `(a ∨ b) → c`. A pure `a ∨ (b ∨ c)` right operand is NOT an arrow,
-                                         // so right-associativity of `∨` is preserved.
+            let right = self.low_postfix_operand(30, Self::or_expr)?;
             Ok(Self::build_connective_arrow_aware("Or", left, right))
-        } else if self.eat(&TokenKind::PipePipe) {
-            // Bool.or via the heterogeneous `||` operator (also infixr:30).
-            let right = self.or_expr()?; // right-associative: a || (b || c)
-            let s = span.merge(right.span());
-            Ok(SurfaceExpr::App(
-                s,
-                Box::new(SurfaceExpr::Ident(span, SurfaceName::global_path("or"))),
-                vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
-            ))
         } else {
-            Ok(left)
+            self.left_boolean_chain(
+                left,
+                &TokenKind::PipePipe,
+                "Bool.or",
+                Self::or_custom_infix_expr,
+            )
         }
     }
 
-    /// And expressions: A ∧ B (Prop, prec 35) and A && B (Bool.and, infixr:35).
-    ///
-    /// Both `∧` (`And`) and `&&` (`Bool.and`) are declared `infixr:35` in Lean 4
-    /// (`Init/Notation.lean`): they are RIGHT-associative, so `a ∧ b ∧ c` parses
-    /// as `a ∧ (b ∧ c)` (= `And a (And b c)`), not `(a ∧ b) ∧ c`. We therefore
-    /// recurse on the right operand (the same shape as the other right-assoc
-    /// operators here, e.g. `pipe_expr`/`cons_expr`) rather than folding left.
-    /// Right-nesting is what `rcases`/`obtain` flattening relies on: `⟨a, b, c⟩`
-    /// on `a ∧ b ∧ c` destructs the left field then recurses into the `b ∧ c`
-    /// right field.
+    /// At precedence 35, propositional `∧` groups to the right (including
+    /// the chains destructured by `rcases`), while Boolean `&&` groups left.
     pub(super) fn and_expr(&mut self) -> Result<SurfaceExpr, ParseError> {
-        // The 36–50 custom-infix band (notably the canonical temporal `⊨` and
-        // `~>` relations). It wraps comparisons and remains inside level-35
-        // conjunction, preserving Lean's binding order.
         let left = self.low_custom_infix_expr()?;
-        let span = left.span();
-
+        let left = self.postfix_before_builtin(left, &[TokenKind::And, TokenKind::AmpAmp])?;
         if self.eat(&TokenKind::And) {
-            let right = self.and_expr()?; // right-associative: a ∧ (b ∧ c)
-                                          // `∧` binds TIGHTER than `→` (35 > 25). When the right operand
-                                          // greedily swallowed a trailing `→` (e.g. `b → c` in `a ∧ b → c`),
-                                          // re-associate to `(a ∧ b) → c`. A pure `a ∧ (b ∧ c)` right operand
-                                          // is NOT an arrow, so right-associativity of `∧` is preserved.
+            let right = self.low_postfix_operand(35, Self::and_expr)?;
             Ok(Self::build_connective_arrow_aware("And", left, right))
-        } else if self.eat(&TokenKind::AmpAmp) {
-            // Bool.and via the heterogeneous `&&` operator (also infixr:35).
-            let right = self.and_expr()?; // right-associative: a && (b && c)
-            let s = span.merge(right.span());
-            Ok(SurfaceExpr::App(
-                s,
-                Box::new(SurfaceExpr::Ident(span, SurfaceName::global_path("and"))),
-                vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
-            ))
         } else {
-            Ok(left)
+            self.left_boolean_chain(
+                left,
+                &TokenKind::AmpAmp,
+                "Bool.and",
+                Self::low_custom_infix_expr,
+            )
         }
+    }
+
+    /// An `infixl:n` right operand starts above n. Each subsequent operator
+    /// at n wraps the completed left operand. Keep Init's definition-time head.
+    fn left_boolean_chain(
+        &mut self,
+        mut left: SurfaceExpr,
+        token: &TokenKind,
+        name: &str,
+        tighter: fn(&mut Self) -> Result<SurfaceExpr, ParseError>,
+    ) -> Result<SurfaceExpr, ParseError> {
+        while self.eat(token) {
+            let right = tighter(self)?;
+            let op_span = left.span();
+            left = SurfaceExpr::App(
+                op_span.merge(right.span()),
+                Box::new(SurfaceExpr::Ident(op_span, SurfaceName::global_path(name))),
+                vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
+            );
+        }
+        Ok(left)
     }
 
     /// Surface spelling of the current token IF it is one of Lean's `infix:50`
@@ -614,6 +606,9 @@ impl Parser {
             // intervening looser operator — `→`, `∧`, … — is parsed at a different
             // chain level or swallowed by the `=` arrow-tail split below, so
             // `a = b → c = d` = `(a = b) → (c = d)` never trips this.)
+            if self.longer_notation_atom_at(1, 0) {
+                break;
+            }
             if saw_comparison {
                 if let Some(op) = self.comparison_op_spelling() {
                     return Err(ParseError::UnexpectedToken {
@@ -629,7 +624,7 @@ impl Parser {
             }
             let span = left.span();
             if self.eat(&TokenKind::Eq) {
-                let right = self.bind_expr()?;
+                let right = self.low_postfix_operand(51, Self::bind_expr)?;
                 let end_span = right.span();
                 let (right, arrow_tail) = match right {
                     SurfaceExpr::Arrow(_, domain, codomain) => (*domain, Some(codomain)),
@@ -646,7 +641,7 @@ impl Parser {
                     eq_expr
                 };
             } else if self.eat(&TokenKind::Ne) {
-                let right = self.bind_expr()?;
+                let right = self.low_postfix_operand(51, Self::bind_expr)?;
                 let end_span = right.span();
                 // Arrow-tail split, exactly as the `=` arm above: `≠` is
                 // infix:50 and binds TIGHTER than `→`, but bind_expr swallows
@@ -673,7 +668,7 @@ impl Parser {
                 // desugar directly to `Bool.not (BEq.beq a b)` so resolution
                 // reuses the same `==`/`Bool.not` heads clean already supports
                 // (no dependence on a `bne` constant being in the prelude).
-                let right = self.bind_expr()?;
+                let right = self.low_postfix_operand(51, Self::bind_expr)?;
                 let end_span = right.span();
                 // Arrow-tail split, as in the `==` arm below: `!=` is `infix:50`
                 // and binds TIGHTER than `→` (25), but `bind_expr` descends into
@@ -705,26 +700,26 @@ impl Parser {
                     None => bne,
                 };
             } else if self.eat(&TokenKind::Lt) {
-                let right = self.bind_expr()?;
+                let right = self.low_postfix_operand(51, Self::bind_expr)?;
                 let end_span = right.span();
                 left = Self::cmp_with_arrow_tail(span, "LT.lt", left, right, end_span);
             } else if self.eat(&TokenKind::Le) {
-                let right = self.bind_expr()?;
+                let right = self.low_postfix_operand(51, Self::bind_expr)?;
                 let end_span = right.span();
                 left = Self::cmp_with_arrow_tail(span, "LE.le", left, right, end_span);
             } else if self.eat(&TokenKind::Gt) {
-                let right = self.bind_expr()?;
+                let right = self.low_postfix_operand(51, Self::bind_expr)?;
                 let end_span = right.span();
                 left = Self::cmp_with_arrow_tail(span, "GT.gt", left, right, end_span);
             } else if self.eat(&TokenKind::Ge) {
-                let right = self.bind_expr()?;
+                let right = self.low_postfix_operand(51, Self::bind_expr)?;
                 let end_span = right.span();
                 left = Self::cmp_with_arrow_tail(span, "GE.ge", left, right, end_span);
             } else if self.eat(&TokenKind::HEq) {
                 // Heterogeneous equality: `a ≍ b` (`Init/Core.lean`:
                 // `infix:50 " ≍ " => HEq`). Arrow-tail split as for the other
                 // 50-class arms: `u ≍ v → c` is `(u ≍ v) → c`.
-                let right = self.bind_expr()?;
+                let right = self.low_postfix_operand(51, Self::bind_expr)?;
                 let end_span = right.span();
                 left = Self::cmp_with_arrow_tail(span, "HEq", left, right, end_span);
             } else if self.eat(&TokenKind::Approx) {
@@ -734,7 +729,7 @@ impl Parser {
                 // through to the `saw_comparison` guard (no `continue`), and it
                 // takes the same arrow-tail split: `s ≈ t → c` is `(s ≈ t) → c`,
                 // the `Quotient.lift` hypothesis shape.
-                let right = self.bind_expr()?;
+                let right = self.low_postfix_operand(51, Self::bind_expr)?;
                 let end_span = right.span();
                 left = Self::cmp_with_arrow_tail(span, "HasEquiv.Equiv", left, right, end_span);
             } else if self.eat(&TokenKind::Equiv) {
@@ -748,7 +743,7 @@ impl Parser {
                         let param = self.expr()?;
                         self.expect(&TokenKind::RBracket)?;
 
-                        let right = self.bind_expr()?;
+                        let right = self.low_postfix_operand(51, Self::bind_expr)?;
                         let end_span = right.span();
                         // Mathlib declares the typed equivalences at `notation:25`
                         // (`≃ₐ[R]`, `≃ₗ[R]`, …), so `→` (`infixr:25`) does NOT
@@ -789,7 +784,7 @@ impl Parser {
                 // OUT of the non-associativity enforcement — `continue` past the
                 // `saw_comparison = true` at the end of the loop so a following
                 // comparison keeps its historical behavior.
-                let right = self.bind_expr()?;
+                let right = self.low_postfix_operand(51, Self::bind_expr)?;
                 let end_span = right.span();
                 // `Mathlib/Logic/Equiv/Defs.lean:82` declares `infixl:25 " ≃ "`.
                 // At level 25 the left operand of a following `→` (`infixr:25`,
@@ -799,12 +794,12 @@ impl Parser {
                 continue;
             } else if self.eat(&TokenKind::DoubleEq) {
                 // BEq equality check: a == b
-                let right = self.bind_expr()?;
+                let right = self.low_postfix_operand(51, Self::bind_expr)?;
                 let end_span = right.span();
                 left = Self::cmp_with_arrow_tail(span, "BEq.beq", left, right, end_span);
             } else if self.eat(&TokenKind::Elem) {
                 // Membership: a ∈ b → Membership.mem b a (note argument swap per Lean 4 spec)
-                let right = self.bind_expr()?;
+                let right = self.with_custom_min_prec(51, Self::bind_expr)?;
                 let end_span = right.span();
                 let (right, arrow_tail) = Self::split_arrow_tail(right);
                 let mem = SurfaceExpr::App(
@@ -823,7 +818,7 @@ impl Parser {
                 };
             } else if self.eat(&TokenKind::NotElem) {
                 // Not membership: a ∉ b → ¬(Membership.mem b a)
-                let right = self.bind_expr()?;
+                let right = self.with_custom_min_prec(51, Self::bind_expr)?;
                 let end_span = right.span();
                 let (right, arrow_tail) = Self::split_arrow_tail(right);
                 let mem_expr = SurfaceExpr::App(
@@ -850,18 +845,18 @@ impl Parser {
                 };
             } else if self.eat(&TokenKind::Subset) {
                 // a ⊆ b → HasSubset.Subset a b (infix:50)
-                let right = self.bind_expr()?;
+                let right = self.low_postfix_operand(51, Self::bind_expr)?;
                 let end_span = right.span();
                 left = Self::cmp_with_arrow_tail(span, "HasSubset.Subset", left, right, end_span);
             } else if self.eat(&TokenKind::ProperSubset) {
                 // a ⊂ b → HasSSubset.SSubset a b (infix:50)
-                let right = self.bind_expr()?;
+                let right = self.low_postfix_operand(51, Self::bind_expr)?;
                 let end_span = right.span();
                 left = Self::cmp_with_arrow_tail(span, "HasSSubset.SSubset", left, right, end_span);
             } else if self.eat(&TokenKind::Dvd) {
                 // a ∣ b → Dvd.dvd a b (infix:50, non-associative). `∣` (U+2223
                 // DIVIDES) is distinct from the ASCII pattern bar `|`.
-                let right = self.bind_expr()?;
+                let right = self.low_postfix_operand(51, Self::bind_expr)?;
                 let end_span = right.span();
                 left = Self::cmp_with_arrow_tail(span, "Dvd.dvd", left, right, end_span);
             } else {
@@ -894,7 +889,16 @@ impl Parser {
 
     /// The builtin monadic-bind level itself, without the 51–59 custom band.
     pub(super) fn bind_core_expr(&mut self) -> Result<SurfaceExpr, ParseError> {
-        let mut left = self.seq_expr()?;
+        let left = self.seq_expr()?;
+        let mut left = self.postfix_before_builtin(
+            left,
+            &[
+                TokenKind::Bind,
+                TokenKind::BindLeft,
+                TokenKind::KleisliL,
+                TokenKind::KleisliR,
+            ],
+        )?;
         // Tracks whether a left-associative `>>=` (infixl:55) was consumed at
         // this level. The infixr:55 operators (`=<<`, `>=>`, `<=<`) require a
         // left operand tighter than 55, so they cannot follow a `>>=` result at
@@ -905,7 +909,8 @@ impl Parser {
             if self.eat(&TokenKind::Bind) {
                 let span = left.span();
                 // infixl:55 — right operand at level 56.
-                let right = self.with_custom_min_prec(56, Self::seq_expr)?;
+                let right =
+                    self.with_custom_min_prec(56, |p| p.low_postfix_operand(56, Self::seq_expr))?;
                 let s = span.merge(right.span());
                 left = SurfaceExpr::App(
                     s,
@@ -935,7 +940,8 @@ impl Parser {
                 let span = left.span();
                 self.advance();
                 // infixr:55 — right operand recurses at the same bind level.
-                let right = self.with_custom_min_prec(55, Self::bind_expr)?;
+                let right =
+                    self.with_custom_min_prec(55, |p| p.low_postfix_operand(55, Self::bind_expr))?;
                 let s = span.merge(right.span());
                 return Ok(SurfaceExpr::App(
                     s,
@@ -1052,11 +1058,13 @@ impl Parser {
     /// Bitwise OR: A ||| B (HOr.hOr, infixl:55). Binds looser than `^^^`/`&&&`
     /// but tighter than the comparison operators — matching Lean 4 precedences.
     pub(super) fn bitor_expr(&mut self) -> Result<SurfaceExpr, ParseError> {
-        let mut left = self.bitxor_expr()?;
+        let left = self.bitxor_expr()?;
+        let mut left = self.postfix_before_builtin(left, &[TokenKind::BitOr])?;
         while self.eat(&TokenKind::BitOr) {
             let span = left.span();
             // infixl:55 — right operand at level 56.
-            let right = self.with_custom_min_prec(56, Self::bitxor_expr)?;
+            let right =
+                self.with_custom_min_prec(56, |p| p.low_postfix_operand(56, Self::bitxor_expr))?;
             let s = span.merge(right.span());
             left = SurfaceExpr::App(
                 s,
@@ -1072,11 +1080,13 @@ impl Parser {
 
     /// Bitwise XOR: A ^^^ B (HXor.hXor, infixl:58).
     pub(super) fn bitxor_expr(&mut self) -> Result<SurfaceExpr, ParseError> {
-        let mut left = self.bitand_expr()?;
+        let left = self.bitand_expr()?;
+        let mut left = self.postfix_before_builtin(left, &[TokenKind::BitXor])?;
         while self.eat(&TokenKind::BitXor) {
             let span = left.span();
             // infixl:58 — right operand at level 59.
-            let right = self.with_custom_min_prec(59, Self::bitand_expr)?;
+            let right =
+                self.with_custom_min_prec(59, |p| p.low_postfix_operand(59, Self::bitand_expr))?;
             let s = span.merge(right.span());
             left = SurfaceExpr::App(
                 s,
@@ -1126,7 +1136,12 @@ impl Parser {
         // `r ≥ Int.ofNat w →` around the body); on a successful Pi parse the
         // guards belong to THIS arrow's binders and must wrap THIS body.
         let saved_guards = self.pending_binder_guards.len();
-        if self.looks_like_binder_start() {
+        // A tightly bound operand such as the RHS of `∈` reads `[f x]` as
+        // a list even when an outer implication follows. Leave the arrow
+        // as an ordinary tail for the caller's precedence handling.
+        let bracket_operand = self.custom_min_prec > super::custom_notation::ARROW_LEVEL
+            && self.check(&TokenKind::LBracket);
+        if !bracket_operand && self.looks_like_binder_start() {
             if let Ok(binders) = self.binders() {
                 // A guard stashed during this speculation means `binders()`
                 // consumed a parenthesized bounded binder (`(n > 0)`,
@@ -1156,7 +1171,8 @@ impl Parser {
             self.pending_binder_guards.truncate(saved_guards);
         }
 
-        let mut left = self.sum_expr()?;
+        let left = self.sum_expr()?;
+        let mut left = self.postfix_before_builtin(left, &[TokenKind::Arrow])?;
 
         // MAXIMAL MUNCH before the arrow: Mathlib's hom arrows are declared as
         // symbols whose FIRST token is this very `→` — `→+` lexes to
@@ -1232,9 +1248,10 @@ impl Parser {
     /// `A ⊕ B → C` is `(A ⊕ B) → C`. Desugars to `Sum A B`.
     pub(super) fn sum_expr(&mut self) -> Result<SurfaceExpr, ParseError> {
         let left = self.prod_expr()?;
+        let left = self.postfix_before_builtin(left, &[TokenKind::Oplus])?;
 
         if self.eat(&TokenKind::Oplus) {
-            let right = self.sum_expr()?; // recurse on the right → right-assoc
+            let right = self.low_postfix_operand(30, Self::sum_expr)?; // recurse on the right → right-assoc
             let span = left.span().merge(right.span());
             Ok(SurfaceExpr::App(
                 span,
@@ -1283,6 +1300,7 @@ impl Parser {
         // continuation band (`custom_notation.rs`); a pass-through to `add_expr`
         // when the file declares no notation.
         let left = self.add_custom_expr()?;
+        let left = self.postfix_before_builtin(left, &[TokenKind::Times, TokenKind::TimesPrime])?;
 
         // Anonymous dependent-pair constructors (Lean `macro:35`,
         // `Init/NotationExtra.lean:93-94`): `(x : T) × b` ⇒ `Sigma (fun x : T =>
@@ -1312,7 +1330,7 @@ impl Parser {
                                     // reaches comparisons/`Dvd`/etc. (prec ≥ 50, tighter than 35)
                                     // AND re-descends into `prod_expr` for a right-associative
                                     // `×`/`×'` chain (`(a : Nat) × (b : Nat) × …`).
-                    let rhs = self.cmp_expr()?;
+                    let rhs = self.low_postfix_operand(35, Self::cmp_expr)?;
                     let span = lspan.merge(rhs.span());
                     let mut result = rhs;
                     for (bspan, name) in names.into_iter().rev() {
@@ -1336,7 +1354,7 @@ impl Parser {
         }
 
         if self.eat(&TokenKind::Times) {
-            let right = self.prod_expr()?; // recurse on the right → right-assoc
+            let right = self.low_postfix_operand(35, Self::prod_expr)?; // recurse on the right → right-assoc
             let span = left.span().merge(right.span());
             Ok(SurfaceExpr::App(
                 span,
@@ -1349,7 +1367,7 @@ impl Parser {
             // `×'` notation for a non-dependent dependent-pair. Right-associative,
             // mirroring the `A × B` → `Prod` fold above.
             let left_span = left.span();
-            let right = self.prod_expr()?;
+            let right = self.low_postfix_operand(35, Self::prod_expr)?;
             let span = left_span.merge(right.span());
             let binder = SurfaceBinder {
                 span: left_span,

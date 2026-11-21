@@ -19,23 +19,20 @@
 #
 # Usage: ./scripts/deny_sorry_gate.sh [--selftest]
 #
-# On completion the gate writes reports/deny-sorry-launch-evidence.json. The
-# evidence file is cleared at startup so a failed or interrupted run cannot
-# leave an old passing artifact behind.
+# On completion the gate writes a run record to $DENY_SORRY_EVIDENCE_PATH, or,
+# when that is unset, to a fresh temporary file whose path it prints. The
+# record is cleared at startup so a failed or interrupted run cannot leave an
+# old passing artifact behind.
 #
-# RUNNING THIS BY HAND CLOBBERS THE COMMITTED LAUNCH EVIDENCE, and the file it
-# leaves behind is one the Rust validator REJECTS. Two producers write that
-# path: this script, which stamps `generated_by: "./scripts/deny_sorry_gate.sh"`,
-# and `clean replacement trust-core-evidence --deny-sorry`, which stamps
-# DENY_SORRY_RUST_GATE_COMMAND -- and `validate_deny_sorry_launch_evidence`
-# (crates/clean-cli/src/cmd_replacement/launch_validation.rs) refuses any
-# `generated_by` that is not the Rust one. So a hand-run deletes a valid
-# artifact at startup and replaces it with an invalid one, which reads as the
-# deny-sorry row going stale. scripts/local_gate.sh is immune -- it passes
-# DENY_SORRY_EVIDENCE_PATH=$(mktemp) and wraps the run in _battery_readonly,
-# which snapshots and restores the tracked file -- so do the same by hand:
-#
-#     DENY_SORRY_EVIDENCE_PATH="$(mktemp)" bash scripts/deny_sorry_gate.sh
+# It never writes the committed launch receipt,
+# reports/deny-sorry-launch-evidence.json, and refuses a path naming it (by
+# spelling or by file identity) before any lane runs. That receipt has one
+# producer, `clean replacement trust-core-evidence --deny-sorry`, which stamps
+# DENY_SORRY_RUST_GATE_COMMAND, the v2 schema and the shared-digest pins that
+# `clean-evidence check trustcore-staleness` compares. Until the EV0 review
+# (2026-11-17) a bare run of this script wrote that path: it deleted a valid
+# receipt at startup and left one the Rust validator rejects, hashed with a
+# Python copy of the Rust module-tree digest and without the v2 pins.
 #
 # --selftest runs this script's OWN refusal arms (no cargo, no build, no
 # evidence written) and exits. It is what the gate registry replays.
@@ -48,8 +45,18 @@ cd "$REPO_ROOT"
 export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-1}"
 
 EVIDENCE_SCHEMA_VERSION="Clean-deny-sorry-launch-evidence-v1"
-EVIDENCE_PATH="${DENY_SORRY_EVIDENCE_PATH:-reports/deny-sorry-launch-evidence.json}"
+COMMITTED_RECEIPT="reports/deny-sorry-launch-evidence.json"
+EVIDENCE_PATH="${DENY_SORRY_EVIDENCE_PATH:-}"
 EXPECTED_STEPS=6
+
+# names_committed_receipt <path>: true when <path> is the committed receipt,
+# spelled any way (`./reports/../reports/...`, an absolute path) or reached
+# through a link (`-ef` compares the files themselves).
+names_committed_receipt() {
+    local dir=""
+    dir="$(cd "$(dirname "$1")" 2>/dev/null && pwd -P)" || dir=""
+    [ "$dir/$(basename "$1")" = "$(pwd -P)/$COMMITTED_RECEIPT" ] || [ "$1" -ef "$COMMITTED_RECEIPT" ]
+}
 
 PASS=0
 FAIL=0
@@ -74,10 +81,17 @@ case "${1:-}" in
     *) echo "usage: $0 [--selftest]" >&2; exit 2 ;;
 esac
 
-# Guarded: --selftest must not delete the committed launch evidence on its way
-# to testing a grep.
+# Guarded: --selftest writes no record on its way to testing a grep.
 if [ "$SELFTEST" -eq 0 ]; then
+    if [ -z "$EVIDENCE_PATH" ]; then
+        EVIDENCE_PATH="$(mktemp "${TMPDIR:-/tmp}/clean-deny-sorry-run.XXXXXX")"
+    fi
     mkdir -p "$(dirname "$EVIDENCE_PATH")"
+    if names_committed_receipt "$EVIDENCE_PATH"; then
+        echo "deny-sorry gate: refusing to write $COMMITTED_RECEIPT -- its one producer is" >&2
+        echo "  clean replacement trust-core-evidence --deny-sorry --evidence $COMMITTED_RECEIPT" >&2
+        exit 2
+    fi
     rm -f "$EVIDENCE_PATH"
 fi
 
@@ -303,40 +317,10 @@ SOURCE_PATHS = [
     Path("crates/clean-kernel/tests/lint_sorry_bypass.rs"),
     RATCHET_PATH,
 ]
-
-
-# TRUST-CORE PINS (added 2026-08-27). The in-binary validator
-# (cmd_replacement/launch_validation.rs -> validate_trust_core_module_tree_sha)
-# and scripts/check_trustcore_evidence_staleness.py both REQUIRE these two
-# keys, but this minter never wrote them, so every freshly minted artifact was
-# born stale and the only previous remedy was hand-editing a generated file
-# (2b3ee69ee). Mint them instead.
-TRUST_CORE_MODULE_FILE = Path("crates/clean-cli/src/cmd_replacement.rs")
-TRUST_CORE_MODULE_DIR = Path("crates/clean-cli/src/cmd_replacement")
-TRUST_CORE_MODULE_TREE_KEY = "crates/clean-cli/src/cmd_replacement/**/*.rs"
-
-
-def trust_core_module_tree_digest(root: Path) -> str:
-    """Byte-identical replication of `sha256_repo_module_tree` (artifact_io.rs)."""
-    entries = []
-    for path in root.rglob("*"):
-        if path.is_symlink() or not path.is_file():
-            continue
-        stem, dot, ext = path.name.rpartition(".")
-        if dot != "." or stem == "" or ext != "rs":
-            continue
-        rel = path.relative_to(root).as_posix()
-        if rel.startswith("tests/"):
-            continue
-        entries.append((rel.encode("utf-8"), path.read_bytes()))
-    entries.sort(key=lambda entry: entry[0])
-    hasher = hashlib.sha256()
-    for rel_bytes, data in entries:
-        hasher.update(rel_bytes)
-        hasher.update(b"\x00")
-        hasher.update(len(data).to_bytes(8, "little"))
-        hasher.update(data)
-    return hasher.hexdigest()
+# This run record pins only the inputs above. The trust-core module-tree and
+# shared-digest pins belong to the committed v2 receipt, which only the Rust
+# producer writes; the Python copy of that digest that lived here was deleted
+# in the EV0 review (2026-11-17).
 
 
 def sha256_file(path: Path) -> str:
@@ -380,11 +364,7 @@ artifact = {
         "add_decl_unchecked_count": ratchet["add_decl_unchecked_count"],
         "sha256": sha256_file(RATCHET_PATH),
     },
-    "source_sha256": {
-        **{str(p): sha256_file(p) for p in SOURCE_PATHS},
-        str(TRUST_CORE_MODULE_FILE): sha256_file(TRUST_CORE_MODULE_FILE),
-        TRUST_CORE_MODULE_TREE_KEY: trust_core_module_tree_digest(TRUST_CORE_MODULE_DIR),
-    },
+    "source_sha256": {str(p): sha256_file(p) for p in SOURCE_PATHS},
     "lanes": lanes,
 }
 EVIDENCE_PATH.write_text(json.dumps(artifact, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -588,6 +568,24 @@ selftest() {
         fi
         rm -f "$synthetic"
     done
+
+    # The committed receipt has one producer, the Rust one, so this script must
+    # recognise every spelling of its path and refuse it, and must not refuse
+    # an ordinary run-record path (or the guard refuses everything).
+    _arm "the committed receipt is recognised by its own spelling" ok \
+        names_committed_receipt "$COMMITTED_RECEIPT"
+    _arm "the committed receipt is recognised through ./reports/../reports" ok \
+        names_committed_receipt "./reports/../$COMMITTED_RECEIPT"
+    _arm "the committed receipt is recognised by its absolute path" ok \
+        names_committed_receipt "$(pwd -P)/$COMMITTED_RECEIPT"
+    local link_dir
+    link_dir="$(mktemp -d "${TMPDIR:-/tmp}/Clean-deny-sorry-selftest.XXXXXX")"
+    ln -s "$(pwd -P)/$COMMITTED_RECEIPT" "$link_dir/receipt.json"
+    _arm "a symlink to the committed receipt is recognised" ok \
+        names_committed_receipt "$link_dir/receipt.json"
+    _arm "a run-record path outside reports/ is not the receipt" red \
+        names_committed_receipt "$link_dir/run.json"
+    rm -rf "${link_dir:?}"
 
     # The argument contract itself: an unknown argument must refuse rather
     # than run the whole gate, which is what let a non-command sit in the

@@ -20,6 +20,7 @@
 //! lemma Lean removes.
 
 use std::collections::HashSet;
+use std::sync::LazyLock;
 
 use clean_kernel::{Expr, Level, Name};
 use clean_parser::{SurfaceExpr, SurfaceName, SurfaceSimpArg};
@@ -38,6 +39,8 @@ use crate::tactic::{ProofState, TacticError};
 /// (`collect_extra_lemmas`): below the `@[simp]` registry (100) and below
 /// `simp [*]`'s hypothesis rules (75).
 pub(crate) const SIMP_ARG_PRIORITY: u32 = 50;
+pub(super) static SIMP_ARG_RULE_PREFIX: LazyLock<Name> =
+    LazyLock::new(|| Name::from_string("?_simpArg"));
 
 /// A `simp` lemma list resolved into the channels [`super::SimpConfig`] has.
 #[derive(Debug, Default)]
@@ -513,14 +516,14 @@ fn collect_open_metas(e: &Expr, out: &mut Vec<Expr>) {
 /// lemma carrying a real constant's name causes. The head's spelling is kept
 /// as a suffix so `CLEAN_SIMP_MATCH_TRACE` stays readable.
 fn simp_arg_rule_name(term: &SurfaceExpr) -> Name {
-    let prefix = Name::from_string("_simpArg");
+    let prefix = &*SIMP_ARG_RULE_PREFIX;
     match surface_head_name(term) {
         // The head's own kernel name, appended component-wise — never its
         // DISPLAY spelling re-parsed by `Name::from_string`, which would
         // flatten `Function.comp` into one component and lose an escaped
         // component's identity.
-        Some(head) => crate::namespace::append_names(&prefix, &head),
-        None => prefix.str("term"),
+        Some(head) => crate::namespace::append_names(prefix, &head),
+        None => prefix.clone().str("term"),
     }
 }
 

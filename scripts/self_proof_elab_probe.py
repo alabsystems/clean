@@ -8,6 +8,7 @@ The gate compares named refusal signatures exactly, so closing one is red too.
 import argparse
 import contextlib
 from datetime import datetime, timezone
+from graphlib import TopologicalSorter
 import hashlib
 import io
 import json
@@ -20,6 +21,14 @@ import sys
 import tarfile
 import tempfile
 import time
+
+try:
+    import tomllib
+except ImportError:  # The system interpreter on the fleet may be Python 3.9.
+    try:
+        import tomli as tomllib
+    except ImportError:
+        from pip._vendor import tomli as tomllib
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGES = ("cic_l", "cic_l_model", "kcheck", "kcheck_spec", "kcheck_labelled")
@@ -79,6 +88,8 @@ def inventory(root=ROOT):
         for line in order.read_text().splitlines():
             module = line.partition("#")[0].strip()
             if module:
+                if Path(module).is_absolute() or any(piece in ("", ".", "..") for piece in module.split("/")):
+                    raise ValueError(f"invalid ORDER module: {package}/{module}")
                 source = order.parent / (module + ".lean")
                 if module in listed or not source.is_file():
                     raise ValueError(f"duplicate or missing ORDER module: {package}/{module}")
@@ -96,24 +107,85 @@ def inventory(root=ROOT):
     return rows
 
 
-def stage_sources(snapshot, work):
-    # Preflight the union before writing any file: package order must never
-    # choose which same-named module Clean actually checks.
-    staged = {}
+def package_closures(theories):
+    """Resolve local Lake requirements and check them against each committed lock."""
+    requirements = {}
     for package in PACKAGES:
-        root = snapshot / "theories" / package
+        root = theories / package
+        if root.resolve() != theories.resolve() / package:
+            raise ValueError(f"package directory escapes its owner: {package}")
+        config = tomllib.loads((root / "lakefile.toml").read_text())
+        rows = config.get("require", [])
+        if config.get("name") != package or not isinstance(rows, list):
+            raise ValueError(f"invalid Lake package requirements: {package}")
+        deps = set()
+        for row in rows:
+            if not isinstance(row, dict) or set(row) != {"name", "path"}:
+                raise ValueError(f"unsupported Lake dependency: {package}: {row}")
+            name, path = row["name"], row["path"]
+            if (not isinstance(name, str) or name not in PACKAGES or name in deps
+                    or not isinstance(path, str) or Path(path).is_absolute()
+                    or (root / path).resolve() != theories.resolve() / name):
+                raise ValueError(f"unresolved or conflicting Lake dependency: {package}: {row}")
+            deps.add(name)
+        requirements[package] = deps
+
+    closures = {}
+    for package in TopologicalSorter(requirements).static_order():
+        deps = set().union(*(closures[name] for name in requirements[package]))
+        root = theories / package
+        lock = json.loads((root / "lake-manifest.json").read_text())
+        if not isinstance(lock, dict) or lock.get("name") != package or not isinstance(lock.get("packages"), list):
+            raise ValueError(f"invalid Lake dependency manifest: {package}")
+        locked = set()
+        for row in lock["packages"]:
+            name = row.get("name") if isinstance(row, dict) else None
+            if (not isinstance(name, str) or name not in deps or name in locked or row.get("type") != "path"
+                    or row.get("inherited") is not (name not in requirements[package])
+                    or not isinstance(row.get("dir"), str) or Path(row["dir"]).is_absolute()
+                    or (root / row["dir"]).resolve() != theories.resolve() / name):
+                raise ValueError(f"conflicting Lake dependency manifest: {package}: {row}")
+            locked.add(name)
+        if locked != deps:
+            raise ValueError(f"Lake manifest and requirement closure disagree: {package}")
+        closures[package] = deps | {package}
+    return closures
+
+
+def stage_sources(snapshot, work):
+    theories = snapshot / "theories"
+    closures = package_closures(theories)
+    sources = {}
+    for package in PACKAGES:
+        root = theories / package
+        sources[package] = {}
         for source in sorted(root.rglob("*.lean")):
-            if ".lake" in source.parts:
-                continue
             relative = source.relative_to(root)
-            if relative in staged:
-                owner, _ = staged[relative]
-                raise ValueError(f"source path collision: {relative} in {owner} and {package}")
-            staged[relative] = (package, source)
-    for relative, (_, source) in staged.items():
-        dest = work / relative
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(source, dest)
+            if ".lake" in relative.parts:
+                continue
+            if not source.resolve().is_relative_to(root.resolve()):
+                raise ValueError(f"source path escaped its owner: {package}/{relative}")
+            sources[package][relative] = source
+
+    # Preflight every closure before writing. A common ancestor is staged once.
+    # Sibling packages may own distinct definitions of the same Lean module.
+    layouts = {}
+    for package, closure in closures.items():
+        files = {}
+        for owner in sorted(closure):
+            for relative, source in sources[owner].items():
+                if relative in files:
+                    raise ValueError(f"source path collision in {package}: {relative} from {files[relative]} and {source}")
+                files[relative] = source
+        layouts[package] = files
+    for package, files in layouts.items():
+        root = work / package
+        root.mkdir(parents=True)
+        shutil.copyfile(theories / package / "lean-toolchain", root / "lean-toolchain")
+        for relative, source in files.items():
+            dest = root / relative
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source, dest)
 
 
 def measured(argv, cwd, env, cap, profile=None):
@@ -240,7 +312,7 @@ def execution_probes(binary, snapshot, work, env, cap, measure=gated_measure):
     rows = []
     for package, module in EXECUTION_PROBES:
         row = measure([str(binary), "run", module + ".lean", "--decl", "main"],
-                      work, env, cap)
+                      work / package, env, cap)
         # A deadline remains a non-verdict even if the process exited zero
         # with the expected bytes. The source classifier has the same rule.
         if row["exit"] == 0 and not row["timed_out"]:
@@ -279,8 +351,10 @@ def compare(actual, expected):
 
 
 def selftest():
+    from unittest import TestCase
     from unittest.mock import patch
 
+    tests = TestCase()
     child = measured([sys.executable, "-c", "print('measured child')"], ROOT, os.environ, 10)
     assert child["exit"] == 0 and child["stdout"] == "measured child\n"
     assert child["peak_bytes"] > 0 and not child["timed_out"]
@@ -301,12 +375,8 @@ def selftest():
     logged = good | {"exit": 1, "stdout": "", "stderr": "time INFO imported module\nError: named refusal\n  detail\n"}
     assert classify(logged) == ("refused", "Error: named refusal\n  detail")
     for change in ({"stdout": ""}, {"stdout": "{}"}, {"exit": 1}):
-        try:
+        with tests.assertRaises(ValueError, msg="empty evidence accepted"):
             classify(good | change)
-        except ValueError:
-            pass
-        else:
-            raise AssertionError("empty evidence accepted")
     row = {"package": "p", "module": "M", "status": "refused", "first_error": "named gap"}
     baseline = {"cap_seconds": 120, "complete": True,
                 "expected_modules": [["p", "M"]], "modules": [row],
@@ -320,72 +390,94 @@ def selftest():
                     authority | {"binary_profile": authority["binary_profile"] | {"debug_assertions": False}},
                     authority | {"binary_profile": authority["binary_profile"] | {"overflow_checks": False}},
                     authority | {"binary_profile": authority["binary_profile"] | {"test": True}}):
-        try:
+        with tests.assertRaises(ValueError, msg="changed or weakened build profile accepted"):
             compare(changed, baseline)
-        except ValueError:
-            pass
-        else:
-            raise AssertionError("changed or weakened build profile accepted")
     for mutation in ({"first_error": "different gap"}, {"status": "elaborated", "first_error": ""}):
-        try:
+        with tests.assertRaises(ValueError, msg="changed refusal accepted"):
             compare(baseline | {"modules": [row | mutation]}, baseline)
-        except ValueError:
-            pass
-        else:
-            raise AssertionError("changed refusal accepted")
-    try:
+    with tests.assertRaises(ValueError, msg="missing subject accepted"):
         compare(baseline | {"modules": []}, baseline)
-    except ValueError:
-        pass
-    else:
-        raise AssertionError("missing subject accepted")
     with tempfile.TemporaryDirectory(prefix="e4-empty-order-") as temp:
         root = Path(temp)
         order = root / "theories" / PACKAGES[0] / "ORDER"
         order.parent.mkdir(parents=True)
         order.write_text("# no modules\n")
-        try:
+        with tests.assertRaisesRegex(ValueError, "empty ORDER", msg="empty ORDER accepted"):
             inventory(root)
-        except ValueError as error:
-            assert "empty ORDER" in str(error)
-        else:
-            raise AssertionError("empty ORDER accepted")
-    with tempfile.TemporaryDirectory(prefix="e4-package-union-") as temp:
+    with tempfile.TemporaryDirectory(prefix="e4-package-closures-") as temp:
         root = Path(temp)
         for i, package in enumerate(PACKAGES):
             source = root / "theories" / package / f"P{i}" / "Module.lean"
             source.parent.mkdir(parents=True)
             source.write_text(f"def package{i} := {i}\n")
             (source.parent.parent / "ORDER").write_text(f"P{i}/Module\n")
+        def fixture_manifest(owner, direct, inherited=()):
+            directory = root / "theories" / owner
+            (directory / "lean-toolchain").write_text("fixture\n")
+            (directory / "lakefile.toml").write_text(
+                f'name = "{owner}"\n' + "".join(
+                    f'[[require]]\nname = "{name}"\npath = "../{name}"\n' for name in direct))
+            (directory / "lake-manifest.json").write_text(json.dumps({"name": owner, "packages": [
+                {"name": name, "dir": "../" + name, "type": "path", "inherited": name in inherited}
+                for name in [*direct, *inherited]]}))
+
+        for package in PACKAGES:
+            fixture_manifest(package, [])
+        fixture_manifest("cic_l_model", ["cic_l"])
+        fixture_manifest("kcheck", ["cic_l"])
+        fixture_manifest("kcheck_labelled", ["cic_l_model"], ["cic_l"])
+        for checker in ("kcheck", "kcheck_labelled"):
+            duplicate = root / "theories" / checker / "KCheck" / "InferSound.lean"
+            duplicate.parent.mkdir()
+            duplicate.write_text(checker + "\n")
         assert [p for p, _, _ in inventory(root)] == list(PACKAGES)
-        stage_sources(root, root / "work")
-        assert (root / "work" / f"P{len(PACKAGES)-1}" / "Module.lean").is_file()
-        duplicate = root / "theories" / PACKAGES[-1] / "P0" / "Module.lean"
-        duplicate.parent.mkdir()
-        duplicate.write_text("def overwritten := 9\n")
-        try:
+        work = root / "work"
+        stage_sources(root, work)
+        for checker in ("kcheck", "kcheck_labelled"):
+            assert (work / checker / "KCheck/InferSound.lean").read_text() == checker + "\n"
+            assert (work / checker / "P0/Module.lean").is_file()
+        assert not (work / "kcheck" / "P1/Module.lean").exists()
+        assert not (work / "kcheck_labelled" / "P2/Module.lean").exists()
+
+        # A duplicate in two dependencies of ONE target must abort all staging.
+        fixture_manifest("kcheck_labelled", ["cic_l_model", "kcheck"], ["cic_l"])
+        with tests.assertRaisesRegex(ValueError, "source path collision in kcheck_labelled",
+                                     msg="colliding package source silently overwritten"):
             stage_sources(root, root / "collision-output")
-        except ValueError as error:
-            assert "source path collision" in str(error)
-            assert not (root / "collision-output").exists()
-        else:
-            raise AssertionError("colliding package source silently overwritten")
-        (root / "theories" / PACKAGES[-1] / "ORDER").unlink()
-        try:
+        assert not (root / "collision-output").exists()
+        directory = root / "theories/kcheck_labelled"
+        for old, new in (('path = "../kcheck"', 'path = "../../kcheck"'),
+                         ('name = "kcheck"', 'name = "unknown"')):
+            fixture_manifest("kcheck_labelled", ["kcheck"], ["cic_l"])
+            config = directory / "lakefile.toml"
+            config.write_text(config.read_text().replace(old, new))
+            with tests.assertRaisesRegex(ValueError, "Lake dependency",
+                                         msg="unresolved or escaping requirement accepted"):
+                stage_sources(root, root / "malformed-output")
+            assert not (root / "malformed-output").exists()
+        fixture_manifest("kcheck_labelled", ["cic_l_model"], [])  # indirect cic_l omitted from lock
+        with tests.assertRaisesRegex(ValueError, "closure disagree",
+                                     msg="stale Lake dependency manifest accepted"):
+            stage_sources(root, root / "stale-lock-output")
+        assert not (root / "stale-lock-output").exists()
+        order = directory / "ORDER"
+        order_source = order.read_text()
+        order.write_text(order_source + "../kcheck/P2/Module\n")
+        with tests.assertRaisesRegex(ValueError, "invalid ORDER", msg="ORDER subject escaped its package"):
             inventory(root)
-        except FileNotFoundError:
-            pass
-        else:
-            raise AssertionError("missing last package accepted")
+        order.write_text(order_source)
+        (directory / order_source.strip()).with_name("Unlisted.lean").write_text("def extra := 4\n")
+        with tests.assertRaisesRegex(ValueError, "ORDER and library source modules disagree",
+                                     msg="unlisted source module omitted from inventory"):
+            inventory(root)
+        order.unlink()
+        with tests.assertRaises(FileNotFoundError, msg="missing last package accepted"):
+            inventory(root)
     probe = {"name": "adopted checker", "status": "refused", "first_error": "named"}
     complete = baseline | {"expected_probes": [probe["name"]], "probes": [probe]}
     compare(complete, complete)
-    try:
+    with tests.assertRaises(ValueError, msg="missing adopted-checker probe accepted"):
         compare(complete | {"probes": []}, complete)
-    except ValueError:
-        pass
-    else:
-        raise AssertionError("missing adopted-checker probe accepted")
     with tempfile.TemporaryDirectory(prefix="e4-execution-verdict-") as temp:
         root = Path(temp)
         outputs = {}
@@ -396,7 +488,8 @@ def selftest():
             expected.write_text(outputs[module + ".lean"])
 
         def fixture_result(changes):
-            def measure(argv, *unused):
+            def measure(argv, cwd, *unused):
+                assert (cwd.name, argv[2].removesuffix(".lean")) in EXECUTION_PROBES and cwd.parent == root
                 return {"exit": 0, "timed_out": False, "stderr": "",
                         "stdout": outputs[argv[2]], **changes}
             return measure
@@ -410,13 +503,9 @@ def selftest():
             assert [r["name"] for r in rows] == [m for _, m in EXECUTION_PROBES]
             assert all(r["status"] == status for r in rows)
         for changes in ({"stdout": "wrong bytes\n"}, {"exit": -signal.SIGKILL}):
-            try:
+            with tests.assertRaises(ValueError, msg="execution accepted wrong output or non-cap signal death"):
                 execution_probes("fixture-clean", root, root, {}, 120,
                                  measure=fixture_result(changes))
-            except ValueError:
-                pass
-            else:
-                raise AssertionError("execution accepted wrong output or non-cap signal death")
     with tempfile.TemporaryDirectory(prefix="e4-pin-preflight-") as temp:
         root = Path(temp)
         pin = "leanprover/lean4:fixture"
@@ -430,27 +519,16 @@ def selftest():
         executable.write_bytes(b"presence-only fixture")
         assert pinned_lean_library({"one": pin, "two": pin}, root) == (pin, lib)
         for pins in ({}, {"one": ""}, {"one": pin, "two": "different"}):
-            try:
+            with tests.assertRaises(ValueError, msg="invalid or mismatched pinned Lean accepted"):
                 pinned_lean_library(pins, root)
-            except ValueError:
-                pass
-            else:
-                raise AssertionError("invalid or mismatched pinned Lean accepted")
         prelude.unlink()
-        try:
+        with tests.assertRaisesRegex(ValueError, "library unavailable", msg="missing pinned Lean library accepted"):
             pinned_lean_library({"one": pin}, root)
-        except ValueError as error:
-            assert "library unavailable" in str(error)
-        else:
-            raise AssertionError("missing pinned Lean library accepted")
         prelude.write_bytes(b"presence-only fixture")
         executable.unlink()
-        try:
+        with tests.assertRaisesRegex(ValueError, "executable unavailable",
+                                     msg="missing pinned Lean executable accepted"):
             pinned_lean_library({"one": pin}, root)
-        except ValueError as error:
-            assert "executable unavailable" in str(error)
-        else:
-            raise AssertionError("missing pinned Lean executable accepted")
         seen = []
 
         def recorded_git(argv, **kwargs):
@@ -469,12 +547,9 @@ def selftest():
                 patch(__name__ + ".selftest", lambda: None), \
                 patch.object(subprocess, "check_output", recorded_git), \
                 patch.object(subprocess, "run", no_expensive_work):
-            try:
+            with tests.assertRaisesRegex(ValueError, "pinned Lean library unavailable",
+                                         msg="missing pin did not stop the CLI"):
                 main()
-            except ValueError as error:
-                assert "pinned Lean library unavailable" in str(error)
-            else:
-                raise AssertionError("missing pin did not stop the CLI")
         assert len(seen) == 1 + len(PACKAGES)
     print("SELF_PROOF_ELAB_SELFTEST=ok", flush=True)
 
@@ -568,9 +643,7 @@ def main():
                   "build_inputs_sha256": inputs,
                   "cap_seconds": args.cap_seconds, "complete": False,
                   "modules": [], "probes": [], "expected_probes": EXPECTED_PROBES}
-        # Use a source-only copy with every package root side by side, as the
-        # executable's production source-import path requires. Never rewrite
-        # a theory or silently reuse a local .olean build.
+        # Each check sees only the unmodified sources in its Lake dependency closure.
         with tempfile.TemporaryDirectory(prefix="e4-sources-") as scratch:
             work = Path(scratch)
             report["source_snapshot_commit"] = subprocess.check_output(
@@ -593,7 +666,6 @@ def main():
                     dest.write_bytes(files.extractfile(entry).read())
             modules = inventory(snapshot)
             report["expected_modules"] = [[p, m] for p, m, _ in modules]
-            (work / "lean-toolchain").write_bytes((snapshot / "theories/cic_l/lean-toolchain").read_bytes())
             stage_sources(snapshot, work)
             pins = {package: (snapshot / "theories" / package / "lean-toolchain").read_text().strip()
                     for package in PACKAGES}
@@ -608,7 +680,7 @@ def main():
             profile = (args.output.parent / "KCheck-Check-diagnostic.sample.txt").resolve() if sys.platform == "darwin" else None
             diagnostic_env = env | {"CLEAN_CHECK_DECL_BUDGET_TRACE": "1"}
             row = gated_measure([str(binary), "check", "KCheck/Check.lean", "--json"],
-                                work, diagnostic_env, args.cap_seconds, profile)
+                                work / "kcheck", diagnostic_env, args.cap_seconds, profile)
             status, error = classify(row)
             row.update(name="KCheck/Check diagnostic", status=status, first_error=error,
                        trace_env={"CLEAN_CHECK_DECL_BUDGET_TRACE": "1"})
@@ -617,10 +689,11 @@ def main():
             for package, module, source in modules:
                 argv = [str(binary), "check", module + ".lean", "--json"]
                 profile = (args.output.parent / "KCheck-Check.sample.txt").resolve() if module == "KCheck/Check" and sys.platform == "darwin" else None
-                row = gated_measure(argv, work, env, args.cap_seconds, profile)
+                source_root = work / package
+                row = gated_measure(argv, source_root, env, args.cap_seconds, profile)
                 status, error = classify(row)
                 row.update(package=package, module=module, status=status, first_error=error,
-                           source_sha256=hashlib.sha256((work / (module + ".lean")).read_bytes()).hexdigest())
+                           source_sha256=hashlib.sha256((source_root / (module + ".lean")).read_bytes()).hexdigest())
                 report["modules"].append(row)
                 args.output.parent.mkdir(parents=True, exist_ok=True)
                 args.output.write_text(json.dumps(report, indent=2) + "\n")

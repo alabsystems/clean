@@ -96,10 +96,12 @@ fn csimp_body_snapshots_survive_real_lake_artifacts() {
     tamper(dir, "CsA", |payload| {
         payload.csimp[0].data = clean_kernel::env::EnvExtensionEntryData::Object(vec![1, 2, 3]);
     });
-    let (corrupt, _) = load(dir, "CsA");
+    let (mut corrupt, _) = builder_base();
+    let error = clean_olean::load_module_with_deps(&mut corrupt, "CsA", &load_paths(dir))
+        .expect_err("malformed compiler context must refuse the artifact");
     assert!(
-        csimp::has_invalid_metadata(&corrupt),
-        "invalid artifact metadata must remain a compilation refusal"
+        error.to_string().contains("invalid compiler context"),
+        "{error}"
     );
 }
 

@@ -456,12 +456,17 @@ def selftest(git_env=None):
     with tempfile.TemporaryDirectory() as d:
         repo = os.path.join(d, "r")
         os.makedirs(os.path.join(repo, "data"))
+        # A short all-digit SHA is deliberately ignored. Fix the object inputs so
+        # both real nine-character fixture anchors exercise reachability every run.
+        date = "1700000001 +0000"
         env = {**git_env, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t.invalid",
-               "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t.invalid"}
+               "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t.invalid",
+               "GIT_AUTHOR_DATE": date, "GIT_COMMITTER_DATE": date}
         def g(*a):
-            return subprocess.run(["git", "-C", repo, *a], capture_output=True,
-                                  text=True, env=env)
-        g("init", "-q", "-b", "main")
+            return subprocess.run(["git", "-C", repo, "-c", "commit.gpgSign=false",
+                                   "-c", "tag.gpgSign=false", *a], capture_output=True,
+                                  text=True, env=env, check=True)
+        g("init", "-q", "-b", "main", "--object-format=sha1")
         with open(os.path.join(repo, "data", "rec.json"), "w") as fh:
             fh.write('{"n": "placeholder"}')
         g("add", "-A"); g("commit", "-qm", "base")
@@ -470,6 +475,8 @@ def selftest(git_env=None):
             fh.write('{"n": "second"}')
         g("add", "-A"); g("commit", "-qm", "second")
         orphan = g("rev-parse", "HEAD").stdout.strip()
+        if any(len(sha) != 40 or not re.search(r"[a-f]", sha[:9]) for sha in (base, orphan)):
+            raise ValueError("reachability selftest needs two extractable abbreviated commit IDs")
         g("reset", "--hard", "-q", base)          # orphan stays in the ODB
         # audit r9 M-2: the POSITIVE arms live HERE now. They used to be minted
         # from the ambient HEAD, which false-reds in every detached worktree
@@ -487,20 +494,22 @@ def selftest(git_env=None):
             ("glued-resolving",
              '{"n": "see srcelab-2026-01-01-g%s.json"}' % base[:9], False),
         ]
-        # audit r10 M10-6: a commit reachable ONLY from a local lane namespace
-        # is NOT shareable -- this is the hole the filter closes, and it had no
-        # arm, so reverting the two path arguments used to survive the suite.
-        g("update-ref", "refs/lane/keepalive", orphan)
-        cases.append(("lane-ref-only-is-not-shareable",
-                      '{"armed_commit": "%s"}' % orphan[:9], True))
-        n_arms += len(cases)
-        for tag, body, expect_bad in cases:
+        def repo_arm(tag, body, expect_bad):
+            nonlocal ok, n_arms
+            n_arms += 1
             with open(os.path.join(repo, "data", "rec.json"), "w") as fh:
                 fh.write(body)
             if bool(check(["data/rec.json"], ["."], {}, root=repo)) != expect_bad:
                 print(f"  [RED] provenance-anchors arm {tag}: expected "
                       f"{'refusal' if expect_bad else 'green'}, got the opposite")
                 ok = False
+
+        for case in cases:
+            repo_arm(*case)
+        # Run the orphan arm before introducing a ref. A local-only ref exercises
+        # a different rejection from an object unreachable from every ref.
+        g("update-ref", "refs/lane/keepalive", orphan)
+        repo_arm("lane-ref-only-is-not-shareable", '{"armed_commit": "%s"}' % orphan[:9], True)
     # a missing audited file is a refusal
     if not check(["data/does_not_exist_xyz.json"], ["."], {}):
         print("  [RED] provenance-anchors arm missing-file: absence was not refused")

@@ -220,6 +220,9 @@ fn push_result_messages(result: &ElabResult, out: &mut Vec<CommandMessage>) {
             CommandOutput::PrintAxioms(r) => {
                 out.extend(r.messages.iter().map(CommandMessage::info));
             }
+            CommandOutput::PrintEquations(messages) => {
+                out.extend(messages.iter().map(CommandMessage::info));
+            }
             CommandOutput::GuardMsgs(r) => out.extend(r.passthrough.iter().cloned()),
             CommandOutput::Check(r) => out.push(CommandMessage::info(r.to_string())),
             CommandOutput::Eval(r) => out.push(CommandMessage::info(r.to_string())),

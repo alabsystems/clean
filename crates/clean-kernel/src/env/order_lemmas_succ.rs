@@ -14,9 +14,7 @@
 
 use crate::env::decl_builder::EnvDeclBuilder;
 use crate::env::order::{nat_le_tc, nat_lt_tc};
-use crate::env::{
-    Declaration, EnvError, Environment, KernelInstanceInfo, DEFAULT_INSTANCE_PRIORITY,
-};
+use crate::env::{Declaration, EnvError, Environment, KernelInstanceInfo};
 use crate::expr::{BinderInfo, Expr};
 #[cfg(test)]
 use crate::level::Level;
@@ -663,29 +661,27 @@ impl Environment {
             });
         }
 
+        // Init.Prelude registers both decision procedures as unannotated instances
+        // at priority 1000. A lower-priority source instance must yield to them.
+        // Keep the LE.le/LT.lt types checked against their values above for the
+        // instance index. Existing callers may still name the checked aliases.
         // Register the two decision procedures under the `Decidable` class so
         // `if (a ≤ b)` / `if (a < b)` / `decide` resolve them. Stripping the two
         // explicit `Nat` binders leaves `Decidable (@LE.le Nat instLENat ?a ?b)`
         // (resp. `LT.lt`) — exactly the goal `resolve_decidable` constructs.
         self.register_instance(KernelInstanceInfo {
-            name: Name::from_string("instDecidableNatLe"),
+            name: Name::from_string("Nat.decLe"),
             class_name: Name::from_string("Decidable"),
-            priority: DEFAULT_INSTANCE_PRIORITY,
+            priority: crate::env::LEAN_DEFAULT_INSTANCE_PRIORITY,
             type_: Some(le_ty),
-            value: Some(Expr::const_(
-                Name::from_string("instDecidableNatLe"),
-                vec![],
-            )),
+            value: Some(Expr::const_(Name::from_string("Nat.decLe"), vec![])),
         });
         self.register_instance(KernelInstanceInfo {
-            name: Name::from_string("instDecidableNatLt"),
+            name: Name::from_string("Nat.decLt"),
             class_name: Name::from_string("Decidable"),
-            priority: DEFAULT_INSTANCE_PRIORITY,
+            priority: crate::env::LEAN_DEFAULT_INSTANCE_PRIORITY,
             type_: Some(lt_ty),
-            value: Some(Expr::const_(
-                Name::from_string("instDecidableNatLt"),
-                vec![],
-            )),
+            value: Some(Expr::const_(Name::from_string("Nat.decLt"), vec![])),
         });
 
         self.nat_decidable_ord_init = true;

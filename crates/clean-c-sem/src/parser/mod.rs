@@ -42,7 +42,7 @@ mod types;
 #[cfg(test)]
 mod tests;
 
-pub use spec::parse_acsl_spec;
+pub use spec::{parse_acsl_contract, parse_acsl_spec};
 
 use crate::stmt::FuncDef;
 use crate::verified::VerifiedFunction;
@@ -185,7 +185,7 @@ impl CParser {
             if let Some(child) = root.child_at(i) {
                 if child.kind() == "function_definition" {
                     let func = self.parse_function_node(child, source)?;
-                    let spec = self.extract_func_spec(child, source).unwrap_or_default();
+                    let spec = self.extract_func_spec(child, source)?.unwrap_or_default();
                     functions.push(VerifiedFunction {
                         name: func.name.clone(),
                         description: format!("Parsed function {}", func.name),
@@ -209,7 +209,7 @@ impl CParser {
             if let Some(child) = root.child_at(i) {
                 if child.kind() == "function_definition" {
                     let func = self.parse_function_node(child, source)?;
-                    let spec = self.extract_func_spec(child, source).unwrap_or_default();
+                    let spec = self.extract_func_spec(child, source)?.unwrap_or_default();
                     return Ok(VerifiedFunction {
                         name: func.name.clone(),
                         description: format!("Parsed function {}", func.name),

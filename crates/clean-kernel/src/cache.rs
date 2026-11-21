@@ -1029,8 +1029,9 @@ mod tests {
 
     /// Regression test for #1771: hash collision must not return wrong type.
     ///
-    /// Constructs two structurally different expressions with identical 32-bit
-    /// hashes (forced via ExprMeta). Before the fix, both would map to the same
+    /// Constructs two different open expressions with identical bucket hashes
+    /// (forced via ExprMeta, which remains the open-expression Hash input).
+    /// Before the fix, both would map to the same
     /// TypeCheckId and the second insert would silently overwrite the first.
     /// After the fix, structural equality in TypeCheckId distinguishes them.
     #[test]
@@ -1040,12 +1041,12 @@ mod tests {
 
         // Two structurally different expressions sharing the same 32-bit hash
         let expr_a = Expr::with_meta(
-            ExprKind::BVar(0),
-            ExprMeta::pack(collision_hash, 0, 0, false, false, false, false),
+            ExprKind::FVar(FVarId::new(0)),
+            ExprMeta::pack(collision_hash, 0, 0, true, false, false, false),
         );
         let expr_b = Expr::with_meta(
-            ExprKind::BVar(1),
-            ExprMeta::pack(collision_hash, 0, 0, false, false, false, false),
+            ExprKind::FVar(FVarId::new(1)),
+            ExprMeta::pack(collision_hash, 0, 0, true, false, false, false),
         );
 
         // Verify they are structurally different but hash-identical
@@ -1054,6 +1055,11 @@ mod tests {
             expr_a.hash_cached(),
             expr_b.hash_cached(),
             "expressions must share the same 32-bit hash for this test"
+        );
+        assert_eq!(
+            TypeCheckId::new(&expr_a, 0, 0).expr_hash,
+            TypeCheckId::new(&expr_b, 0, 0).expr_hash,
+            "the complete current cache bucket hash must collide"
         );
 
         // Two distinct result types
@@ -1087,15 +1093,17 @@ mod tests {
     /// Verify that TypeCheckId structural equality rejects colliding hashes.
     #[test]
     fn test_type_check_id_rejects_hash_collision() {
+        // Open nodes retain the metadata Hash input. Closed-node collisions
+        // are separately forced through the shared auxiliary word in expr tests.
         let collision_hash: u32 = 0xCAFE_BABE;
 
         let expr_a = Expr::with_meta(
-            ExprKind::BVar(0),
-            ExprMeta::pack(collision_hash, 0, 0, false, false, false, false),
+            ExprKind::FVar(FVarId::new(0)),
+            ExprMeta::pack(collision_hash, 0, 0, true, false, false, false),
         );
         let expr_b = Expr::with_meta(
-            ExprKind::BVar(1),
-            ExprMeta::pack(collision_hash, 0, 0, false, false, false, false),
+            ExprKind::FVar(FVarId::new(1)),
+            ExprMeta::pack(collision_hash, 0, 0, true, false, false, false),
         );
 
         let id_a = TypeCheckId::new(&expr_a, 0, 0);

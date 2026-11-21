@@ -23,7 +23,7 @@
 //!    concrete instance, the ground goal `Class Carrier` must resolve to THAT
 //!    instance and not to some imported general one.
 //!
-//! Both lanes skip when the pinned toolchain is absent.
+//! Both lanes require the exact workspace-pinned toolchain; absence fails.
 //!
 //! Decoy discipline: this probe needs no synthetic decoy at all — the ~3,000
 //! competing instances come from the real `.olean`, so they are exactly the
@@ -37,11 +37,9 @@ use clean_kernel::env::Environment;
 use clean_kernel::expr::{Expr, ExprKind};
 use clean_kernel::level::Level;
 use clean_kernel::name::Name;
+use clean_kernel::TypeChecker;
 use clean_olean::load_module_with_deps;
 use std::path::PathBuf;
-
-/// The pinned toolchain whose `InstanceEntry` layout the decoder targets.
-const PINNED_TOOLCHAIN: &str = "leanprover--lean4---v4.30.0-rc2";
 
 const IMPORT_ROOT: &str = "Init";
 
@@ -145,23 +143,19 @@ const GROUND_GOALS: &[(&str, &str, &str)] = &[
     ("Neg", "Float", "instNegFloat"),
 ];
 
-fn v4_30_lib_path() -> Option<PathBuf> {
-    let home = std::env::var("HOME").ok()?;
-    let lib = PathBuf::from(home)
-        .join(".elan/toolchains")
-        .join(PINNED_TOOLCHAIN)
-        .join("lib/lean");
-    lib.join("Init.olean").is_file().then_some(lib)
+fn pinned_lib_path() -> PathBuf {
+    clean_olean::require_pinned_lean_lib_path()
+        .expect("real import probe requires the exact repository-pinned Lean standard library")
 }
 
 /// A prelude environment with a real `import Init` on top — the configuration
 /// where a hand-registered priority actually competes with Lean's.
-fn imported_env() -> Option<Environment> {
-    let lib = v4_30_lib_path()?;
+fn imported_env() -> Environment {
+    let lib = pinned_lib_path();
     let mut env = Environment::with_prelude();
     load_module_with_deps(&mut env, IMPORT_ROOT, &[lib])
         .unwrap_or_else(|e| panic!("importing {IMPORT_ROOT} must succeed: {e}"));
-    Some(env)
+    env
 }
 
 fn head_name(e: &Expr) -> Option<Name> {
@@ -184,10 +178,7 @@ fn rank_of(env: &Environment, class: &str, instance: &str) -> Option<(usize, usi
 /// change. Asserts only that nothing vanished, so the dump is always readable.
 #[test]
 fn probe_dump_measured_instance_ranks() {
-    let Some(env) = imported_env() else {
-        eprintln!("Skipping: {PINNED_TOOLCHAIN} not installed");
-        return;
-    };
+    let env = imported_env();
     eprintln!(
         "\n=== instance ranks under real `import {IMPORT_ROOT}` ({} constants) ===",
         env.num_constants()
@@ -223,25 +214,50 @@ fn probe_dump_measured_instance_ranks() {
 /// instance, all of which carry Lean's real 1000.
 #[test]
 fn imported_ground_goals_resolve_to_the_concrete_prelude_instance() {
-    let Some(env) = imported_env() else {
-        eprintln!("Skipping: {PINNED_TOOLCHAIN} not installed");
-        return;
-    };
+    let env = imported_env();
     let mut ctx = ElabCtx::new(&env);
 
     let mut wrong = Vec::new();
     let mut unresolved = Vec::new();
     for (class, carrier, expected) in GROUND_GOALS {
-        if env.get_const(&Name::from_string(carrier)).is_none()
-            || env.get_const(&Name::from_string(class)).is_none()
-        {
-            continue; // carrier/class absent from this import: nothing to claim
-        }
+        assert!(
+            env.get_const(&Name::from_string(carrier)).is_some(),
+            "required carrier absent: {carrier}"
+        );
+        assert!(
+            env.get_const(&Name::from_string(class)).is_some(),
+            "required class absent: {class}"
+        );
+        // Pinned Init/Prelude.lean: Inhabited takes Sort u, whereas the
+        // other measured classes take Type u. Nat/Bool inhabit Sort 1.
+        let level = if *class == "Inhabited" {
+            Level::succ(Level::zero())
+        } else {
+            Level::zero()
+        };
         let goal = Expr::app(
-            Expr::const_(Name::from_string(class), vec![Level::zero()]),
+            Expr::const_(Name::from_string(class), vec![level]),
             Expr::const_(Name::from_string(carrier), Vec::<Level>::new()),
         );
-        match ctx.resolve_instance(&goal).as_ref().and_then(head_name) {
+        let mut checker = TypeChecker::new(&env);
+        checker.set_allow_unsafe(false);
+        checker.set_allow_partial(false);
+        let _ = checker
+            .infer_type(&goal)
+            .expect("measured class goal must be well-typed");
+        assert!(!checker.heartbeat_spent());
+        assert!(!clean_kernel::tc::declaration_budget_exhausted());
+        // An unresolved goal is recorded and asserted after the loop, so every
+        // goal is reported before the test fails.
+        let Some(instance) = ctx.resolve_instance(&goal) else {
+            unresolved.push(format!("{class} {carrier} (want {expected})"));
+            continue;
+        };
+        let checked = checker.check_type(&instance, &goal);
+        assert!(!checker.heartbeat_spent());
+        assert!(!clean_kernel::tc::declaration_budget_exhausted());
+        checked.expect("selected instance must inhabit the actual class goal");
+        match head_name(&instance) {
             Some(winner) if winner == Name::from_string(expected) => {}
             Some(winner) => wrong.push(format!("{class} {carrier}: got {winner}, want {expected}")),
             None => unresolved.push(format!("{class} {carrier} (want {expected})")),
@@ -256,9 +272,8 @@ fn imported_ground_goals_resolve_to_the_concrete_prelude_instance() {
          serializes (see data/prelude_instance_priority_census.json).",
         wrong.join("\n  ")
     );
-    // Unresolved is reported, not asserted: a goal Clean cannot synthesize at
-    // all is a different (pre-existing) gap and must not masquerade as this one.
-    if !unresolved.is_empty() {
-        eprintln!("NOTE: goals that did not resolve at all (separate gap): {unresolved:?}");
-    }
+    assert!(
+        unresolved.is_empty(),
+        "well-typed ground goals did not resolve under real import: {unresolved:?}"
+    );
 }

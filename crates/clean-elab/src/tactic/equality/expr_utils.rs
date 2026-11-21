@@ -10,7 +10,7 @@
 
 use std::sync::Arc;
 
-use clean_kernel::{Expr, ExprKind, ExprVisitor, Level, Name};
+use clean_kernel::{Environment, Expr, ExprKind, ExprVisitor, Level, Name};
 
 use super::super::op_projection::is_hetero_op_projection;
 use super::super::{RewriteCandidate, TacticError};
@@ -286,6 +286,29 @@ pub(crate) fn abstract_over(expr: &Expr, term: &Expr) -> Expr {
     super::super::bvar_ops::abstract_bvar(expr, term, 0)
 }
 
+/// Recover the primitive projection for a saturated, registered structure field
+/// on a binary operator result, such as `(u + v).x`.
+pub(super) fn named_operator_field(env: &Environment, expr: &Expr) -> Option<Expr> {
+    let ExprKind::App(_, receiver) = expr.kind() else {
+        return None;
+    };
+    let ExprKind::Const(op, _) = receiver.get_app_fn().kind() else {
+        return None;
+    };
+    // Three type arguments, the instance and the two operands of HAdd.hAdd etc.
+    if !is_hetero_op_projection(op) || receiver.get_app_num_args() != 6 || expr.has_loose_bvars() {
+        return None;
+    }
+    let (owner, index, params, binder) = crate::structure_cmd::named_field_accessor(env, expr)?;
+    if expr.get_app_num_args() != params + 1
+        || binder == clean_kernel::BinderInfo::InstImplicit
+        || env.is_class(owner)
+    {
+        return None;
+    }
+    Some(Expr::proj(owner.clone(), index, receiver.as_ref().clone()))
+}
+
 /// Locate the first subterm of `haystack` that is definitionally equal to
 /// `needle` but does **not** occur syntactically (so `contains_expr` already
 /// failed). Returns the *surface* (un-reduced) subterm so a subsequent
@@ -313,6 +336,7 @@ pub(crate) fn abstract_over(expr: &Expr, term: &Expr) -> Expr {
 /// directions). Bare atoms (fvars, sorts, literals) are never def-eq-probed.
 /// Traversal is pre-order and stops at the first match.
 pub(crate) fn find_defeq_subterm_with(
+    env: &Environment,
     haystack: &Expr,
     needle: &Expr,
     is_def_eq: &mut dyn FnMut(&Expr, &Expr) -> bool,
@@ -342,23 +366,10 @@ pub(crate) fn find_defeq_subterm_with(
             // to avoid indiscriminate whole-target def-eq probing.
             return false;
         }
-        // Struct-field-projection bridge: a candidate `Proj(S, i, inner)` whose
-        // inner term is headed by a hetero-op typeclass projection. This is the
-        // `(u + v).x` shape — a user-structure field projection over the
-        // structure's own `+`:
-        //   candidate = Proj(arith_Vec2, 0, @HAdd.hAdd … (instHAdd … instAddarith_Vec2) u v)
-        //   needle    = Int.add u.x v.x   -- from `Int.add_comm`'s LHS
-        // The candidate whnf-reduces through the instance chain (instHAdd → the
-        // user instance's field → `arith_Vec2.mk (u.x + v.x) …` → proj 0 →
-        // instAddInt → `Int.add u.x v.x`), so the *kernel def-eq oracle* — not
-        // this gate — decides the match. A bare `Proj` has no const app-head, so
-        // without this arm the head-keyed `let (Const, Const) …` below refuses
-        // it before the oracle ever runs, and the rewrite dies `RewriteNoMatch`
-        // on a goal real Lean's `kabstract` (matching at instance transparency)
-        // accepts. Gating on the hetero-op inner head keeps the probe scoped to
-        // instance-op chains; an instance that bottoms out at a *different* op
-        // (`Int.sub`, a custom `Add` doing something else) still fails the
-        // definitional check and the rewrite refuses, so this cannot over-match.
+        // A primitive field of an operator result can reduce to the needle
+        // through its instance, for example (u + v).x to Int.add u.x v.x.
+        // A registered named accessor has the same role in written source.
+        // The oracle decides whether this particular field is definitionally equal.
         if let ExprKind::Proj(_, _, inner) = candidate.kind() {
             if let ExprKind::Const(inner_head, _) = inner.get_app_fn().kind() {
                 return is_hetero_op_projection(inner_head);
@@ -403,42 +414,49 @@ pub(crate) fn find_defeq_subterm_with(
         is_hetero_op_projection(needle_name)
     }
 
-    fn walk(
-        expr: &Expr,
-        needle: &Expr,
-        needle_head: &Expr,
-        needle_head_is_const: bool,
-        is_def_eq: &mut dyn FnMut(&Expr, &Expr) -> bool,
-    ) -> Option<Expr> {
-        if candidate_worth_probing(expr, needle_head, needle_head_is_const)
-            && is_def_eq(expr, needle)
+    let mut saw_field = false;
+    let ordinary = first_matching_subterm(haystack, &mut |candidate| {
+        if candidate_worth_probing(candidate, needle_head, needle_head_is_const)
+            && is_def_eq(candidate, needle)
         {
-            return Some(expr.clone());
+            return true;
         }
-        match expr.kind() {
-            ExprKind::App(f, a) => walk(f, needle, needle_head, needle_head_is_const, is_def_eq)
-                .or_else(|| walk(a, needle, needle_head, needle_head_is_const, is_def_eq)),
-            ExprKind::Lam(_, ty, body) | ExprKind::Pi(_, ty, body) => {
-                walk(ty, needle, needle_head, needle_head_is_const, is_def_eq)
-                    .or_else(|| walk(body, needle, needle_head, needle_head_is_const, is_def_eq))
-            }
-            ExprKind::Let(_, ty, val, body, _) => {
-                walk(ty, needle, needle_head, needle_head_is_const, is_def_eq)
-                    .or_else(|| walk(val, needle, needle_head, needle_head_is_const, is_def_eq))
-                    .or_else(|| walk(body, needle, needle_head, needle_head_is_const, is_def_eq))
-            }
-            ExprKind::Proj(_, _, inner) | ExprKind::MData(_, inner) | ExprKind::Squash(inner) => {
-                walk(inner, needle, needle_head, needle_head_is_const, is_def_eq)
-            }
-            _ => None,
+        if needle_head_is_const && !saw_field {
+            saw_field = named_operator_field(env, candidate).is_some();
         }
+        false
+    });
+    if ordinary.is_some() || !saw_field {
+        return ordinary.cloned();
     }
+    first_matching_subterm(haystack, &mut |candidate| {
+        named_operator_field(env, candidate).is_some() && is_def_eq(candidate, needle)
+    })
+    .cloned()
+}
 
-    walk(
-        haystack,
-        needle,
-        needle_head,
-        needle_head_is_const,
-        is_def_eq,
-    )
+/// Visit surface subterms in the ordinary rewrite order. A successful match
+/// returns the actual occurrence so substitution can still abstract it.
+pub(super) fn first_matching_subterm<'a>(
+    expr: &'a Expr,
+    matches: &mut impl FnMut(&'a Expr) -> bool,
+) -> Option<&'a Expr> {
+    if matches(expr) {
+        return Some(expr);
+    }
+    match expr.kind() {
+        ExprKind::App(f, a) => {
+            first_matching_subterm(f, matches).or_else(|| first_matching_subterm(a, matches))
+        }
+        ExprKind::Lam(_, ty, body) | ExprKind::Pi(_, ty, body) => {
+            first_matching_subterm(ty, matches).or_else(|| first_matching_subterm(body, matches))
+        }
+        ExprKind::Let(_, ty, val, body, _) => first_matching_subterm(ty, matches)
+            .or_else(|| first_matching_subterm(val, matches))
+            .or_else(|| first_matching_subterm(body, matches)),
+        ExprKind::Proj(_, _, inner) | ExprKind::MData(_, inner) | ExprKind::Squash(inner) => {
+            first_matching_subterm(inner, matches)
+        }
+        _ => None,
+    }
 }

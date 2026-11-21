@@ -57,14 +57,14 @@ impl Specification {
             (
                 "ir_sc_module".to_string(),
                 "def ir_sc_module : IRModule := IRModule.mk \
-                 (IRList.cons IRFunc ir_sc_func (IRList.nil IRFunc)) (IRList.nil IRGlobal)"
+                 (@IRList.cons IRFunc ir_sc_func (@IRList.nil IRFunc)) (@IRList.nil IRGlobal)"
                     .to_string(),
             ),
             (
                 "ir_sc_cfg".to_string(),
                 "def ir_sc_cfg : IRConfig := IRConfig.running (IRMachine.mk \
-                 (IRList.cons IRFrame (IRFrame.mk ir_d0 ir_d0 ir_d0 (IRList.nil IRBinding) ir_nl0) \
-                 (IRList.nil IRFrame)) (IRList.nil IRMemSlot) ir_d0)"
+                 (@IRList.cons IRFrame (IRFrame.mk ir_d0 ir_d0 ir_d0 (@IRList.nil IRBinding) ir_nl0) \
+                 (@IRList.nil IRFrame)) (@IRList.nil IRMemSlot) ir_d0)"
                     .to_string(),
             ),
         ];
@@ -136,8 +136,8 @@ impl Specification {
             v.push((
                 format!("ir_sc_run_{n}"),
                 format!(
-                    "def ir_sc_run_{n} : Eq IRConfig (ir_steps {lit} ir_sc_module ir_sc_cfg) \
-                     ir_sc_cfg := Eq.refl IRConfig ir_sc_cfg"
+                    "def ir_sc_run_{n} : @Eq IRConfig (ir_steps {lit} ir_sc_module ir_sc_cfg) \
+                     ir_sc_cfg := @Eq.refl IRConfig ir_sc_cfg"
                 ),
             ));
         }
@@ -147,7 +147,7 @@ impl Specification {
         // many steps run. The padding functions carry ids 1..K and NO blocks (never entered)
         // and the entered id-0 function is placed LAST, so each step walks all K.
         for k in [8usize, 32, 113] {
-            let mut fs = "(IRList.cons IRFunc ir_sc_func (IRList.nil IRFunc))".to_string();
+            let mut fs = "(@IRList.cons IRFunc ir_sc_func (@IRList.nil IRFunc))".to_string();
             for i in (1..=k).rev() {
                 // Ids cycle over 1..=31, which ARE registered. 32, 64 and 65 are not, and
                 // reaching for one is how v1 and v2 both produced an "Unknown identifier"
@@ -155,17 +155,17 @@ impl Specification {
                 // `ir_func_find` returns the FIRST match and the entered id-0 function is
                 // last, so every step still walks all K.
                 let pad = format!("(IRFunc.mk ir_d{} ir_nl0 ir_d0 ir_blk0)", (i % 31) + 1);
-                fs = format!("(IRList.cons IRFunc {pad} {fs})");
+                fs = format!("(@IRList.cons IRFunc {pad} {fs})");
             }
             v.push((
                 format!("ir_sc_mod_k{k}"),
-                format!("def ir_sc_mod_k{k} : IRModule := IRModule.mk {fs} (IRList.nil IRGlobal)"),
+                format!("def ir_sc_mod_k{k} : IRModule := IRModule.mk {fs} (@IRList.nil IRGlobal)"),
             ));
             v.push((
                 format!("ir_sc_k{k}_run99"),
                 format!(
-                    "def ir_sc_k{k}_run99 : Eq IRConfig (ir_steps ir_d99 ir_sc_mod_k{k} ir_sc_cfg) \
-                     ir_sc_cfg := Eq.refl IRConfig ir_sc_cfg"
+                    "def ir_sc_k{k}_run99 : @Eq IRConfig (ir_steps ir_d99 ir_sc_mod_k{k} ir_sc_cfg) \
+                     ir_sc_cfg := @Eq.refl IRConfig ir_sc_cfg"
                 ),
             ));
             if k == 113 {
@@ -177,9 +177,9 @@ impl Specification {
                     v.push((
                         format!("ir_sc_k113_run{n}"),
                         format!(
-                            "def ir_sc_k113_run{n} : Eq IRConfig \
+                            "def ir_sc_k113_run{n} : @Eq IRConfig \
                              (ir_steps {lit} ir_sc_mod_k113 ir_sc_cfg) ir_sc_cfg := \
-                             Eq.refl IRConfig ir_sc_cfg"
+                             @Eq.refl IRConfig ir_sc_cfg"
                         ),
                     ));
                 }

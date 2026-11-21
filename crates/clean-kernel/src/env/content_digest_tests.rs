@@ -17,6 +17,22 @@ fn constant(name: &str, ty: Expr) -> ConstantInfo {
     ConstantInfo::new(Name::from_string(name), vec![], ty, None, false)
 }
 
+#[test]
+fn export_alias_digest_commits_to_every_candidate_in_resolution_order() {
+    let alias = Name::from_string("choice");
+    let environment = |choices: &[&str]| {
+        let mut env = Environment::new();
+        for choice in choices {
+            env.register_export_alias(alias.clone(), Name::from_string(choice));
+        }
+        env.content_digest()
+    };
+    let original = environment(&["A.x", "B.x", "C.x"]);
+    assert_ne!(original, environment(&["A.x"]));
+    assert_ne!(original, environment(&["A.x", "C.x", "B.x"]));
+    assert_eq!(original, environment(&["A.x", "B.x", "C.x", "B.x"]));
+}
+
 fn inductive(name: &str, large: bool) -> InductiveVal {
     InductiveVal {
         name: Name::from_string(name),

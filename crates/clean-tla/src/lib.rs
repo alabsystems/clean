@@ -11,13 +11,9 @@
 //! ## Architecture
 //!
 //! ```text
-//! ┌────────────┐     ┌─────────────────┐     ┌──────────────┐
-//! │ TLAPS      │     │ clean-tla       │     │ clean        │
-//! │ (ty repo)│────▶│ (this crate)    │────▶│ kernel       │
-//! │            │     │                 │     │              │
-//! │ Obligations│     │ TLA+ encoding   │     │ Type checker │
-//! │ (sequents) │     │ Automation      │     │ Proof certs  │
-//! └────────────┘     └─────────────────┘     └──────────────┘
+//! TLAPS-style TLA+ proof obligations
+//!     -> clean-tla encodes the obligations and runs tactics
+//!     -> the Clean kernel checks the resulting proof terms
 //! ```
 //!
 //! ## TLA+ Encoding Strategy

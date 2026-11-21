@@ -614,6 +614,7 @@ fn test_variadic_user_tactic_wrong_proof_fails_to_close() {
         &mut ctx,
         r#"elab "introExact" xs:ident* : tactic => intro xs; exact xs"#,
     );
+    assert!(ctx.tactic_registry.get_compound("introExact").is_some());
 
     let p = Expr::const_(Name::from_string("P"), vec![]);
     let q = Expr::const_(Name::from_string("Q"), vec![]);
@@ -2736,4 +2737,21 @@ fn test_proof_site_do_incomplete_fails_unsolved() {
         msg.contains("nsolved") || msg.contains("oals"),
         "incomplete do-block should report unsolved goals, got {msg}"
     );
+}
+
+#[test]
+fn opaque_syntax_and_literal_underscores_are_not_variadic_tactics() {
+    for source in [
+        r#"elab "literalTail" xs:ident "_" : tactic => intro xs"#,
+        r#"elab "opaqueTail" xs:ident (&"tail") : tactic => intro xs"#,
+        r#"elab "nonemptyTail" xs:ident+ : tactic => intro xs"#,
+        r#"elab "separatedTail" xs:ident,* : tactic => intro xs"#,
+    ] {
+        let env = prop_env();
+        let mut ctx = ElabCtx::new(&env);
+        register_elab(&mut ctx, source);
+        for name in ["literalTail", "opaqueTail", "nonemptyTail", "separatedTail"] {
+            assert!(ctx.tactic_registry.get_compound(name).is_none(), "{source}");
+        }
+    }
 }

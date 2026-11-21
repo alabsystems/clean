@@ -359,7 +359,6 @@ impl<'env> TypeChecker<'env> {
             && (self.allow_unsafe != permissive || self.allow_partial != permissive)
         {
             self.clear_theory_answers();
-            self.cached_kernel_theory.set(theory);
         }
         self.kernel_theory = Some(theory);
         self.allow_unsafe = permissive;
@@ -370,6 +369,8 @@ impl<'env> TypeChecker<'env> {
         for admission in self.lean_reducer_admission.get_mut().values_mut() {
             admission.forget_registry();
         }
+        self.unary_shift_alias_verified.set(false);
+        self.parity_reconstruction_verified.set(false);
     }
 
     /// The kernel theory this checker's native reductions run in.
@@ -379,23 +380,11 @@ impl<'env> TypeChecker<'env> {
             .unwrap_or_else(|| self.env.kernel_theory())
     }
 
-    /// O(1) warm custody check at semantic entry points, not at recursive nodes.
-    /// A theory change clears retained answers in time proportional to the cache.
-    /// Delay it until use so callers may install their original theory override
-    /// after cache restoration. Only theory is authenticated here: the existing
-    /// same-environment/context and compatible other-policy requirements remain.
-    #[inline]
-    pub(super) fn ensure_cache_theory(&self) {
-        let theory = self.kernel_theory();
-        if self.cached_kernel_theory.get() != theory {
-            self.clear_theory_answers();
-            self.cached_kernel_theory.set(theory);
-        }
-    }
-
     /// Clear answer-bearing state without altering the context, FVar allocation
     /// floor, resource allowances, or the caller's chosen checker configuration.
     pub(super) fn clear_theory_answers(&self) {
+        self.unary_shift_alias_verified.set(false);
+        self.parity_reconstruction_verified.set(false);
         self.whnf_cache.borrow_mut().clear();
         self.whnf_core_cache.borrow_mut().clear();
         self.def_eq_cache.borrow_mut().clear();
@@ -540,7 +529,7 @@ impl<'env> TypeChecker<'env> {
             transparency,
             honor_reducibility: Cell::new(false),
             kernel_theory: None,
-            cached_kernel_theory: Cell::new(env.kernel_theory()),
+            cached_policy: RefCell::new(None),
             lean_reducer_admission: RefCell::new(std::collections::HashMap::new()),
             whnf_cache: RefCell::new(Default::default()),
             whnf_core_cache: RefCell::new(Default::default()),
@@ -566,6 +555,9 @@ impl<'env> TypeChecker<'env> {
             profiler: None,
             eager_reduce: Cell::new(false),
             nat_probe_depth: Cell::new(0),
+            unary_shift_alias: std::cell::OnceCell::new(),
+            unary_shift_alias_verified: Cell::new(false),
+            parity_reconstruction_verified: Cell::new(false),
             infer_only: Cell::new(true),
             level_params: None,
             allow_unsafe: env.kernel_theory() == crate::env::KernelTheory::Extended,
@@ -580,6 +572,7 @@ impl<'env> TypeChecker<'env> {
             sharing_replay: None,
             expr_loc: RefCell::new(ExprLocation::new()),
         }
+        .establish_empty_cache_policy()
     }
 
     /// Set the transparency mode for definition unfolding.
@@ -620,9 +613,9 @@ impl<'env> TypeChecker<'env> {
     /// caches via `take_caches`, store them, then inject into the next TC via
     /// this constructor. Caches are only valid for the same goal context
     /// (same local declarations and same environment) and compatible checker
-    /// policies. Their effective kernel theory is retained and checked lazily
-    /// before use, allowing the caller to reinstall an identical theory
-    /// override first. Other policy/context compatibility remains the caller's
+    /// policies. Their explicit reduction policies are retained and checked lazily
+    /// before use, allowing the caller to reinstall identical settings first.
+    /// Opaque callback and environment/context compatibility remain the caller's
     /// obligation; this is not a general environment identity check.
     ///
     /// Part of #1671.
@@ -637,7 +630,6 @@ impl<'env> TypeChecker<'env> {
         ctx: impl Into<Arc<LocalContext>>,
         caches: TcCaches,
     ) -> Self {
-        let caches = Self::caches_for_level_profile(env, caches);
         Self {
             env,
             ctx: RefCell::new(ctx.into()),
@@ -646,9 +638,7 @@ impl<'env> TypeChecker<'env> {
             transparency: TransparencyMode::Default,
             honor_reducibility: Cell::new(false),
             kernel_theory: None,
-            cached_kernel_theory: Cell::new(
-                caches.kernel_theory.unwrap_or_else(|| env.kernel_theory()),
-            ),
+            cached_policy: RefCell::new(caches.policy),
             lean_reducer_admission: RefCell::new(std::collections::HashMap::new()),
             whnf_cache: RefCell::new(caches.whnf),
             whnf_core_cache: RefCell::new(caches.whnf_core),
@@ -674,6 +664,9 @@ impl<'env> TypeChecker<'env> {
             profiler: None,
             eager_reduce: Cell::new(false),
             nat_probe_depth: Cell::new(0),
+            unary_shift_alias: std::cell::OnceCell::new(),
+            unary_shift_alias_verified: Cell::new(false),
+            parity_reconstruction_verified: Cell::new(false),
             infer_only: Cell::new(true),
             level_params: None,
             allow_unsafe: env.kernel_theory() == crate::env::KernelTheory::Extended,
@@ -688,6 +681,7 @@ impl<'env> TypeChecker<'env> {
             sharing_replay: None,
             expr_loc: RefCell::new(ExprLocation::new()),
         }
+        .establish_empty_cache_policy()
     }
 
     /// Create a type checker with a specific mode and pre-populated caches.
@@ -705,7 +699,6 @@ impl<'env> TypeChecker<'env> {
         mode: CleanMode,
         caches: TcCaches,
     ) -> Self {
-        let caches = Self::caches_for_level_profile(env, caches);
         let mut ctx = LocalContext::new();
         ctx.advance_next_id(caches.next_fvar_id);
         Self {
@@ -716,9 +709,7 @@ impl<'env> TypeChecker<'env> {
             transparency: TransparencyMode::Default,
             honor_reducibility: Cell::new(false),
             kernel_theory: None,
-            cached_kernel_theory: Cell::new(
-                caches.kernel_theory.unwrap_or_else(|| env.kernel_theory()),
-            ),
+            cached_policy: RefCell::new(caches.policy),
             lean_reducer_admission: RefCell::new(std::collections::HashMap::new()),
             whnf_cache: RefCell::new(caches.whnf),
             whnf_core_cache: RefCell::new(caches.whnf_core),
@@ -744,6 +735,9 @@ impl<'env> TypeChecker<'env> {
             profiler: None,
             eager_reduce: Cell::new(false),
             nat_probe_depth: Cell::new(0),
+            unary_shift_alias: std::cell::OnceCell::new(),
+            unary_shift_alias_verified: Cell::new(false),
+            parity_reconstruction_verified: Cell::new(false),
             infer_only: Cell::new(true),
             level_params: None,
             allow_unsafe: env.kernel_theory() == crate::env::KernelTheory::Extended,
@@ -758,6 +752,7 @@ impl<'env> TypeChecker<'env> {
             sharing_replay: None,
             expr_loc: RefCell::new(ExprLocation::new()),
         }
+        .establish_empty_cache_policy()
     }
 
     /// Extract caches from this TypeChecker for later reuse.
@@ -767,22 +762,6 @@ impl<'env> TypeChecker<'env> {
     /// `with_context_and_caches` to reuse in the next TC instance.
     ///
     /// Part of #1671.
-    fn caches_for_level_profile(env: &crate::env::Environment, caches: TcCaches) -> TcCaches {
-        if caches
-            .level_profile
-            .is_some_and(|profile| profile != env.lean_level_profile())
-        {
-            // Keep the local-ID floor but never relabel answers produced by
-            // another source world's universe algebra.
-            TcCaches {
-                next_fvar_id: caches.next_fvar_id,
-                ..TcCaches::default()
-            }
-        } else {
-            caches
-        }
-    }
-
     pub fn take_caches(&self) -> TcCaches {
         // An untouched import must not be relabeled as this checker's default
         // theory and exported with answers from a different one.
@@ -793,8 +772,7 @@ impl<'env> TypeChecker<'env> {
             self.clear_theory_answers();
         }
         TcCaches {
-            kernel_theory: Some(self.kernel_theory()),
-            level_profile: Some(self.env.lean_level_profile()),
+            policy: Some(super::cache_policy::CachePolicy::capture(self)),
             whnf: self.whnf_cache.take(),
             whnf_core: self.whnf_core_cache.take(),
             def_eq: self.def_eq_cache.take(),

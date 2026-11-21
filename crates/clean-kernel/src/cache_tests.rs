@@ -8,7 +8,7 @@
 //! cache invariant rather than only exercising the surface API.
 
 use crate::cache::{TypeCheckCache, TypeCheckId};
-use crate::expr::{BinderInfo, Expr, ExprKind, ExprMeta};
+use crate::expr::{BinderInfo, Expr, ExprKind, ExprMeta, FVarId};
 use crate::level::Level;
 use crate::name::Name;
 use proptest::prelude::*;
@@ -224,12 +224,12 @@ fn contract_hash_collisions_do_not_cross_contaminate_results() {
     let mode_hash = 7;
 
     let expr_a = Expr::with_meta(
-        ExprKind::BVar(0),
-        ExprMeta::pack(collision_hash, 0, 0, false, false, false, false),
+        ExprKind::FVar(FVarId::new(0)),
+        ExprMeta::pack(collision_hash, 0, 0, true, false, false, false),
     );
     let expr_b = Expr::with_meta(
-        ExprKind::BVar(1),
-        ExprMeta::pack(collision_hash, 0, 0, false, false, false, false),
+        ExprKind::FVar(FVarId::new(1)),
+        ExprMeta::pack(collision_hash, 0, 0, true, false, false, false),
     );
 
     assert_ne!(
@@ -240,6 +240,11 @@ fn contract_hash_collisions_do_not_cross_contaminate_results() {
         expr_a.hash_cached(),
         expr_b.hash_cached(),
         "collision test requires identical cached hashes",
+    );
+    assert_eq!(
+        crate::expr::hash_to_u64(&TypeCheckId::new(&expr_a, env_hash, mode_hash)),
+        crate::expr::hash_to_u64(&TypeCheckId::new(&expr_b, env_hash, mode_hash)),
+        "the full current cache key must occupy the same bucket"
     );
     assert_ne!(
         TypeCheckId::new(&expr_a, env_hash, mode_hash),

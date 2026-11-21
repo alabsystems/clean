@@ -322,3 +322,132 @@ fn test_dot_rfl_pattern_on_an_equation_is_refused() {
         &[],
     );
 }
+
+const NAMED_DOT_HEADER: &str = r#"
+inductive DotBox where
+  | red : DotBox
+  | blue : DotBox
+
+def DotBox.pick (a b : DotBox) : DotBox := a
+def DotBox.tag {Label : Type} (x : Label) (self : DotBox) : Label := x
+def DotBox.payload {Metadata : Type} : DotBox → Option Metadata := fun _ => none
+"#;
+
+#[test]
+fn named_dot_arguments_use_the_full_telescope_and_keep_the_receiver_position() {
+    let source = format!(
+        "{NAMED_DOT_HEADER}{}",
+        r#"
+theorem before (box : DotBox) : box.tag (Label := Nat) 7 = 7 := rfl
+theorem after (box : DotBox) : box.tag (x := 7) (Label := Nat) = 7 := rfl
+theorem anonymousSlot (box : DotBox) : box.payload (Metadata := Nat) = (none : Option Nat) := rfl
+theorem secondReceiver (a b : DotBox) : b.pick (a := a) = a := rfl
+theorem firstReceiver (a b : DotBox) : a.pick (b := b) = a := rfl
+theorem ns (box : DotBox) : DotBox.tag (Label := Nat) 6 box = 6 := rfl
+"#
+    );
+    let env = expect_accepted(&source, "named parameters around a projected receiver");
+    for name in [
+        "before",
+        "after",
+        "anonymousSlot",
+        "secondReceiver",
+        "firstReceiver",
+        "ns",
+    ] {
+        assert_no_axioms(&env, name);
+    }
+}
+
+#[test]
+fn named_dot_arguments_refuse_unknown_duplicate_occupied_and_false_calls() {
+    for (term, reason) in [
+        (
+            "box.tag (Label := Nat) (Label := Nat) 7 = 7",
+            "already bound",
+        ),
+        ("box.tag (invented := Nat) 7 = 7", "unknown named argument"),
+        ("box.pick (a := box) (b := box) = box", "no usable receiver"),
+        ("box.tag (Label := Nat) 7 = 8", "mismatch"),
+    ] {
+        let source = format!("{NAMED_DOT_HEADER}theorem rejected (box : DotBox) : {term} := rfl\n");
+        expect_refused_at(
+            &source,
+            "invalid named-dot call or equality",
+            "rejected",
+            &[reason],
+        );
+    }
+}
+
+#[test]
+fn named_dot_arguments_expand_ellipsis_after_positioning_the_receiver() {
+    let source = format!(
+        "{NAMED_DOT_HEADER}{}",
+        r#"
+inductive DotItem : Nat → Type where
+  | item (n : Nat) : DotItem n
+
+def DotBox.item {Label : Type} (self : DotBox) (n : Nat) : DotItem n := DotItem.item n
+def fromExpected (box : DotBox) : DotItem 4 := box.item (Label := Nat) ..
+theorem expectedIndex (box : DotBox) : fromExpected box = DotItem.item 4 := rfl
+abbrev DotTail := (n : Nat) → DotItem n
+def DotBox.give {Flag : Type} (self : DotBox) : DotTail := DotItem.item
+def tailExpected (box : DotBox) : DotItem 3 := box.give (Flag := Nat) ..
+theorem reducedTail (box : DotBox) : tailExpected box = DotItem.item 3 := rfl
+theorem noneLeft (box : DotBox) : box.payload (Metadata := Nat) .. = (none : Option Nat) := rfl
+theorem withValue (box : DotBox) : box.tag (Label := Nat) 7 .. = 7 := rfl
+"#
+    );
+    let env = expect_accepted(&source, "ellipsis fills the remaining explicit index");
+    for name in ["expectedIndex", "reducedTail", "noneLeft", "withValue"] {
+        assert_no_axioms(&env, name);
+    }
+    expect_refused_at(
+        &format!(
+            "{NAMED_DOT_HEADER}def missing (box : DotBox) : Nat := box.tag (Label := Nat) ..\n"
+        ),
+        "an unconstrained ellipsis hole must remain unsolved",
+        "missing",
+        &[],
+    );
+}
+
+#[test]
+fn named_dot_arguments_distinguish_reducible_aliases_from_ordinary_wrappers() {
+    for (dec, rhs, wrong) in [("def", "r", "s"), ("abbrev", "s", "r")] {
+        let header = format!(
+            r#"
+inductive Box | red | blue
+{dec} WrapBox := Box
+{dec} WrapFun := Nat → Nat
+
+def Box.pick {{Tag : Type}} (first : WrapBox) (real : Box) : Box := real
+def Box.pickPlain (first : WrapBox) (real : Box) : Box := real
+def Function.pick {{Tag : Type}} (first : WrapFun) (real : Nat → Nat) : Nat := real 2
+"#
+        );
+        for (ty, call, suffix) in [
+            ("Box", "r.pick (Tag := Nat) s", ""),
+            ("Box", "r.pickPlain s", ""),
+            ("Nat → Nat", "r.pick (Tag := Nat) s", " 2"),
+        ] {
+            let decl = |target| {
+                format!(
+                    "{header}theorem positioned (r s : {ty}) : {call} = {target}{suffix} := rfl\n"
+                )
+            };
+            let env = expect_accepted(
+                &decl(rhs),
+                "Lean receiver position under instances transparency",
+            );
+            assert_no_axioms(&env, "positioned");
+            expect_refused_at(
+                &decl(wrong),
+                "a swapped receiver changes this method result",
+                "positioned",
+                &[],
+            );
+        }
+    }
+}

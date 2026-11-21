@@ -63,7 +63,7 @@
 //! print "re-checked" for a level that did not re-check the cone.
 
 use clean_kernel::env::Environment;
-use clean_kernel::expr::UsedConstants;
+use clean_kernel::expr::{Expr, Literal, UsedConstants};
 use clean_kernel::name::Name;
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
@@ -96,8 +96,9 @@ pub use source::{ReplayedImportedSource, ReplayedSourceError};
 fn extension_key_fingerprints(
     env: &Environment,
     cone: &BTreeSet<Name>,
+    index: &FamilyIndex,
 ) -> BTreeMap<Name, [u8; 32]> {
-    let mut fp = Fingerprinter::new(env);
+    let mut fp = Fingerprinter::with_family_index(env, index);
     cone.iter()
         .filter(|name| extension_hook(name).is_some())
         .map(|name| (name.clone(), fp.constant(name)))
@@ -512,7 +513,7 @@ pub fn recheck_closed(
     // round-23 verification). `drive::replay_in_order` installs them through
     // `Environment::add_quot` when the first quotient unit comes up, which
     // the planner orders after `Eq` (`ConePlanner::build_unit`).
-    let (report, admitted) = run_closed(env, targets, options, &mut replay);
+    let (report, admitted) = run_closed(env, targets, &BTreeSet::new(), options, &mut replay);
     ClosedRecheck {
         report,
         replayed: replay,
@@ -523,19 +524,20 @@ pub fn recheck_closed(
 /// The closed replay of `targets`' cone into `replay`, which must start
 /// empty: plan the cone, order it, drive every unit through `replay`'s
 /// admissions. Shared by [`recheck_closed`] and
-/// [`reference_base::reference_base_closed`], so the two cannot differ in
-/// what they plan, gate or admit.
+/// [`reference_base::reference_base_closed`]. Only captured source replay
+/// supplies ownership for its auxiliary wrappers.
 fn run_closed(
     env: &Environment,
     targets: &BTreeSet<Name>,
+    source_owned: &BTreeSet<Name>,
     options: &ClosedRecheckOptions,
     replay: &mut dyn drive::ReplayTarget,
 ) -> (ClosedRecheckReport, BTreeSet<Name>) {
     let started = Instant::now();
     let mut refusals = Vec::new();
 
-    let index = FamilyIndex::build(env);
-    let mut planner = ConePlanner::new(env, &index);
+    let index = FamilyIndex::with_source_wrappers(env, source_owned);
+    let mut planner = ConePlanner::new(env, &index, ConeInputs::Replay);
     for target in targets {
         planner.enqueue(target);
     }
@@ -556,7 +558,7 @@ fn run_closed(
     // Every extension key the cone declares, fingerprinted up front over the
     // source environment (see `extension_binding::check_binding` for why the
     // source is the right one to hash).
-    let key_fingerprints = extension_key_fingerprints(env, &cone);
+    let key_fingerprints = extension_key_fingerprints(env, &cone, &index);
     // Names refused (directly or by cascade) → the unit that first refused them.
     // Seed the cascade from the planner's own absent NAMES. Re-parsing the
     // refusals' display strings (`Name::interned`) would key a component that
@@ -630,8 +632,17 @@ struct ReplayStats {
     admitted_names: BTreeSet<Name>,
 }
 
+/// Closed replay regenerates recursors and can consult canonical conversion
+/// helpers. Export writes the resident expressions and their literal support.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ConeInputs {
+    Replay,
+    Export,
+}
+
 /// Walks the cone, groups it into units and produces a dependency order.
 struct ConePlanner<'a> {
+    inputs: ConeInputs,
     env: &'a Environment,
     index: &'a FamilyIndex,
     pending: Vec<Name>,
@@ -646,8 +657,9 @@ struct ConePlanner<'a> {
 }
 
 impl<'a> ConePlanner<'a> {
-    fn new(env: &'a Environment, index: &'a FamilyIndex) -> Self {
+    fn new(env: &'a Environment, index: &'a FamilyIndex, inputs: ConeInputs) -> Self {
         Self {
+            inputs,
             env,
             index,
             pending: Vec::new(),
@@ -667,6 +679,9 @@ impl<'a> ConePlanner<'a> {
 
     /// The canonical head of the family `name` belongs to, if any.
     fn family_head(&self, name: &Name) -> Option<Name> {
+        if self.index.is_source_wrapper(name) {
+            return None;
+        }
         let ind = self.env.get_inductive(name).or_else(|| {
             self.env
                 .get_constructor(name)
@@ -674,6 +689,10 @@ impl<'a> ConePlanner<'a> {
                 .or_else(|| {
                     self.env
                         .get_recursor(name)
+                        .filter(|r| {
+                            self.inputs == ConeInputs::Replay
+                                || !cone_plan::is_exported_eliminator_definition(self.env, r)
+                        })
                         .and_then(|r| self.env.get_inductive(&r.inductive_name))
                 })
         })?;
@@ -701,6 +720,19 @@ impl<'a> ConePlanner<'a> {
     fn build_unit(&self, id: &UnitId) -> Unit {
         let mut members: Vec<Name> = Vec::new();
         let mut refs: HashSet<Name> = HashSet::new();
+        let mut nat_literal = false;
+        let mut string_literal = false;
+        let mut collect = |expr: &Expr, refs: &mut HashSet<Name>| match self.inputs {
+            ConeInputs::Replay => expr.used_constants_dag(UsedConstants::ConstantsOnly, refs),
+            ConeInputs::Export => {
+                expr.used_constants_dag_with_literals(UsedConstants::ConstantsOnly, refs, |lit| {
+                    match lit {
+                        Literal::Nat(_) => nat_literal = true,
+                        Literal::String(_) => string_literal = true,
+                    }
+                });
+            }
+        };
         match id {
             UnitId::Constant(name) => {
                 members.push(name.clone());
@@ -713,10 +745,9 @@ impl<'a> ConePlanner<'a> {
                 }
                 if let Some(info) = self.env.get_const(name) {
                     // DAG walks: shared subterms are visited once.
-                    info.type_
-                        .used_constants_dag(UsedConstants::ConstantsOnly, &mut refs);
+                    collect(&info.type_, &mut refs);
                     if let Some(value) = &info.value {
-                        value.used_constants_dag(UsedConstants::ConstantsOnly, &mut refs);
+                        collect(value, &mut refs);
                     }
                 }
             }
@@ -737,7 +768,7 @@ impl<'a> ConePlanner<'a> {
                         continue;
                     };
                     members.push(family.clone());
-                    // DEPENDENCIES ARE EXACTLY `add_inductive_core`'s INPUT: the
+                    // REPLAY DEPENDENCIES ARE EXACTLY `add_inductive_core`'s INPUT: the
                     // family types and the constructor types. Deliberately NOT
                     // the imported recursors' types or ι-rule right-hand sides —
                     // the replay REGENERATES those from the constructors and
@@ -745,16 +776,25 @@ impl<'a> ConePlanner<'a> {
                     // aux recursors reference constants that in turn reference
                     // the family, which would report a dependency cycle for a
                     // dependency the replay does not have.
-                    ind.type_
-                        .used_constants_dag(UsedConstants::ConstantsOnly, &mut refs);
+                    collect(&ind.type_, &mut refs);
                     for ctor in &ind.constructor_names {
                         members.push(ctor.clone());
                         if let Some(c) = self.env.get_constructor(ctor) {
-                            c.type_
-                                .used_constants_dag(UsedConstants::ConstantsOnly, &mut refs);
+                            collect(&c.type_, &mut refs);
                         }
                     }
                     for rec_name in self.index.recursors(family) {
+                        if self.inputs == ConeInputs::Export {
+                            if let Some(rec) = self.env.get_recursor(rec_name) {
+                                if cone_plan::is_exported_eliminator_definition(self.env, rec) {
+                                    continue;
+                                }
+                                collect(&rec.type_, &mut refs);
+                                for rule in &rec.rules {
+                                    collect(&rule.rhs, &mut refs);
+                                }
+                            }
+                        }
                         members.push(rec_name.clone());
                     }
                 }
@@ -769,7 +809,19 @@ impl<'a> ConePlanner<'a> {
         // enter through the same checked, binding-pinned replay as every
         // other dependency, never through a structural/native shortcut.
         let string = Name::from_string("String");
-        if refs.contains(&string) && !members.contains(&string) {
+        // lean4export's dumpNatDeps and dumpStrDeps run at a literal leaf.
+        // An ordinary reference to the String type adds no export dependency.
+        if nat_literal {
+            let nat = Name::from_string("Nat");
+            if self.env.get_const(&nat).is_some() {
+                refs.insert(nat);
+            }
+        }
+        if string_literal
+            || (self.inputs == ConeInputs::Replay
+                && refs.contains(&string)
+                && !members.contains(&string))
+        {
             for label in ["Char.ofNat", "String.ofList"] {
                 let support = Name::from_string(label);
                 if self.env.get_const(&support).is_some() {
@@ -817,6 +869,14 @@ impl<'a> ConePlanner<'a> {
                 for member in &unit.members {
                     self.unit_of.insert(member.clone(), id.clone());
                     self.cone.insert(member.clone());
+                }
+                if let UnitId::Family(_) = &id {
+                    for member in &unit.members {
+                        // Keep the auxiliary definitions in the cone. Their
+                        // bodies depend on the family, so queue them as
+                        // separate units without a reverse dependency.
+                        frontier.extend(self.index.source_wrappers(member).iter().cloned());
+                    }
                 }
                 for dep in &unit.deps {
                     frontier.push(dep.clone());

@@ -7,7 +7,7 @@
 //! The `induction` tactic has been split to `induction.rs` (#307).
 
 use super::pattern::names::local_name_matches;
-use clean_parser::SurfaceName;
+use clean_parser::{SurfaceInductionAlt, SurfaceName};
 
 use crate::unify::MetaState;
 use clean_kernel::name::Name;
@@ -61,6 +61,16 @@ pub(crate) fn recursor_levels(
 /// ENSURES: On Ok, each new goal has constructor arguments added to the local context
 /// ENSURES: On Err(UnknownIdent), `hyp_name` is not in the local context
 pub fn cases(state: &mut ProofState, hyp_name: &SurfaceName) -> TacticResult {
+    cases_with_alternatives(state, hyp_name, &[]).map(|_| ())
+}
+
+/// Returns whether the index-equation path already named the constructor
+/// fields. It must consume source names before those equations eliminate fields.
+pub(super) fn cases_with_alternatives(
+    state: &mut ProofState,
+    hyp_name: &SurfaceName,
+    alts: &[SurfaceInductionAlt],
+) -> Result<bool, TacticError> {
     super::pattern::names::require_binding_name(hyp_name, "cases")?;
     let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
 
@@ -71,7 +81,7 @@ pub fn cases(state: &mut ProofState, hyp_name: &SurfaceName) -> TacticResult {
         .find(|d| local_name_matches(&d.name, hyp_name))
         .ok_or_else(|| TacticError::UnknownIdent(hyp_name.to_string()))?;
     let hyp_fvar = hyp_decl.fvar;
-    cases_fvar(state, hyp_fvar)
+    cases_fvar_with_alternatives(state, hyp_fvar, alts)
 }
 
 /// `cases` on the local bound to `hyp_fvar`, selected by identity rather than
@@ -88,8 +98,16 @@ pub fn cases(state: &mut ProofState, hyp_name: &SurfaceName) -> TacticResult {
 /// ENSURES: On Err(HypothesisNotFound), no local of the current goal is bound
 ///   to `hyp_fvar`; otherwise exactly what [`cases`] ensures.
 pub(crate) fn cases_fvar(state: &mut ProofState, hyp_fvar: clean_kernel::FVarId) -> TacticResult {
-    if let Some(result) = super::cases_index_constraints::try_cases(state, hyp_fvar) {
-        return result;
+    cases_fvar_with_alternatives(state, hyp_fvar, &[]).map(|_| ())
+}
+
+fn cases_fvar_with_alternatives(
+    state: &mut ProofState,
+    hyp_fvar: clean_kernel::FVarId,
+    alts: &[SurfaceInductionAlt],
+) -> Result<bool, TacticError> {
+    if let Some(result) = super::cases_index_constraints::try_cases(state, hyp_fvar, alts) {
+        return result.map(|_| true);
     }
     let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
     let (hyp_idx, hyp_decl) = goal
@@ -106,7 +124,8 @@ pub(crate) fn cases_fvar(state: &mut ProofState, hyp_fvar: clean_kernel::FVarId)
         Some(hyp_fvar),
         Expr::fvar(hyp_fvar),
         hyp_ty,
-    )
+    )?;
+    Ok(false)
 }
 
 /// Case split on an arbitrary scrutinee expression.
@@ -117,10 +136,19 @@ pub(crate) fn cases_fvar(state: &mut ProofState, hyp_fvar: clean_kernel::FVarId)
 /// constructor fields (for example `h : m = n`) are added to each branch.
 /// Equality expressions first become checked local proofs so equation
 /// elimination rewrites dependent hypotheses as well as the target.
-pub(crate) fn cases_expr(state: &mut ProofState, scrutinee: Expr) -> TacticResult {
+pub(super) fn cases_expr(
+    state: &mut ProofState,
+    scrutinee: Expr,
+    alts: &[SurfaceInductionAlt],
+) -> Result<bool, TacticError> {
     let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
     let hyp_ty = state.infer_type(&goal, &scrutinee)?;
     let hyp_ty_whnf = state.whnf(&goal, &hyp_ty);
+    if let Some(result) =
+        super::cases_index_constraints::try_cases_expr(state, &goal, &scrutinee, &hyp_ty_whnf, alts)
+    {
+        return result.map(|_| true);
+    }
     if matches!(hyp_ty_whnf.get_app_fn().kind(), ExprKind::Const(name, _) if name == &Name::from_string("Eq"))
     {
         let name = fresh_hyp_name(&goal.local_ctx, &SurfaceName::generated_path("cases_eq"));
@@ -130,9 +158,10 @@ pub(crate) fn cases_expr(state: &mut ProofState, scrutinee: Expr) -> TacticResul
             .and_then(|g| g.local_ctx.last())
             .map(|d| d.fvar)
             .ok_or(TacticError::NoGoals)?;
-        return super::cases_unify_eqs::cases_eq(state, local);
+        return super::cases_unify_eqs::cases_eq(state, local).map(|_| false);
     }
-    cases_core(state, goal, None, None, scrutinee, hyp_ty)
+    cases_core(state, goal, None, None, scrutinee, hyp_ty)?;
+    Ok(false)
 }
 
 fn cases_core(

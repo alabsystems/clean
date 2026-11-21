@@ -15,6 +15,123 @@ use crate::{
 use clean_kernel::{Environment, Name};
 use clean_parser::parse_file;
 
+#[test]
+fn test_ordinary_positionals_do_not_fill_implicit_parameter_slots() {
+    for (label, setup_names, code) in [
+        (
+            "ordinary function",
+            &["ident"][..],
+            "def ident {α : Type} (x : α) : α := x\n\
+             def probe : Nat := ident Nat 1\n",
+        ),
+        (
+            "function-valued implicit parameter",
+            &["runImplicit"][..],
+            "def runImplicit {f : Nat → Nat} (x : Nat) : Nat := f x\n\
+             def probe : Nat := runImplicit (fun x => x) 1\n",
+        ),
+        (
+            "structure field",
+            &["Duo"][..],
+            "structure Duo (α β : Type) where\n  first : α\n  second : β\n\
+             def probe (p : Duo Nat Bool) : Nat := Duo.first Nat Bool p\n",
+        ),
+        (
+            "dependent class field",
+            &["Dependent"][..],
+            "class Dependent (α : Type) where\n  value : α\n\
+             def probe [Dependent Nat] : Nat := Dependent.value Nat\n",
+        ),
+        (
+            "class parent projection",
+            &["Dependent", "Child"][..],
+            "class Dependent (α : Type) where\n  value : α\n\
+             class Child (α : Type) extends Dependent α where\n  witness : Nat\n\
+             def probe {α : Type} [Child α] : Dependent α := Child.toDependent α\n",
+        ),
+    ] {
+        let (env, results) = elab_file_prelude(code);
+        assert_eq!(
+            results.len(),
+            setup_names.len() + 1,
+            "{label}: every setup declaration and the probe must be parsed"
+        );
+        assert_all_ok(&results[..results.len() - 1], label);
+        for &setup_name in setup_names {
+            assert!(
+                env.get_const(&Name::from_string(setup_name)).is_some(),
+                "{label}: setup declaration `{setup_name}` must be registered"
+            );
+        }
+        assert!(
+            results.last().is_some_and(Result::is_err),
+            "{label}: ordinary positionals must not supply implicit parameters: {results:?}"
+        );
+        assert!(env.get_const(&Name::from_string("probe")).is_none());
+    }
+}
+
+#[test]
+fn test_ordinary_positionals_preserve_explicit_named_and_empty_recursor_calls() {
+    for (label, code) in [
+        (
+            "inferred function parameter",
+            "def ident {α : Type} (x : α) : α := x\n\
+             def probe : Nat := ident 1\n",
+        ),
+        (
+            "explicit function parameter",
+            "def ident {α : Type} (x : α) : α := x\n\
+             def probe : Nat := @ident Nat 1\n",
+        ),
+        (
+            "named function parameter",
+            "def ident {α : Type} (x : α) : α := x\n\
+             def probe : Nat := ident (α := Nat) 1\n",
+        ),
+        (
+            "interleaved implicit parameters",
+            "def choose {α : Type} (x : α) {β : Type} (y : β) : α := x\n\
+             def probe : Nat := choose 1 true\n",
+        ),
+        (
+            "interleaved named parameter",
+            "def choose {α : Type} (x : α) {β : Type} (y : β) : α := x\n\
+             def probe : Nat := choose 1 (β := Bool) true\n",
+        ),
+        (
+            "interleaved explicit and named parameters",
+            "def choose {α : Type} (x : α) {β : Type} (y : β) : α := x\n\
+             def probe : Nat := @choose Nat 1 (β := Bool) true\n",
+        ),
+        (
+            "empty recursor explicit motive",
+            "def probe (h : False) : Nat := False.rec (fun _ => Nat) h\n",
+        ),
+        (
+            "explicit function-valued implicit parameter",
+            "def runImplicit {f : Nat → Nat} (x : Nat) : Nat := f x\n\
+             def probe : Nat := @runImplicit (fun x => x) 1\n",
+        ),
+        (
+            "named function-valued implicit parameter",
+            "def runImplicit {f : Nat → Nat} (x : Nat) : Nat := f x\n\
+             def probe : Nat := runImplicit (f := fun x => x) 1\n",
+        ),
+    ] {
+        let (env, results) = elab_file_prelude(code);
+        assert_all_ok(&results, label);
+        let name = Name::from_string("probe");
+        assert!(env.get_const(&name).is_some(), "{label}: checked caller");
+        assert!(
+            env.axiom_deps(&name)
+                .expect("registered checked caller")
+                .is_empty(),
+            "{label}: no axiom-backed replacement for the caller"
+        );
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -6512,6 +6629,49 @@ fn test_b88_dep_family_multiarg() {
 }
 
 #[test]
+fn test_b88_dep_family_proof_patterns() {
+    let (env, results) = elab_file_prelude(include_str!(
+        "../tests/fixtures/dependent_proof_columns.lean"
+    ));
+    let refusals = [
+        ("rejectCtor", "constructor of True"),
+        ("wrongField", "False -> True -> False"),
+        ("rejectWrong", "HasPair Bool.false -> True"),
+        ("missedOuter", "missing constructor `Bool.false`"),
+        ("rejectMissing", "non-exhaustive nested constructor pattern"),
+        ("rejectShadow", "never selected"),
+    ];
+    assert_eq!(results.len(), 10 + refusals.len());
+    assert_all_ok(
+        &results[..10],
+        "specialized proof patterns and distinguishing computations",
+    );
+    let kernel = clean_kernel::TypeChecker::new(&env);
+    let tracer = env.sorry_tracer();
+    for name in [
+        "boolPattern",
+        "boolTyped",
+        "choose",
+        "chooseValues",
+        "threeColumns",
+    ] {
+        let key = Name::from_string(name);
+        let info = env.get_const(&key).expect(name);
+        let value = info.value.as_ref().expect(name);
+        assert!(!tracer.has_sorry_deps(&key), "{name} depends on sorry");
+        kernel.check_type(value, &info.type_).expect(name);
+    }
+    for ((name, expected), result) in refusals.iter().zip(&results[10..]) {
+        let error = result.as_ref().expect_err(name).to_string();
+        assert!(error.contains(expected), "{name}: {error}");
+        assert!(
+            env.get_const(&Name::from_string(name)).is_none(),
+            "{name} registered"
+        );
+    }
+}
+
+#[test]
 fn test_b88_dep_family_wrong_value_rejected() {
     // Soundness twin: the same f7 must NOT prove a wrong equation. `f7 3 2`
     // reduces to 2, so `= 3` by rfl must be rejected loudly.
@@ -9475,8 +9635,8 @@ def MyList.append {α : Type} : MyList α → MyList α → MyList α
 // `def mixed_toOpt (n : Nat) : Option Nat := n` failed `TypeMismatch {
 // expected: "Option {0} Nat", actual: "Nat" }`: `try_coerce` had Coe-instance,
 // subtype-val, builtin Nat→Int and container/aux steps but no `α → Option α`
-// lift (Lean's `instCoeSome`, `↑a = some a`). The fix is Step 1b4 in
-// `infer/coercion.rs::try_coerce` — `try_coerce_option_some`, emitting
+// lift (Lean's `optionCoe`, `↑a = some a`). The bundled prelude uses
+// `try_coerce_bootstrap_option_some` in `infer/coercion.rs`, emitting
 // `@Option.some.{u} α expr` with `u` taken from the target's own `Option.{u}`
 // head and the element type unified (scoped) against the source type.
 //
@@ -13947,3 +14107,6 @@ fn test_w2_r11_uint64_soundness_negatives_stay_refused() {
         "false b<=a from a<b",
     );
 }
+
+#[path = "ordinary_special_application_tests.rs"]
+mod ordinary_special_application_tests;

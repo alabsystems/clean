@@ -783,6 +783,80 @@ fn test_emit_trust_ir_rc_inc_emits_native_retain() {
     );
 }
 
+/// The original mixed UInt64 module also has a boxed general fallback. Only
+/// its actual integer calls and the implicit ARC routing triple belong there.
+/// A real float conversion still needs both correctly signed runtime calls.
+#[test]
+fn extern_imports_follow_original_scalar_calls() {
+    use crate::emit_trust_ir::{RuntimeLowering, TrustIrConfig};
+    use std::collections::BTreeSet;
+    let config = TrustIrConfig {
+        runtime_lowering: RuntimeLowering::ExternCalls,
+        ..TrustIrConfig::default()
+    };
+    for (ty, box_name, unbox_name) in [
+        (IRType::UInt64, "clean_box_uint64", "clean_unbox_uint64"),
+        (IRType::Float32, "clean_box_float", "clean_unbox_float"),
+        (IRType::Float64, "clean_box_float", "clean_unbox_float"),
+    ] {
+        let decl = IRDecl {
+            name: Name::from_string("roundTrip"),
+            params: vec![(VarId(0), ty.clone())],
+            return_type: ty.clone(),
+            body: IRBody::VDecl {
+                var: VarId(1),
+                ty: IRType::Object,
+                value: IRExpr::Box {
+                    ty: ty.clone(),
+                    arg: IRArg::Var(VarId(0)),
+                },
+                rest: Box::new(IRBody::VDecl {
+                    var: VarId(2),
+                    ty: ty.clone(),
+                    value: IRExpr::Unbox {
+                        ty,
+                        arg: IRArg::Var(VarId(1)),
+                    },
+                    rest: Box::new(IRBody::Ret(IRArg::Var(VarId(2)))),
+                }),
+            },
+        };
+        let module = emit_trust_ir_with_config(&[decl], &config).unwrap();
+        assert!(validate_module(&module).is_empty());
+        let observed: BTreeSet<_> = module
+            .functions
+            .iter()
+            .filter(|f| f.is_declaration())
+            .map(|f| f.name.as_str())
+            .collect();
+        assert_eq!(
+            observed,
+            BTreeSet::from([
+                "clean_inc",
+                "clean_dec",
+                "clean_is_exclusive",
+                box_name,
+                unbox_name,
+            ])
+        );
+        let owner = module
+            .functions
+            .iter()
+            .find(|f| f.name == "roundTrip")
+            .unwrap();
+        let calls: Vec<_> = owner
+            .instructions()
+            .filter_map(|node| match &node.inst {
+                trust_ir::Inst::Call { callee, .. } => {
+                    Some(module.function_by_id(*callee).unwrap().name.as_str())
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(calls, [box_name, unbox_name]);
+    }
+}
+
 #[test]
 fn test_emit_trust_ir_extern_calls_managed_runtime_validates() {
     use crate::emit_trust_ir::{RuntimeLowering, TrustIrConfig};
@@ -1271,7 +1345,7 @@ fn test_codegen_license_claims_every_body_and_no_declaration() {
     // The user decl's symbol IS its Lean name, and a runtime ABI import is a
     // C symbol with no Clean declaration behind it: no display path either way.
     assert_eq!(by_name("root").display_path, None);
-    assert_eq!(by_name("clean_alloc_ctor").display_path, None);
+    assert_eq!(by_name("clean_inc").display_path, None);
     // Every claim above is a v41 wire fact: the module still validates and
     // the binary codec round-trips it without laundering a state.
     assert!(validate_module(&module).is_empty());
@@ -6531,7 +6605,7 @@ fn test_emit_trust_ir_ws614_closure_arity_census_mutation() {
 // ---------------------------------------------------------------------------
 
 /// The `FuncId` of the runtime extern `name`. Panics when the extern is not
-/// declared, so a checker built on it can never pass by finding nothing.
+/// declared, so a required call target cannot pass by finding nothing.
 fn ws6_1_runtime_fn(module: &Module, name: &str) -> FuncId {
     module
         .functions
@@ -6575,11 +6649,44 @@ fn ws6_1_narrowings_fed_by(module: &Module, reader: &str) -> Vec<String> {
 /// Calls to the runtime extern `name` anywhere in `module`.
 fn ws6_1_calls_to(module: &Module, name: &str) -> usize {
     use trust_ir::inst::Inst;
-    let id = ws6_1_runtime_fn(module, name);
+    let Some(id) = module
+        .functions
+        .iter()
+        .find(|f| f.name == name)
+        .map(|f| f.id)
+    else {
+        return 0;
+    };
     module
         .instructions()
         .filter(|n| matches!(&n.inst, Inst::Call { callee, .. } if *callee == id))
         .count()
+}
+
+/// Import the alternative reader or boxer only in the negative-control image.
+/// Both ABI variants take the same arguments and return the same result.
+fn ws6_1_mutant_extern(module: &mut Module, original: FuncId, name: &str) -> FuncId {
+    let source = module
+        .functions
+        .iter()
+        .find(|f| f.id == original)
+        .expect("original extern");
+    assert!(source.is_declaration());
+    if let Some(existing) = module.functions.iter().find(|f| f.name == name) {
+        assert!(existing.is_declaration());
+        let signature = module.func_type(source.ty).expect("original extern signature");
+        assert_eq!(module.func_type(existing.ty), Some(signature));
+        assert_eq!(existing.calling_conv, source.calling_conv);
+        assert_eq!(existing.linkage, source.linkage);
+        return existing.id;
+    }
+    let mut alternative = source.clone();
+    let id = FuncId::new(u32::try_from(module.functions.len()).expect("mutation fixture fits"));
+    assert!(module.functions.iter().all(|f| f.id != id));
+    alternative.id = id;
+    alternative.name = name.to_owned();
+    module.functions.push(alternative);
+    id
 }
 
 /// MUTATION: revert the WS6.1 consumer fix inside an emitted module — every
@@ -6589,7 +6696,7 @@ fn ws6_1_calls_to(module: &Module, name: &str) -> usize {
 fn ws6_1_revert_narrow_readers(module: &mut Module) -> usize {
     use trust_ir::inst::Inst;
     let dispatching = ws6_1_runtime_fn(module, "clean_unbox_uint64");
-    let tagged_only = ws6_1_runtime_fn(module, "clean_unbox");
+    let tagged_only = ws6_1_mutant_extern(module, dispatching, "clean_unbox");
     let mut reverted = 0;
     for f in &mut module.functions {
         let narrowed: HashSet<ValueId> = f
@@ -6670,7 +6777,7 @@ fn test_ws6_1_integer_unbox_reads_the_dispatching_reader() {
         0,
         "no scalar unbox may read the tagged-only `clean_unbox`"
     );
-    assert!(ws6_1_narrowings_fed_by(&module, "clean_unbox").is_empty());
+    assert!(module.functions.iter().all(|f| f.name != "clean_unbox"));
     // u8 trunc + u16 trunc + Bool icmp: the three arms the bug lived in.
     let dispatching = ws6_1_narrowings_fed_by(&module, "clean_unbox_uint64");
     assert_eq!(
@@ -7830,7 +7937,7 @@ fn test_ws6_1_review_literal_and_wide_heap_nat_vectors() {
     // that, and vector 4 shows it is the spelling, not the value, that moved.
     let mut reverted = module.clone();
     let nat_of_u64 = ws6_1_runtime_fn(&reverted, "clean_nat_of_u64");
-    let box_u64 = ws6_1_runtime_fn(&reverted, "clean_box_uint64");
+    let box_u64 = ws6_1_mutant_extern(&mut reverted, nat_of_u64, "clean_box_uint64");
     let mut repointed = 0;
     // The literal may be hoisted into `ws6_1_rv_nat._boxed_const_N`.
     for f in reverted
@@ -8178,7 +8285,25 @@ pub(super) fn ws6_2_sqlet_linkrun(
         );
     }
     let tmbc = dir.path().join("sqlet.tmbc");
-    std::fs::write(&tmbc, tmbc_envelope(&legacy)).expect("write legacy tmbc");
+    let encoded = tmbc_envelope(&legacy);
+    let decoded = trust_ir::binary::deserialize_module(&encoded[8..])
+        .expect("the exact sqlet consumer payload must decode");
+    assert_eq!(
+        decoded, legacy,
+        "sqlet transport must preserve the whole module"
+    );
+    let wire_validation = trust_ir_build::validate_module_report(&decoded);
+    assert!(
+        wire_validation.is_ok(),
+        "the serialized consumer input must still validate: {:?}",
+        wire_validation.errors()
+    );
+    assert_eq!(
+        wire_validation.replayed_certificate_refs(),
+        Some(replayed),
+        "the exact consumer bytes must replay the same kernel certificates"
+    );
+    std::fs::write(&tmbc, encoded).expect("write legacy tmbc");
     let obj = dir.path().join("sqlet.o");
     let cg = legacy_trust_cg(&trust_cg)
         .args(["-c", "--target", target, "-o"])

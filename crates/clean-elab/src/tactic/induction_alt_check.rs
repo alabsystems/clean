@@ -87,6 +87,12 @@ fn selects(alt: &SurfaceInductionAlt, goal: &Goal) -> bool {
         .is_some_and(|tag| tag.last_component() == alt.name)
 }
 
+/// The first matching named alternative, or the final wildcard.
+pub(super) fn select_alternative(alts: &[SurfaceInductionAlt], goal: &Goal) -> Option<usize> {
+    alts.iter()
+        .position(|alt| selects(alt, goal) || is_wildcard(alt))
+}
+
 /// For each case goal, in order, the index into `alts` of the alternative
 /// that covers it: the first named alternative selecting it, else the
 /// wildcard, else `None` (the caller reports that case as not provided).
@@ -100,14 +106,9 @@ pub(super) fn assign_alternatives(
     alts: &[SurfaceInductionAlt],
     goals: &VecDeque<Goal>,
 ) -> Result<Vec<Option<usize>>, TacticError> {
-    let wildcard = alts.iter().rposition(is_wildcard);
-    let assignment: Vec<Option<usize>> = goals
+    let assignment: Vec<_> = goals
         .iter()
-        .map(|goal| {
-            alts.iter()
-                .position(|alt| !is_wildcard(alt) && selects(alt, goal))
-                .or(wildcard)
-        })
+        .map(|goal| select_alternative(alts, goal))
         .collect();
     for (index, alt) in alts.iter().enumerate() {
         if is_wildcard(alt) || assignment.contains(&Some(index)) {

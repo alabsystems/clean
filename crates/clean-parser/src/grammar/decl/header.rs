@@ -99,7 +99,34 @@ struct ImportForm {
 impl Parser {
     /// Read only the file header; no term/tactic parser or environment is needed.
     pub fn parse_header(input: &str) -> Result<FileHeader, ParseError> {
-        Self::new(input).file_header(&mut Vec::new())
+        Self::parse_header_in_world(input, clean_kernel::LeanWorld::ORACLE)
+    }
+
+    /// Read only the file header, using the same world as the full file parser.
+    ///
+    /// # Errors
+    /// Returns the first header refusal, with the same recovery as [`Self::parse_header`].
+    pub fn parse_header_in_world(
+        input: &str,
+        world: clean_kernel::LeanWorld,
+    ) -> Result<FileHeader, ParseError> {
+        Self::parse_header_with_decls_in_world(input, world).map(|(header, _)| header)
+    }
+
+    /// Preserve the actual parsed prelude and import declarations for a caller
+    /// that validates the prelude before loading the explicit artifact graph.
+    ///
+    /// # Errors
+    /// Returns the same header diagnostics as [`Self::parse_header_in_world`].
+    pub fn parse_header_with_decls_in_world(
+        input: &str,
+        world: clean_kernel::LeanWorld,
+    ) -> Result<(FileHeader, Vec<SurfaceDecl>), ParseError> {
+        let mut declarations = Vec::new();
+        let header = Self::new(input)
+            .with_lean_world(world)
+            .file_header(&mut declarations)?;
+        Ok((header, declarations))
     }
 
     /// Read the same header grammar for `--deps` and `--src-deps`.

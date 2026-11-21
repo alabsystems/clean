@@ -12,6 +12,9 @@ use clean_kernel::{CertificationAudit, ConstantKind, Declaration, Expr, Name, Ty
 use crate::spec::{SpecError, Specification};
 
 mod canonical_arithmetic;
+mod canonical_division;
+#[cfg(test)]
+mod canonical_division_tests;
 #[path = "eval_ir_integer_normalization_v1.rs"]
 mod integer_normalization;
 #[cfg(test)]
@@ -26,6 +29,9 @@ mod shifts64_tests;
 mod sources_a;
 mod sources_b;
 #[cfg(test)]
+#[path = "eval_ir_positive_division_telescope_tests.rs"]
+mod telescope_tests;
+#[cfg(test)]
 mod tests;
 mod total_division;
 #[cfg(test)]
@@ -36,6 +42,23 @@ mod unsigned_compare_tests;
 mod word_add;
 #[cfg(test)]
 mod word_add_tests;
+mod word_and_loop;
+mod word_and_scalar;
+#[cfg(test)]
+mod word_and_tests;
+mod word_lshr_canonical;
+#[cfg(test)]
+mod word_lshr_canonical_tests;
+mod word_shl_canonical;
+#[cfg(test)]
+mod word_shl_canonical_boundaries;
+#[cfg(test)]
+mod word_shl_canonical_tests;
+mod word_xor;
+mod word_xor_loop;
+mod word_xor_scalar;
+#[cfg(test)]
+mod word_xor_tests;
 
 const AGREEMENT_ROOTS: [&str; 2] = ["ir_div_agrees_at_fuel", "ir_rem_agrees_at_fuel"];
 const SHIFT_ROOTS: [&str; 5] = [

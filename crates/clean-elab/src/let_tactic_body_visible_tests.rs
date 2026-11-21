@@ -88,3 +88,28 @@ fn test_let_tactic_value_type_mismatch_errors() {
         "let x : Nat := True.intro must error: value is not a Nat"
     );
 }
+
+#[test]
+fn test_let_tactic_anonymous_inferred_and_typed_pass() {
+    check_decl("def t : Nat := by\n  let _ := 4\n  let _ : Nat := 5\n  exact 6")
+        .expect("both anonymous lets should elaborate before the continuation");
+}
+
+#[test]
+fn test_let_tactic_anonymous_value_type_mismatch_errors() {
+    let error = check_decl("def t : Nat := by let _ : Nat := True.intro; exact 5")
+        .expect_err("the anonymous let must check its value against Nat");
+    assert!(
+        matches!(
+            error.innermost(),
+            crate::ElabError::TacticFailed(crate::tactic::TacticError::TypeMismatch { .. })
+        ),
+        "expected a type mismatch, got {error:?}"
+    );
+}
+
+#[test]
+fn test_let_tactic_anonymous_leaves_quoted_hypothesis_accessible() {
+    check_decl("theorem t («h✝» : False) : False := by\n  let _ : Nat := 5\n  exact «h✝»")
+        .expect("the anonymous let should leave the quoted hypothesis accessible");
+}

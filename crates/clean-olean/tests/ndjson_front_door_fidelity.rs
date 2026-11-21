@@ -159,53 +159,69 @@ fn test_fidelity_every_name_keyed_fold_head_is_declined_unless_authorized() {
     assert!(failures.is_empty(), "{failures:#?}");
 }
 
-/// `Lean.reduceNat := fun n => n` (a definition, or an opaque) and
-/// `forgedReduceNat : Lean.reduceNat c = 5 := Eq.refl 5`: Lean's kernel
-/// evaluates `Lean.reduceNat c` by name with compiled code (`reduce_native`),
-/// which a replayed export has none of, so pinned Lean refuses it ("(kernel)
-/// (interpreter) unknown declaration 'c'"); Clean computes it from the
-/// declaration (an identity admits even its own fold rule). The export is
-/// declined, never accepted. Under another name Lean's kernel computes
-/// nothing by name: both kernels unfold the identity definition and accept
-/// it, and both refuse the opaque one, which neither unfolds (review round 3).
+/// Pinned Lean evaluates `Lean.reduceNat c` by name with compiled code, which
+/// an export lacks. A transparent identity lets Clean replay the theorem by
+/// unfolding, and R128 then declines the named head. F1 excludes native
+/// evaluation of an opaque identity in the export loader's Lean theory, so
+/// the theorem over either opaque spelling is refused during replay.
 #[test]
 fn test_fidelity_native_evaluation_heads_are_declined() {
-    for opaque in [false, true] {
-        let forged = check(&forged_reduce_nat("reduceNat", opaque));
+    let transparent = check(&forged_reduce_nat("reduceNat", false));
+    assert_eq!(transparent.exit, ExitClass::Decline, "{transparent:?}");
+    assert_eq!(transparent.refused, 0, "{transparent:?}");
+    assert_eq!(
+        verdict_of(&transparent, "forgedReduceNat"),
+        Some(DeclarationVerdict::Admitted),
+        "{transparent:?}"
+    );
+
+    let renamed = check(&forged_reduce_nat("reduceNatForged", false));
+    assert_eq!(renamed.exit, ExitClass::Accept, "{renamed:?}");
+    assert_eq!(
+        verdict_of(&renamed, "forgedReduceNat"),
+        Some(DeclarationVerdict::Admitted),
+        "{renamed:?}"
+    );
+
+    let named_opaque = forged_reduce_nat("reduceNat", true);
+    let renamed_opaque = forged_reduce_nat("reduceNatForged", true);
+    for export in [&named_opaque, &renamed_opaque] {
+        let report = check(export);
+        assert_eq!(report.exit, ExitClass::Reject, "{report:?}");
+        assert_eq!(report.refused, 1, "{report:?}");
         assert_eq!(
-            forged.exit,
-            ExitClass::Decline,
-            "opaque {opaque}: {forged:?}"
+            report.first_refusal.as_ref().map(|r| r.name.as_str()),
+            Some("forgedReduceNat"),
+            "{report:?}"
         );
-        let reason = forged.decline_reason.as_deref().unwrap_or_default();
+        assert_eq!(
+            verdict_of(&report, "forgedReduceNat"),
+            Some(DeclarationVerdict::Refused),
+            "{report:?}"
+        );
+    }
+
+    // Without the final theorem, no replay refusal masks the R128 decision
+    // for the opaque head itself.
+    let (prefix, theorem) = named_opaque
+        .trim_end()
+        .rsplit_once('\n')
+        .expect("fixture rows");
+    assert!(theorem.starts_with(r#"{"thm":"#), "{theorem}");
+    let opaque_prefix = check(prefix);
+    assert_eq!(opaque_prefix.exit, ExitClass::Decline, "{opaque_prefix:?}");
+    assert_eq!(opaque_prefix.refused, 0, "{opaque_prefix:?}");
+    for report in [&transparent, &opaque_prefix] {
+        assert_eq!(
+            verdict_of(report, "Lean.reduceNat"),
+            Some(DeclarationVerdict::Admitted),
+            "{report:?}"
+        );
+        let reason = decline_reason(report);
         assert!(
             reason.contains("`Lean.reduceNat`") && reason.contains("R128"),
-            "opaque {opaque}: declined for the head: {reason}"
+            "{report:?}"
         );
-        assert_eq!(
-            verdict_of(&forged, "forgedReduceNat"),
-            Some(DeclarationVerdict::Admitted),
-            "opaque {opaque}: Clean's replay admits it; only the head rule declines"
-        );
-        let control = check(&forged_reduce_nat("reduceNatForged", opaque));
-        if opaque {
-            assert_eq!(
-                control.exit,
-                ExitClass::Reject,
-                "an opaque never unfolds: {control:?}"
-            );
-            assert_eq!(
-                control.first_refusal.as_ref().map(|r| r.name.as_str()),
-                Some("forgedReduceNat"),
-                "the theorem over the opaque is the refusal: {control:?}"
-            );
-        } else {
-            assert_eq!(
-                control.exit,
-                ExitClass::Accept,
-                "the definition unfolds: {control:?}"
-            );
-        }
     }
 }
 

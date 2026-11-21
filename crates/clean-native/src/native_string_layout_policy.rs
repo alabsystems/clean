@@ -12,6 +12,7 @@ use clean_kernel::{
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct StringLayoutPolicy {
     byte_backed: bool,
+    owns_string_push: bool,
 }
 
 fn constant(name: &str) -> Expr {
@@ -166,6 +167,9 @@ fn validity_layout(env: &Environment) -> bool {
 
 impl StringLayoutPolicy {
     pub(crate) fn from_env(env: &Environment) -> Self {
+        let owns_string_push = env
+            .get_const(&Name::from_string("String.push"))
+            .is_some_and(|info| crate::native_ffi_audit::stable_string_push(env, info).is_ok());
         if !clean_compiler::string_layout::has_byte_array_string_layout(env)
             || !byte_list_layout(env)
             || !validity_layout(env)
@@ -191,7 +195,10 @@ impl StringLayoutPolicy {
             .iter()
             .all(|name| checked(env, &Name::from_string(name)))
         {
-            return Self::default();
+            return Self {
+                byte_backed: false,
+                owns_string_push,
+            };
         }
         let bytes = constant("ByteArray");
         let string = constant("String");
@@ -230,6 +237,7 @@ impl StringLayoutPolicy {
             ),
         );
         Self {
+            owns_string_push,
             byte_backed: projection(env, "Array.toList", array_type, array_value)
                 && projection(
                     env,
@@ -252,6 +260,10 @@ impl StringLayoutPolicy {
                     ),
                 ),
         }
+    }
+
+    pub(crate) fn owns_string_push(self) -> bool {
+        self.owns_string_push
     }
 
     pub(crate) fn permits_byte_backed_bodies(self) -> bool {

@@ -164,50 +164,41 @@ impl ProofState {
         ctx: &mut LocalContext,
         seen: &mut std::collections::HashSet<FVarId>,
     ) {
-        // Build a lookup of every local decl across all goals, keyed by FVarId.
-        // Sibling subgoals hold the binder decls that leaked into meta types.
-        let mut decl_index: std::collections::HashMap<FVarId, &super::LocalDecl> =
+        // Only sibling locals outside the current context can extend the
+        // closure. If this set is empty, no expression needs to be traversed.
+        let mut available: std::collections::HashMap<FVarId, &super::LocalDecl> =
             std::collections::HashMap::new();
         for goal in &self.goals {
             for decl in &goal.local_ctx {
-                decl_index.entry(decl.fvar).or_insert(decl);
+                if !seen.contains(&decl.fvar) {
+                    available.entry(decl.fvar).or_insert(decl);
+                }
             }
-        }
-        if decl_index.is_empty() {
-            return;
         }
 
-        // Fixed-point: repeatedly pull in any referenced-but-undeclared FVar.
-        // The loop strictly grows `seen` each iteration (or stops), and is
-        // bounded by `decl_index.len()`.
-        let max_iters = decl_index.len() + 1;
-        for _ in 0..max_iters {
-            let missing: Vec<FVarId> = ctx
+        // Every declaration is appended once. After a round only the types
+        // of the newly appended declarations can introduce further siblings.
+        let mut next = 0;
+        while !available.is_empty() && next < ctx.len() {
+            let missing: Vec<_> = ctx
                 .iter()
+                .skip(next)
                 .flat_map(|decl| crate::tactic::hypothesis::collect_fvars(&decl.type_))
-                .filter(|fv| !seen.contains(fv) && decl_index.contains_key(fv))
+                .filter(|fv| available.contains_key(fv))
                 .collect();
-            if missing.is_empty() {
-                break;
-            }
-            let mut progressed = false;
+            next = ctx.len();
             for fv in missing {
-                if !seen.insert(fv) {
+                let Some(decl) = available.remove(&fv) else {
                     continue;
+                };
+                seen.insert(fv);
+                let name = decl.name.name().clone();
+                let ty = self.metas.instantiate(&decl.ty);
+                if let Some(value) = decl.reduction_value() {
+                    ctx.push_let_with_id(decl.fvar, name, ty, self.metas.instantiate(value));
+                } else {
+                    ctx.push_with_id(decl.fvar, name, ty, decl.binder_info);
                 }
-                if let Some(decl) = decl_index.get(&fv) {
-                    let name = decl.name.name().clone();
-                    let ty = self.metas.instantiate(&decl.ty);
-                    if let Some(value) = decl.reduction_value() {
-                        ctx.push_let_with_id(decl.fvar, name, ty, self.metas.instantiate(value));
-                    } else {
-                        ctx.push_with_id(decl.fvar, name, ty, decl.binder_info);
-                    }
-                    progressed = true;
-                }
-            }
-            if !progressed {
-                break;
             }
         }
     }

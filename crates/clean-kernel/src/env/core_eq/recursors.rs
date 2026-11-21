@@ -206,7 +206,7 @@ fn fix_eq_rec(
     // unknown, never as verified (axiom_audit certification flags it
     // `UnverifiedKernelObject` / re-checks it; nothing promotes silently).
     env.declaration_verification.remove(&rec_name);
-    env.constants.insert(rec_name.clone(), rec_const_info);
+    env.install_resident_constant(rec_name.clone(), rec_const_info);
 
     if let Some(rec_val) = env.recursors.get(&rec_name).cloned() {
         let rhs = promoted_singleton_rhs(dummy_ty);
@@ -304,7 +304,7 @@ fn fix_eq_cases_on(
     // SOUNDNESS (R1-EQREC, 2026-08-25): transient removal — re-earned by
     // `validate_and_stamp_recursor` in `register()`; see the Eq.rec note.
     env.declaration_verification.remove(&cases_name);
-    env.constants.insert(cases_name.clone(), cases_const_info);
+    env.install_resident_constant(cases_name.clone(), cases_const_info);
 
     if let Some(cases_val) = env.recursors.get(&cases_name).cloned() {
         let rhs = promoted_singleton_rhs(dummy_ty);
@@ -406,7 +406,7 @@ fn fix_eq_rec_on(
     // SOUNDNESS (R1-EQREC, 2026-08-25): transient removal — re-earned by
     // `validate_and_stamp_recursor` in `register()`; see the Eq.rec note.
     env.declaration_verification.remove(&rec_on_name);
-    env.constants.insert(rec_on_name.clone(), rec_on_const_info);
+    env.install_resident_constant(rec_on_name.clone(), rec_on_const_info);
 
     if let Some(rec_on_val) = env.recursors.get(&rec_on_name).cloned() {
         let rhs = promoted_singleton_rhs(dummy_ty);

@@ -1,0 +1,35 @@
+def Char.ofNat (x_1 : @& tobj) : u32 :=
+  block_1 :=
+    let x_2 : u32 := Char.ofNat._closed_0;
+    ret x_2;
+  let x_3 : tagged := 55296;
+  let x_4 : u8 := Nat.decLt x_1 x_3;
+  case x_4 : u8 of
+  Bool.false →
+    let x_5 : tagged := 57343;
+    let x_6 : u8 := Nat.decLt x_5 x_1;
+    case x_6 : u8 of
+    Bool.false →
+      jmp block_1
+    Bool.true →
+      let x_7 : tagged := 1114112;
+      let x_8 : u8 := Nat.decLt x_1 x_7;
+      case x_8 : u8 of
+      Bool.false →
+        jmp block_1
+      Bool.true →
+        let x_9 : u32 := Char.ofNatAux x_1 ◾;
+        ret x_9
+  Bool.true →
+    let x_10 : u32 := Char.ofNatAux x_1 ◾;
+    ret x_10
+def Char.ofNat._closed_0 : u32 :=
+  let x_1 : tagged := 0;
+  let x_2 : u32 := UInt32.ofBitVec x_1;
+  ret x_2
+extern Nat.decLt (x_1 : @& tobj) (x_2 : @& tobj) : u8
+all lean_nat_dec_lt
+extern Char.ofNatAux (x_1 : @& tobj) (x_2 : ◾) : u32
+all lean_uint32_of_nat
+extern UInt32.ofBitVec (x_1 : tobj) : u32
+all lean_uint32_of_nat_mk

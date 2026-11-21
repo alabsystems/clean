@@ -55,6 +55,7 @@ impl ElabCtx<'_> {
         &mut self,
         name: &SurfaceName,
         binders: &[SurfaceBinder],
+        public_binders: &[SurfaceBinder],
         ty: &SurfaceExpr,
         proof: &SurfaceExpr,
         modifiers: &DeclModifiers,
@@ -65,7 +66,14 @@ impl ElabCtx<'_> {
         let lift_mark = self.mutual_lift_entries.len();
         let previous_capture = self.single_theorem_capture.take();
         let result = self.with_local_scope_rollback(|this| {
-            this.elab_single_equation_theorem_inner(name, binders, ty, proof, modifiers)
+            this.elab_single_equation_theorem_inner(
+                name,
+                binders,
+                public_binders,
+                ty,
+                proof,
+                modifiers,
+            )
         });
         self.single_theorem_capture = previous_capture;
         if result.is_err() {
@@ -81,6 +89,7 @@ impl ElabCtx<'_> {
         &mut self,
         name: &SurfaceName,
         binders: &[SurfaceBinder],
+        public_binders: &[SurfaceBinder],
         ty: &SurfaceExpr,
         proof: &SurfaceExpr,
         modifiers: &DeclModifiers,
@@ -154,8 +163,9 @@ impl ElabCtx<'_> {
             &auto_implicits,
             Some(&section_fvars),
         )?;
+        let decl_name = self.kernel_decl_name(name, modifiers, PrivateNameKind::Theorem);
         let declaration = PreDef {
-            name: self.kernel_decl_name(name, modifiers, PrivateNameKind::Theorem),
+            name: decl_name.clone(),
             fvar,
             is_theorem: true,
             universe_params: self
@@ -170,7 +180,15 @@ impl ElabCtx<'_> {
         let mut lowered = self.lower_mutual_predefs(&[declaration])?;
         self.locals.retain(|(_, id, _)| *id != fvar);
         match lowered.pop() {
-            Some(member) if lowered.is_empty() => Ok((member.ty, member.val, auto_count)),
+            Some(member) if lowered.is_empty() => {
+                self.note_public_param_infos(
+                    &decl_name,
+                    public_binders,
+                    &auto_implicits,
+                    auto_count,
+                );
+                Ok((member.ty, member.val, auto_count))
+            }
             _ => Err(ElabError::InternalInvariant(
                 "single theorem pre-definition did not produce exactly one member".to_string(),
             )),

@@ -6,35 +6,37 @@ use super::{Parser, PendingRecoveryDiagnostic};
 use crate::lexer::TokenKind;
 use crate::surface::*;
 use crate::{ParseError, ParseSourceLocation, ParserDiagnosticSeverity, ParserRecoveryDiagnostic};
+use clean_kernel::BigNat;
 
 impl Parser {
     // ========================================================================
     // Macro system parsing
     // ========================================================================
 
-    /// Parse a syntax declaration: `syntax [name]? [prec]? pattern... : category`
-    ///
-    /// Examples:
-    /// - `syntax term "+" term : term`
-    /// - `syntax:50 term "+" term : term`
-    /// - `syntax [myAdd] term "+" term : term`
+    /// Parse a Lean syntax declaration and its optional node name and priority.
     pub(super) fn syntax_decl(&mut self, start_span: Span) -> Result<SurfaceDecl, ParseError> {
-        // Check for optional precedence: syntax:50
         let precedence = self.parse_precedence_suffix();
-
-        // Check for optional name: [name]
-        let name = if self.eat(&TokenKind::LBracket) {
-            let n = self.ident()?;
-            self.expect(&TokenKind::RBracket)?;
-            Some(n)
+        let name = if self.check(&TokenKind::LParen)
+            && self.peek_token(1).is_some_and(|token| {
+                !token.ident_escaped && matches!(&token.kind, TokenKind::Ident(s) if s == "name")
+            }) {
+            self.advance();
+            self.advance();
+            self.expect(&TokenKind::ColonEq)?;
+            let name = self.qualified_ident()?;
+            self.expect(&TokenKind::RParen)?;
+            Some(name)
         } else {
             None
         };
-
-        // Check for optional priority: (priority := N)
-        let priority = self.parse_priority_attr();
-
-        // Parse the syntax pattern until we hit `:` (category delimiter)
+        let priority = self.parse_priority_attr()?;
+        if self.check(&TokenKind::LBracket) {
+            return Err(ParseError::UnexpectedToken {
+                line: self.current_line(),
+                col: self.current().col as usize,
+                message: "expected a syntax descriptor or (name := identifier)".to_owned(),
+            });
+        }
         let pattern = self.parse_syntax_pattern()?;
 
         // Expect `: category`
@@ -252,21 +254,18 @@ impl Parser {
                             .unwrap_or(u32::MAX),
                     )
                 }
-                TokenKind::Ident(s) if s == "max" && !self.current().ident_escaped => {
+                TokenKind::Ident(s) if !self.current().ident_escaped => {
+                    // The precedence macros exported by Lean's Init.Notation.
+                    let level = match s.as_str() {
+                        "min" => 10,
+                        "min1" => 11,
+                        "lead" => 1022,
+                        "arg" => 1023,
+                        "max" => 1024,
+                        _ => return None,
+                    };
                     self.advance();
-                    Some(1024) // max precedence
-                }
-                TokenKind::Ident(s) if s == "min" && !self.current().ident_escaped => {
-                    self.advance();
-                    Some(0)
-                }
-                TokenKind::Ident(s) if s == "arg" && !self.current().ident_escaped => {
-                    self.advance();
-                    Some(1023) // arg precedence
-                }
-                TokenKind::Ident(s) if s == "lead" && !self.current().ident_escaped => {
-                    self.advance();
-                    Some(1024) // lead = max
+                    Some(level)
                 }
                 _ => None,
             }
@@ -275,32 +274,72 @@ impl Parser {
         }
     }
 
-    /// Parse optional priority attribute: (priority := N)
-    pub(super) fn parse_priority_attr(&mut self) -> Option<u32> {
-        if self.check(&TokenKind::LParen) {
-            let pos = self.pos;
-            self.advance();
-            if let TokenKind::Ident(s) = self.current_kind().clone() {
-                if s == "priority" && !self.current().ident_escaped {
-                    self.advance();
-                    if self.eat(&TokenKind::ColonEq) {
-                        if let TokenKind::NatLit(n) = self.current_kind().clone() {
-                            self.advance();
-                            if self.eat(&TokenKind::RParen) {
-                                return Some(
-                                    n.to_u64()
-                                        .and_then(|v| u32::try_from(v).ok())
-                                        .unwrap_or(u32::MAX),
-                                );
-                            }
-                        }
-                    }
-                }
-            }
-            // Backtrack if not a priority attr
-            self.pos = pos;
+    /// A named priority option commits after the nonreserved `priority` token.
+    /// A malformed value must never become an ordinary syntax pattern.
+    pub(super) fn parse_priority_attr(&mut self) -> Result<Option<BigNat>, ParseError> {
+        if !self.check(&TokenKind::LParen)
+            || !self.peek_token(1).is_some_and(|token| {
+                !token.ident_escaped
+                    && matches!(&token.kind, TokenKind::Ident(s) if s == "priority")
+            })
+        {
+            return Ok(None);
         }
-        None
+        self.advance();
+        self.advance();
+        self.expect(&TokenKind::ColonEq)?;
+        let value = self.syntax_priority_expr(0)?;
+        self.expect(&TokenKind::RParen)?;
+        Ok(Some(value))
+    }
+
+    fn syntax_priority_expr(&mut self, depth: u32) -> Result<BigNat, ParseError> {
+        if depth > Self::MAX_EXPR_DEPTH {
+            return Err(ParseError::NestingTooDeep {
+                col: self.current().col as usize,
+                depth,
+                max: Self::MAX_EXPR_DEPTH,
+            });
+        }
+        let mut total = self.syntax_priority_operand(depth)?;
+        while matches!(self.current_kind(), TokenKind::Plus | TokenKind::Minus) {
+            let add = self.eat(&TokenKind::Plus);
+            if !add {
+                self.advance();
+            }
+            let right = self.syntax_priority_operand(depth)?;
+            total = if add {
+                total.checked_add_big(&right)
+            } else {
+                total.saturating_sub_big(&right)
+            };
+        }
+        Ok(total)
+    }
+
+    fn syntax_priority_operand(&mut self, depth: u32) -> Result<BigNat, ParseError> {
+        if self.eat(&TokenKind::LParen) {
+            let value = stacker::maybe_grow(
+                Self::EXPR_STACK_RED_ZONE,
+                Self::EXPR_STACK_GROW_SIZE,
+                || self.syntax_priority_expr(depth + 1),
+            )?;
+            self.expect(&TokenKind::RParen)?;
+            return Ok(value);
+        }
+        if let TokenKind::NatLit(n) = self.current_kind() {
+            let value = n.clone();
+            self.advance();
+            return Ok(value);
+        }
+        self.instance_priority_value()
+            .map(|p| BigNat::from(u64::from(p)))
+            .ok_or_else(|| ParseError::UnexpectedToken {
+                line: self.current_line(),
+                col: self.current().col as usize,
+                message: "expected a priority numeral, priority keyword, or parenthesized priority"
+                    .into(),
+            })
     }
 
     /// Parse a syntax pattern (sequence of items until `: category`)
@@ -374,10 +413,32 @@ impl Parser {
                             // More pattern follows - this is a variable binding
                             self.advance(); // eat :
                             self.advance(); // eat category
-                            return Ok(SyntaxPatternItem::Variable {
+                            let variable = SyntaxPatternItem::Variable {
                                 name,
                                 category: Some(cat),
-                            });
+                            };
+                            // Keep a categorized repetition structural. Opaque
+                            // parser tokens are never repetition markers.
+                            let separator = if self.check(&TokenKind::Comma)
+                                && matches!(
+                                    self.peek_kind(1),
+                                    Some(TokenKind::Star | TokenKind::Plus)
+                                ) {
+                                self.advance();
+                                Some(",".to_owned())
+                            } else {
+                                None
+                            };
+                            let at_least_one = self.check(&TokenKind::Plus);
+                            if at_least_one || self.check(&TokenKind::Star) {
+                                self.advance();
+                                return Ok(SyntaxPatternItem::Repetition {
+                                    pattern: vec![variable],
+                                    separator,
+                                    at_least_one,
+                                });
+                            }
+                            return Ok(variable);
                         }
                     }
                 }
@@ -541,6 +602,13 @@ impl Parser {
         while !self.check(&TokenKind::FatArrow) && !matches!(self.current_kind(), TokenKind::Eof) {
             match self.current_kind().clone() {
                 TokenKind::StringLit(s) => {
+                    if s.trim().chars().any(char::is_whitespace) {
+                        return Err(ParseError::UnexpectedToken {
+                            line: self.current_line(),
+                            col: self.current_span().start,
+                            message: "invalid atom".to_owned(),
+                        });
+                    }
                     self.advance();
                     items.push(NotationItem::Literal(s));
                 }
@@ -860,7 +928,13 @@ mod typed_macro_name_tests {
         assert_ne!(name.name(), SurfaceName::generated_path("x.y").name());
         assert_eq!(category.as_deref(), Some("term"));
 
-        for (word, expected) in [("max", 1024), ("min", 0), ("arg", 1023), ("lead", 1024)] {
+        for (word, expected) in [
+            ("min", 10),
+            ("min1", 11),
+            ("lead", 1022),
+            ("arg", 1023),
+            ("max", 1024),
+        ] {
             assert_eq!(
                 Parser::new(&format!(":{word}")).parse_precedence_suffix(),
                 Some(expected)
@@ -870,11 +944,13 @@ mod typed_macro_name_tests {
             assert!(escaped.current().ident_escaped);
         }
         assert_eq!(
-            Parser::new("(priority := 7)").parse_priority_attr(),
-            Some(7)
+            Parser::new("(priority := 7)")
+                .parse_priority_attr()
+                .unwrap(),
+            Some(7u64.into())
         );
         let mut escaped = Parser::new("(«priority» := 7)");
-        assert_eq!(escaped.parse_priority_attr(), None);
+        assert_eq!(escaped.parse_priority_attr().unwrap(), None);
         assert!(
             escaped.check(&TokenKind::LParen),
             "failed attribute lookahead must rewind"

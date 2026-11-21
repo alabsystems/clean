@@ -310,6 +310,7 @@ pub(crate) fn shape(e: &SurfaceExpr) -> String {
         SurfaceExpr::Paren(..) => "a parenthesised term",
         SurfaceExpr::NamedHole(..) => "a named hole",
         SurfaceExpr::Ascription(..) => "a type ascription",
+        SurfaceExpr::Borrowed(..) => "a borrowed type annotation",
         SurfaceExpr::OutParam(..) => "an `outParam`",
         SurfaceExpr::SemiOutParam(..) => "a `semiOutParam`",
         SurfaceExpr::If(..) => "an `if`",

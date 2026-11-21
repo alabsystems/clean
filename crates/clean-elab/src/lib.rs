@@ -263,6 +263,7 @@ pub(crate) mod instances_ext;
 pub mod interactive_goals;
 pub mod io_bridge;
 pub(crate) mod io_monad;
+pub(crate) mod island_fence;
 pub mod term_info;
 // Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
 // production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
@@ -270,6 +271,7 @@ pub mod term_info;
 pub(crate) mod io_monad_ext;
 // Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
 // production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
+mod documentation;
 #[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod io_monad_ext2;
 /// Lean's refusals outside its kernel: compilation, `#eval`, the safe context.
@@ -406,6 +408,7 @@ pub(crate) mod preprocess;
 pub(crate) mod preprocess_ext;
 pub(crate) mod print_axioms;
 pub(crate) mod print_cmd;
+mod print_equations;
 pub(crate) mod proj_recursion;
 pub mod register;
 // Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
@@ -621,6 +624,27 @@ pub use preprocess::preprocess_decl_with_context;
 pub(crate) use register::register_elab_result;
 pub use register::{kernel_check_failure_count, register_aesop_rule};
 
+/// Run synchronous elaboration on this thread with source compiler and safe-
+/// context checks enabled. Direct mathematical elaboration keeps its ordinary
+/// default policy outside the closure. Nested calls retain the enabled policy;
+/// normal return and unwinding restore the previous scope.
+///
+/// This enables checks, never grants declaration or proof authority. A
+/// declaration may register mathematically while returning source errors in
+/// [`ElabResult::source_error_message`]; source consumers must inspect them.
+pub fn with_source_compilation_checks<T>(check: impl FnOnce() -> T) -> T {
+    let _scope = lean_compile_checks::FrontDoorScope::enter(true);
+    check()
+}
+
+/// Whether synchronous elaboration on this thread currently applies source
+/// compiler policy. This observation grants no authority. Cache consumers must
+/// bind this policy to their evidence and replay, or decline cached results.
+#[must_use]
+pub fn source_compilation_checks_enabled() -> bool {
+    lean_compile_checks::front_door_active()
+}
+
 impl FileContext {
     /// Whether imports may search external `.olean` paths.
     ///
@@ -804,8 +828,58 @@ pub mod prelude {
 fn source_elaboration_advice(
     env: &clean_kernel::Environment,
 ) -> Result<clean_kernel::Environment, ElabError> {
+    if source_prelude::is_island_prelude(env) {
+        return Ok(env.clone());
+    }
     clean_kernel::tc::with_declaration_budget_suspended(|| env.bootstrap_stub_advice())
         .map_err(|e| register::map_add_decl_error("bootstrap stub advice", e))
+}
+
+/// Shared [`module_driver::EnvironmentSetup`] equal to pinned Lean `Init`
+/// (Ph3 I.2 / Clean F5).
+#[must_use]
+pub fn pinned_init_environment_setup() -> module_driver::EnvironmentSetup {
+    module_driver::EnvironmentSetup::PINNED_INIT
+}
+
+/// Whether `env` carries the island prelude marker (Ph3 I.2 / Clean F5).
+#[must_use]
+pub fn is_island_environment(env: &clean_kernel::Environment) -> bool {
+    source_prelude::is_island_prelude(env)
+}
+
+/// Construct an island elaboration environment and citation gate in `decision`
+/// over the shared pinned-`Init` constructor, armed with the island prelude's
+/// value-less constant fence (Ph3 I.2 / Clean F5).
+pub fn island_environment_in_world(
+    decision: &clean_olean::SourceWorldDecision,
+    header: &clean_parser::FileHeader,
+) -> Result<
+    (clean_kernel::Environment, clean_olean::ImportedConeGate),
+    module_driver::ModuleSetupError,
+> {
+    module_driver::module_environment_for_header_in_world(
+        module_driver::EnvironmentSetup::ISLAND_PINNED_INIT,
+        decision,
+        header,
+    )
+}
+
+/// Construct an island elaboration environment and citation gate over the
+/// configured compiler-pin snapshot world (`v4.30.0-rc2`) (Ph3 I.2 / Clean F5).
+pub fn island_environment_for_header(
+    header: &clean_parser::FileHeader,
+) -> Result<
+    (clean_kernel::Environment, clean_olean::ImportedConeGate),
+    module_driver::ModuleSetupError,
+> {
+    let decision = clean_olean::source_world_for_snapshot().map_err(|reason| {
+        module_driver::ModuleSetupError::LeanWorld {
+            world: clean_kernel::lean_world::LeanWorld::ORACLE,
+            reason: reason.to_string(),
+        }
+    })?;
+    island_environment_in_world(&decision, header)
 }
 
 /// Elaborate surface syntax to kernel expression
@@ -1278,10 +1352,8 @@ fn elaborate_decl_and_register_leaf(
         .transpose()
         .map_err(|error| ElabError::SourceWorld(error.to_string()))?
         .filter(|world| {
-            matches!(
-                world,
-                clean_kernel::LeanWorld::Lean435 | clean_kernel::LeanWorld::Lean436Rc2
-            ) && clean_olean::environment_world(env) != Some(world.tag())
+            world.requires_genuine_init()
+                && clean_olean::environment_world(env) != Some(world.tag())
         });
     if let Some(world) = mismatched_world {
         return Err(ElabError::SourceWorld(format!(
@@ -1415,7 +1487,7 @@ fn elaborate_decl_and_register_leaf(
                     env,
                     paths,
                     policy,
-                    fc.imports_satisfied_from_source(),
+                    fc.imports_satisfied_without_search(),
                     fc.preloaded_artifact_imports(),
                 )?,
                 None => imports::process_imports_clean_native(env, paths, policy)?,
@@ -1523,6 +1595,10 @@ fn elaborate_decl_and_register_leaf(
             warning,
             hole_contexts,
         });
+    }
+
+    if let Some(result) = print_equations::try_elaborate(env, file_ctx.as_deref(), decl) {
+        return result;
     }
 
     // Handle section blocks the same resilient, incremental way as namespace
@@ -2133,6 +2209,8 @@ fn elaborate_general_and_register(
         // declaration, so without this a registered term elaborator is dropped
         // before the next declaration can call it.
         ctx.set_user_term_elabs(file_ctx.take_user_term_elabs());
+        ctx.imported_term_syntax = file_ctx.imported_term_syntax.clone();
+        ctx.imported_runtime = file_ctx.imported_runtime.clone();
         // `preprocess_decl_with_context` could not scan THIS declaration, so
         // it prepended every section variable and asked for the unused ones
         // to be dropped from the elaborated term (`infer::section_prune`).
@@ -2184,7 +2262,8 @@ fn elaborate_general_and_register(
     // Drain every collected attribute out of `ctx` BEFORE it is dropped: the
     // registrations below need `&mut env`, and `ctx` holds an immutable borrow
     // of it. See `decl_attributes::CtxAttributes`.
-    let collected_attributes = decl_attributes::CtxAttributes::collect(&mut ctx);
+    let mut collected_attributes = decl_attributes::CtxAttributes::collect(&mut ctx, Some(&result));
+    let simple_equation_sources = std::mem::take(&mut ctx.simple_equation_sources);
 
     // Extract namespace state back to FileContext before dropping ctx.
     let ns_state = ctx.take_namespace_state();
@@ -2225,15 +2304,21 @@ fn elaborate_general_and_register(
     let (result, logged_deriving_failures) = infer::split_logged_deriving_failures(result);
 
     // First register the declaration itself (so attributes can reference it)
-    source_family_authority::register_source(env, &result)?;
+    let registered_names = source_family_authority::register_source_with_matchers(
+        env,
+        &result,
+        std::mem::take(&mut collected_attributes.matchers),
+    )?
+    .registered_names;
     // ... and which run added it: an `attribute [implemented_by]` or
     // `attribute [extern]` command may name only the run's own declarations
     // (Lean's imported-module check, `crate::declared_here`), with or
     // without a file context.
-    declared_here::record_declared(
+    declared_here::record_declared_with_equation_sources(
         env,
         declared_here::ElabUnit::of(file_ctx.as_deref()),
         register::leaf_own_names(&result),
+        &simple_equation_sources,
     );
 
     // Record `local` / `scoped` instance scope state into the FileContext
@@ -2257,10 +2342,25 @@ fn elaborate_general_and_register(
         .and_then(|outcome| decl_without_pruned_section_binders(decl, &result, outcome));
     register::register_param_names(env, pruned_decl.as_ref().unwrap_or(decl), &result);
 
+    let documentation_world = match file_ctx.as_deref() {
+        Some(context) => context
+            .documentation_world()
+            .map_err(|error| ElabError::SourceWorld(error.to_string()))?,
+        None => clean_kernel::LeanWorld::ORACLE,
+    };
     definition_attrs::record_definitions(env, file_ctx.as_deref(), decl, &result)?;
     // Now register attributes that reference the declaration.
-    collected_attributes.apply(env, file_ctx)?;
-    clean_kernel::env::csimp::record_compiled(env, register::leaf_own_names(&result));
+    collected_attributes.apply(env, file_ctx.as_deref_mut())?;
+    // Native family recursors travel as typed family/lowering records, not
+    // payload definition bodies. Their importer reconstructs their signatures
+    // and wrappers. Source-body contexts belong to the ordinary declarations
+    // actually exported as constants; binding a reconstruction as an identical
+    // source body would reject a genuine family artifact.
+    let compilation_names: Vec<_> = registered_names
+        .into_iter()
+        .filter(|name| env.get_recursor(name).is_none())
+        .collect();
+    clean_kernel::env::csimp::record_compiled(env, compilation_names);
 
     // Every checker walks the leaves, so a logged failure is counted and
     // reported exactly like a failed member of a `namespace` block.
@@ -2275,9 +2375,11 @@ fn elaborate_general_and_register(
 
     let result = lean_compile_checks::diagnose_registered(
         env,
+        file_ctx.as_deref(),
         result,
         module_driver::surface_decl_span(decl),
     );
+    let result = documentation::diagnose_registered(env, result, decl, documentation_world);
     Ok(RegisteredElabResult {
         result,
         warning,
@@ -2370,6 +2472,8 @@ mod mutual_inductive_elab_tests;
 
 #[cfg(test)]
 mod codata_cmd_tests;
+#[cfg(test)]
+mod mutual_codef_call_typing_tests;
 
 #[cfg(test)]
 mod codata_declared_results_tests;
@@ -2887,6 +2991,9 @@ mod tests_ascription_without_type;
 mod tests_anon_ctor_one_field;
 
 #[cfg(test)]
+mod tests_split_at_source;
+
+#[cfg(test)]
 mod tests_anon_ctor_subobject_as_written;
 
 #[cfg(test)]
@@ -3041,3 +3148,6 @@ mod tests_decl_timing;
 
 #[cfg(test)]
 mod tests_source_placeholder_authority;
+
+#[cfg(test)]
+mod tests_compiler_extern_carriers;

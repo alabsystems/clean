@@ -87,7 +87,7 @@ impl Specification {
                 // is doing two unfoldings at once and is the one place a
                 // mis-transcription of the driver would hide.
                 "ir_dm_go_is_gen".to_string(),
-                "def ir_dm_go_is_gen (inc : Nat) (hi : Nat) (kp : Nat) (p : Nat) (s0 : IRDivMod) : Eq IRDivMod (ir_dm_go inc hi (Nat.succ kp) p s0) (ir_dm_go_gen inc hi kp p s0 (ir_nat_ltb hi p)) := Eq.refl IRDivMod (ir_dm_go inc hi (Nat.succ kp) p s0)"
+                "def ir_dm_go_is_gen (inc : Nat) (hi : Nat) (kp : Nat) (p : Nat) (s0 : IRDivMod) : @Eq IRDivMod (ir_dm_go inc hi (Nat.succ kp) p s0) (ir_dm_go_gen inc hi kp p s0 (ir_nat_ltb hi p)) := @Eq.refl IRDivMod (ir_dm_go inc hi (Nat.succ kp) p s0)"
                     .to_string(),
             ),
             (
@@ -154,7 +154,7 @@ impl Specification {
                 // records: fuel exhaustion returns the initial state, where the
                 // equation is `m = 0 * dv + m`.
                 "ir_nat_divmod_spec_eq".to_string(),
-                "def ir_nat_divmod_spec_eq (m : Nat) (dv : Nat) : Eq Nat (Nat.add (ir_nat_mul (ir_dm_quot (ir_nat_divmod m dv)) dv) (ir_dm_rem (ir_nat_divmod m dv))) m := ir_dm_go_eq m 4200 dv"
+                "def ir_nat_divmod_spec_eq (m : Nat) (dv : Nat) : @Eq Nat (Nat.add (ir_nat_mul (ir_dm_quot (ir_nat_divmod m dv)) dv) (ir_dm_rem (ir_nat_divmod m dv))) m := ir_dm_go_eq m 4200 dv"
                     .to_string(),
             ),
             (
@@ -166,7 +166,7 @@ impl Specification {
                 // theorem. Anyone quoting the agreement result must quote this
                 // premise with it.
                 "ir_nat_divmod_spec_bound".to_string(),
-                "def ir_nat_divmod_spec_bound (m : Nat) (dv : Nat) (hfuel : Eq Bool (ir_nat_ltb m (ir_nat_shl dv 4200)) Bool.true) : Eq Bool (ir_nat_ltb_walk (ir_dm_rem (ir_nat_divmod m dv)) dv) Bool.true := ir_dm_go_bound m 4200 dv hfuel"
+                "def ir_nat_divmod_spec_bound (m : Nat) (dv : Nat) (hfuel : @Eq Bool (ir_nat_ltb m (ir_nat_shl dv 4200)) Bool.true) : @Eq Bool (ir_nat_ltb_walk (ir_dm_rem (ir_nat_divmod m dv)) dv) Bool.true := ir_dm_go_bound m 4200 dv hfuel"
                     .to_string(),
             ),
             (
@@ -311,7 +311,7 @@ impl Specification {
                 // This is what makes the specification worth having: a spec
                 // something else could also satisfy pins nothing.
                 "ir_nat_divmod_is_the_quotient".to_string(),
-                "def ir_nat_divmod_is_the_quotient (m : Nat) (dv : Nat) (q : Nat) (r : Nat) (hfuel : Eq Bool (ir_nat_ltb m (ir_nat_shl dv 4200)) Bool.true) (heq : Eq Nat (Nat.add (ir_nat_mul q dv) r) m) (hr : Eq Bool (ir_nat_ltb_walk r dv) Bool.true) : Eq Nat q (ir_dm_quot (ir_nat_divmod m dv)) := ir_nat_qr_unique_q dv q (ir_dm_quot (ir_nat_divmod m dv)) r (ir_dm_rem (ir_nat_divmod m dv)) (Eq.trans Nat (Nat.add (ir_nat_mul q dv) r) m (Nat.add (ir_nat_mul (ir_dm_quot (ir_nat_divmod m dv)) dv) (ir_dm_rem (ir_nat_divmod m dv))) heq (Eq.symm Nat (Nat.add (ir_nat_mul (ir_dm_quot (ir_nat_divmod m dv)) dv) (ir_dm_rem (ir_nat_divmod m dv))) m (ir_nat_divmod_spec_eq m dv))) hr (ir_nat_divmod_spec_bound m dv hfuel)"
+                "def ir_nat_divmod_is_the_quotient (m : Nat) (dv : Nat) (q : Nat) (r : Nat) (hfuel : @Eq Bool (ir_nat_ltb m (ir_nat_shl dv 4200)) Bool.true) (heq : @Eq Nat (Nat.add (ir_nat_mul q dv) r) m) (hr : @Eq Bool (ir_nat_ltb_walk r dv) Bool.true) : @Eq Nat q (ir_dm_quot (ir_nat_divmod m dv)) := ir_nat_qr_unique_q dv q (ir_dm_quot (ir_nat_divmod m dv)) r (ir_dm_rem (ir_nat_divmod m dv)) (@Eq.trans Nat (Nat.add (ir_nat_mul q dv) r) m (Nat.add (ir_nat_mul (ir_dm_quot (ir_nat_divmod m dv)) dv) (ir_dm_rem (ir_nat_divmod m dv))) heq (@Eq.symm Nat (Nat.add (ir_nat_mul (ir_dm_quot (ir_nat_divmod m dv)) dv) (ir_dm_rem (ir_nat_divmod m dv))) m (ir_nat_divmod_spec_eq m dv))) hr (ir_nat_divmod_spec_bound m dv hfuel)"
                     .to_string(),
             ),
             (
@@ -320,7 +320,7 @@ impl Specification {
                 // uniqueness needs BOTH remainders below the divisor, and the
                 // loop's own is only below it when the fuel sufficed.
                 "ir_nat_divmod_is_the_remainder".to_string(),
-                "def ir_nat_divmod_is_the_remainder (m : Nat) (dv : Nat) (q : Nat) (r : Nat) (hfuel : Eq Bool (ir_nat_ltb m (ir_nat_shl dv 4200)) Bool.true) (heq : Eq Nat (Nat.add (ir_nat_mul q dv) r) m) (hr : Eq Bool (ir_nat_ltb_walk r dv) Bool.true) : Eq Nat r (ir_dm_rem (ir_nat_divmod m dv)) := ir_nat_qr_unique_r dv q (ir_dm_quot (ir_nat_divmod m dv)) r (ir_dm_rem (ir_nat_divmod m dv)) (Eq.trans Nat (Nat.add (ir_nat_mul q dv) r) m (Nat.add (ir_nat_mul (ir_dm_quot (ir_nat_divmod m dv)) dv) (ir_dm_rem (ir_nat_divmod m dv))) heq (Eq.symm Nat (Nat.add (ir_nat_mul (ir_dm_quot (ir_nat_divmod m dv)) dv) (ir_dm_rem (ir_nat_divmod m dv))) m (ir_nat_divmod_spec_eq m dv))) hr (ir_nat_divmod_spec_bound m dv hfuel)"
+                "def ir_nat_divmod_is_the_remainder (m : Nat) (dv : Nat) (q : Nat) (r : Nat) (hfuel : @Eq Bool (ir_nat_ltb m (ir_nat_shl dv 4200)) Bool.true) (heq : @Eq Nat (Nat.add (ir_nat_mul q dv) r) m) (hr : @Eq Bool (ir_nat_ltb_walk r dv) Bool.true) : @Eq Nat r (ir_dm_rem (ir_nat_divmod m dv)) := ir_nat_qr_unique_r dv q (ir_dm_quot (ir_nat_divmod m dv)) r (ir_dm_rem (ir_nat_divmod m dv)) (@Eq.trans Nat (Nat.add (ir_nat_mul q dv) r) m (Nat.add (ir_nat_mul (ir_dm_quot (ir_nat_divmod m dv)) dv) (ir_dm_rem (ir_nat_divmod m dv))) heq (@Eq.symm Nat (Nat.add (ir_nat_mul (ir_dm_quot (ir_nat_divmod m dv)) dv) (ir_dm_rem (ir_nat_divmod m dv))) m (ir_nat_divmod_spec_eq m dv))) hr (ir_nat_divmod_spec_bound m dv hfuel)"
                     .to_string(),
             ),
             (
@@ -368,7 +368,7 @@ impl Specification {
             (
                 // Refl bridge for the counting loop.
                 "ir_div_go_is_gen".to_string(),
-                "def ir_div_go_is_gen (b : Nat) (kp : Nat) (x : Nat) : Eq Nat (ir_div_go (Nat.succ kp) x b) (ir_div_go_gen b kp x (ir_nat_ltb x b)) := Eq.refl Nat (ir_div_go (Nat.succ kp) x b)"
+                "def ir_div_go_is_gen (b : Nat) (kp : Nat) (x : Nat) : @Eq Nat (ir_div_go (Nat.succ kp) x b) (ir_div_go_gen b kp x (ir_nat_ltb x b)) := @Eq.refl Nat (ir_div_go (Nat.succ kp) x b)"
                     .to_string(),
             ),
             (
@@ -377,7 +377,7 @@ impl Specification {
                 // mis-transcription of the driver would hide behind a definitional
                 // equality that happens to hold anyway.
                 "ir_div_rem_go_is_gen".to_string(),
-                "def ir_div_rem_go_is_gen (b : Nat) (kp : Nat) (x : Nat) : Eq Nat (ir_div_rem_go b (Nat.succ kp) x) (ir_div_rem_go_gen b kp x (ir_nat_ltb x b)) := Eq.refl Nat (ir_div_rem_go b (Nat.succ kp) x)"
+                "def ir_div_rem_go_is_gen (b : Nat) (kp : Nat) (x : Nat) : @Eq Nat (ir_div_rem_go b (Nat.succ kp) x) (ir_div_rem_go_gen b kp x (ir_nat_ltb x b)) := @Eq.refl Nat (ir_div_rem_go b (Nat.succ kp) x)"
                     .to_string(),
             ),
             (
@@ -485,7 +485,7 @@ impl Specification {
                 // out, so beyond that bound the two really do disagree. Quote the
                 // premise with the theorem.
                 "ir_nat_div_agrees".to_string(),
-                "def ir_nat_div_agrees (m : Nat) (d : Nat) (hbits : Eq Bool (ir_nat_ltb m (ir_nat_shl (Nat.succ d) 4200)) Bool.true) : Eq Nat (ir_nat_div m (Nat.succ d)) (ir_dm_quot (ir_nat_divmod m (Nat.succ d))) := ir_nat_divmod_is_the_quotient m (Nat.succ d) (ir_nat_div m (Nat.succ d)) (ir_div_rem_go (Nat.succ d) m m) hbits (ir_div_go_pair_eq (Nat.succ d) m m) (ir_div_rem_go_bound (Nat.succ d) m m (ir_div_fuel_suffices_pos m d))"
+                "def ir_nat_div_agrees (m : Nat) (d : Nat) (hbits : @Eq Bool (ir_nat_ltb m (ir_nat_shl (Nat.succ d) 4200)) Bool.true) : @Eq Nat (ir_nat_div m (Nat.succ d)) (ir_dm_quot (ir_nat_divmod m (Nat.succ d))) := ir_nat_divmod_is_the_quotient m (Nat.succ d) (ir_nat_div m (Nat.succ d)) (ir_div_rem_go (Nat.succ d) m m) hbits (ir_div_go_pair_eq (Nat.succ d) m m) (ir_div_rem_go_bound (Nat.succ d) m m (ir_div_fuel_suffices_pos m d))"
                     .to_string(),
             ),
             (
@@ -498,7 +498,7 @@ impl Specification {
                 // ir_nat_divmod_q_w and ir_nat_divmod_r_w -- `Eq.refl` at 17/5 --
                 // and its header said they stood in for exactly this theorem.
                 "ir_nat_rem_agrees".to_string(),
-                "def ir_nat_rem_agrees (m : Nat) (d : Nat) (hbits : Eq Bool (ir_nat_ltb m (ir_nat_shl (Nat.succ d) 4200)) Bool.true) : Eq Nat (ir_nat_rem m (Nat.succ d)) (ir_dm_rem (ir_nat_divmod m (Nat.succ d))) := Eq.trans Nat (ir_nat_rem m (Nat.succ d)) (ir_div_rem_go (Nat.succ d) m m) (ir_dm_rem (ir_nat_divmod m (Nat.succ d))) (ir_nat_rem_is_residue m (Nat.succ d)) (ir_nat_divmod_is_the_remainder m (Nat.succ d) (ir_nat_div m (Nat.succ d)) (ir_div_rem_go (Nat.succ d) m m) hbits (ir_div_go_pair_eq (Nat.succ d) m m) (ir_div_rem_go_bound (Nat.succ d) m m (ir_div_fuel_suffices_pos m d)))"
+                "def ir_nat_rem_agrees (m : Nat) (d : Nat) (hbits : @Eq Bool (ir_nat_ltb m (ir_nat_shl (Nat.succ d) 4200)) Bool.true) : @Eq Nat (ir_nat_rem m (Nat.succ d)) (ir_dm_rem (ir_nat_divmod m (Nat.succ d))) := @Eq.trans Nat (ir_nat_rem m (Nat.succ d)) (ir_div_rem_go (Nat.succ d) m m) (ir_dm_rem (ir_nat_divmod m (Nat.succ d))) (ir_nat_rem_is_residue m (Nat.succ d)) (ir_nat_divmod_is_the_remainder m (Nat.succ d) (ir_nat_div m (Nat.succ d)) (ir_div_rem_go (Nat.succ d) m m) hbits (ir_div_go_pair_eq (Nat.succ d) m m) (ir_div_rem_go_bound (Nat.succ d) m m (ir_div_fuel_suffices_pos m d)))"
                     .to_string(),
             ),
             (
@@ -551,13 +551,13 @@ impl Specification {
                 // theorem whose hypothesis nothing satisfies proves nothing, and
                 // this tree has a firewall for exactly that failure.
                 "ir_div_agrees_witness".to_string(),
-                "def ir_div_agrees_witness : Eq Nat (ir_nat_div 17 5) (ir_dm_quot (ir_dm_go (Nat.succ Nat.zero) 17 8 5 (IRDivMod.mk 17 Nat.zero))) := ir_div_agrees_at_fuel 17 4 8 (Eq.refl Bool Bool.true)"
+                "def ir_div_agrees_witness : @Eq Nat (ir_nat_div 17 5) (ir_dm_quot (ir_dm_go (Nat.succ Nat.zero) 17 8 5 (IRDivMod.mk 17 Nat.zero))) := ir_div_agrees_at_fuel 17 4 8 (@Eq.refl Bool Bool.true)"
                     .to_string(),
             ),
             (
                 // ... and for the remainder.
                 "ir_rem_agrees_witness".to_string(),
-                "def ir_rem_agrees_witness : Eq Nat (ir_nat_rem 17 5) (ir_dm_rem (ir_dm_go (Nat.succ Nat.zero) 17 8 5 (IRDivMod.mk 17 Nat.zero))) := ir_rem_agrees_at_fuel 17 4 8 (Eq.refl Bool Bool.true)"
+                "def ir_rem_agrees_witness : @Eq Nat (ir_nat_rem 17 5) (ir_dm_rem (ir_dm_go (Nat.succ Nat.zero) 17 8 5 (IRDivMod.mk 17 Nat.zero))) := ir_rem_agrees_at_fuel 17 4 8 (@Eq.refl Bool Bool.true)"
                     .to_string(),
             ),
             (
@@ -569,7 +569,7 @@ impl Specification {
                 // Same discipline as the standing rule that a green
                 // "it compiled and ran" never checks what the program PRINTED.
                 "ir_div_agrees_witness_is_not_stuck".to_string(),
-                "def ir_div_agrees_witness_is_not_stuck : Eq Nat (ir_dm_quot (ir_dm_go (Nat.succ Nat.zero) 17 8 5 (IRDivMod.mk 17 Nat.zero))) 3 := Eq.refl Nat 3"
+                "def ir_div_agrees_witness_is_not_stuck : @Eq Nat (ir_dm_quot (ir_dm_go (Nat.succ Nat.zero) 17 8 5 (IRDivMod.mk 17 Nat.zero))) 3 := @Eq.refl Nat 3"
                     .to_string(),
             ),
             (
@@ -577,7 +577,7 @@ impl Specification {
                 // agreement is between two real computations, not between two
                 // symbols.
                 "ir_rem_agrees_witness_is_not_stuck".to_string(),
-                "def ir_rem_agrees_witness_is_not_stuck : Eq Nat (ir_dm_rem (ir_dm_go (Nat.succ Nat.zero) 17 8 5 (IRDivMod.mk 17 Nat.zero))) 2 := Eq.refl Nat 2"
+                "def ir_rem_agrees_witness_is_not_stuck : @Eq Nat (ir_dm_rem (ir_dm_go (Nat.succ Nat.zero) 17 8 5 (IRDivMod.mk 17 Nat.zero))) 2 := @Eq.refl Nat 2"
                     .to_string(),
             ),
             (
@@ -693,7 +693,7 @@ impl Specification {
                 // CRYSTAL_STATUS should be updated — the test asserts that
                 // explicitly rather than leaving it to be noticed.
                 "free_var_fail_open_type_position".to_string(),
-                "def free_var_fail_open_type_position (h : Eq Nat ir_undeclared_probe_zzz ir_undeclared_probe_zzz) : Eq Nat Nat.zero Nat.zero := Eq.refl Nat Nat.zero"
+                "def free_var_fail_open_type_position (h : @Eq Nat ir_undeclared_probe_zzz ir_undeclared_probe_zzz) : @Eq Nat Nat.zero Nat.zero := @Eq.refl Nat Nat.zero"
                     .to_string(),
             ),
             (
@@ -724,7 +724,7 @@ impl Specification {
                 //             one statement need not denote the same thing
                 // Classified after the run, not before.
                 "free_var_same_name_two_types".to_string(),
-                "def free_var_same_name_two_types (h : Eq Nat ir_undeclared_probe_zzz Nat.zero) (k : Eq Bool ir_undeclared_probe_zzz Bool.true) : Eq Nat Nat.zero Nat.zero := Eq.refl Nat Nat.zero"
+                "def free_var_same_name_two_types (h : @Eq Nat ir_undeclared_probe_zzz Nat.zero) (k : @Eq Bool ir_undeclared_probe_zzz Bool.true) : @Eq Nat Nat.zero Nat.zero := @Eq.refl Nat Nat.zero"
                     .to_string(),
             ),
             (
@@ -734,7 +734,7 @@ impl Specification {
                 // declaration's RESULT type as well, so neither can be ignored.
                 // Classified after the run.
                 "free_var_binder_used_in_value".to_string(),
-                "def free_var_binder_used_in_value (h : Eq Nat ir_undeclared_probe_zzz ir_undeclared_probe_zzz) : Eq Nat ir_undeclared_probe_zzz ir_undeclared_probe_zzz := h"
+                "def free_var_binder_used_in_value (h : @Eq Nat ir_undeclared_probe_zzz ir_undeclared_probe_zzz) : @Eq Nat ir_undeclared_probe_zzz ir_undeclared_probe_zzz := h"
                     .to_string(),
             ),
             (
@@ -750,7 +750,7 @@ impl Specification {
                 // sides compute, and the successor case lands on the definition
                 // by iota.
                 "ir_pow2_pred".to_string(),
-                "def ir_pow2_pred (k : Nat) : Nat := Nat.rec (fun (_ : Nat) => Nat) Nat.zero (fun (_ : Nat) (ih : Nat) => Nat.add (Nat.succ ih) ih) k"
+                "def ir_pow2_pred (k : Nat) : Nat := @Nat.rec (fun (_ : Nat) => Nat) Nat.zero (fun (_ : Nat) (ih : Nat) => Nat.add (Nat.succ ih) ih) k"
                     .to_string(),
             ),
             (
@@ -764,7 +764,7 @@ impl Specification {
                 // `Eq.refl`: `ir_nat_pow2 Nat.zero` is literally `Nat.succ
                 // Nat.zero` and `ir_pow2_pred Nat.zero` is `Nat.zero`.
                 "ir_nat_pow2_is_succ".to_string(),
-                "def ir_nat_pow2_is_succ (w : Nat) : Eq Nat (ir_nat_pow2 w) (Nat.succ (ir_pow2_pred w)) := Nat.rec (fun (k : Nat) => Eq Nat (ir_nat_pow2 k) (Nat.succ (ir_pow2_pred k))) (Eq.refl Nat (Nat.succ Nat.zero)) (fun (j : Nat) (ih : Eq Nat (ir_nat_pow2 j) (Nat.succ (ir_pow2_pred j))) => Eq.trans Nat (Nat.add (ir_nat_pow2 j) (ir_nat_pow2 j)) (Nat.add (ir_nat_pow2 j) (Nat.succ (ir_pow2_pred j))) (Nat.succ (Nat.add (Nat.succ (ir_pow2_pred j)) (ir_pow2_pred j))) (Eq.cong Nat Nat (fun (z : Nat) => Nat.add (ir_nat_pow2 j) z) (ir_nat_pow2 j) (Nat.succ (ir_pow2_pred j)) ih) (Eq.cong Nat Nat (fun (z : Nat) => Nat.succ (Nat.add z (ir_pow2_pred j))) (ir_nat_pow2 j) (Nat.succ (ir_pow2_pred j)) ih)) w"
+                "def ir_nat_pow2_is_succ (w : Nat) : @Eq Nat (ir_nat_pow2 w) (Nat.succ (ir_pow2_pred w)) := @Nat.rec (fun (k : Nat) => @Eq Nat (ir_nat_pow2 k) (Nat.succ (ir_pow2_pred k))) (@Eq.refl Nat (Nat.succ Nat.zero)) (fun (j : Nat) (ih : @Eq Nat (ir_nat_pow2 j) (Nat.succ (ir_pow2_pred j))) => @Eq.trans Nat (Nat.add (ir_nat_pow2 j) (ir_nat_pow2 j)) (Nat.add (ir_nat_pow2 j) (Nat.succ (ir_pow2_pred j))) (Nat.succ (Nat.add (Nat.succ (ir_pow2_pred j)) (ir_pow2_pred j))) (Eq.cong Nat Nat (fun (z : Nat) => Nat.add (ir_nat_pow2 j) z) (ir_nat_pow2 j) (Nat.succ (ir_pow2_pred j)) ih) (Eq.cong Nat Nat (fun (z : Nat) => Nat.succ (Nat.add z (ir_pow2_pred j))) (ir_nat_pow2 j) (Nat.succ (ir_pow2_pred j)) ih)) w"
                     .to_string(),
             ),
             (
@@ -791,7 +791,7 @@ impl Specification {
                 // breaking. The mathematics is finished; the edit is a separate,
                 // measured act against a stage that does not build here.
                 "ir_wrap_is_the_restoring_residue".to_string(),
-                "def ir_wrap_is_the_restoring_residue (w : Nat) (n : Nat) : Eq Nat (ir_wrap w n) (ir_dm_rem (ir_dm_go (Nat.succ Nat.zero) n (Nat.succ n) (ir_nat_pow2 w) (IRDivMod.mk n Nat.zero))) := Eq.trans Nat (ir_nat_rem n (ir_nat_pow2 w)) (ir_nat_rem n (Nat.succ (ir_pow2_pred w))) (ir_dm_rem (ir_dm_go (Nat.succ Nat.zero) n (Nat.succ n) (ir_nat_pow2 w) (IRDivMod.mk n Nat.zero))) (Eq.cong Nat Nat (fun (z : Nat) => ir_nat_rem n z) (ir_nat_pow2 w) (Nat.succ (ir_pow2_pred w)) (ir_nat_pow2_is_succ w)) (Eq.trans Nat (ir_nat_rem n (Nat.succ (ir_pow2_pred w))) (ir_dm_rem (ir_dm_go (Nat.succ Nat.zero) n (Nat.succ n) (Nat.succ (ir_pow2_pred w)) (IRDivMod.mk n Nat.zero))) (ir_dm_rem (ir_dm_go (Nat.succ Nat.zero) n (Nat.succ n) (ir_nat_pow2 w) (IRDivMod.mk n Nat.zero))) (ir_rem_agrees_unconditional n (ir_pow2_pred w)) (Eq.cong Nat Nat (fun (z : Nat) => ir_dm_rem (ir_dm_go (Nat.succ Nat.zero) n (Nat.succ n) z (IRDivMod.mk n Nat.zero))) (Nat.succ (ir_pow2_pred w)) (ir_nat_pow2 w) (Eq.symm Nat (ir_nat_pow2 w) (Nat.succ (ir_pow2_pred w)) (ir_nat_pow2_is_succ w))))"
+                "def ir_wrap_is_the_restoring_residue (w : Nat) (n : Nat) : @Eq Nat (ir_wrap w n) (ir_dm_rem (ir_dm_go (Nat.succ Nat.zero) n (Nat.succ n) (ir_nat_pow2 w) (IRDivMod.mk n Nat.zero))) := @Eq.trans Nat (ir_nat_rem n (ir_nat_pow2 w)) (ir_nat_rem n (Nat.succ (ir_pow2_pred w))) (ir_dm_rem (ir_dm_go (Nat.succ Nat.zero) n (Nat.succ n) (ir_nat_pow2 w) (IRDivMod.mk n Nat.zero))) (Eq.cong Nat Nat (fun (z : Nat) => ir_nat_rem n z) (ir_nat_pow2 w) (Nat.succ (ir_pow2_pred w)) (ir_nat_pow2_is_succ w)) (@Eq.trans Nat (ir_nat_rem n (Nat.succ (ir_pow2_pred w))) (ir_dm_rem (ir_dm_go (Nat.succ Nat.zero) n (Nat.succ n) (Nat.succ (ir_pow2_pred w)) (IRDivMod.mk n Nat.zero))) (ir_dm_rem (ir_dm_go (Nat.succ Nat.zero) n (Nat.succ n) (ir_nat_pow2 w) (IRDivMod.mk n Nat.zero))) (ir_rem_agrees_unconditional n (ir_pow2_pred w)) (Eq.cong Nat Nat (fun (z : Nat) => ir_dm_rem (ir_dm_go (Nat.succ Nat.zero) n (Nat.succ n) z (IRDivMod.mk n Nat.zero))) (Nat.succ (ir_pow2_pred w)) (ir_nat_pow2 w) (@Eq.symm Nat (ir_nat_pow2 w) (Nat.succ (ir_pow2_pred w)) (ir_nat_pow2_is_succ w))))"
                     .to_string(),
             ),
         ]);

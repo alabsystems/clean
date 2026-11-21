@@ -69,7 +69,8 @@ pub struct SourceInfo {
     pub id: u64,
     pub parent_id: Option<u64>,
     pub span: Span,
-    /// An identifier application head whose own goal is superseded by the app.
+    /// A written application head whose partial function observation is
+    /// superseded by this applied term; argument observations remain distinct.
     pub application_head: Option<Span>,
     pub is_variable: bool,
     pub is_partial: bool,

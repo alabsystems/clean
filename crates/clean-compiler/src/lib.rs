@@ -88,6 +88,7 @@ pub(crate) mod closure_ext;
 mod closure_ext_tests;
 pub mod code_visitor;
 pub mod string_layout;
+pub mod world_token;
 pub use code_visitor::{CodeFolder, CodeVisitor};
 #[cfg(test)]
 pub(crate) mod code_visitor_ext;
@@ -153,6 +154,7 @@ pub(crate) mod emit_rust_ext;
 #[cfg(test)]
 #[path = "emit_rust_ext_tests.rs"]
 mod emit_rust_ext_tests;
+pub mod main_signature;
 // Experimental, unverified, non-TCB trust-ir backend. Off by default; the
 // entire module (and its trust-ir / trust-ir-build dependencies) compile only
 // when the `trust-ir-backend` feature is enabled.
@@ -192,6 +194,8 @@ pub(crate) mod ffi_verify_ext;
 #[path = "ffi_verify_ext_tests.rs"]
 mod ffi_verify_ext_tests;
 // `@[implemented_by]` in compiled code: the chain each reference runs.
+mod source_expansion;
+pub use source_expansion::{expand_source_macro_inline, SourceMacroExpansion};
 pub(crate) mod csimp;
 pub use csimp::{resolve_csimp_reference, resolve_dependencies as resolve_csimp_dependencies};
 pub(crate) mod implemented_by;
@@ -375,19 +379,10 @@ pub(crate) mod specialize_ext;
 #[cfg(test)]
 #[path = "specialize_ext_tests.rs"]
 mod specialize_ext_tests;
+pub(crate) mod tail_loop;
 #[cfg(test)]
-pub(crate) mod tail_call;
-#[cfg(test)]
-pub(crate) mod tail_call_ext;
-#[cfg(test)]
-#[path = "tail_call_ext_opt_tests.rs"]
-mod tail_call_ext_opt_tests;
-#[cfg(test)]
-#[path = "tail_call_ext_tests.rs"]
-mod tail_call_ext_tests;
-#[cfg(test)]
-#[path = "tail_call_tests.rs"]
-mod tail_call_tests;
+#[path = "tail_loop_tests.rs"]
+mod tail_loop_tests;
 pub mod to_ir;
 #[cfg(test)]
 pub(crate) mod to_ir_ext;
@@ -413,6 +408,8 @@ pub(crate) mod unboxing_ext;
 #[cfg(test)]
 #[path = "unboxing_ext_tests.rs"]
 mod unboxing_ext_tests;
+#[cfg(test)]
+mod wide_nat_tests;
 
 // Re-export the stable crate-root pipeline API used by integration tests and
 // examples so callers do not need to depend on internal module layout.

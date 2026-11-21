@@ -70,9 +70,9 @@ def self_test(sb) -> int:
     )
     real_load = sb.load
     try:
-        sb.load = lambda path: {"gaps": [{"status": "open"}, {"status": "Open"}]}  # noqa: E731
+        sb.load = lambda path, root=None: {"gaps": [{"status": "open"}, {"status": "Open"}]}  # noqa: E731
         expect("a gap row with an unknown status is refused", "absent" in sb.figure(sb.island_gaps), True)
-        sb.load = lambda path: {"gaps": [{"status": "open"}, {"status": "pinned"}]}  # noqa: E731
+        sb.load = lambda path, root=None: {"gaps": [{"status": "open"}, {"status": "pinned"}]}  # noqa: E731
         expect("open gap rows are counted", sb.figure(sb.island_gaps).get("open"), 1)
     finally:
         sb.load = real_load

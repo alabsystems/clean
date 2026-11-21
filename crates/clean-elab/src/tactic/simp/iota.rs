@@ -18,14 +18,69 @@
 
 use clean_kernel::env::ConstantKind;
 use clean_kernel::name::NameInner;
-use clean_kernel::{Expr, ExprKind, RecursorArgOrder};
+use clean_kernel::{BinderInfo, Expr, ExprKind, RecursorArgOrder};
 
 use super::budget::SimpBudget;
-use super::reduce::beta_reduce;
+use super::expr::proof_matches_rewrite;
+use super::proof::mk_congr_arg;
+use super::reduce::{beta_reduce, shift_expr};
+use super::types::SimpResult;
 use crate::tactic::core::{Goal, ProofState};
 
 /// Bound on the β rounds that normalize one reduct.
 const BETA_ROUNDS: usize = 64;
+
+/// A proven change to one argument can expose the branch of a complete
+/// recursor. Transport the whole application through that change before
+/// simplifying its alternatives. A prefix ending just after the major may
+/// still have a dependent function type even when the final result is constant.
+pub(super) fn reduce_after_argument_rewrite(
+    state: &ProofState,
+    goal: &Goal,
+    original: &Expr,
+    index: usize,
+    after: &Expr,
+    equality: &Expr,
+    budget: &SimpBudget,
+) -> Option<SimpResult> {
+    let head = original.get_app_fn();
+    let ExprKind::Const(name, _) = head.kind() else {
+        return None;
+    };
+    if state.env.get_recursor(name).is_none()
+        && !matches!(name.inner(), NameInner::Str(_, suffix) if suffix.as_ref() == "casesOn")
+    {
+        return None;
+    }
+    let args = original.get_app_args();
+    let (previous, rest) = args.split_at(index);
+    let (before, remaining) = rest.split_first()?;
+    let prefix = Expr::apps(head.clone(), previous.iter().map(|arg| (*arg).clone()));
+    let rewritten = Expr::apps(
+        Expr::app(prefix.clone(), after.clone()),
+        remaining.iter().map(|arg| (*arg).clone()),
+    );
+    let reduced = reduce_recursor_app(state, goal, &rewritten, budget)?;
+    let argument_type = state.infer_type(goal, before).ok()?;
+    let context = Expr::lam(
+        BinderInfo::Default,
+        argument_type,
+        Expr::apps(
+            Expr::app(shift_expr(&prefix, 1), Expr::bvar(0)),
+            remaining.iter().map(|arg| shift_expr(arg, 1)),
+        ),
+    );
+    let proof = mk_congr_arg(state, goal, &context, before, after, equality)?;
+    if !proof_matches_rewrite(state, goal, &proof, original, &reduced)
+        || !budget.admit(&reduced, "reducing a recursor after rewriting its argument")
+    {
+        return None;
+    }
+    Some(SimpResult {
+        expr: reduced,
+        proof: Some(proof),
+    })
+}
 
 /// The ι reduct of `expr` when it is a registered recursor applied to a
 /// constructor application in its major position, else `None`.
@@ -80,7 +135,7 @@ fn reduce_imported_cases_on(
     for argument in expr.get_app_args() {
         applied = Expr::app(applied, argument.clone());
     }
-    if !budget.admit_before_zeta(&applied) {
+    if !budget.admit_before_zeta(&applied, format_args!("reducing {name}")) {
         return None;
     }
     let reduced = beta_reduce(&applied);

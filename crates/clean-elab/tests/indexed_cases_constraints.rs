@@ -134,6 +134,44 @@ fn compound_indices_do_not_prove_false_negations() {
 }
 
 #[test]
+fn projected_scrutinee_retains_compound_index_equations() {
+    let declarations = r"
+inductive Listed (a : Nat) : List Nat → Prop where
+  | nil : Listed a []
+  | cons {b : Nat} {tail : List Nat} : a = b → Listed a (b :: tail)
+structure Held (a : Nat) (xs : List Nat) : Prop where
+  item : Listed a xs
+";
+    let positive = format!(
+        "{HEADER}{declarations}{}",
+        r"
+theorem projected (a b : Nat) (h : Held a [b]) : a = b := by
+  cases h.item with
+  | cons eq => exact eq
+"
+    );
+    let oracle_positive = oracle(&positive);
+    assert!(
+        oracle_positive.status.success(),
+        "{}",
+        String::from_utf8_lossy(&oracle_positive.stdout)
+    );
+    elaborate(&positive, &["projected"]).expect("indexed projection should check");
+
+    let negative = format!(
+        "{HEADER}{declarations}{}",
+        r"
+theorem missingNil (a : Nat) (xs : List Nat) (h : Held a xs) : True := by
+  cases h.item with
+  | cons _ => exact True.intro
+"
+    );
+    assert!(!oracle(&negative).status.success());
+    let refusal = elaborate(&negative, &["missingNil"]).unwrap_err();
+    assert!(refusal.contains("Alternative `nil`"), "{refusal}");
+}
+
+#[test]
 fn explicit_index_equations_are_checked_positive_controls() {
     let source = format!(
         "{HEADER}{PREAMBLE}{}",
@@ -150,4 +188,34 @@ end IndexCases
     );
     assert!(oracle(&source).status.success());
     elaborate(&source, &["IndexCases.manual"]).expect("explicit index equality");
+}
+
+#[test]
+fn indexed_away_fields_still_consume_their_alternative_names() {
+    for (tail, body, expected) in [
+        ("tail _ member", "exact Or.inr member", true),
+        ("tail item member", "exact Or.inr member", true),
+        ("@tail item rest member", "exact Or.inr member", true),
+        ("tail member", "exact Or.inr member", false),
+        ("tail _ member extra", "exact Or.inr member", false),
+        ("tail _ member", "exact Or.inl member", false),
+    ] {
+        let source = format!(
+            "{HEADER}theorem slots {{a : Nat}} (h : a ∈ [0, 1]) : a = 0 ∨ a ∈ [1] := by\n  cases h with\n  | head => exact Or.inl rfl\n  | {tail} => {body}\n"
+        );
+        let lean = oracle(&source);
+        assert_eq!(
+            lean.status.success(),
+            expected,
+            "{tail}: {body}\n{}",
+            String::from_utf8_lossy(&lean.stdout)
+        );
+        let checked = elaborate(&source, &["slots"]);
+        assert_eq!(
+            checked.is_ok(),
+            expected,
+            "{tail}: {body}\n{:?}",
+            checked.err()
+        );
+    }
 }

@@ -21,7 +21,9 @@
 //! the imported `Subcommand` / `Args` types via `#[command(subcommand)]` or
 //! `#[command(flatten)]`.
 
-use clap::{Parser, Subcommand};
+use std::path::PathBuf;
+
+use clap::{Args, Parser, Subcommand};
 
 use clean_auto::cli::AutoCommands;
 use clean_c_sem::cli::VerifyCArgs;
@@ -180,6 +182,11 @@ pub(crate) enum Commands {
     Replacement {
         #[command(subcommand)]
         command: ReplacementCommands,
+    },
+    /// Inspect recorded evidence offline
+    Evidence {
+        #[command(subcommand)]
+        command: EvidenceCommands,
     },
     /// Release readiness proof surfaces
     Release {
@@ -403,6 +410,173 @@ pub(crate) enum Commands {
     /// bucket-B script consolidation (`docs/SCRIPTS_MIGRATION.md`).
     #[command(name = "sorry-census")]
     SorryCensus(crate::cli::SorryCensusArgs),
+}
+
+#[derive(Args)]
+pub(crate) struct K3PacketSyntaxArgs {
+    /// Print the frame lengths, parsed rows, and reported summary as JSON
+    #[arg(long)]
+    pub(crate) json: bool,
+    /// Check agreement between frames, rows, and summary, and scan accepted tokens
+    #[arg(long)]
+    pub(crate) check_consistency: bool,
+    /// Check packet consistency and bind declaration lines and kinds to the export
+    #[arg(long)]
+    pub(crate) check_declaration_index: bool,
+    /// Check non-inductive declaration bodies, the declaration index, and packet consistency
+    #[arg(long)]
+    pub(crate) check_non_inductive_bodies: bool,
+    /// Check all declaration bodies and unique declared names, including inductive members
+    #[arg(long)]
+    pub(crate) check_declaration_bodies: bool,
+    /// Check declaration bodies and bind exact declaration names to the transcript
+    #[arg(long)]
+    pub(crate) check_declaration_names: bool,
+    /// Bind accepted statement echoes and level parameter counts to the export
+    #[arg(long)]
+    pub(crate) check_accepted_statements: bool,
+    /// Check accepted statements and compare recognition of the pinned base families
+    #[arg(long)]
+    pub(crate) check_base_families: bool,
+    /// Check base families and bind every declaration's fragment class to the export
+    #[arg(long)]
+    pub(crate) check_fragment_classes: bool,
+    /// Check fragment classes and bind dependency refusals to earlier inside declarations
+    #[arg(long)]
+    pub(crate) check_dependency_refusals: bool,
+    /// Validate the packet and export, then print canonical coverage figure JSON
+    #[arg(long)]
+    pub(crate) coverage_figures: bool,
+    /// Path to the Clean checkout (defaults to the current directory)
+    #[arg(long, value_name = "PATH")]
+    pub(crate) repo_root: Option<PathBuf>,
+}
+
+#[derive(Subcommand)]
+pub(crate) enum EvidenceCommands {
+    /// Show the evidence board: headline rows in design order, then other figures
+    Status {
+        /// Print the board rows, or the derived scoreboard, as JSON
+        #[arg(long, conflicts_with = "markdown")]
+        json: bool,
+        /// Write the board as a Markdown table to this path
+        #[arg(long, value_name = "OUT", conflicts_with = "scoreboard")]
+        markdown: Option<PathBuf>,
+        /// Derive the full W0 scoreboard from its source artifacts
+        #[arg(long)]
+        scoreboard: bool,
+        /// Compare the saved scoreboard with the canonical source derivation
+        #[arg(long, requires = "scoreboard", conflicts_with = "json")]
+        check: bool,
+        /// Save the canonical scoreboard to data/self_proof_scoreboard.json
+        #[arg(long, requires = "scoreboard", conflicts_with_all = ["check", "json"])]
+        write: bool,
+        /// Path to the Clean checkout (defaults to the current directory)
+        #[arg(long, value_name = "PATH")]
+        repo_root: Option<PathBuf>,
+    },
+    /// List supported evidence figures and their check inputs
+    List {
+        /// Print the catalog as JSON
+        #[arg(long)]
+        json: bool,
+    },
+    /// Check recorded evidence figures against their local inputs
+    Check {
+        /// Evidence figure identifiers
+        #[arg(value_name = "FIGURE", required_unless_present = "all")]
+        figures: Vec<String>,
+        /// Check every registered figure
+        #[arg(long, conflicts_with = "figures")]
+        all: bool,
+        /// Path to the Clean checkout (defaults to the current directory)
+        #[arg(long, value_name = "PATH")]
+        repo_root: Option<PathBuf>,
+    },
+    /// Compute a canonical root digest over an exported environment and module inventory
+    MeaningDigest {
+        /// Uncompressed lean4export NDJSON stream
+        #[arg(long, value_name = "FILE")]
+        export: PathBuf,
+        /// Caller-supplied label for the compiled module inventory
+        #[arg(long, value_name = "MODULE")]
+        module: String,
+        /// Compiled module inventory, including its companion parts when present
+        #[arg(long, value_name = "FILE")]
+        olean: PathBuf,
+        /// Unambiguous Lean name of the package declaration to measure
+        #[arg(long, value_name = "NAME")]
+        root: String,
+    },
+    /// Check the recorded K3 executable source closure and digests
+    #[command(name = "check-k3-sources")]
+    CheckK3Sources {
+        /// Path to the Clean checkout (defaults to the current directory)
+        #[arg(long, value_name = "PATH")]
+        repo_root: Option<PathBuf>,
+    },
+    /// Check Lean rule references and discover unlisted controls
+    #[command(name = "check-rule-lean-references")]
+    CheckRuleLeanReferences {
+        /// Path to the Clean checkout (defaults to the current directory)
+        #[arg(long, value_name = "PATH")]
+        repo_root: Option<PathBuf>,
+    },
+    /// Check pinned C++ rule source files and raw line digests
+    #[command(name = "check-rule-cpp-anchors")]
+    CheckRuleCppAnchors {
+        /// Path to the Clean checkout (defaults to the current directory)
+        #[arg(long, value_name = "PATH")]
+        repo_root: Option<PathBuf>,
+        /// Also check that inventory rows cover the pinned definitions and their contents
+        #[arg(long)]
+        coverage: bool,
+    },
+    /// Check rule inventory sources, row shape, and incomplete-family status
+    #[command(name = "check-rule-inventory")]
+    CheckRuleInventory {
+        /// Path to the Clean checkout (defaults to the current directory)
+        #[arg(long, value_name = "PATH")]
+        repo_root: Option<PathBuf>,
+        /// Require every rule family to be specified after the consistency checks pass
+        #[arg(long)]
+        require_complete: bool,
+    },
+    /// Check the canonical K3 coverage receipt against its packet and sources
+    #[command(name = "check-k3-coverage")]
+    CheckK3Coverage {
+        /// Path to the Clean checkout (defaults to the current directory)
+        #[arg(long, value_name = "PATH")]
+        repo_root: Option<PathBuf>,
+    },
+    /// Check K3 advice framing and version-1 transcript syntax
+    #[command(name = "check-k3-packet-syntax")]
+    CheckK3PacketSyntax(K3PacketSyntaxArgs),
+    /// Check K3 export syntax and the lean4export 3.1.0 header
+    #[command(name = "check-k3-export-syntax")]
+    CheckK3ExportSyntax {
+        /// Check consecutive name IDs, earlier parents, and unique names
+        #[arg(long)]
+        check_names: bool,
+        /// Check the name and level tables, including the unfolded level size limit
+        #[arg(long)]
+        check_levels: bool,
+        /// Check name, level, and expression tables and unfolded expression sizes
+        #[arg(long)]
+        check_expressions: bool,
+        /// Path to the Clean checkout (defaults to the current directory)
+        #[arg(long, value_name = "PATH")]
+        repo_root: Option<PathBuf>,
+    },
+    /// Show the recorded provenance of an evidence figure
+    Explain {
+        /// Evidence figure identifier
+        #[arg(value_name = "FIGURE")]
+        figure: String,
+        /// Path to the Clean checkout (defaults to the current directory)
+        #[arg(long, value_name = "PATH")]
+        repo_root: Option<PathBuf>,
+    },
 }
 
 /// Verbs under `clean verify <language>`.

@@ -91,6 +91,42 @@ fn test_dot_elim_written_ascription_passes() {
     }
 }
 
+/// A definition body that is a bare `x.f`: Lean elaborates it against the
+/// declared result (pinned v4.30.0-rc2 accepts each, run 2026-11-18; the
+/// `noncomputable` rows are also in the 2026-11-06 special-application
+/// oracle, 4.30.0-rc2 and 4.35.0).
+#[test]
+fn test_dot_elim_definition_body_passes() {
+    for source in [
+        "def f (x : Empty) : Nat := x.casesOn\n",
+        "theorem q (h : False) : 1 = 2 := h.rec\n",
+        "theorem q (x : Empty) : 1 = 2 := x.recOn\n",
+        "inductive E (α : Type) : Type\ndef q (x : E Nat) : Nat := x.casesOn\n",
+        "noncomputable def q (x : Empty) : Nat := x.rec\n",
+        "noncomputable def q (x : Empty) : Nat := x.recOn\n",
+        "def f (x : Empty) : Nat :=\n  let g (_ : Unit) : Nat → Nat := x.casesOn\n  g () 0\n",
+    ] {
+        assert_passes(source);
+    }
+}
+
+/// Controls Lean rejects (pinned v4.30.0-rc2, run 2026-11-18): a recursor at
+/// data in a COMPUTABLE body is the code generator's call ("Failed to find
+/// LCNF signature for Empty.recOn"), and a declared result with a hole is
+/// not a type to elaborate against ("Failed to infer type of definition").
+#[test]
+fn test_dot_elim_definition_body_controls_refused() {
+    assert_refused(
+        "def h (x : Empty) : Nat := x.recOn\n",
+        "modelled only at a proposition",
+    );
+    // Refused at the header, as Lean refuses it, before any eliminator route.
+    assert_refused(
+        "def k (x : Empty) : _ := x.casesOn\n",
+        "Failed to infer declaration header",
+    );
+}
+
 /// A positional motive other than `_`: Lean's ordinary application, which
 /// the lambda path reproduces up to β (Lean accepts).
 #[test]
@@ -222,8 +258,6 @@ fn test_dot_elim_inner_chain_refused() {
 /// Lean ACCEPTS each.
 #[test]
 fn test_dot_elim_known_gaps_refused() {
-    // The declaration body's expected type is not a written ascription here.
-    assert_refused("def f (x : Empty) : Nat := x.casesOn\n", NO_EXPECTED);
     // A `_` motive with an expected type.
     assert_refused(
         "def f (x : Empty) : Nat := (x.casesOn _ : Nat)\n",
@@ -239,6 +273,24 @@ fn test_dot_elim_known_gaps_refused() {
         "def q (x : Empty) : Nat := (x.rec : Nat)\n",
         "modelled only at a proposition",
     );
+    assert_refused(
+        "def h (x : Empty) : Nat := x.rec\n",
+        "modelled only at a proposition",
+    );
+    // A `noncomputable section` (Lean marks the declaration noncomputable
+    // when it does not compile; Clean does not model that mark here).
+    assert_refused(
+        "noncomputable section\ndef h (x : Empty) : Nat := x.recOn\nend\n",
+        "modelled only at a proposition",
+    );
+    // Only the definition body's top-level term is handed the declared
+    // result: not a `let` body, not an argument whose expected type Lean
+    // later learns (pinned v4.30.0-rc2 accepts both, 2026-11-18).
+    assert_refused(
+        "def k (x : Empty) : Nat := let z := 0; x.casesOn\n",
+        NO_EXPECTED,
+    );
+    assert_refused("def k (x : Empty) : Nat := id x.casesOn\n", NO_EXPECTED);
     // A motive mentioning another local (`fun _ => n = n`).
     assert_refused(
         "theorem q (x : Empty) (n : Nat) : n = n := (x.casesOn : n = n)\n",

@@ -16,6 +16,7 @@ use super::convert_expr_direct::RegionPtrCache;
 use super::default_fn_binders::{
     record_default_fn_binders_from_parsed, record_default_fn_binders_from_region,
 };
+use super::export_fields::ExportFields;
 use super::load_parse::LoadModule;
 use super::load_shadowing::{
     foreign_resident_provenance, refused_duplicates_loaded, refused_duplicates_parsed, ShadowedAt,
@@ -45,6 +46,8 @@ mod deferred_recursors;
 use deferred_recursors::RecursorStaging;
 pub(crate) use deferred_recursors::{refresh_artifact_families, DeferredRecursors};
 
+#[cfg(test)]
+mod compiler_extern_metadata_tests;
 #[cfg(test)]
 mod csimp_metadata_tests;
 #[cfg(test)]
@@ -195,19 +198,34 @@ fn record_refused_completions(
 /// continues upgrades at least one of them.
 fn upgrade_stubs_to_fixpoint(
     env: &mut Environment,
-    candidates: Vec<clean_kernel::env::ConstantInfo>,
+    candidates: Vec<(clean_kernel::env::ConstantInfo, ExportFields)>,
 ) -> (usize, Vec<(Name, clean_kernel::env::EnvError)>) {
-    let mut pending = candidates;
+    let mut pending = Vec::with_capacity(candidates.len());
+    let mut stub_fields = Vec::new();
+    for (info, fields) in candidates {
+        if info.value.is_some() && env.get_const(&info.name).is_some_and(|c| c.value.is_none()) {
+            stub_fields.push((info.name.clone(), fields));
+        }
+        pending.push(info);
+    }
     let mut upgraded = 0usize;
-    loop {
+    let refused = loop {
         let (round, refused) = env.upgrade_axiom_stubs_checked(pending.clone().into_iter());
         upgraded += round;
         if round == 0 || refused.is_empty() {
-            return (upgraded, refused);
+            break refused;
         }
         let refused_names: HashSet<Name> = refused.into_iter().map(|(name, _)| name).collect();
         pending.retain(|info| refused_names.contains(&info.name));
+    };
+    // A value-bearing resident and an incoming elided body are silent no-ops.
+    // Record metadata only for a stub that actually acquired a checked value.
+    for (name, fields) in stub_fields {
+        if env.get_const(&name).is_some_and(|c| c.value.is_some()) {
+            fields.remember(env, &name);
+        }
     }
+    (upgraded, refused)
 }
 
 /// A diagnostic name hint for compiler/code-generator auxiliaries.
@@ -614,6 +632,18 @@ fn load_clean_payload(
             first,
         });
     }
+    // Recursor deduplication below consults the side table, but its bulk
+    // registration also writes ConstantInfo. A resident ordinary declaration
+    // owns that name even without a recursor packet: do not replace its type,
+    // value or origin and then authenticate the replacement. Check the whole
+    // payload before registering any family member or replaying compiler hints.
+    for recursor in &payload.recursors {
+        if env.get_const(&recursor.name).is_some() && env.get_recursor(&recursor.name).is_none() {
+            return Err(ImportError::ResidentRecursorConflict {
+                name: recursor.name.to_string(),
+            });
+        }
+    }
     // A record naming what an earlier part of this very artifact declared
     // (a payload carried by its `.olean.private`, say) must state it as that
     // part did; `filter_payload_dups` below used to drop it unread (rule 4 of
@@ -819,7 +849,7 @@ fn load_clean_payload(
     super::artifact_ledger::remember_part_records(env, artifact, payload_part_records(payload));
     let module = origin.and_then(origin_module);
     apply_payload_instance_entries(env, payload, module);
-    apply_payload_compiler_attrs(env, payload, module);
+    apply_payload_compiler_attrs(env, payload, module)?;
 
     Ok((added, duplicates, structural_rejections))
 }
@@ -1203,14 +1233,100 @@ fn register_real_alias_entries(env: &mut Environment, extensions: &[TypedExtensi
 ///
 /// SOUNDNESS: kernel-irrelevant. Neither registry is read by type checking;
 /// both change only which body compiled code runs, or refuse it.
-fn register_real_compiler_attr_entries(
+// Enum inline attributes belong to their declaration's defining module.
+// Lean rejects attempts to set them on an imported definition. Keep duplicate
+// builtin residents untouched when their imported declaration was shadowed.
+fn compiler_module_owner(module: &str) -> Name {
+    Name::from_string(
+        module
+            .strip_suffix("._server")
+            .or_else(|| module.strip_suffix("._private"))
+            .unwrap_or(module),
+    )
+}
+
+fn register_real_inline_entries(
     env: &mut Environment,
     module: Option<&str>,
+    extensions: &[TypedExtension],
+) -> Result<usize, ImportError> {
+    use clean_kernel::env::csimp::{import_inline_mode, InlineMode};
+    let mut unresolved = 0;
+    let mut accepted = Vec::new();
+    for extension in extensions {
+        if extension.extension_name != Name::from_string("Lean.Compiler.inlineAttrs") {
+            continue;
+        }
+        let rows = extension.compiler_names.as_ref().ok_or_else(|| {
+            crate::OleanError::Region("present inlineAttrs metadata was not decoded".into())
+        })?;
+        let owner = module
+            .map(compiler_module_owner)
+            .filter(|n| !n.is_anon())
+            .ok_or_else(|| {
+                crate::OleanError::Region("inlineAttrs metadata has no owning module".into())
+            })?;
+        // Validate the complete row set before applying any of its hints.
+        let rows = rows
+            .iter()
+            .map(|(name, kind)| {
+                let mode = match kind {
+                    0 => InlineMode::Inline,
+                    1 => InlineMode::NoInline,
+                    2 => InlineMode::MacroInline,
+                    3 => InlineMode::InlineIfReduce,
+                    4 => InlineMode::AlwaysInline,
+                    _ => {
+                        return Err(crate::OleanError::Region(format!(
+                            "unknown inlineAttrs mode {kind}"
+                        )))
+                    }
+                };
+                Ok((name, mode))
+            })
+            .collect::<Result<Vec<_>, crate::OleanError>>()?;
+        for (name, mode) in rows {
+            if env.get_const(name).is_none() {
+                unresolved += 1;
+                continue;
+            }
+            let origin = match env.get_constant_origin(name) {
+                Some(ConstantOrigin::Olean {
+                    module: Some(origin),
+                    ..
+                })
+                | Some(ConstantOrigin::CleanPayload {
+                    module: Some(origin),
+                    ..
+                }) => origin
+                    .strip_suffix("._server")
+                    .or_else(|| origin.strip_suffix("._private"))
+                    .unwrap_or(origin),
+                _ => continue,
+            };
+            if owner != Name::from_string(origin) {
+                return Err(crate::OleanError::Region(format!(
+                    "inlineAttrs row for {name} belongs to a different defining module"
+                ))
+                .into());
+            }
+            accepted.push((owner.clone(), name.clone(), mode));
+        }
+    }
+    for (owner, name, mode) in accepted {
+        import_inline_mode(env, owner, name, mode);
+    }
+    Ok(unresolved)
+}
+
+fn register_real_compiler_attr_entries(
+    env: &mut Environment,
+    artifact: &super::artifact_ledger::ArtifactKey,
     extensions: &[TypedExtension],
     names: &super::late_binding::CompilerNames,
     registered: &mut Vec<(Name, Name)>,
 ) -> Result<usize, ImportError> {
-    let mut unresolved = 0usize;
+    let mut unresolved = register_real_inline_entries(env, artifact.as_deref(), extensions)?;
     for entry in extensions.iter().flat_map(|ext| ext.entries.iter()) {
         if let TypedExtensionEntry::CSimp {
             from,
@@ -1219,7 +1335,7 @@ fn register_real_compiler_attr_entries(
             namespace,
         } = entry
         {
-            let owner = module.map(Name::from_string).ok_or_else(|| {
+            let owner = artifact.as_deref().map(Name::from_string).ok_or_else(|| {
                 crate::OleanError::Region("CSimp metadata has no owning module".into())
             })?;
             let valid = env.get_const(theorem).is_some_and(|info| {
@@ -1231,7 +1347,7 @@ fn register_real_compiler_attr_entries(
                     "CSimp metadata for {theorem} disagrees with its registered equality or names an absent target"
                 )).into());
             }
-            if foreign_resident_provenance(env, theorem, module, false).is_some() {
+            if !super::artifact_ledger::declared_by_this_artifact(env, theorem, artifact) {
                 continue;
             }
             if !clean_kernel::env::csimp::import_rule(env, &owner, namespace.as_ref(), theorem) {
@@ -1254,7 +1370,7 @@ fn register_real_compiler_attr_entries(
                 }
                 (decl, ImportedCompilerAttr::ImplementedBy(target))
             }
-            TypedExtensionEntry::Extern { decl, symbol } => {
+            TypedExtensionEntry::Extern { decl, symbol, .. } => {
                 (decl, ImportedCompilerAttr::Extern(symbol))
             }
             TypedExtensionEntry::Noncomputable { decl } => {
@@ -1262,7 +1378,21 @@ fn register_real_compiler_attr_entries(
             }
             _ => continue,
         };
-        match register_imported_compiler_attr(env, module, decl, attr) {
+        let registration = match entry {
+            TypedExtensionEntry::Extern {
+                symbol, metadata, ..
+            } => {
+                if *symbol != metadata.diagnostic() {
+                    return Err(crate::OleanError::Region(
+                        "contradictory decoded extern diagnostic and descriptor".into(),
+                    )
+                    .into());
+                }
+                register_imported_extern_metadata(env, artifact.as_deref(), decl, metadata)?
+            }
+            _ => register_imported_compiler_attr(env, artifact.as_deref(), decl, attr),
+        };
+        match registration {
             Registration::Absent => unresolved += 1,
             Registration::Registered => {
                 if let ImportedCompilerAttr::ImplementedBy(target) = attr {
@@ -1343,6 +1473,38 @@ fn register_imported_compiler_attr(
     Registration::Registered
 }
 
+/// Full compiler annotations obey the same resident/owner and first-writer
+/// rules as diagnostic-only bindings. Encoding failure stays a typed import
+/// refusal; no complete descriptor is reconstructed from a diagnostic string.
+fn register_imported_extern_metadata(
+    env: &mut Environment,
+    module: Option<&str>,
+    decl: &Name,
+    metadata: &clean_kernel::env::CompilerExternMetadata,
+) -> Result<Registration, ImportError> {
+    if env.get_const(decl).is_none() {
+        return Ok(Registration::Absent);
+    }
+    if foreign_resident_provenance(env, decl, module, false).is_some() {
+        return Ok(Registration::NotRegistered);
+    }
+    if env.is_extern(decl) {
+        let previous = env.extern_metadata(decl).map_err(|error| {
+            crate::OleanError::Region(format!("existing extern metadata carrier: {error}"))
+        })?;
+        if previous.as_ref() != Some(metadata) {
+            return Err(crate::OleanError::Region(
+                "conflicting compiler extern metadata for the same owned declaration".into(),
+            )
+            .into());
+        }
+        return Ok(Registration::NotRegistered);
+    }
+    env.register_extern_metadata(decl.clone(), metadata.clone())
+        .map_err(|error| crate::OleanError::Region(format!("extern metadata carrier: {error}")))?;
+    Ok(Registration::Registered)
+}
+
 /// Register a Clean payload's `@[implemented_by]` / `@[extern]` bindings
 /// (payload version 5), as [`register_real_compiler_attr_entries`] registers
 /// a Lean-built module's rows. A binding whose declaration the payload did
@@ -1362,8 +1524,42 @@ fn apply_payload_compiler_attrs(
     env: &mut Environment,
     payload: &CleanPayload,
     module: Option<&str>,
-) {
-    clean_kernel::env::csimp::import_compilation_snapshot(env, &payload.csimp);
+) -> Result<(), ImportError> {
+    match payload.compiler_context {
+        crate::CompilerContextKind::LogicalOnly => {
+            if !payload.csimp.is_empty()
+                || !payload.implemented_by.is_empty()
+                || !payload.externs.is_empty()
+                || !payload.extern_metadata.is_empty()
+                || !payload.implemented_by_order.is_empty()
+            {
+                return Err(crate::OleanError::Region(
+                    "logical-only payload cannot claim runtime compiler context or bindings".into(),
+                )
+                .into());
+            }
+        }
+        crate::CompilerContextKind::Source => {
+            let owner = module
+                .map(compiler_module_owner)
+                .filter(|name| !name.is_anon())
+                .ok_or_else(|| {
+                    crate::OleanError::Region("source compiler context has no owning module".into())
+                })?;
+            clean_kernel::env::csimp::import_artifact_source_compilation_snapshot(
+                env,
+                &payload.csimp,
+                &owner,
+                &payload.constants,
+            );
+        }
+    }
+    if clean_kernel::env::csimp::has_invalid_metadata(env) {
+        return Err(crate::OleanError::Region(
+            "invalid compiler context or declaration identity in Clean payload".into(),
+        )
+        .into());
+    }
     for (name, exposed) in &payload.definition_exposure {
         if env.get_const(name).is_some()
             && foreign_resident_provenance(env, name, module, false).is_none()
@@ -1379,8 +1575,30 @@ fn apply_payload_compiler_attrs(
             ImportedCompilerAttr::ImplementedBy(target),
         );
     }
+    let mut typed = std::collections::HashMap::new();
+    for (decl, metadata) in &payload.extern_metadata {
+        let mut labels = payload.externs.iter().filter(|(name, _)| name == decl);
+        let agrees = labels
+            .next()
+            .is_some_and(|(_, symbol)| *symbol == metadata.diagnostic());
+        if typed.insert(decl, metadata).is_some() || !agrees || labels.next().is_some() {
+            return Err(crate::OleanError::Region(
+                "duplicate or contradictory payload extern metadata".into(),
+            )
+            .into());
+        }
+    }
     for (decl, symbol) in &payload.externs {
-        register_imported_compiler_attr(env, module, decl, ImportedCompilerAttr::Extern(symbol));
+        if let Some(metadata) = typed.get(decl) {
+            register_imported_extern_metadata(env, module, decl, metadata)?;
+        } else {
+            register_imported_compiler_attr(
+                env,
+                module,
+                decl,
+                ImportedCompilerAttr::Extern(symbol),
+            );
+        }
     }
     let order: Vec<(Name, clean_kernel::env::CompiledBefore)> = payload
         .implemented_by_order
@@ -1399,6 +1617,7 @@ fn apply_payload_compiler_attrs(
     if !order.is_empty() {
         env.record_compiled_before(order);
     }
+    Ok(())
 }
 
 fn register_real_simp_entries(env: &mut Environment, extensions: &[TypedExtension]) -> usize {
@@ -3360,8 +3579,8 @@ fn load_parsed_module_with_cache_and_policy_at_index(
         let mut upgrade_others = Vec::new();
         for cc in upgrade_converted {
             match cc {
-                ConvertedConstant::Other(_name, Ok((decl, hints)), _stats) => {
-                    let mut info = decl_to_constant_info(decl, hints);
+                ConvertedConstant::Other(_name, Ok((decl, fields)), _stats) => {
+                    let mut info = decl_to_constant_info(decl, fields.hints);
                     // Under R142's invariant the value is checked whole first and
                     // elided after the upgrade installs it (below).
                     if info.value.is_some()
@@ -3370,7 +3589,7 @@ fn load_parsed_module_with_cache_and_policy_at_index(
                     {
                         info.value = None;
                     }
-                    upgrade_others.push(info);
+                    upgrade_others.push((info, fields));
                 }
                 ConvertedConstant::Other(name, Err(e), _stats) => {
                     summary.skipped_constants.push(SkippedConstant {
@@ -3391,11 +3610,11 @@ fn load_parsed_module_with_cache_and_policy_at_index(
         // as read — or the parts disagree (round 31: a private part whose
         // record of a public stub stated another type left the stub standing
         // with the public part's type while `lean` reads the private one).
-        for info in &upgrade_others {
+        for (info, _) in &upgrade_others {
             super::artifact_ledger::check_stub_completion(env, &artifact, info)?;
         }
-        let completing = upgrade_others.clone();
-        upgraded_names.extend(upgrade_others.iter().map(|c| c.name.clone()));
+        let completing: Vec<_> = upgrade_others.iter().map(|(c, _)| c.clone()).collect();
+        upgraded_names.extend(completing.iter().map(|c| c.name.clone()));
         let (upgraded, refused) = upgrade_stubs_to_fixpoint(env, upgrade_others);
         summary.added_constants += upgraded;
         // R142: the values were checked whole; the policy's elision drops the
@@ -3526,7 +3745,7 @@ fn load_parsed_module_with_cache_and_policy_at_index(
                 register_real_alias_entries(env, std::slice::from_ref(extension));
             counts.unresolved_targets += register_real_compiler_attr_entries(
                 env,
-                summary.module_name.as_deref(),
+                &artifact,
                 std::slice::from_ref(extension),
                 &super::late_binding::CompilerNames::unknown(),
                 &mut registered,
@@ -3715,7 +3934,9 @@ pub(crate) fn load_module_part_direct(
         ..LoadSummary::empty()
     };
 
-    if let Some(owner) = summary.module_name.as_deref() {
+    // Imports name the artifact itself. Its private part can supply the
+    // compiler table without becoming a separate module in the source view.
+    if let (PartEntries::Read, Some(owner)) = (entries, artifact.as_deref()) {
         clean_kernel::env::csimp::record_imported_module(
             env,
             Name::from_string(owner),
@@ -4146,8 +4367,8 @@ pub(crate) fn load_module_part_direct(
         let mut upgrade_others = Vec::new();
         for cc in upgrade_converted {
             match cc {
-                ConvertedConstant::Other(_name, Ok((decl, hints)), _stats) => {
-                    let mut info = decl_to_constant_info(decl, hints);
+                ConvertedConstant::Other(_name, Ok((decl, fields)), _stats) => {
+                    let mut info = decl_to_constant_info(decl, fields.hints);
                     // Under R142's invariant the value is checked whole first and
                     // elided after the upgrade installs it (below).
                     if info.value.is_some()
@@ -4156,7 +4377,7 @@ pub(crate) fn load_module_part_direct(
                     {
                         info.value = None;
                     }
-                    upgrade_others.push(info);
+                    upgrade_others.push((info, fields));
                 }
                 ConvertedConstant::Other(name, Err(e), _stats) => {
                     summary.skipped_constants.push(SkippedConstant {
@@ -4172,8 +4393,8 @@ pub(crate) fn load_module_part_direct(
         // value must check_type against it (UnknownConst-tolerant, G4). A
         // refused record leaves the stub in place FAIL-CLOSED and is recorded
         // loudly below; nothing ever registers unchecked.
-        let completing = upgrade_others.clone();
-        upgraded_names.extend(upgrade_others.iter().map(|c| c.name.clone()));
+        let completing: Vec<_> = upgrade_others.iter().map(|(c, _)| c.clone()).collect();
+        upgraded_names.extend(completing.iter().map(|c| c.name.clone()));
         let (upgraded, refused) = upgrade_stubs_to_fixpoint(env, upgrade_others);
         summary.added_constants += upgraded;
         // R142: the values were checked whole; the policy's elision drops the
@@ -4308,7 +4529,7 @@ pub(crate) fn load_module_part_direct(
                 register_real_alias_entries(env, std::slice::from_ref(extension));
             counts.unresolved_targets += register_real_compiler_attr_entries(
                 env,
-                summary.module_name.as_deref(),
+                &artifact,
                 std::slice::from_ref(extension),
                 &compiler_names,
                 &mut registered,
@@ -4440,8 +4661,8 @@ pub(super) fn part_record(
         ConvertedConstant::Recursor(_, Ok((v, all, nested)), _) => {
             PartRecord::Recursor(v.clone(), all.clone(), *nested, safety)
         }
-        ConvertedConstant::Other(_, Ok((decl, hints)), _) => PartRecord::Constant {
-            info: decl_to_constant_info(decl.clone(), *hints),
+        ConvertedConstant::Other(_, Ok((decl, fields)), _) => PartRecord::Constant {
+            info: decl_to_constant_info(decl.clone(), fields.hints),
             safety,
         },
         _ => return None,
@@ -4453,8 +4674,8 @@ pub(super) fn part_record(
 /// family member, or a record that did not convert, never.
 fn same_declaration(env: &Environment, converted: ConvertedConstant) -> bool {
     match converted {
-        ConvertedConstant::Other(_, Ok((decl, hints)), _) => {
-            may_stand_beside(env, &decl_to_constant_info(decl, hints))
+        ConvertedConstant::Other(_, Ok((decl, fields)), _) => {
+            may_stand_beside(env, &decl_to_constant_info(decl, fields.hints))
         }
         _ => false,
     }
@@ -4576,7 +4797,7 @@ fn register_converted_constants(
             ConvertedConstant::Other(name, result, stats) => {
                 summary.expr_sharing.merge(&stats);
                 match result {
-                    Ok((decl, hints)) => ok_others.push((decl, hints)),
+                    Ok(record) => ok_others.push(record),
                     Err(e) => summary.skipped_constants.push(SkippedConstant {
                         name,
                         reason: e.to_string(),
@@ -4661,10 +4882,10 @@ fn register_converted_constants(
     // the same `ConstantInfo`, so no verdict changes — the inductive families
     // registered above resolve their definitional deps through that fallback.
     if !inductive_families_only {
-        let others: Vec<_> = ok_others
+        let (others, export_fields): (Vec<_>, Vec<_>) = ok_others
             .into_iter()
-            .map(|(decl, hints)| decl_to_constant_info(decl, hints))
-            .map(|mut info| {
+            .map(|(decl, fields)| {
+                let mut info = decl_to_constant_info(decl, fields.hints);
                 // BOUNDED MEMORY (WS3): drop never-unfolded proof VALUES here, before
                 // the constant is stored, so the proof-term Expr DAG is freed as each
                 // module loads — capping PEAK resident memory. TYPES and Definition
@@ -4675,11 +4896,11 @@ fn register_converted_constants(
                 if info.value.is_some() && proof_elision.elides(info.kind) {
                     info.value = None;
                 }
-                info
+                let name = info.name.clone();
+                (info, (name, fields))
             })
-            .collect();
+            .unzip();
         let pre_validate_count = others.len();
-        let other_origin_names: Vec<_> = others.iter().map(|info| info.name.clone()).collect();
         // SOUNDNESS: structural validation (above) is NOT kernel type-checking — a
         // structurally-clean constant whose stored type disagrees with its value, or that
         // references a nonexistent constant, still passes. Bypassing per-decl type-checking is
@@ -4694,13 +4915,15 @@ fn register_converted_constants(
         // Tracking: data/unchecked_decl_ratchet.json (extend_constants block, #4).
         let rejected = env.extend_constants_structural(others.into_iter());
         summary.added_constants += pre_validate_count - rejected.len();
-        if !other_origin_names.is_empty() {
-            let rejected_names: HashSet<_> =
-                rejected.iter().map(|(name, _)| name.clone()).collect();
-            let accepted_names = other_origin_names
-                .into_iter()
-                .filter(|name| !rejected_names.contains(name))
-                .collect();
+        if !export_fields.is_empty() {
+            let rejected_names: HashSet<_> = rejected.iter().map(|(name, _)| name).collect();
+            let mut accepted_names = Vec::with_capacity(pre_validate_count - rejected.len());
+            for (name, fields) in export_fields {
+                if !rejected_names.contains(&name) {
+                    fields.remember(env, &name);
+                    accepted_names.push(name);
+                }
+            }
             tag_inserted_constants(env, origin, accepted_names, &mut summary.added_names);
         }
         for (name, err) in rejected {
@@ -5773,6 +5996,24 @@ mod part_agreement_tests {
         let name = |s: &str| Name::from_string(s);
         let mut env = Environment::with_prelude();
         let mut part = payload(0);
+        // Runtime bindings require an explicit Source producer. Construct
+        // its actual declaration and source-time context before import; the
+        // loader never manufactures context for a logical-only payload.
+        let mut producer = Environment::with_prelude();
+        clean_kernel::env::csimp::begin_source_module(&mut producer, name("V0"), vec![]);
+        let info = &part.constants[0];
+        producer
+            .add_decl(clean_kernel::Declaration::Definition {
+                name: info.name.clone(),
+                level_params: info.level_params.clone(),
+                type_: info.type_.clone(),
+                value: info.value.clone().expect("fixture body"),
+                is_reducible: info.is_reducible,
+            })
+            .expect("source declaration");
+        clean_kernel::env::csimp::record_compiled(&mut producer, [info.name.clone()]);
+        part.compiler_context = crate::CompilerContextKind::Source;
+        part.csimp = clean_kernel::env::csimp::export_compilation_snapshot(&producer);
         part.implemented_by = vec![
             (name("V0.v"), name("V0.w")),
             (name("Nat.add"), name("V0.v")),

@@ -4132,6 +4132,17 @@ mod tests {
     }
 
     #[test]
+    fn a_without_provenance_reference_value_images_as_its_address() {
+        for address in [0, 7, u64::MAX] {
+            let value = trust_ir::InterpretValue {
+                ty: Ty::Ptr,
+                kind: trust_ir::InterpretValueKind::WithoutProvenance(address),
+            };
+            assert_eq!(reference::image(&value), Img::Word(u128::from(address)));
+        }
+    }
+
+    #[test]
     fn a_nominal_function_item_reference_value_images_as_opaque() {
         for id in [0, 7, u32::MAX] {
             let value = trust_ir::InterpretValue {
@@ -4462,6 +4473,21 @@ mod d12_tests {
             Some(5),
         );
         assert_eq!(p.ptr_bitcast_identity_image(&ptrtoptr).unwrap(), None);
+        let raw_address = node(
+            Inst::Cast {
+                op: CastOp::WithoutProvenance,
+                src_ty: Ty::Usize,
+                dst_ty: Ty::Ptr,
+                operand: ValueId::new(4),
+            },
+            Some(5),
+        );
+        assert_eq!(p.ptr_bitcast_identity_image(&raw_address).unwrap(), None);
+        assert!(!super::is_ptr_identity_cast(&CastOp::WithoutProvenance));
+        assert_eq!(
+            super::ops::cast(CastOp::WithoutProvenance).unwrap_err(),
+            "no IRCastOp image for WithoutProvenance"
+        );
         assert_eq!(p.ptr_bitcast_identities, 1);
     }
 
@@ -9437,6 +9463,7 @@ fn cast_is_bitcast(op: &CastOp) -> bool {
         | CastOp::SIToFP
         | CastOp::PtrToInt
         | CastOp::IntToPtr
+        | CastOp::WithoutProvenance
         | CastOp::Transmute
         | CastOp::ReifyFnPointer
         | CastOp::FPToSISat
@@ -9729,6 +9756,7 @@ fn is_ptr_identity_cast(op: &CastOp) -> bool {
         | CastOp::SIToFP
         | CastOp::PtrToInt
         | CastOp::IntToPtr
+        | CastOp::WithoutProvenance
         | CastOp::Transmute
         | CastOp::ReifyFnPointer
         | CastOp::FPToSISat
@@ -10340,7 +10368,7 @@ mod ops {
             C::Transmute => "transmute",
             C::ReifyFnPointer => "reifyfnpointer",
             // Named, not wildcarded: a cast trust-ir adds fails to compile here.
-            other @ (C::FPToSISat | C::FPToUISat) => {
+            other @ (C::FPToSISat | C::FPToUISat | C::WithoutProvenance) => {
                 return Err(format!("no IRCastOp image for {other:?}"))
             }
         })
@@ -10704,7 +10732,9 @@ mod reference {
         match &v.kind {
             InterpretValueKind::Int(i) => Img::Word(i.raw),
             InterpretValueKind::NullPtr => Img::Word(0),
-            InterpretValueKind::DanglingPtr(a) => Img::Word(u128::from(*a)),
+            InterpretValueKind::DanglingPtr(a) | InterpretValueKind::WithoutProvenance(a) => {
+                Img::Word(u128::from(*a))
+            }
             InterpretValueKind::Aggregate(fields) => Img::Agg(fields.iter().map(image).collect()),
             InterpretValueKind::Ptr(_) => Img::Opaque("a pointer into an allocation".into()),
             // A nominal singleton is not an address-bearing FnDef or a word.

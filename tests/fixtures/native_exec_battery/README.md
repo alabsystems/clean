@@ -130,8 +130,9 @@ much of it runs, and never read a green gate as "the native path works".
   so their pins are `REFUSED_BUILD`. A boxed tag lives in the pointer bits,
   not in a header byte, and every lane now reads it at 32 bits (the C header,
   the trust-cg `U32` import, the Rust runtime), so `layout_enum_300` runs and
-  is pinned `BYTE_EQUAL` (the LX0 trust-cg lane refuses it by name in
-  trust-cg's aarch64 encoder, `TCG-A64-BRANCH-RELAX` on the 300-way
+  is pinned `BYTE_EQUAL` (on the LX0 trust-cg lane too since the 2026-11-17
+  re-mint under atpkg's trust-cg 0.7.0; the scratch build that minted the
+  earlier pins refused it with `TCG-A64-BRANCH-RELAX` on the 300-way
   `E.casesOn`; `reports/lx0-trustcg-native-battery-2026-09-30.json`). A
   battery row cannot show that the out-of-bounds writes are gone (the
   pre-fix `clean` 0.9.0 printed `41` for the first at exit 0 while writing
@@ -149,6 +150,14 @@ much of it runs, and never read a green gate as "the native path works".
   so no lane reads a constructor tag off a `Nat`; this row pins that a `Nat`
   of 256 or more takes the successor branch (pinned by the clean-compiler
   `pipeline_api` test at the IR level for all three lanes).
+
+* `wide_uint_ofnat`: `UInt64.ofNat` and `UInt32.ofNat` of a `Nat` at or
+  above 2^128, computed at run time (Lean prints `4294967303`, `7`,
+  `18446744073709551615` and the Nat itself). `ofNat` wraps, so only the
+  low limb matters; the native shims read it through `clean_nat_low_u64`.
+  Before 2026-11-18 they read the Nat through `clean_nat_to_u128` and
+  panicked `native Nat does not fit u128` (`REFUSED_RUNTIME`) once the
+  runtime's `Nat` grew past two limbs.
 
 `import` programs are deliberately absent: each loads ~90k constants from
 `.olean` in ~80 s at ~2.2 GB (audit battery 3), which belongs to the import

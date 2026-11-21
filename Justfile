@@ -92,6 +92,16 @@ test-int-division:
         clean_run_executes_euclidean_int_division_and_remainder \
         clean_run_executes_floor_int_division_and_remainder --test-threads=1
 
+# The reduction-bound theorem family (proofs/reduction_bound.lean): the file
+# elaborates and is kernel-checked, the headline statements and the definitions
+# under them match their pins, every device mode has its witness, and no theorem
+# reaches an axiom outside the kernel's foundations. clean-elab is not a default
+# member, so `test-fast` does not build this target. About three minutes after a
+# warm build; a cold build peaked at 33 GB, so admit it through build-slot and
+# heavy_gate.sh. This emits no Trust proof claim.
+test-reduction-bound:
+    targo --unverified test --locked -p clean-elab --test reduction_bound_all_lengths
+
 # Authority-bearing .olean library lane. The build must resolve the exact
 # repository pin, and Prelude integration tests are opted in explicitly so a
 # missing Lean installation cannot be reported as a passing skipped test.
@@ -265,10 +275,11 @@ update-ay:
 # ── Composite ──────────────────────────────────────────────────────────────
 
 # Full diagnostic: vendor manifest + authority census + fmt + lint coverage +
-# workspace clippy + test-fast. Run once on merged source for a full-CI claim.
+# workspace clippy + test-fast + the reduction-bound theorem. Run once on merged
+# source for a full-CI claim.
 # Ordinary source publication qualifies affected checks (CLAUDE.md). Hooks are
 # opt-in (R35); fail-closed soundness diagnostics are `just gate`.
-ci: vendor-manifest-check authority-sites fmt-check lint-coverage clippy test-fast
+ci: vendor-manifest-check authority-sites fmt-check lint-coverage clippy test-fast test-reduction-bound
 
 # Expanded soundness + quality diagnostics; `ci` is the full source diagnostic.
 gate:

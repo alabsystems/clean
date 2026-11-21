@@ -232,10 +232,10 @@ pub(crate) fn declaration_budget_state() -> (u64, u64) {
     BUDGET.with(|b| (b.limit.get(), b.remaining.get()))
 }
 
-/// Set this thread's `(limit, remaining)` exactly. Crate-internal: the one
-/// caller gives a worker the calling thread's state, resets the worker
-/// afterwards, and charges the calling thread what the workers spent — it
-/// never grants more than [`declaration_budget_state`] reported.
+/// Set this thread's `(limit, remaining)` exactly. Crate-internal callers
+/// transfer an allowance to workers or tighten it for a nested proof audit.
+/// They restore the original state with the actual expenditure subtracted;
+/// they never grant more than [`declaration_budget_state`] reported.
 pub(crate) fn restore_declaration_budget_state(limit: u64, remaining: u64) {
     BUDGET.with(|b| {
         b.limit.set(limit);

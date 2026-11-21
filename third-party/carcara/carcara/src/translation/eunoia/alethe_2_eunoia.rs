@@ -1,3 +1,4 @@
+// Modified in Clean: typed array-lambda dialect and explicit lambda export refusal.
 //! Translator for `EunoiaProof`.
 use crate::ast::*;
 use crate::translation::{
@@ -438,6 +439,10 @@ impl VecToVecTranslator<'_> for EunoiaTranslator {
             }
 
             Term::Binder(binder, binding_list, scope) => {
+                if matches!(binder, Binder::Lambda | Binder::ArrayLambda) {
+                    return EunoiaTerm::UnsupportedLambda;
+                }
+
                 // New scope to shadow those context variables that
                 // now bound by this binder.
                 self.get_mut_translator_data()
@@ -510,11 +515,10 @@ impl VecToVecTranslator<'_> for EunoiaTranslator {
                         )
                     }
 
-                    // TODO: complete
-                    Binder::Lambda => EunoiaTerm::App(
-                        self.alethe_signature.exists_binder.to_owned(),
-                        vec![translated_bindings, self.translate_term(scope)],
-                    ),
+                    // No faithful lambda representation exists in this
+                    // translator. Preserve explicit refusal DATA for the
+                    // fallible export owner, never turn a lambda into exists.
+                    Binder::Lambda | Binder::ArrayLambda => EunoiaTerm::UnsupportedLambda,
                 };
 
                 // Closing the context...

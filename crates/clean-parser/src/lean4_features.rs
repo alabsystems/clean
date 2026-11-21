@@ -627,7 +627,13 @@ mod do_notation {
             SurfaceExpr::Do(_, elems) => {
                 assert_eq!(elems.len(), 2, "expected let-else plus trailing expression");
                 match &elems[0] {
-                    DoElem::LetElse(_, pat, action, fallback) => {
+                    DoElem::LetExpr(
+                        _,
+                        pat,
+                        action,
+                        crate::DoLetExprKind::PurePattern,
+                        fallback,
+                    ) => {
                         assert!(
                             matches!(pat, crate::surface::SurfacePattern::Var(name) if (name).name() == crate::SurfaceName::generated_path("true").name())
                                 || matches!(
@@ -644,7 +650,7 @@ mod do_notation {
                         assert_eq!(fallback.len(), 1, "fallback should contain one do element");
                         assert!(matches!(&fallback[0], DoElem::Return(_, _)));
                     }
-                    other => panic!("expected DoElem::LetElse, got {other:?}"),
+                    other => panic!("expected a pure let-else, got {other:?}"),
                 }
                 assert!(matches!(&elems[1], DoElem::Expr(_, _)));
             }

@@ -367,6 +367,62 @@ fn incremental_change_invalidates_holes_but_preserves_declaration_metadata() {
 }
 
 #[tokio::test]
+async fn real_applied_projection_head_and_argument_keep_distinct_goals() {
+    let (service, _socket) = LspService::new(CleanBackend::new);
+    let backend = service.inner();
+    let uri = Url::parse("file:///applied-projection-term-goal.lean").unwrap();
+    let text = "def Nat.takeReceiverLater (step : Bool) (n : Nat) : Nat := n\n\
+                def projected (n : Nat) : Nat := n.takeReceiverLater true\n";
+    backend.documents.insert(
+        uri.clone(),
+        Document::new(uri.clone(), 1, text.to_string(), "lean".to_string()),
+    );
+    backend.parse_document(&uri).await;
+    backend.elaborate_document(&uri).await;
+    let doc = backend.documents.get(&uri).unwrap();
+    let elaborated = doc.elaborated.as_ref().unwrap();
+    assert!(elaborated.errors.is_empty(), "the actual definitions check");
+    assert_eq!(elaborated.declarations.len(), 2);
+    let head = text.rfind("n.takeReceiverLater").unwrap();
+    let argument = text.rfind("true").unwrap();
+    assert!(elaborated.term_infos.iter().any(|info| {
+        info.start == head
+            && info.end == argument + "true".len()
+            && info.goal.as_deref() == Some("n : Nat\n⊢ Nat")
+    }));
+    let queries = [
+        (
+            doc.offset_to_position(head),
+            doc.offset_to_position(head),
+            doc.offset_to_position(head + 1),
+            "n : Nat\n⊢ Nat",
+        ),
+        (
+            doc.offset_to_position(head + 2),
+            doc.offset_to_position(head),
+            doc.offset_to_position(head + "n.takeReceiverLater".len()),
+            "n : Nat\n⊢ Nat",
+        ),
+        (
+            doc.offset_to_position(argument),
+            doc.offset_to_position(argument),
+            doc.offset_to_position(argument + "true".len()),
+            "n : Nat\n⊢ Bool",
+        ),
+    ];
+    drop(doc);
+    for (point, start, end, goal) in queries {
+        let response = backend
+            .plain_term_goal_request(params(&uri, point))
+            .unwrap()
+            .expect("actual applied-head and argument observations remain selectable");
+        assert_eq!(response.goal, goal);
+        assert_eq!(response.range.start, start);
+        assert_eq!(response.range.end, end);
+    }
+}
+
+#[tokio::test]
 async fn real_ordinary_term_infos_follow_expected_and_inferred_types_across_edits() {
     let (service, _socket) = LspService::new(CleanBackend::new);
     let backend = service.inner();

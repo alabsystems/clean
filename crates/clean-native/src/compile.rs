@@ -29,17 +29,20 @@ use clean_compiler::pass_manager::{compile_lcnf_decls_for, PipelineConfig};
 use clean_compiler::{
     constant_to_decl_with_meaning, BoxingConfig, CompilerError, Decl, OptConfig, RCConfig,
 };
-use clean_elab::module_driver::validate_decl_read_only;
+use clean_elab::module_driver::{validate_decl_read_only, LeafOutcome};
 use clean_elab::{
     elaborate_decl_and_register_with_context_and_warning, preprocess_decl_with_context, ElabResult,
     FileContext, RegistrationWarning,
 };
+use clean_kernel::env::ConstantOrigin;
 use clean_kernel::{Environment, Expr, ExprVisitor, LevelVec, Name, TypeChecker};
 
 use crate::native_build::is_primitive_denylisted;
 use crate::native_eager_io::prepare_native_constant;
 use crate::native_ffi_audit::{
-    refuse_compiled_before_binding, refuse_ffi_root, route_ffi_dep, CodeMeaning, FfiRoute,
+    has_pinned_nat_add_binding, has_pinned_uint32_of_nat_binding, refuse_compiled_before_binding,
+    refuse_ffi_root, require_stable_nat_add, route_ffi_dep, select_stable_core_shim, CodeMeaning,
+    FfiRoute,
 };
 use crate::native_opaque_audit::refuse_unfaithful_body;
 use clean_compiler::ffi_bridge::ImplementedByMap;
@@ -66,6 +69,33 @@ impl ConstDepCollector {
         collector.visit_expr(value);
         collector.deps
     }
+}
+
+/// Checked LCNF already contains the calls that survived argument erasure and
+/// ordered compiler substitutions. The closure checks subsequent IR rewrites.
+fn native_dependencies(
+    env: &Environment,
+    value: &Expr,
+    decl: &Decl,
+    meaning: CodeMeaning,
+    closure: Option<&clean_compiler::RuntimeBindingClosure>,
+) -> Result<Vec<Name>, CompilerError> {
+    if closure.is_none() {
+        return clean_compiler::resolve_csimp_dependencies(
+            env,
+            &decl.name,
+            ConstDepCollector::collect(value),
+            meaning,
+        );
+    }
+    let clean_compiler::lcnf::DeclValue::Code(body) = &decl.body else {
+        return Ok(Vec::new());
+    };
+    let mut names: Vec<_> = clean_compiler::to_lcnf::code_called_constant_names(body)
+        .into_iter()
+        .collect();
+    names.sort_unstable();
+    Ok(names)
 }
 
 impl ExprVisitor for ConstDepCollector {
@@ -192,6 +222,33 @@ pub(crate) fn select_lcnf_decl_with_meaning(
         .map(|(decls, env, pipeline, _imported)| (decls, env, pipeline))
 }
 
+/// Select against the same source environment and executable closure used by the C emitter.
+pub(crate) fn select_file_declarations_for_native_c(
+    env: &Environment,
+    source_opaques: &HashSet<Name>,
+    source_decls: &HashSet<Name>,
+    root: &Name,
+    opt_level: u8,
+    closure: Option<&clean_compiler::RuntimeBindingClosure>,
+) -> anyhow::Result<SelectedNativeDecls> {
+    select_in_environment_borrowed(
+        env,
+        source_opaques,
+        root,
+        opt_level,
+        &is_primitive_denylisted,
+        &|_| DepRoute::Compile,
+        SelectionPolicy {
+            meaning: CodeMeaning::LeanCompiled,
+            allow_pinned_c_shims: true,
+            closure,
+            source_decls: Some(source_decls),
+            file_context: None,
+        },
+        None,
+    )
+}
+
 /// Where the dependency walk sends one referenced constant that survived the
 /// #14 boundary checks (WS6.8). Without `--link-artifact` every such constant
 /// is [`DepRoute::Compile`], which is the walk as it always was.
@@ -239,8 +296,10 @@ pub(crate) fn select_lcnf_decl_routed(
         route,
         SelectionPolicy {
             meaning,
+            allow_pinned_c_shims: false,
             closure: None,
             source_decls: Some(&source_decls),
+            file_context: None,
         },
     )
 }
@@ -269,7 +328,7 @@ pub(crate) fn select_lcnf_decl_recording(
         "actual native selection environment",
         std::sync::Arc::clone(&env),
     );
-    let (decls, pipeline, _) = select_in_environment_borrowed(
+    let selected = select_in_environment_borrowed(
         &env,
         &opaques,
         &root,
@@ -278,12 +337,18 @@ pub(crate) fn select_lcnf_decl_recording(
         &|_| DepRoute::Compile,
         SelectionPolicy {
             meaning: CodeMeaning::LeanCompiled,
+            allow_pinned_c_shims: false,
             closure: None,
             source_decls: Some(&source_decls),
+            file_context: None,
         },
         Some(observer),
     )?;
-    Ok((decls.into(), env, std::sync::Arc::new(pipeline)))
+    Ok((
+        selected.decls.into(),
+        env,
+        std::sync::Arc::new(selected.pipeline),
+    ))
 }
 
 /// The single native declaration/dependency selection implementation. Both
@@ -307,8 +372,10 @@ pub(crate) fn select_in_environment(
         route,
         SelectionPolicy {
             meaning,
+            allow_pinned_c_shims: false,
             closure: None,
             source_decls: None,
+            file_context: None,
         },
     )
 }
@@ -331,17 +398,164 @@ pub(crate) fn select_in_environment_in_runtime_closure(
         route,
         SelectionPolicy {
             meaning: CodeMeaning::LeanCompiled,
+            allow_pinned_c_shims: false,
             closure: Some(closure),
             source_decls: None,
+            file_context: None,
         },
     )
+}
+
+/// Declarations registered and checked by the source frontend in this run.
+///
+/// The compiler uses this inventory to distinguish source definitions from
+/// imported bodies. In particular, a stored opaque value is only executable
+/// here if the source frontend observed its declaration.
+#[derive(Debug, Default)]
+pub struct CheckedNativeSource {
+    declarations: HashMap<Name, (clean_kernel::ConstantInfo, Option<ConstantOrigin>)>,
+    opaques: HashSet<Name>,
+}
+
+impl CheckedNativeSource {
+    /// Record a source leaf that the module driver checked.
+    ///
+    /// # Errors
+    /// The source leaf failed, contains a diagnostic, or carries trust debt.
+    pub fn record(&mut self, env: &Environment, outcome: &LeafOutcome<'_>) -> anyhow::Result<()> {
+        let LeafOutcome::Checked {
+            leaf,
+            warning,
+            kernel_failures_delta,
+            source_diagnostics,
+            ..
+        } = outcome
+        else {
+            anyhow::bail!("source declaration failed its elaboration or kernel check");
+        };
+        if *kernel_failures_delta != 0 || !source_diagnostics.is_empty() {
+            anyhow::bail!("source declaration has an elaboration or kernel diagnostic");
+        }
+        let warning = warning
+            .clone()
+            .or_else(|| clean_elab::register::registration_warning_for_leaf(env, leaf));
+        refuse_trust_warning(warning.as_ref())?;
+        if let Some(refusal) = leaf.unflattened_block_refusal() {
+            anyhow::bail!(refusal);
+        }
+        if let Some(name) = leaf.declaration_name() {
+            let info = env
+                .get_const(name)
+                .ok_or_else(|| anyhow!("source declaration `{name}` is absent after checking"))?;
+            let origin = env.get_constant_origin(name);
+            if matches!(
+                origin,
+                Some(ConstantOrigin::Olean { .. } | ConstantOrigin::CleanPayload { .. })
+            ) {
+                anyhow::bail!("cannot record imported declaration `{name}` as source");
+            }
+            if let ElabResult::Opaque { val, .. } = leaf {
+                if info.value.as_ref() != val.as_ref() {
+                    anyhow::bail!("checked opaque body for `{name}` differs from its registration");
+                }
+            }
+            self.declarations
+                .insert(name.clone(), (info.clone(), origin.cloned()));
+        }
+        collect_source_opaques(leaf, &mut self.opaques);
+        Ok(())
+    }
+
+    pub(crate) fn select(
+        &self,
+        env: &Environment,
+        file_context: Option<&FileContext>,
+        root: &Name,
+        opt_level: u8,
+        closure: Option<&clean_compiler::RuntimeBindingClosure>,
+        nat_display: crate::native_nat_display::NatDisplay,
+    ) -> anyhow::Result<SelectedNativeDecls> {
+        for (name, (info, origin)) in &self.declarations {
+            if env.get_const(name) != Some(info) || env.get_constant_origin(name) != origin.as_ref()
+            {
+                anyhow::bail!("source declaration `{name}` changed after checking");
+            }
+        }
+        let declarations = self.declarations.keys().cloned().collect();
+        select_in_environment_borrowed(
+            env,
+            &self.opaques,
+            root,
+            opt_level,
+            &|symbol| nat_display.uses_shim(symbol),
+            &|_| DepRoute::Compile,
+            SelectionPolicy {
+                meaning: CodeMeaning::LeanCompiled,
+                allow_pinned_c_shims: true,
+                closure,
+                source_decls: Some(&declarations),
+                file_context,
+            },
+            None,
+        )
+    }
 }
 
 #[derive(Clone, Copy)]
 struct SelectionPolicy<'a> {
     meaning: CodeMeaning,
+    allow_pinned_c_shims: bool,
     closure: Option<&'a clean_compiler::RuntimeBindingClosure>,
     source_decls: Option<&'a HashSet<Name>>,
+    file_context: Option<&'a FileContext>,
+}
+
+mod imported_nat;
+
+fn select_imported_nat_body(
+    env: &Environment,
+    name: &Name,
+    context: Option<&FileContext>,
+) -> anyhow::Result<Option<Decl>> {
+    let Some(context) = context else {
+        return Ok(None);
+    };
+    let Some(function) = context.prepare_imported_nat_for_native(env, name)? else {
+        return Ok(None);
+    };
+    anyhow::ensure!(
+        !env.is_unsafe(name)
+            && !env.is_partial(name)
+            && !env.is_noncomputable(name)
+            && !env.is_noncomputable(&name.clone().str("_unsafe_rec")),
+        "captured Nat dependency `{name}` must be safe and computable"
+    );
+    let program = function.native_program()?;
+    let lowered = imported_nat::lower_imported_nat_program(&program)?;
+    if lowered.uses_nat_add {
+        require_stable_nat_add(env)?;
+    }
+    Ok(Some(lowered.declaration))
+}
+
+mod stable_bitvec;
+mod stable_char;
+mod stable_nat_dec_lt;
+mod stable_nat_pow;
+pub(crate) mod stable_stdout;
+pub(crate) mod stable_void;
+
+pub(crate) struct SelectedNativeDecls {
+    pub(crate) decls: Vec<Decl>,
+    pub(crate) pipeline: PipelineConfig,
+    imported: Vec<Name>,
+    pub(crate) original_char: bool,
+    pub(crate) nat_dec_lt: bool,
+    pub(crate) nat_pow: bool,
+    pub(crate) char_from_valid_nat: Option<stable_char::CharFromValidNat>,
+    pub(crate) bitvec32: Option<stable_bitvec::BitVec32>,
+    pub(crate) void_mk: Option<stable_void::VoidMk>,
+    pub(crate) stdout: stable_stdout::StdoutBindings,
 }
 
 fn lower_selected_constant(
@@ -382,7 +596,7 @@ fn select_in_environment_ordered(
     route: &dyn Fn(&Name) -> DepRoute,
     policy: SelectionPolicy<'_>,
 ) -> anyhow::Result<(Vec<Decl>, Environment, PipelineConfig, Vec<Name>)> {
-    let (decls, pipeline, imported) = select_in_environment_borrowed(
+    let selected = select_in_environment_borrowed(
         &env,
         source_opaques,
         root_name,
@@ -392,7 +606,7 @@ fn select_in_environment_ordered(
         policy,
         None,
     )?;
-    Ok((decls, env, pipeline, imported))
+    Ok((selected.decls, env, selected.pipeline, selected.imported))
 }
 
 fn select_in_environment_borrowed(
@@ -404,7 +618,7 @@ fn select_in_environment_borrowed(
     route: &dyn Fn(&Name) -> DepRoute,
     policy: SelectionPolicy<'_>,
     observation: Option<&crate::primitive_uses::NativeRecorder>,
-) -> anyhow::Result<(Vec<Decl>, PipelineConfig, Vec<Name>)> {
+) -> anyhow::Result<SelectedNativeDecls> {
     let meaning = policy.meaning;
     let decl_name = root_name.to_string();
     let root_info = env
@@ -480,34 +694,40 @@ fn select_in_environment_borrowed(
     let mut seen: HashSet<Name> = HashSet::new();
     seen.insert(root_name.clone());
 
-    let mut decls = vec![root_decl];
     let mut imported: Vec<Name> = Vec::new();
+    let mut original_char = false;
+    let mut nat_dec_lt = false;
+    let mut nat_pow = false;
+    let mut char_from_valid_nat = None;
+    let mut bitvec32 = None;
+    let mut void_mk = None;
+    let mut stdout = stable_stdout::StdoutBindings::default();
 
     // Worklist of value expressions still to scan for dependencies. We scan the
     // root's value, then each compilable dependency's value, transitively.
-    let mut worklist: Vec<Name> = clean_compiler::resolve_csimp_dependencies(
+    let mut worklist = native_dependencies(
         env,
-        root_name,
-        ConstDepCollector::collect(
-            root_info
-                .value
-                .as_ref()
-                .expect("constant_to_decl returned Some, so the root has a value"),
-        ),
+        root_info
+            .value
+            .as_ref()
+            .expect("constant_to_decl returned Some, so the root has a value"),
+        &root_decl,
         meaning,
+        policy.closure,
     )?;
 
+    let mut decls = vec![root_decl];
     let pipeline = pipeline_config_from_opt_level(opt_level);
     // Every `@[implemented_by]` binding, read once for the walk below.
     let implemented_by = ImplementedByMap::from_env(env);
 
-    // Silence the default panic hook for the duration of the dependency-probe
-    // loop: a candidate dep that trips a `debug_assert!` during the isolated
-    // probe is caught and dropped to extern (see below), so its panic trace is
-    // expected noise, not a failure. Restored immediately after the loop.
-    let prev_hook = std::panic::take_hook();
-    std::panic::set_hook(Box::new(|_| {}));
+    // Panic hooks belong to the caller and are process-wide. Catching a probe
+    // panic below must not suppress another thread's diagnostics or overwrite
+    // the caller's hook when dependency walks overlap.
 
+    let nat_add = Name::interned("Nat.add");
+    let byte_constructor = Name::interned("UInt8.ofNat");
+    let word_constructor = Name::interned("UInt32.ofNat");
     let mut refusal = None;
     while let Some(dep_name) = worklist.pop() {
         if !seen.insert(dep_name.clone()) {
@@ -539,33 +759,183 @@ fn select_in_environment_borrowed(
         // Otherwise it stays an extern: do NOT emit, do NOT recurse, do NOT
         // propagate any `Err`. This per-const fallback never aborts the compile.
 
-        // (a) PRIMITIVE_DENYLIST: any symbol with a runtime shim (Nat ops, the
-        // HAdd/HMul/HSub typeclass dispatchers, Bool ctors, IO ops) keeps its
-        // shim — the lowered body would break the shim's C contract (O(1) win,
-        // representation invariant, or effect model). Stay extern.
-        let denied = denylisted(&mangle_name(&dep_name));
-        if let Some(observer) = observation {
-            observer.decision(
-                crate::primitive_uses::NativeInvocationRole::Selection,
-                "primitive boundary",
-                Some(&dep_name),
-                None,
-                if denied {
-                    "actual denylist route to shim boundary"
-                } else {
-                    "actual non-denylisted dependency"
-                },
-            );
-        }
-        if denied {
-            continue;
-        }
-
-        // (a0) FFI ATTRIBUTES (`native_ffi_audit`). Lean never runs the body of
+        // FFI ATTRIBUTES (`native_ffi_audit`) precede shim selection. A
+        // mangled name in the shim table cannot authorize ignoring explicit
+        // extern metadata or an implemented_by edge on this declaration.
+        // Lean never runs the body of
         // an `@[implemented_by f]` declaration -- every call runs `f`, which
         // `to_lcnf` already substituted at each reference -- so walk `f`
         // instead and never lower this body. An `@[extern]` declaration with a
         // body is refused: Lean calls its C symbol, never the body.
+        if meaning == CodeMeaning::LeanCompiled && !implemented_by.has_binding(&dep_name) {
+            if policy.allow_pinned_c_shims
+                && ((dep_name == byte_constructor
+                    && crate::native_ffi_audit::has_pinned_uint8_of_nat_binding(env, &dep_name))
+                    || (dep_name == word_constructor
+                        && denylisted("l_UInt32_ofNat")
+                        && has_pinned_uint32_of_nat_binding(env, dep_info))
+                    || (dep_name == nat_add
+                        && denylisted("l_Nat_add")
+                        && has_pinned_nat_add_binding(env, &dep_name)))
+            {
+                match route(&dep_name) {
+                    DepRoute::Compile => {}
+                    DepRoute::Import => anyhow::bail!(
+                        "selected native extern `{dep_name}` also has a linked implementation"
+                    ),
+                    DepRoute::Refuse(why) => anyhow::bail!(why),
+                }
+                if let Some(observer) = observation {
+                    observer.decision(
+                        crate::primitive_uses::NativeInvocationRole::Selection,
+                        "primitive boundary",
+                        Some(&dep_name),
+                        None,
+                        "actual denylist route to shim boundary",
+                    );
+                }
+                continue;
+            }
+            if policy.file_context.is_some() {
+                if stdout.select(env, dep_info, policy.file_context)? {
+                    match route(&dep_name) {
+                        DepRoute::Compile => {}
+                        DepRoute::Import => anyhow::bail!(
+                            "selected native stdout operation `{dep_name}` also has a linked implementation"
+                        ),
+                        DepRoute::Refuse(why) => anyhow::bail!(why),
+                    }
+                    continue;
+                }
+                if dep_name == Name::interned("Char.ofNat")
+                    && policy.closure.is_some()
+                    && policy
+                        .file_context
+                        .and_then(|ctx| ctx.stable_char_program())
+                        .is_some_and(|capture| capture.matches_environment(env))
+                {
+                    anyhow::ensure!(
+                        env.extern_metadata(&dep_name)?.is_none(),
+                        "original Char.ofNat has a compiled body and cannot have an extern binding"
+                    );
+                    match route(&dep_name) {
+                        DepRoute::Compile => original_char = true,
+                        DepRoute::Import => anyhow::bail!(
+                            "selected native Char.ofNat program also has a linked implementation"
+                        ),
+                        DepRoute::Refuse(why) => anyhow::bail!(why),
+                    }
+                    // The remaining local callee is the closed zero initializer. Its only
+                    // dependency is UInt32.ofBitVec, included here with the two direct calls.
+                    worklist.extend(
+                        ["Nat.decLt", "Char.ofNatAux", "UInt32.ofBitVec"].map(Name::interned),
+                    );
+                    continue;
+                }
+                if stable_nat_dec_lt::select(env, dep_info)? {
+                    match route(&dep_name) {
+                        DepRoute::Compile => nat_dec_lt = true,
+                        DepRoute::Import => anyhow::bail!(
+                            "selected native extern `{dep_name}` also has a linked implementation"
+                        ),
+                        DepRoute::Refuse(why) => anyhow::bail!(why),
+                    }
+                    continue;
+                }
+                if stable_nat_pow::select(env, dep_info)? {
+                    match route(&dep_name) {
+                        DepRoute::Compile => nat_pow = true,
+                        DepRoute::Import => anyhow::bail!(
+                            "selected native extern `{dep_name}` also has a linked implementation"
+                        ),
+                        DepRoute::Refuse(why) => anyhow::bail!(why),
+                    }
+                    continue;
+                }
+                if let Some(binding) = stable_char::CharFromValidNat::select(env, dep_info)? {
+                    match route(&dep_name) {
+                        DepRoute::Compile => char_from_valid_nat = Some(binding),
+                        DepRoute::Import => anyhow::bail!(
+                            "selected native extern `{dep_name}` also has a linked implementation"
+                        ),
+                        DepRoute::Refuse(why) => anyhow::bail!(why),
+                    }
+                    continue;
+                }
+                if let Some(binding) = stable_bitvec::BitVec32::select(env, dep_info)? {
+                    anyhow::ensure!(
+                        policy.closure.is_some(),
+                        "stable UInt32.ofBitVec needs a checked executable constructor closure"
+                    );
+                    match route(&dep_name) {
+                        DepRoute::Compile => bitvec32 = Some(binding),
+                        DepRoute::Import => anyhow::bail!(
+                            "selected native extern `{dep_name}` also has a linked implementation"
+                        ),
+                        DepRoute::Refuse(why) => anyhow::bail!(why),
+                    }
+                    continue;
+                }
+                if let Some(binding) = stable_void::VoidMk::select(env, dep_info)? {
+                    // An extern executes its recorded implementation. Its opaque
+                    // logical body contributes no native dependencies here.
+                    match route(&dep_name) {
+                        DepRoute::Compile => void_mk = Some(binding),
+                        DepRoute::Import => anyhow::bail!(
+                            "selected native extern `{dep_name}` also has a linked implementation"
+                        ),
+                        DepRoute::Refuse(why) => anyhow::bail!(why),
+                    }
+                    continue;
+                }
+                match select_stable_core_shim(env, dep_info) {
+                    Ok(Some(shim)) => {
+                        if let Err(error) =
+                            refuse_unfaithful_body(dep_info, root_name, source_opaques)
+                        {
+                            refusal = Some(anyhow::Error::from(error));
+                            break;
+                        }
+                        match route(&dep_name) {
+                            DepRoute::Compile if denylisted(shim) => {}
+                            DepRoute::Compile => {
+                                refusal =
+                                    Some(anyhow!("required native shim `{shim}` is unavailable"));
+                                break;
+                            }
+                            DepRoute::Import => {
+                                refusal = Some(anyhow!(
+                                    "selected native extern `{dep_name}` also has a linked implementation"
+                                ));
+                                break;
+                            }
+                            DepRoute::Refuse(why) => {
+                                refusal = Some(anyhow!(why));
+                                break;
+                            }
+                        }
+                        if let Some(observer) = observation {
+                            observer.decision(
+                                crate::primitive_uses::NativeInvocationRole::Selection,
+                                "managed extern dependency routing",
+                                Some(&dep_name),
+                                None,
+                                "actual typed stable core shim route",
+                            );
+                        }
+                        // A shim call remains outside the compiled declarations.
+                        // The ordinary unknown-callee path uses the boxed Clean
+                        // ABI and transfers ownership to the runtime shim.
+                        continue;
+                    }
+                    Ok(None) => {}
+                    Err(error) => {
+                        refusal = Some(error);
+                        break;
+                    }
+                }
+            }
+        }
         match route_ffi_dep(env, &implemented_by, dep_info, root_name, meaning) {
             Ok(FfiRoute::Ordinary) => {
                 if let Some(observer) = observation {
@@ -595,6 +965,27 @@ fn select_in_environment_borrowed(
                 refusal = Some(anyhow::Error::from(err));
                 break;
             }
+        }
+
+        // (a) PRIMITIVE_DENYLIST: an ordinary dependency with a runtime shim
+        // (Nat ops, typeclass dispatchers, Bool ctors, IO ops) keeps its shim.
+        // FFI metadata above must first agree that the declaration is ordinary.
+        let denied = denylisted(&mangle_name(&dep_name));
+        if let Some(observer) = observation {
+            observer.decision(
+                crate::primitive_uses::NativeInvocationRole::Selection,
+                "primitive boundary",
+                Some(&dep_name),
+                None,
+                if denied {
+                    "actual denylist route to shim boundary"
+                } else {
+                    "actual non-denylisted dependency"
+                },
+            );
+        }
+        if denied {
+            continue;
         }
 
         // (a') RUNTIME FIDELITY. A prelude `opaque` whose value is a type-correct
@@ -661,6 +1052,20 @@ fn select_in_environment_borrowed(
         }
         let importing = matches!(dep_route, DepRoute::Import);
 
+        let captured = match select_imported_nat_body(env, &dep_name, policy.file_context) {
+            Ok(Some(_)) if importing => {
+                refusal = Some(anyhow!(
+                    "captured Nat dependency `{dep_name}` also has a linked implementation"
+                ));
+                break;
+            }
+            Ok(captured) => captured,
+            Err(error) => {
+                refusal = Some(error.context(format!("captured IR for dependency `{dep_name}`")));
+                break;
+            }
+        };
+
         // (b) A const that does not lower to a compilable `Decl` — `Ok(None)`
         // (axiom/opaque/ctor/noncomputable) or `Err(_)` (value present but
         // lowering failed, e.g. `List.length`) — is an extern. Drop and continue;
@@ -671,7 +1076,12 @@ fn select_in_environment_borrowed(
         // and the build failed at link time without a name. A link whose
         // implementation has another type here (an imported binding whose
         // target resolves to a resident declaration) is named the same way.
-        let dep_decl = match lower_selected_constant(env, dep_info, policy) {
+        let using_captured_ir = captured.is_some();
+        let lowered = match captured {
+            Some(decl) => Ok(Some(decl)),
+            None => lower_selected_constant(env, dep_info, policy),
+        };
+        let dep_decl = match lowered {
             Ok(Some(dep_decl)) => dep_decl,
             Err(
                 err @ (CompilerError::ImplementedByCycle { .. }
@@ -761,17 +1171,23 @@ fn select_in_environment_borrowed(
             // A source body has no prelude shim to fall back to. Keep the
             // original refusal at the production caller instead of replacing
             // it with a missing-extern error at link-demand checking.
-            if policy
-                .source_decls
-                .is_some_and(|names| names.contains(&dep_name))
+            if using_captured_ir
+                || policy
+                    .source_decls
+                    .is_some_and(|names| names.contains(&dep_name))
             {
                 let cause = match probe {
                     Ok(Err(err)) => err.to_string(),
                     Err(_) => "compiler probe panicked".to_string(),
                     Ok(Ok(_)) => unreachable!("probe failed above"),
                 };
+                let input = if using_captured_ir {
+                    "captured IR"
+                } else {
+                    "source"
+                };
                 refusal = Some(anyhow!(
-                    "cannot compile source dependency `{dep_name}` of `{root_name}`: {cause}"
+                    "cannot compile {input} dependency `{dep_name}` of `{root_name}`: {cause}"
                 ));
                 break;
             }
@@ -795,13 +1211,8 @@ fn select_in_environment_borrowed(
         // "arithmetic primitive UInt64.add produces U64 but the declaration
         // expects Ptr"). The slice is then exactly the flattening closure
         // with every artifact-defined body replaced by a declaration.
-        if let Some(value) = &dep_info.value {
-            match clean_compiler::resolve_csimp_dependencies(
-                env,
-                &dep_name,
-                ConstDepCollector::collect(value),
-                meaning,
-            ) {
+        if let Some(value) = dep_info.value.as_ref().filter(|_| !using_captured_ir) {
+            match native_dependencies(env, value, &dep_decl, meaning, policy.closure) {
                 Ok(dependencies) => worklist.extend(dependencies),
                 Err(error) => {
                     refusal = Some(anyhow::Error::from(error));
@@ -817,7 +1228,6 @@ fn select_in_environment_borrowed(
         decls.push(dep_decl);
     }
 
-    std::panic::set_hook(prev_hook);
     if let Some(err) = refusal {
         return Err(err);
     }
@@ -826,7 +1236,18 @@ fn select_in_environment_borrowed(
     // (so `to_ir`'s `build_ctor_env` sees the prelude constructors), together with
     // the transitive compilable closure. `env` is only borrowed by the dep-walk
     // above; the legacy wrapper retains ownership and returns that original Env.
-    Ok((decls, pipeline, imported))
+    Ok(SelectedNativeDecls {
+        decls,
+        pipeline,
+        imported,
+        original_char,
+        nat_dec_lt,
+        nat_pow,
+        char_from_valid_nat,
+        bitvec32,
+        void_mk,
+        stdout,
+    })
 }
 
 /// A dependency a linked artifact defines, which this compile cannot lower:
@@ -1344,16 +1765,25 @@ pub(crate) fn elaborate_file_to_env_with_source_opaques(
     elaborate_file_with_inventory(path).map(|(env, opaques, _)| (env, opaques))
 }
 
-fn elaborate_file_with_inventory(
+pub(crate) fn elaborate_file_with_inventory(
     path: &Path,
+) -> anyhow::Result<(Environment, HashSet<Name>, HashSet<Name>)> {
+    let decision = clean_olean::source_world_for_file(path, None)?;
+    elaborate_file_with_inventory_in_world(path, &decision)
+}
+
+fn elaborate_file_with_inventory_in_world(
+    path: &Path,
+    decision: &clean_olean::SourceWorldDecision,
 ) -> anyhow::Result<(Environment, HashSet<Name>, HashSet<Name>)> {
     let source_identity = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
     let source_input = std::fs::read_to_string(path)?;
-    let header = clean_parser::Parser::parse_header(&source_input)?;
-    let decision = clean_olean::source_world_for_file(path, None)?;
+    let header = clean_parser::Parser::parse_header_in_world(&source_input, decision.world())?;
     let mut source_setup =
-        if clean_elab::module_driver::source_closure_needs_world_setup(path, &decision)? {
-            Some(clean_elab::module_driver::SourceModuleSetup::for_program_file(&decision, path)?)
+        if clean_elab::module_driver::source_closure_needs_world_setup(path, decision)?
+            || decision.world().requires_genuine_init()
+        {
+            Some(clean_elab::module_driver::SourceModuleSetup::for_program_file(decision, path)?)
         } else {
             None
         };
@@ -1364,7 +1794,7 @@ fn elaborate_file_with_inventory(
     } else if header.is_prelude {
         clean_elab::module_driver::module_environment_for_header_in_world(
             clean_elab::module_driver::EnvironmentSetup::default(),
-            &decision,
+            decision,
             &header,
         )
         .map(|(env, _)| env)
@@ -1394,16 +1824,17 @@ fn elaborate_file_with_inventory(
         source_setup,
         source_inputs,
         source_entry,
-        import_world: Some(clean_elab::import_world_for_file(path)),
-        ..SourceWalk::default()
+        ..SourceWalk::new(decision)
     };
     elaborate_file_into_env(path, &mut env, &mut walk)?;
     Ok((env, walk.source_opaques, walk.source_decls))
 }
 
 /// State threaded through the recursive intra-project elaboration.
-#[derive(Default)]
-struct SourceWalk {
+struct SourceWalk<'a> {
+    /// The entry file's Lean world for parsing, elaboration and imports in
+    /// every source file, including independent body comparisons.
+    decision: &'a clean_olean::SourceWorldDecision,
     /// Fresh headers are permitted only with independent body comparison.
     source_setup: Option<clean_elab::module_driver::SourceModuleSetup>,
     /// Effects independently validated in this unchanged source invocation.
@@ -1425,10 +1856,23 @@ struct SourceWalk {
     /// declarations are minted with (`_private.<module>.0.<name>`, G21), as
     /// `clean check` mints them.
     module_names: HashMap<PathBuf, Name>,
-    /// The build's Lean world, selected once for the entry file; every file
-    /// of the walk resolves its imports in it (`None`: each file selects its
-    /// own).
-    import_world: Option<Result<clean_elab::ImportWorld, clean_elab::ImportWorldRefusal>>,
+}
+
+impl<'a> SourceWalk<'a> {
+    fn new(decision: &'a clean_olean::SourceWorldDecision) -> Self {
+        Self {
+            decision,
+            source_setup: None,
+            faithful_effects: HashMap::new(),
+            source_inputs: HashMap::new(),
+            source_entry: None,
+            in_flight: HashSet::new(),
+            completed: HashSet::new(),
+            source_opaques: HashSet::new(),
+            source_decls: HashSet::new(),
+            module_names: HashMap::new(),
+        }
+    }
 }
 
 /// Record every value-bearing `opaque` an elaboration result declares.
@@ -1475,7 +1919,7 @@ const MAX_NATIVE_IMPORT_DEPTH: usize = 256;
 fn elaborate_file_into_env(
     path: &Path,
     env: &mut Environment,
-    walk: &mut SourceWalk,
+    walk: &mut SourceWalk<'_>,
 ) -> anyhow::Result<()> {
     if walk.in_flight.len() >= MAX_NATIVE_IMPORT_DEPTH {
         anyhow::bail!(
@@ -1514,47 +1958,48 @@ fn elaborate_file_into_env(
         // Even the first dependency may have seen its ordinary parent's
         // implicit Init. Compare EVERY imported body, not only siblings.
         if !walk.in_flight.is_empty() {
-            let expected =
-                match walk.faithful_effects.get(&canonical) {
-                    Some(expected) => expected.clone(),
-                    None => {
-                        let mut setup = walk
-                            .source_setup
-                            .as_ref()
-                            .map(clean_elab::module_driver::SourceModuleSetup::isolated)
-                            .ok_or_else(|| anyhow::anyhow!("missing isolated source setup"))?;
-                        let input = walk.source_inputs.get(&canonical).ok_or_else(|| {
-                            anyhow::anyhow!("isolated source has no retained input")
-                        })?;
-                        let header = clean_parser::Parser::parse_header(input)?;
-                        let mut isolated_env = setup.initial_environment(&header)?;
-                        let mut isolated = SourceWalk {
-                            source_setup: Some(setup),
-                            faithful_effects: walk.faithful_effects.clone(),
-                            source_inputs: walk.source_inputs.clone(),
-                            source_entry: Some(canonical.clone()),
-                            module_names: walk.module_names.clone(),
-                            import_world: walk.import_world.clone(),
-                            ..SourceWalk::default()
-                        };
-                        elaborate_file_into_env(path, &mut isolated_env, &mut isolated)
-                            .with_context(|| {
-                                format!(
+            let expected = match walk.faithful_effects.get(&canonical) {
+                Some(expected) => expected.clone(),
+                None => {
+                    let mut setup = walk
+                        .source_setup
+                        .as_ref()
+                        .map(clean_elab::module_driver::SourceModuleSetup::isolated)
+                        .ok_or_else(|| anyhow::anyhow!("missing isolated source setup"))?;
+                    let input = walk
+                        .source_inputs
+                        .get(&canonical)
+                        .ok_or_else(|| anyhow::anyhow!("isolated source has no retained input"))?;
+                    let header =
+                        clean_parser::Parser::parse_header_in_world(input, walk.decision.world())?;
+                    let mut isolated_env = setup.initial_environment(&header)?;
+                    let mut isolated = SourceWalk {
+                        source_setup: Some(setup),
+                        faithful_effects: walk.faithful_effects.clone(),
+                        source_inputs: walk.source_inputs.clone(),
+                        source_entry: Some(canonical.clone()),
+                        module_names: walk.module_names.clone(),
+                        ..SourceWalk::new(walk.decision)
+                    };
+                    elaborate_file_into_env(path, &mut isolated_env, &mut isolated).with_context(
+                        || {
+                            format!(
                                 "source module {} could not elaborate in its own import closure",
                                 path.display()
                             )
-                            })?;
-                        let expected = isolated
-                            .faithful_effects
-                            .get(&canonical)
-                            .cloned()
-                            .ok_or_else(|| {
-                                anyhow::anyhow!("isolated source module has no completed effect")
-                            })?;
-                        walk.faithful_effects.extend(isolated.faithful_effects);
-                        expected
-                    }
-                };
+                        },
+                    )?;
+                    let expected = isolated
+                        .faithful_effects
+                        .get(&canonical)
+                        .cloned()
+                        .ok_or_else(|| {
+                            anyhow::anyhow!("isolated source module has no completed effect")
+                        })?;
+                    walk.faithful_effects.extend(isolated.faithful_effects);
+                    expected
+                }
+            };
             if let Some(reason) = expected.disagreement(&effect, env) {
                 anyhow::bail!(
                     "source module {} differs from its own import closure: {reason}",
@@ -1573,7 +2018,7 @@ fn elaborate_file_into_env(
 fn elaborate_file_body(
     path: &Path,
     env: &mut Environment,
-    walk: &mut SourceWalk,
+    walk: &mut SourceWalk<'_>,
 ) -> anyhow::Result<Option<clean_kernel::env::EnvEffect>> {
     let source = std::fs::read_to_string(path)
         .with_context(|| format!("failed to read source file {}", path.display()))?;
@@ -1603,20 +2048,19 @@ fn elaborate_file_body(
         }
     }
     let patterns = clean_elab::tactic::builtins::builtin_tactic_patterns();
-    let parsed = clean_parser::parse_file_with_tactics_diagnostics(&source, &patterns)
-        .with_context(|| format!("failed to parse {}", path.display()))?;
+    let parsed = clean_parser::parse_file_seeded_in_world(
+        &source,
+        &patterns,
+        &clean_parser::NotationSeed::default(),
+        walk.decision.world(),
+    )
+    .with_context(|| format!("failed to parse {}", path.display()))?;
     let header = parsed.header;
     let decls = parsed.decls;
 
     let mut file_ctx = FileContext::new();
     file_ctx.set_file_header(&header);
-    // Thread Lake `.olean` search paths and the project's Lean world (G72) so
-    // external imports still resolve via the existing artifact loader during
-    // the main elaboration pass, in that world only.
-    match &walk.import_world {
-        Some(world) => file_ctx.set_import_context(path, world.clone()),
-        None => file_ctx.set_import_context_for_file(path),
-    }
+    file_ctx.set_source_world(path, walk.decision);
     // Lean's main module: the name an importer wrote, else the entry file's
     // Lake (or path) name — the name `clean check` gives the same file.
     file_ctx.set_main_module(
@@ -1763,7 +2207,7 @@ fn resolve_and_elaborate_imports(
     decl: &clean_parser::SurfaceDecl,
     parent_path: &Path,
     env: &mut Environment,
-    walk: &mut SourceWalk,
+    walk: &mut SourceWalk<'_>,
     satisfied_from_source: &mut HashSet<Name>,
 ) -> anyhow::Result<()> {
     use clean_parser::SurfaceDecl;
@@ -1969,12 +2413,97 @@ fn emit_decls_ordered(
                 "internal error: `--emit trustir-bin` must be handled before `emit_decls`"
             )
         }
+        other => anyhow::bail!("emit format {other:?} is not supported by this build"),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn checked_native_selection_walks_calls_and_skips_erased_bodies() {
+        use clean_compiler::{constant_to_decl_in_runtime_closure, RuntimeBindingClosure};
+        use clean_kernel::{BinderInfo, Declaration};
+
+        let mut env = Environment::with_prelude();
+        let word = Expr::const_str("WorldWord");
+        let nat = Expr::const_str("Nat");
+        for (name, ty, value) in [
+            ("WorldWord", Expr::type_(), nat.clone()),
+            ("observedValue", nat.clone(), Expr::nat_lit(23)),
+            (
+                "readWorld",
+                Expr::arrow(word.clone(), nat.clone()),
+                Expr::lam(
+                    BinderInfo::Default,
+                    word.clone(),
+                    Expr::const_str("observedValue"),
+                ),
+            ),
+            (
+                "keepValue",
+                Expr::arrow(Expr::type_(), Expr::arrow(nat.clone(), nat.clone())),
+                Expr::lam(
+                    BinderInfo::Default,
+                    Expr::type_(),
+                    Expr::lam(BinderInfo::Default, nat.clone(), Expr::bvar(0)),
+                ),
+            ),
+            (
+                "appliedWorld",
+                nat,
+                Expr::apps(
+                    Expr::const_str("keepValue"),
+                    [word, Expr::const_str("observedValue")],
+                ),
+            ),
+        ] {
+            env.add_decl(Declaration::Definition {
+                name: Name::from_string(name),
+                level_params: vec![],
+                type_: ty,
+                value,
+                is_reducible: true,
+            })
+            .unwrap();
+        }
+
+        for (entry, calls, logical_dependency) in [
+            (
+                "readWorld",
+                vec![Name::from_string("observedValue")],
+                "WorldWord",
+            ),
+            ("WorldWord", vec![], "Nat"),
+            (
+                "appliedWorld",
+                vec![
+                    Name::from_string("keepValue"),
+                    Name::from_string("observedValue"),
+                ],
+                "WorldWord",
+            ),
+        ] {
+            let root = Name::from_string(entry);
+            let closure = RuntimeBindingClosure::check_executable(&env, &[root.clone()]).unwrap();
+            let info = env.get_const(&root).unwrap();
+            let decl = constant_to_decl_in_runtime_closure(&env, info, &closure)
+                .unwrap()
+                .unwrap();
+            let value = info.value.as_ref().unwrap();
+            let meaning = CodeMeaning::LeanCompiled;
+            let mut calls = calls;
+            calls.sort_unstable();
+            assert_eq!(
+                native_dependencies(&env, value, &decl, meaning, Some(&closure)).unwrap(),
+                calls
+            );
+            assert!(native_dependencies(&env, value, &decl, meaning, None)
+                .unwrap()
+                .contains(&Name::from_string(logical_dependency)));
+        }
+    }
 
     #[test]
     fn compile_decl_query_uses_exact_source_identifier_syntax() {
@@ -2675,6 +3204,10 @@ mod battery_census_tests;
 mod program_env_tests;
 
 #[cfg(test)]
+#[path = "compile_panic_hook_tests.rs"]
+mod panic_hook_tests;
+
+#[cfg(test)]
 #[path = "compile_implemented_by_tests.rs"]
 mod implemented_by_tests;
 
@@ -2685,3 +3218,15 @@ mod implemented_by_order_tests;
 #[cfg(test)]
 #[path = "compile_implemented_by_import_tests.rs"]
 mod implemented_by_import_tests;
+
+#[cfg(test)]
+#[path = "compile_extern_carrier_tests.rs"]
+mod extern_carrier_tests;
+
+#[cfg(test)]
+#[path = "compile_pinned_uint32_tests.rs"]
+mod pinned_uint32_tests;
+
+#[cfg(test)]
+#[path = "compile_pinned_nat_add_tests.rs"]
+mod pinned_nat_add_tests;

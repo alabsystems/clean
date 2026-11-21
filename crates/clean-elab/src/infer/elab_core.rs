@@ -1862,7 +1862,9 @@ impl<'a> ElabCtx<'a> {
             );
         let own_state = std::mem::replace(&mut self.namespace_state, declared_under);
         let own_prefix = std::mem::replace(&mut self.namespace_prefix, declared_in);
+        let own_decl_site = self.decl_site_namespace.take();
         let resolutions = self.template_spelling_resolutions(spellings);
+        self.decl_site_namespace = own_decl_site;
         self.namespace_state = own_state;
         self.namespace_prefix = own_prefix;
         self.namespace_state
@@ -2151,10 +2153,7 @@ impl<'a> ElabCtx<'a> {
         // A user template's free reference resolves from the namespace the
         // template was DECLARED in (Lean pre-resolves it there), not the one
         // it is used in.
-        let namespace_prefix = match name.template_origin() {
-            Some(origin) => SurfaceName::from_name(origin.namespace.clone()),
-            None => self.namespace_prefix.clone(),
-        };
+        let namespace_prefix = self.term_lookup_namespace(name);
         if !namespace_prefix.is_anonymous() && !name.is_global_reference() {
             let mut prefix = namespace_prefix;
             loop {
@@ -2806,7 +2805,7 @@ impl<'a> ElabCtx<'a> {
         }
         // 1. The current namespace outward (with the aliases declared in
         //    those namespaces).
-        let mut prefix = self.namespace_prefix.clone();
+        let mut prefix = self.term_lookup_namespace(spelling);
         while !prefix.is_anonymous() {
             let qualified = prefix.append(spelling).into_name();
             let declared = self.with_private_step(qualified.clone());

@@ -90,6 +90,7 @@ pub(super) fn collect_sorry_usage(
             }
         }
         SurfaceExpr::Paren(_, inner)
+        | SurfaceExpr::Borrowed(_, inner)
         | SurfaceExpr::OutParam(_, inner)
         | SurfaceExpr::SemiOutParam(_, inner)
         | SurfaceExpr::Explicit(_, inner) => collect_sorry_usage(inner, locations),

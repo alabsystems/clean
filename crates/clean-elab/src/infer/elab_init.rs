@@ -180,6 +180,7 @@ impl<'a> ElabCtx<'a> {
             where_termination: Vec::new(),
             aux_decl_locals: std::collections::HashSet::new(),
             let_rec_lift: let_rec_lift::LetRecLiftState::default(),
+            public_param_infos: Vec::new(),
             mutual_lift_entries: Vec::new(),
             mutual_eq_lemmas: Vec::new(),
             logged_deriving_failures: Vec::new(),
@@ -225,6 +226,7 @@ impl<'a> ElabCtx<'a> {
             default_instances: HashMap::new(),
             instance_cache: HashMap::new(),
             tc_caches: RefCell::new(TcCaches::default()),
+            tc_cache_state: RefCell::new(None),
             local_ctx_cache: RefCell::new(None),
             decl_memo: RefCell::new(demand_local_ctx::DeclMemo::default()),
             recursor_auth_cache: RefCell::new(HashMap::new()),
@@ -237,6 +239,8 @@ impl<'a> ElabCtx<'a> {
             },
             term_elab_registry: TermElabRegistry::new(),
             user_term_elabs: HashMap::new(),
+            imported_term_syntax: None,
+            imported_runtime: None,
             meta_value_bindings: HashMap::new(),
             collected_aesop_attrs: Vec::new(),
             collected_simp_attrs: Vec::new(),
@@ -244,22 +248,20 @@ impl<'a> ElabCtx<'a> {
             collected_local_csimp: Vec::new(),
             collected_scoped_csimp: Vec::new(),
             collected_reducibility: Vec::new(),
+            collected_matchers: Vec::new(),
             collected_extern: Vec::new(),
             collected_export: Vec::new(),
             collected_deprecated: Vec::new(),
-            collected_inline: Vec::new(),
-            collected_noinline: Vec::new(),
-            collected_always_inline: Vec::new(),
+            collected_inline_attributes: Vec::new(),
             collected_specialize: Vec::new(),
             collected_csimp: Vec::new(),
             collected_definition_attrs: Vec::new(),
+            simple_equation_sources: Vec::new(),
             collected_congr: Vec::new(),
             collected_ext: Vec::new(),
             collected_grind: Vec::new(),
             collected_refl: Vec::new(),
             collected_symm: Vec::new(),
-            collected_macro_inline: Vec::new(),
-            collected_inline_if_reduce: Vec::new(),
             collected_nospecialize: Vec::new(),
             collected_implemented_by: Vec::new(),
             collected_coe: Vec::new(),
@@ -363,7 +365,11 @@ impl<'a> ElabCtx<'a> {
     /// Take collected extern bindings for registration
     pub(crate) fn take_extern(
         &mut self,
-    ) -> Vec<(Name, String, crate::declared_here::AttributeSite)> {
+    ) -> Vec<(
+        Name,
+        clean_kernel::env::CompilerExternMetadata,
+        crate::declared_here::AttributeSite,
+    )> {
         std::mem::take(&mut self.collected_extern)
     }
 
@@ -377,19 +383,43 @@ impl<'a> ElabCtx<'a> {
         std::mem::take(&mut self.collected_deprecated)
     }
 
+    /// Drain the one ordered compiler-attribute queue.
+    pub(crate) fn take_inline_attributes(
+        &mut self,
+    ) -> Vec<crate::decl_attributes::InlineAttributeUse> {
+        std::mem::take(&mut self.collected_inline_attributes)
+    }
+
+    #[cfg(test)]
+    fn take_inline_mode(&mut self, mode: clean_kernel::env::csimp::InlineMode) -> Vec<Name> {
+        let mut names = Vec::new();
+        self.collected_inline_attributes.retain(|use_| {
+            if use_.mode == mode {
+                names.push(use_.name.clone());
+                false
+            } else {
+                true
+            }
+        });
+        names
+    }
+
     /// Take collected inline hints for registration
+    #[cfg(test)]
     pub(crate) fn take_inline(&mut self) -> Vec<Name> {
-        std::mem::take(&mut self.collected_inline)
+        self.take_inline_mode(clean_kernel::env::csimp::InlineMode::Inline)
     }
 
     /// Take collected noinline hints for registration
+    #[cfg(test)]
     pub(crate) fn take_noinline(&mut self) -> Vec<Name> {
-        std::mem::take(&mut self.collected_noinline)
+        self.take_inline_mode(clean_kernel::env::csimp::InlineMode::NoInline)
     }
 
     /// Take collected always_inline hints for registration
+    #[cfg(test)]
     pub(crate) fn take_always_inline(&mut self) -> Vec<Name> {
-        std::mem::take(&mut self.collected_always_inline)
+        self.take_inline_mode(clean_kernel::env::csimp::InlineMode::AlwaysInline)
     }
 
     /// Take collected specialize hints for registration
@@ -432,13 +462,15 @@ impl<'a> ElabCtx<'a> {
     }
 
     /// Take collected macro_inline hints for registration
+    #[cfg(test)]
     pub(crate) fn take_macro_inline(&mut self) -> Vec<Name> {
-        std::mem::take(&mut self.collected_macro_inline)
+        self.take_inline_mode(clean_kernel::env::csimp::InlineMode::MacroInline)
     }
 
     /// Take collected inline_if_reduce hints for registration
+    #[cfg(test)]
     pub(crate) fn take_inline_if_reduce(&mut self) -> Vec<Name> {
-        std::mem::take(&mut self.collected_inline_if_reduce)
+        self.take_inline_mode(clean_kernel::env::csimp::InlineMode::InlineIfReduce)
     }
 
     /// Take collected nospecialize hints for registration
@@ -550,6 +582,7 @@ impl<'a> ElabCtx<'a> {
             where_termination: Vec::new(),
             aux_decl_locals: std::collections::HashSet::new(),
             let_rec_lift: let_rec_lift::LetRecLiftState::default(),
+            public_param_infos: Vec::new(),
             mutual_lift_entries: Vec::new(),
             mutual_eq_lemmas: Vec::new(),
             logged_deriving_failures: Vec::new(),
@@ -595,6 +628,7 @@ impl<'a> ElabCtx<'a> {
             default_instances: HashMap::new(),
             instance_cache: HashMap::new(),
             tc_caches: RefCell::new(TcCaches::default()),
+            tc_cache_state: RefCell::new(None),
             local_ctx_cache: RefCell::new(None),
             decl_memo: RefCell::new(demand_local_ctx::DeclMemo::default()),
             recursor_auth_cache: RefCell::new(HashMap::new()),
@@ -607,6 +641,8 @@ impl<'a> ElabCtx<'a> {
             },
             term_elab_registry: TermElabRegistry::new(),
             user_term_elabs: HashMap::new(),
+            imported_term_syntax: None,
+            imported_runtime: None,
             meta_value_bindings: HashMap::new(),
             collected_aesop_attrs: Vec::new(),
             collected_simp_attrs: Vec::new(),
@@ -614,22 +650,20 @@ impl<'a> ElabCtx<'a> {
             collected_local_csimp: Vec::new(),
             collected_scoped_csimp: Vec::new(),
             collected_reducibility: Vec::new(),
+            collected_matchers: Vec::new(),
             collected_extern: Vec::new(),
             collected_export: Vec::new(),
             collected_deprecated: Vec::new(),
-            collected_inline: Vec::new(),
-            collected_noinline: Vec::new(),
-            collected_always_inline: Vec::new(),
+            collected_inline_attributes: Vec::new(),
             collected_specialize: Vec::new(),
             collected_csimp: Vec::new(),
             collected_definition_attrs: Vec::new(),
+            simple_equation_sources: Vec::new(),
             collected_congr: Vec::new(),
             collected_ext: Vec::new(),
             collected_grind: Vec::new(),
             collected_refl: Vec::new(),
             collected_symm: Vec::new(),
-            collected_macro_inline: Vec::new(),
-            collected_inline_if_reduce: Vec::new(),
             collected_nospecialize: Vec::new(),
             collected_implemented_by: Vec::new(),
             collected_coe: Vec::new(),

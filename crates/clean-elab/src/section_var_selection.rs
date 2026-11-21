@@ -112,6 +112,16 @@ pub(crate) fn select_section_binders(
     if section_binders.is_empty() {
         return SectionVarSelection::default();
     }
+    // Families select after the type former and constructors have elaborated.
+    if matches!(
+        decl,
+        SurfaceDecl::Inductive { .. } | SurfaceDecl::Structure { .. } | SurfaceDecl::Class { .. }
+    ) {
+        return SectionVarSelection {
+            binders: section_binders.to_vec(),
+            prune: None,
+        };
+    }
     let Some((rule, scan, own_binders)) = scan_decl(decl) else {
         return SectionVarSelection::default();
     };

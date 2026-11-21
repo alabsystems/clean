@@ -21,7 +21,8 @@ pub(crate) use refine::count_placeholders;
 pub(crate) use refine::refine_elaborated;
 pub use refine::{refine, refine_placeholder};
 pub(crate) use refine_bridge::{
-    import_open_term, refine_elaborated_from_pending, refine_eliminator_from_pending_with_tags,
+    import_lifted_term, import_open_term, refine_elaborated_from_pending,
+    refine_eliminator_from_pending_with_tags,
 };
 
 use crate::unify::MetaState;

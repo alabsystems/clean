@@ -12,96 +12,157 @@ use tree_sitter::Node;
 
 impl CParser {
     /// Extract ACSL spec attached to a function (block or line comment)
-    pub(super) fn extract_func_spec(&self, node: Node<'_>, source: &str) -> Option<FuncSpec> {
-        let start_byte = node.start_byte();
-        let nearest_comment = find_nearest_acsl_comment(source, start_byte)?;
-        parse_acsl_spec(&nearest_comment)
+    pub(super) fn extract_func_spec(
+        &self,
+        node: Node<'_>,
+        source: &str,
+    ) -> super::ParseResult<Option<FuncSpec>> {
+        let Some(comment) = find_nearest_acsl_comment(source, node.start_byte()) else {
+            return Ok(None);
+        };
+        parse_acsl_contract(&comment).map(Some).map_err(|message| {
+            let position = node.start_position();
+            super::ParseError::SyntaxError {
+                line: position.row + 1,
+                column: position.column + 1,
+                message: format!("invalid ACSL function contract: {message}"),
+            }
+        })
     }
 }
 
-/// Parse ACSL-style specification comments
+/// Inspect an ACSL annotation using the historical expression representation.
+/// This API can represent an unsupported expression as opaque text in a
+/// variable node. Proof-producing callers must use [`parse_acsl_contract`].
 pub fn parse_acsl_spec(comment: &str) -> Option<FuncSpec> {
-    // Look for /*@ ... */ or //@ ...
-    let content = if let Some(inner) = comment
-        .strip_prefix("/*@")
-        .and_then(|s| s.strip_suffix("*/"))
-    {
-        inner
-    } else {
-        comment.strip_prefix("//@")?
-    };
+    parse_contract(comment, false).ok()
+}
 
-    let mut requires = Vec::new();
-    let mut ensures = Vec::new();
-    let mut assigns: Vec<Location> = Vec::new();
-    let mut reads: Vec<Location> = Vec::new();
-    let mut terminates: Option<Spec> = None;
+/// Parse the supported ACSL contract grammar for verification. All clauses
+/// and predicate terms must be accounted for before any obligations are built.
+pub fn parse_acsl_contract(comment: &str) -> Result<FuncSpec, String> {
+    parse_contract(comment, true)
+}
 
-    for line in content.lines() {
-        let mut line = line.trim();
-        if let Some(rest) = line.strip_prefix("//@") {
-            line = rest.trim();
-        }
-        let line = line.trim_start_matches('@').trim();
-        if let Some(rest) = line.strip_prefix("requires") {
-            requires.push(parse_spec_expr(rest.trim().trim_end_matches(';')));
-        } else if let Some(rest) = line.strip_prefix("ensures") {
-            ensures.push(parse_spec_expr(rest.trim().trim_end_matches(';')));
-        } else if let Some(rest) = line.strip_prefix("terminates") {
-            // ACSL `terminates <pred>;` is a single function-contract clause:
-            // the predicate under which the function is guaranteed to
-            // terminate. Per ACSL there is at most one terminates clause per
-            // contract, so a later clause replaces an earlier one.
-            terminates = Some(parse_spec_expr(rest.trim().trim_end_matches(';')));
-        } else if let Some(rest) = line.strip_prefix("assigns") {
-            let text = rest.trim().trim_end_matches(';');
-            if text == "\\nothing" {
-                assigns.push(Location::Nothing);
-            } else {
-                // Parse each assigned location
-                let parts: Vec<&str> = text.split(',').collect();
-                for part in parts {
-                    let part = part.trim();
-                    if part == "\\nothing" {
-                        assigns.push(Location::Nothing);
-                    } else {
-                        // Treat as a dereference of the variable
-                        assigns.push(Location::Deref(parse_spec_expr(part)));
-                    }
-                }
+fn keyword(text: &str) -> (&str, &str) {
+    let end = text
+        .find(|c: char| !(c.is_alphanumeric() || c == '_'))
+        .unwrap_or(text.len());
+    (&text[..end], text[end..].trim())
+}
+
+fn clause_keyword(text: &str) -> bool {
+    matches!(
+        keyword(text).0,
+        "requires" | "ensures" | "reads" | "assigns" | "terminates"
+    )
+}
+
+/// Separate top-level clauses. Quantifiers and bounded aggregations in the
+/// supported expression grammar contain their own parenthesized semicolons.
+fn clauses(content: &str) -> Result<Vec<&str>, String> {
+    let mut start = 0;
+    let mut closing = Vec::new();
+    let mut result = Vec::new();
+    for (i, ch) in content.char_indices() {
+        match ch {
+            '(' => closing.push(')'),
+            '[' => closing.push(']'),
+            '{' => closing.push('}'),
+            ')' | ']' | '}' if closing.pop() != Some(ch) => {
+                return Err("mismatched delimiter".into())
             }
-        } else if let Some(rest) = line.strip_prefix("reads") {
-            // ACSL `reads <locations>;` declares the read footprint: the set of
-            // memory locations the function may read. Mirrors the `assigns`
-            // clause exactly (comma-separated list, `\nothing` keyword), but
-            // populates `FuncSpec::reads` rather than `assigns`.
-            let text = rest.trim().trim_end_matches(';');
-            if text == "\\nothing" {
-                reads.push(Location::Nothing);
-            } else {
-                // Parse each read location
-                let parts: Vec<&str> = text.split(',').collect();
-                for part in parts {
-                    let part = part.trim();
-                    if part == "\\nothing" {
-                        reads.push(Location::Nothing);
-                    } else {
-                        // Treat as a dereference of the variable
-                        reads.push(Location::Deref(parse_spec_expr(part)));
-                    }
+            ';' if closing.is_empty() => {
+                let clause = content[start..i].trim();
+                if !clause.is_empty() {
+                    result.push(clause);
                 }
+                start = i + 1;
             }
+            // Preserve the historical line-comment spelling with an omitted
+            // terminator before the next clause. Other newlines are whitespace.
+            '\n' if closing.is_empty() && clause_keyword(content[i + 1..].trim_start()) => {
+                let clause = content[start..i].trim();
+                if !clause.is_empty() {
+                    result.push(clause);
+                }
+                start = i + 1;
+            }
+            _ => {}
         }
     }
+    if !closing.is_empty() {
+        return Err("unclosed delimiter".into());
+    }
+    let tail = content[start..].trim();
+    if !tail.is_empty() {
+        result.push(tail);
+    }
+    Ok(result)
+}
 
-    Some(FuncSpec {
-        requires,
-        ensures,
-        assigns,
-        reads,
-        terminates,
-        ..Default::default()
-    })
+fn parse_contract(comment: &str, require_complete_terms: bool) -> Result<FuncSpec, String> {
+    let content = comment
+        .strip_prefix("/*@")
+        .and_then(|s| s.strip_suffix("*/"))
+        .or_else(|| comment.strip_prefix("//@"))
+        .ok_or("expected an ACSL annotation")?;
+    let text = content
+        .lines()
+        .map(|line| {
+            let trimmed = line.trim();
+            trimmed
+                .strip_prefix("//@")
+                .unwrap_or(trimmed)
+                .trim_start_matches('@')
+                .trim()
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let mut parser = PredicateParser {
+        unsupported_term: None,
+    };
+    let mut spec = FuncSpec::default();
+    for clause in clauses(&text)? {
+        let (kind, predicate) = keyword(clause);
+        if predicate.is_empty() {
+            return Err(format!("missing body for clause '{kind}'"));
+        }
+        match kind {
+            "requires" => spec.requires.push(parser.parse_spec_expr(predicate)),
+            "ensures" => spec.ensures.push(parser.parse_spec_expr(predicate)),
+            "terminates" => {
+                if spec.terminates.is_some() {
+                    return Err("duplicate terminates clause".into());
+                }
+                spec.terminates = Some(parser.parse_spec_expr(predicate));
+            }
+            "assigns" | "reads" => {
+                let output = if kind == "reads" {
+                    &mut spec.reads
+                } else {
+                    &mut spec.assigns
+                };
+                for part in split_top_level_commas(predicate) {
+                    if part.is_empty() {
+                        return Err(format!("empty location in {kind} clause"));
+                    }
+                    output.push(if part == "\\nothing" {
+                        Location::Nothing
+                    } else {
+                        Location::Deref(parser.parse_spec_expr(&part))
+                    });
+                }
+            }
+            _ => return Err(format!("unsupported clause '{kind}'")),
+        }
+    }
+    if require_complete_terms {
+        if let Some(term) = parser.unsupported_term {
+            return Err(format!("unsupported or incomplete predicate term '{term}'"));
+        }
+    }
+    Ok(spec)
 }
 
 /// Find the ACSL comment nearest to the given byte offset
@@ -186,14 +247,16 @@ fn find_line_acsl_comment_before(source: &str, start_byte: usize) -> Option<(Str
 /// Precedence (lowest binds last, evaluated left-to-right within a level):
 ///   1. `==>` / `<==>` (implication / equivalence)
 ///   2. `||`
-///   3. `&&`
+///   3. `&&`, followed by bitwise `|`, `^`, `&` (in increasing precedence)
 ///   4. comparisons (`==`, `!=`, `<=`, `>=`, `<`, `>`)
 ///   5. `+` / `-`
 ///   6. `*` / `/` / `%`
 ///   7. unary `!` / `-`
 ///   8. primary (literals, ACSL builtins, parenthesised terms, variables)
-fn parse_spec_expr(s: &str) -> Spec {
-    parse_implies(s.trim())
+struct PredicateParser {
+    // A diagnostic outlives simplification of a parent predicate. A malformed
+    // operand cannot be hidden by folding an enclosing conjunction to false.
+    unsupported_term: Option<String>,
 }
 
 /// Find the byte index of the first top-level (paren-depth 0) occurrence of any
@@ -203,7 +266,7 @@ fn parse_spec_expr(s: &str) -> Spec {
 /// operators that share a prefix are listed first when relevant (e.g. `<==>`
 /// before `<`). The matched op is mapped to a `'static` spelling so the returned
 /// lifetime is independent of `s`.
-fn find_top_level(s: &str, ops: &[&str]) -> Option<(usize, &'static str)> {
+fn find_top_level(s: &str, ops: &[&'static str]) -> Option<(usize, &'static str)> {
     let bytes = s.as_bytes();
     let mut depth: i32 = 0;
     let mut i = 0;
@@ -230,7 +293,7 @@ fn find_top_level(s: &str, ops: &[&str]) -> Option<(usize, &'static str)> {
 
 /// Like [`find_top_level`] but returns the *last* (rightmost) top-level match,
 /// used for left-associative arithmetic reduction.
-fn find_top_level_last(s: &str, ops: &[&str]) -> Option<(usize, &'static str)> {
+fn find_top_level_last(s: &str, ops: &[&'static str]) -> Option<(usize, &'static str)> {
     let bytes = s.as_bytes();
     let mut depth: i32 = 0;
     let mut found: Option<(usize, &'static str)> = None;
@@ -255,30 +318,8 @@ fn find_top_level_last(s: &str, ops: &[&str]) -> Option<(usize, &'static str)> {
 }
 
 /// If `prefix` begins with one of `ops`, return its `'static` spelling.
-fn match_op_at(prefix: &str, ops: &[&str]) -> Option<&'static str> {
-    for &op in ops {
-        if prefix.starts_with(op) {
-            return Some(match op {
-                "<==>" => "<==>",
-                "==>" => "==>",
-                "||" => "||",
-                "&&" => "&&",
-                "==" => "==",
-                "!=" => "!=",
-                "<=" => "<=",
-                ">=" => ">=",
-                "<" => "<",
-                ">" => ">",
-                "+" => "+",
-                "-" => "-",
-                "*" => "*",
-                "/" => "/",
-                "%" => "%",
-                _ => continue,
-            });
-        }
-    }
-    None
+fn match_op_at(prefix: &str, ops: &[&'static str]) -> Option<&'static str> {
+    ops.iter().copied().find(|op| prefix.starts_with(op))
 }
 
 /// Strip one or more layers of fully-enclosing parentheses, if present.
@@ -312,264 +353,307 @@ fn strip_outer_parens(s: &str) -> &str {
     s
 }
 
-/// Level 1: implication (`==>`) and equivalence (`<==>`), right-associative.
-fn parse_implies(s: &str) -> Spec {
-    let s = s.trim();
-    if let Some((idx, op)) = find_top_level(s, &["<==>", "==>"]) {
-        let left = parse_or(&s[..idx]);
-        let right = parse_implies(&s[idx + op.len()..]);
-        return match op {
-            "<==>" => Spec::iff(left, right),
-            _ => Spec::implies(left, right),
-        };
-    }
-    parse_or(s)
-}
+const BITWISE_OPS: &[(&'static str, BinOp)] = &[
+    ("|", BinOp::BitOr),
+    ("^", BinOp::BitXor),
+    ("&", BinOp::BitAnd),
+];
 
-/// Level 2: logical or (`||`), left-associative.
-fn parse_or(s: &str) -> Spec {
-    let s = s.trim();
-    let mut operands = Vec::new();
-    let mut rest = s;
-    while let Some((idx, _)) = find_top_level(rest, &["||"]) {
-        operands.push(parse_and(&rest[..idx]));
-        rest = &rest[idx + 2..];
+impl PredicateParser {
+    fn parse_spec_expr(&mut self, s: &str) -> Spec {
+        self.parse_implies(s.trim())
     }
-    operands.push(parse_and(rest));
-    Spec::or(operands)
-}
 
-/// Level 3: logical and (`&&`), left-associative.
-fn parse_and(s: &str) -> Spec {
-    let s = s.trim();
-    let mut operands = Vec::new();
-    let mut rest = s;
-    while let Some((idx, _)) = find_top_level(rest, &["&&"]) {
-        operands.push(parse_cmp(&rest[..idx]));
-        rest = &rest[idx + 2..];
-    }
-    operands.push(parse_cmp(rest));
-    Spec::and(operands)
-}
-
-/// Level 4: comparisons. We parse a single top-level comparison (the leftmost),
-/// matching the leniency of ACSL surface usage. Longer operators are tried
-/// before their prefixes (`<=` before `<`).
-fn parse_cmp(s: &str) -> Spec {
-    let s = s.trim();
-    if let Some((idx, op)) = find_top_level(s, &["==", "!=", "<=", ">=", "<", ">"]) {
-        let left = parse_add(&s[..idx]);
-        let right = parse_add(&s[idx + op.len()..]);
-        let bin = match op {
-            "==" => BinOp::Eq,
-            "!=" => BinOp::Ne,
-            "<=" => BinOp::Le,
-            ">=" => BinOp::Ge,
-            "<" => BinOp::Lt,
-            _ => BinOp::Gt,
-        };
-        return Spec::binop(bin, left, right);
-    }
-    parse_add(s)
-}
-
-/// Level 5: additive (`+`, `-`), left-associative.
-fn parse_add(s: &str) -> Spec {
-    let s = s.trim();
-    // Reduce on the rightmost top-level +/- so the recursion accumulates the
-    // higher-up additions on the left (left-associative reduction).
-    if let Some((idx, op)) = find_top_level_last(s, &["+", "-"]) {
-        // A leading '-' (or '+') is unary, not a binary operator.
-        if idx == 0 {
-            return parse_mul(s);
+    /// Level 1: implication (`==>`) and equivalence (`<==>`), right-associative.
+    fn parse_implies(&mut self, s: &str) -> Spec {
+        let s = s.trim();
+        if let Some((idx, op)) = find_top_level(s, &["<==>", "==>"]) {
+            let left = self.parse_or(&s[..idx]);
+            let right = self.parse_implies(&s[idx + op.len()..]);
+            return match op {
+                "<==>" => Spec::iff(left, right),
+                _ => Spec::implies(left, right),
+            };
         }
-        let left = parse_add(&s[..idx]);
-        let right = parse_mul(&s[idx + op.len()..]);
-        let bin = if op == "+" { BinOp::Add } else { BinOp::Sub };
-        return Spec::binop(bin, left, right);
+        self.parse_or(s)
     }
-    parse_mul(s)
-}
 
-/// Level 6: multiplicative (`*`, `/`, `%`), left-associative.
-fn parse_mul(s: &str) -> Spec {
-    let s = s.trim();
-    if let Some((idx, op)) = find_top_level_last(s, &["*", "/", "%"]) {
-        let left = parse_mul(&s[..idx]);
-        let right = parse_unary(&s[idx + op.len()..]);
-        let bin = match op {
-            "*" => BinOp::Mul,
-            "/" => BinOp::Div,
-            _ => BinOp::Mod,
+    /// Level 2: logical or (`||`), left-associative.
+    fn parse_or(&mut self, s: &str) -> Spec {
+        let s = s.trim();
+        let mut operands = Vec::new();
+        let mut rest = s;
+        while let Some((idx, _)) = find_top_level(rest, &["||"]) {
+            operands.push(self.parse_and(&rest[..idx]));
+            rest = &rest[idx + 2..];
+        }
+        operands.push(self.parse_and(rest));
+        Spec::or(operands)
+    }
+
+    /// Level 3: logical and (`&&`), left-associative.
+    fn parse_and(&mut self, s: &str) -> Spec {
+        let s = s.trim();
+        let mut operands = Vec::new();
+        let mut rest = s;
+        while let Some((idx, _)) = find_top_level(rest, &["&&"]) {
+            operands.push(self.parse_bitwise(&rest[..idx], BITWISE_OPS));
+            rest = &rest[idx + 2..];
+        }
+        operands.push(self.parse_bitwise(rest, BITWISE_OPS));
+        Spec::and(operands)
+    }
+
+    /// C bitwise binary operators bind between logical AND and equality.
+    fn parse_bitwise(&mut self, s: &str, levels: &[(&'static str, BinOp)]) -> Spec {
+        let Some((&(token, op), tighter)) = levels.split_first() else {
+            return self.parse_cmp(s);
         };
-        return Spec::binop(bin, left, right);
+        let mut rest = s;
+        let mut value = None;
+        while let Some((i, _)) = find_top_level(rest, &[token]) {
+            let part = self.parse_bitwise(&rest[..i], tighter);
+            value = Some(match value {
+                None => part,
+                Some(left) => Spec::binop(op, left, part),
+            });
+            rest = &rest[i + token.len()..];
+        }
+        let last = self.parse_bitwise(rest, tighter);
+        match value {
+            None => last,
+            Some(left) => Spec::binop(op, left, last),
+        }
     }
-    parse_unary(s)
-}
 
-/// Level 7: unary `!` (logical not) and `-` (negation).
-fn parse_unary(s: &str) -> Spec {
-    let s = s.trim();
-    if let Some(rest) = s.strip_prefix('!') {
-        return Spec::not(parse_unary(rest));
+    /// Level 4: comparisons. We parse a single top-level comparison (the leftmost),
+    /// matching the leniency of ACSL surface usage. Longer operators are tried
+    /// before their prefixes (`<=` before `<`).
+    fn parse_cmp(&mut self, s: &str) -> Spec {
+        let s = s.trim();
+        if let Some((idx, op)) = find_top_level(s, &["==", "!=", "<=", ">=", "<", ">"]) {
+            let left = self.parse_add(&s[..idx]);
+            let right = self.parse_add(&s[idx + op.len()..]);
+            let bin = match op {
+                "==" => BinOp::Eq,
+                "!=" => BinOp::Ne,
+                "<=" => BinOp::Le,
+                ">=" => BinOp::Ge,
+                "<" => BinOp::Lt,
+                _ => BinOp::Gt,
+            };
+            return Spec::binop(bin, left, right);
+        }
+        self.parse_add(s)
     }
-    if let Some(rest) = s.strip_prefix('-') {
-        let operand = parse_unary(rest);
-        if let Spec::Int(value) = operand {
-            if let Some(negated) = value.checked_neg() {
-                return Spec::Int(negated);
+
+    /// Level 5: additive (`+`, `-`), left-associative.
+    fn parse_add(&mut self, s: &str) -> Spec {
+        let s = s.trim();
+        // Reduce on the rightmost top-level +/- so the recursion accumulates the
+        // higher-up additions on the left (left-associative reduction).
+        if let Some((idx, op)) = find_top_level_last(s, &["+", "-"]) {
+            // A leading '-' (or '+') is unary, not a binary operator.
+            if idx == 0 {
+                return self.parse_mul(s);
+            }
+            let left = self.parse_add(&s[..idx]);
+            let right = self.parse_mul(&s[idx + op.len()..]);
+            let bin = if op == "+" { BinOp::Add } else { BinOp::Sub };
+            return Spec::binop(bin, left, right);
+        }
+        self.parse_mul(s)
+    }
+
+    /// Level 6: multiplicative (`*`, `/`, `%`), left-associative.
+    fn parse_mul(&mut self, s: &str) -> Spec {
+        let s = s.trim();
+        if let Some((idx, op)) = find_top_level_last(s, &["*", "/", "%"]) {
+            let left = self.parse_mul(&s[..idx]);
+            let right = self.parse_unary(&s[idx + op.len()..]);
+            let bin = match op {
+                "*" => BinOp::Mul,
+                "/" => BinOp::Div,
+                _ => BinOp::Mod,
+            };
+            return Spec::binop(bin, left, right);
+        }
+        self.parse_unary(s)
+    }
+
+    /// Level 7: unary `!` (logical not) and `-` (negation).
+    fn parse_unary(&mut self, s: &str) -> Spec {
+        let s = s.trim();
+        if let Some(rest) = s.strip_prefix('!') {
+            return Spec::not(self.parse_unary(rest));
+        }
+        if let Some(rest) = s.strip_prefix('-') {
+            let operand = self.parse_unary(rest);
+            if let Spec::Int(value) = operand {
+                if let Some(negated) = value.checked_neg() {
+                    return Spec::Int(negated);
+                }
+                return Spec::UnaryOp {
+                    op: UnaryOp::Neg,
+                    operand: Box::new(Spec::Int(value)),
+                };
             }
             return Spec::UnaryOp {
                 op: UnaryOp::Neg,
-                operand: Box::new(Spec::Int(value)),
+                operand: Box::new(operand),
             };
         }
-        return Spec::UnaryOp {
-            op: UnaryOp::Neg,
-            operand: Box::new(operand),
-        };
-    }
-    parse_primary(s)
-}
-
-/// Level 8: primary terms — literals, ACSL builtins, parenthesised terms,
-/// logic-function calls, and bare variables.
-fn parse_primary(s: &str) -> Spec {
-    let s = s.trim();
-
-    // Parenthesised sub-expression.
-    let unwrapped = strip_outer_parens(s);
-    if unwrapped != s {
-        return parse_spec_expr(unwrapped);
+        self.parse_primary(s)
     }
 
-    // ACSL builtin keywords without arguments.
-    match s {
-        "\\result" => return Spec::Result,
-        "\\true" => return Spec::True,
-        "\\false" => return Spec::False,
-        "\\null" => return Spec::Null,
-        _ => {}
-    }
+    /// Level 8: primary terms — literals, ACSL builtins, parenthesised terms,
+    /// logic-function calls, and bare variables.
+    fn parse_primary(&mut self, s: &str) -> Spec {
+        let s = s.trim();
 
-    // ACSL quantifiers: \forall T x; P  and  \exists T x; P.
-    // The inner argument text is split on the *first* top-level ';' into a
-    // binder declarator (`T x`) and the predicate body. The binder declarator
-    // is a logic type followed by a single variable name.
-    for (kw, is_forall) in [("\\forall", true), ("\\exists", false)] {
-        if let Some(args) = strip_call(s, kw) {
-            if let Some((binder, body)) = split_first_top_level_semicolon(&args) {
-                if let Some((ty, var)) = parse_binder(&binder) {
-                    let body = Box::new(parse_spec_expr(&body));
-                    return if is_forall {
-                        Spec::Forall { var, ty, body }
-                    } else {
-                        Spec::Exists { var, ty, body }
-                    };
-                }
-            }
+        // Parenthesised sub-expression.
+        let unwrapped = strip_outer_parens(s);
+        if unwrapped != s {
+            return self.parse_spec_expr(unwrapped);
         }
-    }
 
-    // ACSL bounded aggregations: \sum(lo, hi, var; body) and friends. The head
-    // (before ';') is `lo, hi, var`; the tail (after ';') is the lambda body
-    // evaluated for each `var` in `[lo, hi]`.
-    for kw in ["\\sum", "\\product", "\\min", "\\max", "\\numof"] {
-        if let Some(args) = strip_call(s, kw) {
-            if let Some((head, body)) = split_first_top_level_semicolon(&args) {
-                let head_parts = split_top_level_commas(&head);
-                if head_parts.len() == 3 {
-                    if let Some(var) = parse_label(&head_parts[2]) {
-                        let lo = Box::new(parse_spec_expr(&head_parts[0]));
-                        let hi = Box::new(parse_spec_expr(&head_parts[1]));
-                        let body = Box::new(parse_spec_expr(&body));
-                        return match kw {
-                            "\\sum" => Spec::Sum { lo, hi, var, body },
-                            "\\product" => Spec::Product { lo, hi, var, body },
-                            "\\min" => Spec::Min { lo, hi, var, body },
-                            "\\max" => Spec::Max { lo, hi, var, body },
-                            _ => Spec::NumOf { lo, hi, var, body },
+        // ACSL builtin keywords without arguments.
+        match s {
+            "\\result" => return Spec::Result,
+            "\\true" => return Spec::True,
+            "\\false" => return Spec::False,
+            "\\null" => return Spec::Null,
+            _ => {}
+        }
+
+        // ACSL quantifiers: \forall T x; P  and  \exists T x; P.
+        // The inner argument text is split on the *first* top-level ';' into a
+        // binder declarator (`T x`) and the predicate body. The binder declarator
+        // is a logic type followed by a single variable name.
+        for (kw, is_forall) in [("\\forall", true), ("\\exists", false)] {
+            if let Some(args) = strip_call(s, kw) {
+                if let Some((binder, body)) = split_first_top_level_semicolon(&args) {
+                    if let Some((ty, var)) = parse_binder(&binder) {
+                        let body = Box::new(self.parse_spec_expr(&body));
+                        return if is_forall {
+                            Spec::Forall { var, ty, body }
+                        } else {
+                            Spec::Exists { var, ty, body }
                         };
                     }
                 }
             }
         }
-    }
 
-    // ACSL builtins with a parenthesised argument list.
-    if let Some(args) = strip_call(s, "\\at") {
-        // \at(e, Label): value of `e` evaluated at program point `Label`.
-        // The first argument is a spec expression; the second is a label
-        // (a standard ACSL label such as Pre/Post/Here/Old/Init or a named
-        // C label). Exactly two arguments are required; a malformed form
-        // (missing label or extra arguments) is not a valid \at and degrades
-        // to the bare-variable fallback below rather than mis-constructing.
-        let parts = split_top_level_commas(&args);
-        if parts.len() == 2 {
-            if let Some(label) = parse_label(&parts[1]) {
-                return Spec::At {
-                    expr: Box::new(parse_spec_expr(&parts[0])),
-                    label,
+        // ACSL bounded aggregations: \sum(lo, hi, var; body) and friends. The head
+        // (before ';') is `lo, hi, var`; the tail (after ';') is the lambda body
+        // evaluated for each `var` in `[lo, hi]`.
+        for kw in ["\\sum", "\\product", "\\min", "\\max", "\\numof"] {
+            if let Some(args) = strip_call(s, kw) {
+                if let Some((head, body)) = split_first_top_level_semicolon(&args) {
+                    let head_parts = split_top_level_commas(&head);
+                    if head_parts.len() == 3 {
+                        if let Some(var) = parse_label(&head_parts[2]) {
+                            let lo = Box::new(self.parse_spec_expr(&head_parts[0]));
+                            let hi = Box::new(self.parse_spec_expr(&head_parts[1]));
+                            let body = Box::new(self.parse_spec_expr(&body));
+                            return match kw {
+                                "\\sum" => Spec::Sum { lo, hi, var, body },
+                                "\\product" => Spec::Product { lo, hi, var, body },
+                                "\\min" => Spec::Min { lo, hi, var, body },
+                                "\\max" => Spec::Max { lo, hi, var, body },
+                                _ => Spec::NumOf { lo, hi, var, body },
+                            };
+                        }
+                    }
+                }
+            }
+        }
+
+        // ACSL builtins with a parenthesised argument list.
+        if let Some(args) = strip_call(s, "\\at") {
+            // \at(e, Label): value of `e` evaluated at program point `Label`.
+            // The first argument is a spec expression; the second is a label
+            // (a standard ACSL label such as Pre/Post/Here/Old/Init or a named
+            // C label). Exactly two arguments are required; a malformed form
+            // (missing label or extra arguments) is not a valid \at and degrades
+            // to the bare-variable fallback below rather than mis-constructing.
+            let parts = split_top_level_commas(&args);
+            if parts.len() == 2 {
+                if let Some(label) = parse_label(&parts[1]) {
+                    return Spec::At {
+                        expr: Box::new(self.parse_spec_expr(&parts[0])),
+                        label,
+                    };
+                }
+            }
+        }
+        if let Some(args) = strip_call(s, "\\old") {
+            return Spec::Old(Box::new(self.parse_spec_expr(&args)));
+        }
+        if let Some(args) = strip_call(s, "\\valid_read") {
+            return Spec::ValidRead(Box::new(self.parse_spec_expr(&args)));
+        }
+        if let Some(args) = strip_call(s, "\\valid") {
+            return Spec::Valid(Box::new(self.parse_spec_expr(&args)));
+        }
+        if let Some(args) = strip_call(s, "\\separated") {
+            return Spec::Separated(
+                split_top_level_commas(&args)
+                    .iter()
+                    .map(|p| self.parse_spec_expr(p))
+                    .collect(),
+            );
+        }
+        if let Some(args) = strip_call(s, "\\fresh") {
+            return Spec::Fresh(Box::new(self.parse_spec_expr(&args)));
+        }
+        if let Some(args) = strip_call(s, "\\freeable") {
+            return Spec::Freeable(Box::new(self.parse_spec_expr(&args)));
+        }
+
+        // Integer literal.
+        if let Ok(n) = s.parse::<i64>() {
+            return Spec::Int(n);
+        }
+
+        // Logic-function call: name(arg, ...) where name is an ordinary identifier
+        // (not an ACSL `\builtin`).
+        if let Some((head, rest)) = s.split_once('(') {
+            let head = head.trim();
+            if is_source_identifier(head)
+                && !head.starts_with('\\')
+                && head.chars().all(|c| c.is_alphanumeric() || c == '_')
+                && rest.ends_with(')')
+            {
+                let inner = &rest[..rest.len() - 1];
+                let args = if inner.trim().is_empty() {
+                    Vec::new()
+                } else {
+                    split_top_level_commas(inner)
+                        .iter()
+                        .map(|p| self.parse_spec_expr(p))
+                        .collect()
+                };
+                return Spec::Call {
+                    func: head.to_string(),
+                    args,
                 };
             }
         }
-    }
-    if let Some(args) = strip_call(s, "\\old") {
-        return Spec::Old(Box::new(parse_spec_expr(&args)));
-    }
-    if let Some(args) = strip_call(s, "\\valid_read") {
-        return Spec::ValidRead(Box::new(parse_spec_expr(&args)));
-    }
-    if let Some(args) = strip_call(s, "\\valid") {
-        return Spec::Valid(Box::new(parse_spec_expr(&args)));
-    }
-    if let Some(args) = strip_call(s, "\\separated") {
-        return Spec::Separated(
-            split_top_level_commas(&args)
-                .iter()
-                .map(|p| parse_spec_expr(p))
-                .collect(),
-        );
-    }
-    if let Some(args) = strip_call(s, "\\fresh") {
-        return Spec::Fresh(Box::new(parse_spec_expr(&args)));
-    }
-    if let Some(args) = strip_call(s, "\\freeable") {
-        return Spec::Freeable(Box::new(parse_spec_expr(&args)));
-    }
 
-    // Integer literal.
-    if let Ok(n) = s.parse::<i64>() {
-        return Spec::Int(n);
-    }
-
-    // Logic-function call: name(arg, ...) where name is an ordinary identifier
-    // (not an ACSL `\builtin`).
-    if let Some((head, rest)) = s.split_once('(') {
-        let head = head.trim();
-        if !head.is_empty()
-            && !head.starts_with('\\')
-            && head.chars().all(|c| c.is_alphanumeric() || c == '_')
-            && rest.ends_with(')')
-        {
-            let inner = &rest[..rest.len() - 1];
-            let args = if inner.trim().is_empty() {
-                Vec::new()
-            } else {
-                split_top_level_commas(inner)
-                    .iter()
-                    .map(|p| parse_spec_expr(p))
-                    .collect()
-            };
-            return Spec::Call {
-                func: head.to_string(),
-                args,
-            };
+        // Default: treat as a (possibly compound) variable reference.
+        if self.unsupported_term.is_none() && !is_source_identifier(s) {
+            self.unsupported_term = Some(s.to_owned());
         }
+        Spec::Var(s.to_string())
     }
+}
 
-    // Default: treat as a (possibly compound) variable reference.
-    Spec::Var(s.to_string())
+fn is_source_identifier(name: &str) -> bool {
+    let mut chars = name.chars();
+    chars.next().is_some_and(|c| c.is_alphabetic() || c == '_')
+        && chars.all(|c| c.is_alphanumeric() || c == '_')
 }
 
 /// If `s` is exactly `keyword(...)` with balanced parentheses enclosing the
@@ -644,15 +728,15 @@ fn split_first_top_level_semicolon(s: &str) -> Option<(String, String)> {
 /// Parse a quantifier binder declarator `T x` into `(type, variable name)`.
 ///
 /// ACSL allows a comma-separated list of variables sharing a type (`int i, j`),
-/// but we model a single binder per quantifier node, so only the first variable
-/// is taken. The type is everything up to the last whitespace-separated token,
+/// but we model a single binder per quantifier node, so a multi-variable list is unsupported.
+/// The type is everything up to the last whitespace-separated token,
 /// which is the variable name. Returns `None` for a malformed binder (no
 /// variable name or an unrecognised type).
 fn parse_binder(s: &str) -> Option<(CType, String)> {
     let s = s.trim();
     // The variable name is the last identifier; the type is everything before.
     let (ty_part, var_part) = s.rsplit_once(char::is_whitespace)?;
-    let var = var_part.split(',').next()?.trim();
+    let var = var_part.trim();
     if var.is_empty() || !is_identifier(var) {
         return None;
     }

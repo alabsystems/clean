@@ -30,9 +30,9 @@
 //!   `.olean` (module-trust round 31);
 //! - the three artifact files it wrote;
 //!
-//! plus the builder identity, whether the build ran with
-//! `--permissive-imports`, and the `lean` arguments (`leanOptions`,
-//! `moreLeanArgs`) the module was compiled with.
+//! plus the builder identity, the source world and its permission to load
+//! Lean imports, whether the build ran with `--permissive-imports`, and the
+//! `lean` arguments (`leanOptions`, `moreLeanArgs`) used for the module.
 //!
 //! A module is reused only when a trace exists and every one of those digests
 //! matches the files on disk NOW. Anything else — no trace (an artifact some
@@ -60,7 +60,7 @@ use std::path::{Path, PathBuf};
 
 /// Schema tag of a `.clean-trace` file; a trace with any other tag is not
 /// read as a match.
-const TRACE_SCHEMA: &str = "clean-lake-build-trace-v2";
+const TRACE_SCHEMA: &str = "clean-lake-build-trace-v3";
 
 /// One module's build trace (see the module docs).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -71,6 +71,10 @@ pub(crate) struct ModuleBuildTrace {
     builder: String,
     /// Digest of the module's source file.
     source: String,
+    /// Source language selected from the project's toolchain.
+    source_world: String,
+    /// Whether that toolchain can supply Lean imports.
+    lean_imports_permitted: bool,
     /// Per in-workspace module of the transitive import closure: the digest
     /// of its artifact files as they were when this module was built.
     inputs: BTreeMap<String, String>,
@@ -158,6 +162,8 @@ pub fn digest_artifact_parts(parts: &[PathBuf; 3]) -> LakeResult<String> {
 /// written).
 pub(crate) struct TraceInputs {
     pub(crate) source: Vec<u8>,
+    pub(crate) source_world: &'static str,
+    pub(crate) lean_imports_permitted: bool,
     pub(crate) inputs: BTreeMap<String, String>,
     pub(crate) stdlib: BTreeMap<String, String>,
     pub(crate) permissive_imports: bool,
@@ -170,6 +176,8 @@ impl TraceInputs {
             schema: TRACE_SCHEMA.to_string(),
             builder: builder_identity(),
             source: digest_bytes(&self.source),
+            source_world: self.source_world.to_string(),
+            lean_imports_permitted: self.lean_imports_permitted,
             inputs: self.inputs,
             stdlib: self.stdlib,
             permissive_imports: self.permissive_imports,
@@ -231,6 +239,11 @@ pub(crate) fn reuse_refusal(
     }
     if recorded.source != digest_bytes(&current.source) {
         return Ok(Some("source changed"));
+    }
+    if recorded.source_world != current.source_world
+        || recorded.lean_imports_permitted != current.lean_imports_permitted
+    {
+        return Ok(Some("source world changed"));
     }
     if recorded.inputs != current.inputs {
         return Ok(Some("a dependency's artifact changed"));

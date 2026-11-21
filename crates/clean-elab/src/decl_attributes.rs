@@ -24,10 +24,42 @@ use crate::declared_here::{declared_by, AttributeSite, ElabUnit};
 use crate::{
     instances, register_aesop_rule, register_user_derive_handler, ElabCtx, ElabError, FileContext,
 };
+use clean_kernel::env::csimp::InlineMode;
 use clean_kernel::env::{
     GrindAttrKind, Reducibility, SimpPriority as KernelSimpPriority, TrustedEnvExt,
 };
-use clean_parser::AesopAttr;
+use clean_parser::{AesopAttr, Attribute};
+
+/// One inline attribute in parser order. Enum attributes are global and may
+/// only target declarations created by the current elaboration run.
+#[derive(Debug, Clone)]
+pub(crate) struct InlineAttributeUse {
+    pub name: Name,
+    pub mode: InlineMode,
+    pub site: AttributeSite,
+    pub scope: Option<&'static str>,
+}
+
+pub(crate) fn inline_mode(attribute: &Attribute) -> Option<InlineMode> {
+    Some(match attribute {
+        Attribute::Inline => InlineMode::Inline,
+        Attribute::Noinline => InlineMode::NoInline,
+        Attribute::AlwaysInline => InlineMode::AlwaysInline,
+        Attribute::MacroInline => InlineMode::MacroInline,
+        Attribute::InlineIfReduce => InlineMode::InlineIfReduce,
+        _ => return None,
+    })
+}
+
+pub(crate) fn inline_attribute_name(mode: InlineMode) -> &'static str {
+    match mode {
+        InlineMode::Inline => "inline",
+        InlineMode::NoInline => "noinline",
+        InlineMode::AlwaysInline => "always_inline",
+        InlineMode::MacroInline => "macro_inline",
+        InlineMode::InlineIfReduce => "inline_if_reduce",
+    }
+}
 
 /// Every attribute an elaboration collected, drained out of its `ElabCtx`.
 #[derive(Debug, Default)]
@@ -37,13 +69,16 @@ pub(crate) struct CtxAttributes {
     /// The subset of `simp_attrs` registered by `local simp`.
     local_simp_attrs: Vec<Name>,
     reducibility_attrs: Vec<(Name, Reducibility)>,
+    pub(crate) matchers: crate::source_family_authority::GeneratedMatchers,
     /// `@[extern]` bindings, with where each was written.
-    extern_attrs: Vec<(Name, String, AttributeSite)>,
+    extern_attrs: Vec<(
+        Name,
+        clean_kernel::env::CompilerExternMetadata,
+        AttributeSite,
+    )>,
     export_attrs: Vec<(Name, String)>,
     deprecated_attrs: Vec<(Name, Option<String>)>,
-    inline_attrs: Vec<Name>,
-    noinline_attrs: Vec<Name>,
-    always_inline_attrs: Vec<Name>,
+    inline_attrs: Vec<InlineAttributeUse>,
     specialize_attrs: Vec<Name>,
     csimp_attrs: Vec<Name>,
     definition_attrs: Vec<crate::definition_attrs::NamedAttribute>,
@@ -56,8 +91,6 @@ pub(crate) struct CtxAttributes {
     grind_attrs: Vec<(Name, GrindAttrKind)>,
     refl_attrs: Vec<Name>,
     symm_attrs: Vec<Name>,
-    macro_inline_attrs: Vec<Name>,
-    inline_if_reduce_attrs: Vec<Name>,
     nospecialize_attrs: Vec<Name>,
     implemented_by_attrs: Vec<crate::implemented_by::ImplementedByUse>,
     coe_attrs: Vec<Name>,
@@ -74,6 +107,8 @@ pub(crate) struct CtxAttributes {
     /// Parameter names of the `where` / `let rec` auxiliaries the declaration
     /// lifted (`parent.go`), for named arguments on them.
     let_rec_param_infos: Vec<(Name, Vec<(Name, clean_kernel::BinderInfo)>)>,
+    /// Complete elaborated public headers, including auto-bound implicits.
+    public_param_infos: Vec<crate::infer::PublicParamInfos>,
     /// Members a recursive `mutual` block was lifted into (gap G23).
     mutual_lift_entries: Vec<crate::infer::mutual_lift::MutualLiftEntry>,
     mutual_eq_lemmas: Vec<crate::infer::mutual_lift::PendingEqLemma>,
@@ -82,18 +117,17 @@ pub(crate) struct CtxAttributes {
 impl CtxAttributes {
     /// Drain every attribute out of `ctx`. Must run BEFORE `ctx` is dropped;
     /// after this the context holds none.
-    pub(crate) fn collect(ctx: &mut ElabCtx<'_>) -> Self {
+    pub(crate) fn collect(ctx: &mut ElabCtx<'_>, result: Option<&crate::ElabResult>) -> Self {
         Self {
             aesop_attrs: ctx.take_aesop_attrs(),
             simp_attrs: ctx.take_simp_attrs(),
             local_simp_attrs: ctx.take_local_simp(),
             reducibility_attrs: ctx.take_reducibility(),
+            matchers: std::mem::take(&mut ctx.collected_matchers),
             extern_attrs: ctx.take_extern(),
             export_attrs: ctx.take_export(),
             deprecated_attrs: ctx.take_deprecated(),
-            inline_attrs: ctx.take_inline(),
-            noinline_attrs: ctx.take_noinline(),
-            always_inline_attrs: ctx.take_always_inline(),
+            inline_attrs: ctx.take_inline_attributes(),
             specialize_attrs: ctx.take_specialize(),
             csimp_attrs: ctx.take_csimp(),
             definition_attrs: ctx.take_definition_attrs(),
@@ -104,8 +138,6 @@ impl CtxAttributes {
             grind_attrs: ctx.take_grind(),
             refl_attrs: ctx.take_refl(),
             symm_attrs: ctx.take_symm(),
-            macro_inline_attrs: ctx.take_macro_inline(),
-            inline_if_reduce_attrs: ctx.take_inline_if_reduce(),
             nospecialize_attrs: ctx.take_nospecialize(),
             implemented_by_attrs: ctx.take_implemented_by(),
             coe_attrs: ctx.take_coe(),
@@ -118,6 +150,7 @@ impl CtxAttributes {
             derive_handler_attrs: ctx.take_derive_handler(),
             attribute_removals: ctx.take_attribute_removals(),
             let_rec_param_infos: ctx.take_let_rec_param_infos(),
+            public_param_infos: ctx.take_public_param_infos(result),
             mutual_lift_entries: ctx.take_mutual_lift_entries(),
             mutual_eq_lemmas: ctx.take_mutual_eq_lemmas(),
         }
@@ -143,12 +176,11 @@ impl CtxAttributes {
             simp_attrs,
             local_simp_attrs,
             reducibility_attrs,
+            matchers: _,
             extern_attrs,
             export_attrs,
             deprecated_attrs,
             inline_attrs,
-            noinline_attrs,
-            always_inline_attrs,
             specialize_attrs,
             csimp_attrs,
             definition_attrs,
@@ -159,8 +191,6 @@ impl CtxAttributes {
             grind_attrs,
             refl_attrs,
             symm_attrs,
-            macro_inline_attrs,
-            inline_if_reduce_attrs,
             nospecialize_attrs,
             implemented_by_attrs,
             coe_attrs,
@@ -173,6 +203,7 @@ impl CtxAttributes {
             derive_handler_attrs,
             attribute_removals,
             let_rec_param_infos,
+            public_param_infos,
             mutual_lift_entries,
             mutual_eq_lemmas,
         } = self;
@@ -225,6 +256,11 @@ impl CtxAttributes {
             }
         }
 
+        // The checked public telescope supersedes the surface-only fallback.
+        for row in public_param_infos {
+            row.register(env)?;
+        }
+
         // Now register attributes that reference the declaration
 
         // Register aesop rules
@@ -264,7 +300,10 @@ impl CtxAttributes {
                     decl: decl_name,
                 });
             }
-            env.register_extern(decl_name, extern_name);
+            env.register_extern_metadata(decl_name, extern_name)
+                .map_err(|error| ElabError::Unsupported {
+                    feature: format!("extern metadata carrier: {error}"),
+                })?;
         }
 
         // Register export bindings
@@ -277,19 +316,37 @@ impl CtxAttributes {
             env.register_deprecated(name, msg);
         }
 
-        // Register inline hints
-        for name in inline_attrs {
-            env.register_inline(name);
-        }
-
-        // Register noinline hints
-        for name in noinline_attrs {
-            env.register_noinline(name);
-        }
-
-        // Register always_inline hints
-        for name in always_inline_attrs {
-            env.register_always_inline(name);
+        // Preserve parser order: these five attributes share one enum table.
+        // Validate here as well as during collection, so every registration
+        // path refuses invalid scope or an imported declaration.
+        let unit = ElabUnit::of(file_ctx.as_deref());
+        for use_ in inline_attrs {
+            let attribute = inline_attribute_name(use_.mode);
+            if let Some(scope) = use_.scope {
+                return Err(ElabError::Unsupported {
+                    feature: format!("attribute '{attribute}' must be global, not {scope}"),
+                });
+            }
+            if use_.site == AttributeSite::AttributeCommand && !declared_by(env, unit, &use_.name) {
+                return Err(ElabError::Unsupported {
+                    feature: format!("Cannot add attribute `[{attribute}]` to declaration `{}` because it is in an imported module", use_.name),
+                });
+            }
+            if use_.mode == InlineMode::MacroInline
+                && crate::source_kind::get(env, &use_.name)
+                    != Some(clean_kernel::ConstantKind::Definition)
+            {
+                return Err(ElabError::Unsupported {
+                    feature: format!("attribute 'macro_inline' cannot be applied to {}: only definitions are supported", use_.name),
+                });
+            }
+            match use_.mode {
+                InlineMode::Inline => env.register_inline(use_.name),
+                InlineMode::NoInline => env.register_noinline(use_.name),
+                InlineMode::AlwaysInline => env.register_always_inline(use_.name),
+                InlineMode::MacroInline => env.register_macro_inline(use_.name),
+                InlineMode::InlineIfReduce => env.register_inline_if_reduce(use_.name),
+            }
         }
 
         // Register specialize hints
@@ -349,16 +406,6 @@ impl CtxAttributes {
         // Register symm lemmas
         for name in symm_attrs {
             env.register_symm(name);
-        }
-
-        // Register macro_inline hints
-        for name in macro_inline_attrs {
-            env.register_macro_inline(name);
-        }
-
-        // Register inline_if_reduce hints
-        for name in inline_if_reduce_attrs {
-            env.register_inline_if_reduce(name);
         }
 
         // Register nospecialize hints

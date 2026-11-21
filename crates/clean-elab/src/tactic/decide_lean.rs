@@ -149,7 +149,9 @@ pub(super) fn preprocess_prop_to_decide(
     goal: &Goal,
     tactic: &str,
 ) -> Result<Expr, TacticError> {
-    let mut target = state.metas().instantiate(&goal.target);
+    // Compute on the beta-reduced proposition, as before the tactic bridge
+    // retained nested applications for occurrence-sensitive rewrites.
+    let mut target = super::simp::beta_reduce(&state.metas().instantiate(&goal.target));
     if free_vars(&target).locals {
         target = zeta_delta(state, goal, &target);
     }
@@ -202,42 +204,13 @@ fn of_decide_eq_true_proof(target: &Expr, instance: &Expr) -> Expr {
     )
 }
 
-/// Synthesize `class_ty` the way Lean's `synthInstance` does inside the goal:
-/// the goal's class-typed locals are local instances, tried first at every
-/// sub-goal (a `∀`-typed local and a `DecidableEq` local included), and the
-/// file's instance state applies — an `attribute [-instance]` erasure,
-/// `local instance`s of an open section, `scoped instance`s of an open
-/// namespace. This is the query simp's `synthesizeArgs` makes
-/// (`simp/instance_slot.rs`).
-///
-/// ENSURES: on `Some(s)`, `s` mentions no unassigned metavariable.
-pub(super) fn resolve_class(state: &ProofState, goal: &Goal, class_ty: &Expr) -> Option<Expr> {
-    let scope = crate::infer::TacticInstanceScope {
-        instances: state.instances.as_ref(),
-        namespace_state: state.namespace_state(),
-        visibility: state.instance_visibility.as_deref(),
-        rigid_levels: state.metas.rigid_level_params_snapshot(),
-        locals: state
-            .meta_scope_for_context(&goal.local_ctx)
-            .into_iter()
-            .map(|(name, fvar, ty)| {
-                let ty = state.metas.instantiate(&ty);
-                (name, fvar, ty)
-            })
-            .collect(),
-        next_fvar: state.next_fvar,
-        level_mint: state.level_mint.clone(),
-    };
-    crate::ElabCtx::synthesize_in_tactic_scope(&state.env, &scope, class_ty)
-}
-
-/// [`resolve_class`] for `Decidable target`.
+/// Resolve `Decidable target` with the instances in the tactic goal.
 pub(super) fn resolve_decidable(state: &ProofState, goal: &Goal, target: &Expr) -> Option<Expr> {
     let class_ty = Expr::app(
         Expr::const_(Name::from_string("Decidable"), vec![]),
         target.clone(),
     );
-    resolve_class(state, goal, &class_ty)
+    state.synthesize_class_in_goal(goal, &class_ty, None)
 }
 
 /// A fresh kernel checker for `goal` that reduces as `reduction` says, with

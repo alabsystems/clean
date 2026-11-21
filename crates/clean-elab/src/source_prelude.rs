@@ -23,6 +23,7 @@ impl PersistentExtEntry for Marker {
 #[derive(Clone, Default)]
 struct State {
     bare: bool,
+    island: bool,
 }
 impl PersistentExtState for State {
     type Entry = Marker;
@@ -43,4 +44,11 @@ pub(crate) fn mark_bare_module(env: &mut Environment) {
 pub(crate) fn is_bare_module(env: &Environment) -> bool {
     env.get_ext_state::<State>(index())
         .is_some_and(|state| state.bare)
+}
+pub(crate) fn mark_island_prelude(env: &mut Environment) {
+    env.get_ext_state_mut::<State>(index()).island = true;
+}
+pub(crate) fn is_island_prelude(env: &Environment) -> bool {
+    env.get_ext_state::<State>(index())
+        .is_some_and(|state| state.island)
 }

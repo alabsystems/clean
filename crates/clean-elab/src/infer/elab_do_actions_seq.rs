@@ -85,6 +85,7 @@ pub(super) fn has_lift_method(expr: &SurfaceExpr) -> bool {
             has_lift_method(discr) || arms.iter().any(|arm| has_lift_method(&arm.body))
         }
         SurfaceExpr::Paren(_, e)
+        | SurfaceExpr::Borrowed(_, e)
         | SurfaceExpr::OutParam(_, e)
         | SurfaceExpr::SemiOutParam(_, e)
         | SurfaceExpr::Explicit(_, e)

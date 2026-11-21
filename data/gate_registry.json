@@ -227,7 +227,8 @@
       "claims": "hygiene",
       "wired_by": [
         "scripts/local_gate.sh",
-        "scripts/run_build_regression_gate.sh"
+        "scripts/run_build_regression_gate.sh",
+        "scripts/run_w0_scoreboard_gate.sh"
       ],
       "demonstrated": {
         "kind": "selftest-file",
@@ -355,7 +356,8 @@
         "scripts/release_readiness_smoke.sh",
         "scripts/rust_modules.py",
         "scripts/test_ck0_custody_loader.py",
-        "scripts/verdict_set.py"
+        "scripts/verdict_set.py",
+        "scripts/verify_runner.py"
       ],
       "demonstrated": {
         "kind": "selftest-inline",
@@ -602,9 +604,9 @@
         "kind": "mutation-record",
         "ref": "data/gate_demonstrations.json",
         "replayable": true,
-        "date": "2026-11-16",
+        "date": "2026-11-19",
         "script_sha256": "c781339b85d424c909e73e852feabe1b78ff2c33eff3eaaba02c8e3ae8123d92",
-        "note": "Arms, each measured red-then-green on the real tree 2026-08-25: a planted unaccounted extend_inductives_unchecked call in a production file, and the census artifact losing its add_skolem_axiom accounting row. The --selftest additionally runs on every gate invocation (synthetic tree; it is the arms above that fail the REAL scan). 2026-11-10: also replay an extra register_persistent_extension call in the newly accounted matcher.rs file; the unchanged scanner must refuse eleven occurrences over the reviewed cap of ten. All three arms require an independently green unmodified baseline before mutation. This refresh preserves the existing claim and source-scan classification. Additional current publication qualification: the incoming scanner/original three arms and source pin are preserved. The two appended DATA/hint cap arms make five recorded arms, all replayed green by the normal owner on the complete 9558-file publication corpus after 61 synthetic self-tests and a green live census. Earlier custom controls remain dated to their 9554-file snapshot. Classifications and R1 dispositions are unchanged; no Rust compilation, semantic proof or authority claim follows.",
+        "note": "Arms, each measured red-then-green on the real tree 2026-08-25: a planted unaccounted extend_inductives_unchecked call in a production file, and the census artifact losing its add_skolem_axiom accounting row. The --selftest additionally runs on every gate invocation (synthetic tree; it is the arms above that fail the REAL scan). 2026-11-10: also replay an extra register_persistent_extension call in the newly accounted matcher.rs file; the unchanged scanner must refuse eleven occurrences over the reviewed cap of ten. All three arms require an independently green unmodified baseline before mutation. This refresh preserves the existing claim and source-scan classification. Additional current publication qualification: the incoming scanner/original three arms and source pin are preserved. The two appended DATA/hint cap arms make five recorded arms, all replayed green by the normal owner on the complete 9558-file publication corpus after 61 synthetic self-tests and a green live census. Earlier custom controls remain dated to their 9554-file snapshot. Classifications and R1 dispositions are unchanged; no Rust compilation, semantic proof or authority claim follows. On 2026-11-19 the six-arm replay qualified the reviewed eighth hint write and the 89th structure-field registration. Removing either file from the ledger alone also refused its precise location. See reports/env-bypass-source-metadata-2026-11-19/.",
         "replayed": {
           "script_sha256": "c781339b85d424c909e73e852feabe1b78ff2c33eff3eaaba02c8e3ae8123d92",
           "inputs_sha256": "48716b286f7cb0ccfe380f4e5395cf64c8149a1b62558a86f6a233dbd2a04045",
@@ -890,11 +892,11 @@
         "kind": "selftest-inline",
         "flag": "--selftest",
         "ref": "scripts/check_provenance_anchors.py --selftest",
-        "date": "2026-09-30",
-        "script_sha256": "c1d02a5588c5c6cea62567d360d75411cad786418a42de8596a9b4c43c0aa4c4",
+        "date": "2026-11-19",
+        "script_sha256": "e587cfa3f10f7c25aedbe9df44d735b103b122ce10da49b02cf73ccb48fe97dd",
         "note": "Audit r6 class-closer (wf_a000d04d), hardened r7 and r8: every sha-shaped anchor in the AUDITED committed record set (11 files; the list is in the script and the count is printed live, so this sentence cannot go stale again) must resolve (this repo, ../trust, ../trust-ir), carry an explicit 'resolves to no commit' annotation, or be a justified ALLOW row. Selftest arms on every invocation (r8 added: a full 40-hex dangling sha REFUSES and a resolving one passes; an annotation about sha A does NOT excuse a different dangling sha B in the same window; an ALLOW row whose token vanished is rot and REFUSES; a GLUED -g<sha> filename anchor is extracted; and a commit that EXISTS in the object database but is reachable from NO REF -- exactly what a pre-rebase lane HEAD becomes -- REFUSES, which is the r8 M6 finding that the gate used to be green at the very moment the class occurred): dangling-unannotated REFUSES; annotated passes and excuses file-wide; resolving sha passes; sha256-prefixed and all-digit tokens are skipped; ALLOW passes; a missing audited file REFUSES. Rounds 5-6 found six dangling-anchor records one instance at a time (2d023a11d [resolves to no commit reachable from any ref: still an object in this repository's odb, contained by no remote or tag, and its other occurrence in this file has since been rewritten -- annotated here 2026-09-10], c0ea930ca, 4a39d38e0, f02de5b0f -- each annotated at its own occurrence in this file, EXCEPT f02de5b0f, whose own occurrence was the everyday-battery waiver retired on 2026-09-16 when that row was demonstrated: it resolves to no commit here (a pre-rebase lane HEAD, rewritten by the merge that landed it) and is annotated inline here instead, because deleting a citation has to take its annotation with it or leave one behind, and this list is where it survived -- plus the c41d2dcf5 [resolves to no commit] family and d8da4fe2 [resolves to no commit], annotated at their source records too) -- the live sweep at adoption found 32 candidate tokens of which the genuinely-dangling were annotated the same day. crystal_a0_a6_probe.json is deliberately NOT audited here: it is a mechanical transcription whose own gate (a0a6-probe-transcription) refuses disagreement, so its shas are judged at their source records.",
         "replayed": {
-          "script_sha256": "c1d02a5588c5c6cea62567d360d75411cad786418a42de8596a9b4c43c0aa4c4",
+          "script_sha256": "e587cfa3f10f7c25aedbe9df44d735b103b122ce10da49b02cf73ccb48fe97dd",
           "inputs_sha256": null,
           "by": "`scripts/check_provenance_anchors.py --selftest` exited 0"
         }
@@ -1044,18 +1046,6 @@
       "waiver": null
     },
     {
-      "id": "check_trustcore_evidence_staleness",
-      "path": "scripts/check_trustcore_evidence_staleness.py",
-      "kind": "gate",
-      "claims": "evidence",
-      "wired_by": [
-        "scripts/githooks/pre-push",
-        "scripts/local_gate.sh"
-      ],
-      "demonstrated": null,
-      "waiver": null
-    },
-    {
       "id": "check_workspace_dependency_boundary",
       "path": "scripts/check_workspace_dependency_boundary.py",
       "kind": "gate",
@@ -1094,7 +1084,7 @@
       "claims": "soundness",
       "source_scan": {
         "kind": "lexed",
-        "note": "Raw ay proof-payload type mentions (ProofStep, TermData, AletheRule, TheoryLemmaKind, FarkasAnnotation, Constant::, Symbol::) over the production files of src/bridge/ay_backend/proof_reconstruct, baseline a literal 0 per file. LEXED 2026-08-25 (lane LOOSE): it skipped only lines whose `trim()` STARTS with `//` and then counted on the RAW line, so a TRAILING comment naming one of these types counted -- as did a block comment and a string literal -- against a zero baseline. Now over `blank_noncode` in crates/clean-auto/src/test_support/source_scan.rs."
+        "note": "Raw ay proof-payload type mentions (ProofStep, TermData, AletheRule, TheoryLemmaKind, FarkasAnnotation, Constant::, Symbol::) over the production files of src/bridge/ay_backend/proof_reconstruct, baseline a literal 0 per file. LEXED 2026-08-25 (lane LOOSE): it skipped only lines whose `trim()` STARTS with `//` and then counted on the RAW line, so a TRAILING comment naming one of these types counted -- as did a block comment and a string literal -- against a zero baseline. Now over `blank_noncode`, re-exported by crates/clean-auto/src/test_support/source_scan.rs from crates/clean-evidence/src/source_scan.rs (design unit EV0, 2026-11-17)."
       },
       "wired_by": [],
       "demonstrated": {
@@ -1112,7 +1102,7 @@
         }
       },
       "waiver": null,
-      "note": "FOUND 2026-08-25 by lane LOOSE. Measured over-count in production scope at 0b3b94e5b: 0 (PRE 0, LEXED 0). The fix also consolidated clean-auto onto ONE lexer copy: src/test_support/source_scan.rs serves this ratchet directly and tests/expr_let_constructor_hygiene.rs by `#[path]`, because an integration test is a separate crate and cannot see `pub(crate)` items. It cannot share clean-elab's copy -- clean-elab DEPENDS on clean-auto, so the dev-dependency would be a cycle."
+      "note": "FOUND 2026-08-25 by lane LOOSE. Measured over-count in production scope at 0b3b94e5b: 0 (PRE 0, LEXED 0). The fix also consolidated clean-auto onto ONE lexer copy: src/test_support/source_scan.rs serves this ratchet directly and tests/expr_let_constructor_hygiene.rs by `#[path]`, because an integration test is a separate crate and cannot see `pub(crate)` items. It could not share clean-elab's copy -- clean-elab DEPENDS on clean-auto -- until design unit EV0 (2026-11-17): both crates' test_support now re-export clean_evidence::source_scan, which depends on no Clean crate, so there is one lexer in the tree."
     },
     {
       "id": "clean-auto::expr_let_constructor_hygiene",
@@ -1121,7 +1111,7 @@
       "claims": "soundness",
       "source_scan": {
         "kind": "lexed",
-        "note": "`Expr::let_(` calls over crates/clean-auto/src/**.rs and tests/**.rs. LEXED 2026-08-25 (lane LOOSE), same defect and same two directions as the clean-elab sibling. The lexer is DUPLICATED into the test file on purpose: clean-elab depends on clean-auto, so a clean-auto dev-dependency on clean-elab's `pub(crate)` test_support is a dependency cycle. Both copies carry their own two-way arms."
+        "note": "`Expr::let_(` calls over crates/clean-auto/src/**.rs and tests/**.rs. LEXED 2026-08-25 (lane LOOSE), same defect and same two directions as the clean-elab sibling. Since design unit EV0 (2026-11-17) the file the test includes by #[path] re-exports clean_evidence::source_scan::blank_noncode, the one lexer in the tree (clean-evidence depends on no Clean crate, so the clean-elab -> clean-auto cycle that forced a copy is gone); this file's own two-way arms still run against it."
       },
       "wired_by": [],
       "demonstrated": {
@@ -1440,6 +1430,17 @@
       "path": "",
       "kind": "leg",
       "claims": "hygiene",
+      "wired_by": [
+        "scripts/local_gate.sh"
+      ],
+      "demonstrated": null,
+      "waiver": null
+    },
+    {
+      "id": "reduction-bound-theorem",
+      "path": "",
+      "kind": "leg",
+      "claims": "evidence",
       "wired_by": [
         "scripts/local_gate.sh"
       ],
@@ -2060,11 +2061,11 @@
         "kind": "selftest-inline",
         "flag": "--selftest",
         "ref": "scripts/deny_sorry_gate.sh --selftest",
-        "date": "2026-09-28",
-        "script_sha256": "6acb3ada8596e7fc260c57a5dd8b4f94c019f59477174ebd2452298368b106d2",
+        "date": "2026-11-17",
+        "script_sha256": "ac3b710607bf27b853a6c4d2ae8de04aa589b734d40b5d55ffcef1d46d85dbbf",
         "note": "runs check_add_decl_ratchet's mutation arms in-process before the unchecked_decl_ratchet_accounted lane REF REPAIRED 2026-09-15, and the old one is the finding. This row's demonstration ref was `scripts/deny_sorry_gate.sh scanner.selftest()` -- not a command (the script took no arguments and IGNORED every one it was given), and naming a DIFFERENT gate's selftest: `scanner` is scripts/check_add_decl_ratchet.py, imported by step 2's embedded python, which has its own registry row and its own demonstration. So a claims=soundness row recorded a demonstration that could not be replayed and, read literally, was about somebody else's gate. The script now takes `--selftest` (no cargo, no build, writes no evidence -- the destructive startup `rm -f $EVIDENCE_PATH` is guarded behind it) and runs 11 of its own refusal arms. WHAT THEY GUARD: step 1 was the ONE cargo lane in the script with no test-count assertion while steps 3-6 all went through run_filtered_cargo_test. Measured 2026-09-15 on a throwaway crate: a `--exact` filter that matches nothing exits 0 and prints `running 0 tests` / `test result: ok. 0 passed; 0 failed; ...; 1 filtered out`, so a renamed test left step 1 GREEN having executed nothing -- the class CLAUDE.md records as closed at 26c9b823c for the filtered enforcement legs, with this leg missed. Step 1 is counted now, and the arms cover both the capability and its CALLER: one arm re-reads this file and refuses any `cargo test` in COMMAND POSITION that does not go through the counter, falsified by reverting step 1 (it reds and names the line). That reader needed two corrections to obey the repo's own parse-not-grep rule -- draft 1 matched raw text and accused three of its own string literals; draft 2 blanked quoted runs with one state machine over a POLYGLOT file and desynced on apostrophes inside its python heredocs -- and the arm caught both. SEPARATELY RECORDED, not fixed here: a hand-run of this script clobbers reports/deny-sorry-launch-evidence.json with an artifact `validate_deny_sorry_launch_evidence` REJECTS, because two producers write that path and only `clean replacement trust-core-evidence --deny-sorry` stamps the `generated_by` the validator demands. local_gate.sh is immune (DENY_SORRY_EVIDENCE_PATH=$(mktemp) inside _battery_readonly); the script header and local_gate's failure message now name the safe form.",
         "replayed": {
-          "script_sha256": "6acb3ada8596e7fc260c57a5dd8b4f94c019f59477174ebd2452298368b106d2",
+          "script_sha256": "ac3b710607bf27b853a6c4d2ae8de04aa589b734d40b5d55ffcef1d46d85dbbf",
           "inputs_sha256": null,
           "by": "`scripts/deny_sorry_gate.sh --selftest` exited 0"
         }
@@ -2230,11 +2231,11 @@
         "kind": "mutation-record",
         "ref": "data/gate_demonstrations.json",
         "replayable": true,
-        "date": "2026-10-17",
-        "script_sha256": "eaa4aac620d1b5a73535cc3237b75a113e4856c88855a68418e721aba80e35f5",
+        "date": "2026-11-19",
+        "script_sha256": "5ff0a0e1f908bd979b9d800bc9e75590955b6232dddbcbac4488eb873c84c722",
         "note": "The arm, replayed 2026-09-16 at HEAD and green. The waiver was an R7 bookkeeping gap, not a doubt about the battery: R7 was extended on 2026-08-29 to pin `implemented_by` as well as `path`, this row's arm predated the pin field, and no other row pins this implementation so `inherited_from` was unavailable. It was deliberately NOT repinned blind, because the arm had not been seen to fail against the CURRENT implementation. It now has. THE ARM TARGETS THE STRONGER OF THIS TEST'S TWO TEETH. It replaces the tactic body of the locked snippet `logic_and-comm-impl` with an unknown identifier, so that snippet fails to elaborate and the locked-regression assert fires BEFORE the artifact comparison is reached -- proving the half that pins the 38 snippets byte-identical to the 2026-07-20 R100 measurement, not merely the half that compares against a committed JSON. rc=101. THE OTHER TOOTH IS NOT ARMED HERE and the reason is recorded rather than hidden: reaching it means editing reports/everyday-battery.json. The leg's ABSENT-artifact refusal was verified separately by deleting that file in a detached worktree and running the leg body verbatim -- `REFUSING: reports/everyday-battery.json is absent`, exit 1. The waiver's own named discharge command CANNOT work and is not what was run: `--repin` refuses a row whose `demonstrated` is null, and `--demonstrate` writes nothing to the registry, so `--demonstrate && --repin` exits 1 and records nothing. This record is written directly. Its named weight cannot work either -- this is an 8 GB box where heavy_gate refuses any request above the 4 GB budget with exit 75.",
         "replayed": {
-          "script_sha256": "eaa4aac620d1b5a73535cc3237b75a113e4856c88855a68418e721aba80e35f5",
+          "script_sha256": "5ff0a0e1f908bd979b9d800bc9e75590955b6232dddbcbac4488eb873c84c722",
           "inputs_sha256": null,
           "by": "its recorded arms replayed green"
         }
@@ -2762,10 +2763,10 @@
         "ref": "python3 scripts/gen_stack_lemmas.py --self-test",
         "replayable": false,
         "date": "2026-11-16",
-        "script_sha256": "fd49db586e0524cb729bb093fa2de896a5700070c279979fa4a205f5fc208538",
+        "script_sha256": "f348d1b1d6f29dbc0dfa5210e6684724b9048fb1f0ed0e14002609fa0ad48aed",
         "note": "The self-test recomputes every emitted term and compares its sha256 against PINNED_DIGESTS, the digests of shapes a KERNEL ACCEPTED in the EvalIr bundle (re-pinned 2026-09-25 at the merge of origin/main into the crystal lane, after one spec_suite process accepted the merged family: main's stacking / module-extension terms with its new atomic_fetch_add_relaxed_usize_seq arms, unmoved against main's own pins, and E1's node-keyed terms, whose IRInst-enumerating members moved; target-quality/crystal-m0-merge/spec-suite.log), and its mutation arm demonstrates that the --check logic REFUSES three hand edits of the rendered file (a character inside a term, a hand-added const, a reordered registration row). A refactor that moves a shape fails here in a second rather than in a bundle build. Re-pinned 2026-09-30 (W3, the mkv module axis): 46 terms ADDED and none moved -- the encodings-agreement lemmas ir_enc_agree_view_word / _view_ty / _load_view and the ir_mextv_* twin of every ir_mext_* term over IRModule.mkv, whose load arm and step / steps / run carry the encodings premise (henc, hlen); one EvalIr bundle build accepted all 199 (reports/crystal-lane/2026-09-30-link4-m0/w3/red-record.txt), and the same record shows the kernel REFUSING the load arm with that premise dropped. The self-test now also refuses an mkv term binding a premise name twice (the capture the kernel found: first-build-capture.txt). 2026-11-10 scope clarification: the current source includes the retained Release syntax epoch introduced by 80db89390. The current replay checks generator structure, agreement with its existing direct-form digest table, and refusal of the three rendered-text mutations; --check separately compares the actual tracked generated Rust. Refreshing this script hash after that replay is not a fresh kernel acceptance result for the Release-era terms. The older kernel-build observations above remain historical, tied to the terms/epoch they actually tested. No term digest, emitter, generated term or production proof claim is changed by this registry refresh.",
         "replayed": {
-          "script_sha256": "fd49db586e0524cb729bb093fa2de896a5700070c279979fa4a205f5fc208538",
+          "script_sha256": "f348d1b1d6f29dbc0dfa5210e6684724b9048fb1f0ed0e14002609fa0ad48aed",
           "inputs_sha256": null,
           "by": "`python3 scripts/gen_stack_lemmas.py --self-test` exited 0"
         }
@@ -3072,11 +3073,11 @@
         "kind": "mutation-record",
         "ref": "data/gate_demonstrations.json",
         "replayable": true,
-        "date": "2026-09-28",
-        "script_sha256": "6ae414c5b97bcef5080a253fcd9286df0144011b9057ef3b100755f9be8a66f9",
+        "date": "2026-11-18",
+        "script_sha256": "7dac012f49583c20d8a571d9e52b7f17e8776107fad78357ca780f37c323e29e",
         "note": "The arm in data/gate_demonstrations.json: lane 0 (the differential corpus edited without re-minting the baseline -> `expressions_sha256 mismatch`). The note read 'Three replayable arms, one per lane' until verifier r7 (2026-09-24): lane 1 (the Lean 4 type recorded for `Prop` perturbed -> `MISMATCH #0`, the refusal only the Clean kernel's own inference can make) and lane 2 (a must-REJECT corpus file rewritten as a well-typed one) were recorded on 2026-08-25 (018a0745e) and dropped from the record by 7422b63a0 (2026-08-27); they are OWED, and the arm_coverage_debt row for this gate carries them with an expiry. MEASURED on 2026-08-25 and worth knowing for lane 2: the gate does not reach the reject lane, it refuses at the ledger with `corpus changed since the Lean 4 baseline was generated` -- the corpus is sha256-pinned to the Lean 4 verdicts it was generated against, which is the stronger refusal, so that is the one the arm requires. COST: the arms are cheap once the two cargo lanes are warm (`-p clean-kernel --test lean4_parity --features test-utils` and `-p clean-elab --bin soundness_gate`); the first build is not. ALSO FIXED IN THE SAME CHANGE: this gate could not have printed either verdict on this machine. Its write_evidence heredoc opened with `from datetime import UTC` (Python 3.11+) under the ambient `python3`, which is 3.9.6 here (macOS CommandLineTools, ahead of Homebrew on PATH; local_gate.sh has a _gate_python apparatus for exactly this and the `clean` CLI path does not use it), so the heredoc raised ImportError, set -e killed the script, and both `=== Kernel Soundness Gate: PASS ===` and `: FAILED ===` were unreachable lines. Now `datetime.now(timezone.utc)`, correct on 3.9 and 3.14 alike.",
         "replayed": {
-          "script_sha256": "6ae414c5b97bcef5080a253fcd9286df0144011b9057ef3b100755f9be8a66f9",
+          "script_sha256": "7dac012f49583c20d8a571d9e52b7f17e8776107fad78357ca780f37c323e29e",
           "inputs_sha256": null,
           "by": "its recorded arms replayed green"
         }
@@ -3095,11 +3096,11 @@
         "kind": "mutation-record",
         "ref": "data/gate_demonstrations.json",
         "replayable": true,
-        "date": "2026-09-28",
-        "script_sha256": "09de9a8b572eec3ad5120bbc5c179a284cd648f18462a9e701d9d19668fc5f2a",
-        "note": "The ALWAYS-ON SEED leg, demonstrated with a production defect -- NOT with KVINV_GATE_REQUIRE_MEASURED=1, which the previous waiver correctly said would only prove the gate refuses a deferral. The arm disables the load-time source-olean content binding in `verify_one_closure_shard` (the recomputed blake3 vs the shard header), so a stale or swapped shard is marked verified and its constants are served; `test_load_time_hash_mismatch_refuses` flips one byte of the on-disk olean, the seed leg goes red, and the gate exits 1 naming the seed. LIMIT, stated here because the gate's own verdict line states it: at HEAD on this machine the unmutated gate reports `KVINV_GATE=seed-only:no-target` -- the CORPUS-SCALE eager-vs-lazy stamp comparison is NOT measured here and this demonstration does not claim it. Exercising it needs KV_GATE_TARGET, KV_GATE_CLOSURE_ROOT and a KV_GATE_CLOSURE_SHARDS directory, i.e. the same Mathlib provisioning kv_ratchet_gate is waiting on.",
+        "date": "2026-11-17",
+        "script_sha256": "4df1e8f967ee43bb933fa81fdb280fa875d323a811faab5579320350acd2f5d4",
+        "note": "The ALWAYS-ON SEED leg, demonstrated with a production defect -- NOT with KVINV_GATE_REQUIRE_MEASURED=1, which the previous waiver correctly said would only prove the gate refuses a deferral. The arm disables the load-time source-olean content binding in `verify_one_closure_shard` (the recomputed blake3 vs the shard header), so a stale or swapped shard is marked verified and its constants are served; `test_load_time_hash_mismatch_refuses` edits the source-olean blake3 (then the length) the shard header records, leaving the .olean, the arena and the recon digests as built, so no other load-time gate can refuse it and it asserts the binding's own refusal; the seed leg goes red, and the gate exits 1 naming the seed. Until 2026-11-17 that test flipped one byte of the on-disk olean, which now also leaves the olean unparseable, so the subset parse refused it first and the arm stayed green (that flip is kept as its own test, `test_load_time_unparseable_olean_flip_refuses`). LIMIT, stated here because the gate's own verdict line states it: at HEAD on this machine the unmutated gate reports `KVINV_GATE=seed-only:no-target` -- the CORPUS-SCALE eager-vs-lazy stamp comparison is NOT measured here and this demonstration does not claim it. Exercising it needs KV_GATE_TARGET, KV_GATE_CLOSURE_ROOT and a KV_GATE_CLOSURE_SHARDS directory, i.e. the same Mathlib provisioning kv_ratchet_gate is waiting on.",
         "replayed": {
-          "script_sha256": "09de9a8b572eec3ad5120bbc5c179a284cd648f18462a9e701d9d19668fc5f2a",
+          "script_sha256": "4df1e8f967ee43bb933fa81fdb280fa875d323a811faab5579320350acd2f5d4",
           "inputs_sha256": null,
           "by": "its recorded arms replayed green"
         }
@@ -4596,9 +4597,46 @@
       "wired_by": [
         "scripts/local_gate.sh"
       ],
-      "demonstrated": null,
+      "demonstrated": {
+        "kind": "mutation-record",
+        "ref": "data/gate_demonstrations.json",
+        "replayable": true,
+        "date": "2026-11-17",
+        "note": "Four planted-mutation arms (design section 8.2: flipped byte, wrong schema, deleted pin, stale input) replay against the production command, the standalone clean-evidence binary over the real receipts. The pin is the sha256 of crates/clean-evidence/src/trustcore.rs, the module that decides the verdict (section 8.5: one pin per producer module, so an edit elsewhere in the crate does not stale this row). Added in the EV0 review fix; the retired Python gate row check_trustcore_evidence_staleness, superseded by this row, had no demonstration either.",
+        "script_sha256": "19e101b8928868532e49f130a1c25261f4385735d81eaec4ff2fc8dd82155002",
+        "replayed": {
+          "script_sha256": "19e101b8928868532e49f130a1c25261f4385735d81eaec4ff2fc8dd82155002",
+          "inputs_sha256": null,
+          "by": "its recorded arms replayed green"
+        }
+      },
       "waiver": null,
-      "implemented_by": "scripts/check_trustcore_evidence_staleness.py"
+      "implemented_by": "crates/clean-evidence/src/trustcore.rs"
+    },
+    {
+      "id": "python-minters-publication",
+      "path": "",
+      "kind": "leg",
+      "claims": "evidence",
+      "wired_by": [
+        "scripts/githooks/pre-push",
+        "scripts/local_gate.sh"
+      ],
+      "demonstrated": {
+        "kind": "mutation-record",
+        "ref": "data/gate_demonstrations.json",
+        "replayable": true,
+        "date": "2026-11-18",
+        "note": "The standalone checker tests staged candidate equality against an explicitly pinned published Git object. The replay mints the matching staged proposal after a registry row ID swap and requires refusal against the publication anchor.",
+        "script_sha256": "30b2fff70d59ea62b8a18ff44fe32d754b4e5cd88c3914e6858f3b5fd9ca5dad",
+        "replayed": {
+          "script_sha256": "30b2fff70d59ea62b8a18ff44fe32d754b4e5cd88c3914e6858f3b5fd9ca5dad",
+          "inputs_sha256": null,
+          "by": "its recorded arms replayed green"
+        }
+      },
+      "waiver": null,
+      "implemented_by": "crates/clean-evidence/src/python_minters/membership/publication.rs"
     },
     {
       "id": "u2-battery",
@@ -4809,11 +4847,11 @@
         "kind": "mutation-record",
         "ref": "data/gate_demonstrations.json",
         "replayable": true,
-        "date": "2026-11-16",
-        "script_sha256": "407cae9dfb4f7a22c84b8fcfc0fe1eadc1380fa8ebd0e100a967cebb2ffac36b",
+        "date": "2026-11-17",
+        "script_sha256": "0a1d365dcf48aeca10f4fe3e560214d7022aa34cba56c23ea48484b0f07f6689",
         "note": "Arms: a ledger row's statement typed over in the committed JSON; the row_ratchet baseline typed over. Wired 2026-09-12, the day --check stopped being red-by-construction -- the mint day was stamped into all 44 rows, so the artifact went stale on the calendar with zero tree change (measured: 88 differing lines, all dates; rendering at the mint day reproduced it byte-for-byte). Its own --self-test arms run first in both runners.",
         "replayed": {
-          "script_sha256": "407cae9dfb4f7a22c84b8fcfc0fe1eadc1380fa8ebd0e100a967cebb2ffac36b",
+          "script_sha256": "0a1d365dcf48aeca10f4fe3e560214d7022aa34cba56c23ea48484b0f07f6689",
           "inputs_sha256": null,
           "by": "its recorded arms replayed green"
         }
@@ -5238,11 +5276,11 @@
         "kind": "mutation-record",
         "ref": "data/gate_demonstrations.json",
         "replayable": true,
-        "date": "2026-11-01",
+        "date": "2026-11-19",
         "note": "Eight arms, replayed with `scripts/check_gate_registry.py --demonstrate ndjson-front-door`; each arm's command runs only the test it names. Arm 1 removes the tokenizer's duplicate-key refusal (lean4#15542/#15628), arm 2 the name table's rebinding refusal (lean4#15542), arm 3 the reader's refusal of a non-quot record named for Lean's quotient (v4.33.1 check_name), arm 4 the kernel's `check_eq_for_quot` in `Environment::add_quot` (crates/clean-kernel/src/env/quot_admission.rs), without which a `quot` record is installed over an export with no `Eq`. Arms 5-8 come from the 2026-10-22 review: the reader's block-shape check (finding C1, a forged inductive `all` that let `bad : False` exit 0), its isRec/isReflexive check (C2), R117's partial-definition decline (C8) and the export's `Quot.sound` comparison (C9). Each must turn the named test red. The C5 arm (a recursor over a rewritten level) moved with its test to the ndjson-front-door-fidelity row, which has one arm per path of the block decline.",
-        "script_sha256": "4f9102c3b7eda0a2bed28857fa5c9e5bbaadf7434617ef3614698bc4ca18021d",
+        "script_sha256": "511e053341f4207de966a5432cedfd7e0ce2cfecd24d2fb69a26f7410eb009f0",
         "replayed": {
-          "script_sha256": "4f9102c3b7eda0a2bed28857fa5c9e5bbaadf7434617ef3614698bc4ca18021d",
+          "script_sha256": "511e053341f4207de966a5432cedfd7e0ce2cfecd24d2fb69a26f7410eb009f0",
           "inputs_sha256": null,
           "by": "its recorded arms replayed green"
         }
@@ -5260,11 +5298,11 @@
         "kind": "mutation-record",
         "ref": "data/gate_demonstrations.json",
         "replayable": true,
-        "date": "2026-10-29",
+        "date": "2026-11-17",
         "note": "Fourteen arms, replayed with `scripts/check_gate_registry.py --demonstrate ndjson-front-door-fidelity`; each arm's command runs only the test it names, and each comes from the 2026-10-22 re-review. Arm 1 removes decide's decline of an export declaring a fold head Clean's native-fold authority does not admit (N1, R128: a forged `Nat.add` exits 0). Arm 2 stops the reader marking a level record built as zero (N2, N9), arm 3 a rewrite through `imax` (R125: a definition Lean refuses exits 0), arms 4-7 each one path of an inductive block's marking (an inductive type's type, a constructor's type: N8; a recursor's type, a rule's right-hand side: N7), arm 8 removes the composite-argument bound on a level `max` (N5: the reader no longer finishes). Arm 9 reverts the nested-block isReflexive rule to the direct one (N3, N6, N10: an honest nested reflexive export is refused), arm 10 the escaping of a dotted name component (N4), arm 11 the decline of two names stored alike, arm 12 the decision's decline of an export over a marked level (R125), and, from review round 3, arm 13 the decline of an export declaring Lean.reduceBool or Lean.reduceNat (R128) and arm 14 the per-export level-work budget (R125). Each must turn the named test red.",
-        "script_sha256": "245fb76af6b980e0ee1a92d42e15692641d2537a41f7eba72025fc04ce53c678",
+        "script_sha256": "6c6c10ad18e8d73c7499f131603b9c5119231ad6ed0b5e76f301013c4075e785",
         "replayed": {
-          "script_sha256": "245fb76af6b980e0ee1a92d42e15692641d2537a41f7eba72025fc04ce53c678",
+          "script_sha256": "6c6c10ad18e8d73c7499f131603b9c5119231ad6ed0b5e76f301013c4075e785",
           "inputs_sha256": null,
           "by": "its recorded arms replayed green"
         }
@@ -5304,11 +5342,11 @@
         "kind": "mutation-record",
         "ref": "data/gate_demonstrations.json",
         "replayable": true,
-        "date": "2026-10-26",
-        "script_sha256": "0d80b0d7d573f3b28a6fe23f77b134ef61bd35cbec41b41814c4d4bd066fee08",
+        "date": "2026-11-17",
+        "script_sha256": "15f233906b2eee5b93377b99e24201e8d948ea2080ab1138f5404914320c30c0",
         "note": "One arm per removable half of the fix, replayed with `scripts/check_gate_registry.py --demonstrate mathverse-replay-order`; each arm's command runs only the test it names. Round 1: PARAGON's per-module admission gate; PARAGON's Lean kernel-theory profile on the eager base; the cross-module demotion call (which PARAGON and both sequential stamp modes share); and per-constant-verify's prerequisites. Round 2 (2026-09-25): per-constant-verify's for_lean_replay base, its canonical-quotient guard and its record of a target's redeclarations (hole A); PARAGON's inductive-block replay and the sequential stamp lanes' stored-member comparison (hole B); and the opt-in demand-paged base's refusal of a closure two of whose modules declare one name (hole A). Each arm must turn the named test red. The quotient-guard arm first stayed GREEN against the ReplayForgedQuot fixture, because the redeclaration refusal fires first there; it now pins the guard directly, and the redeclaration refusal has its own arm. 2026-09-24 round 1: arms 1-2 replayed red in a first run, and arms 3-4 were refused by the harness because the battery file was edited in the shared checkout mid-run; all four were re-run after the edit. Round 3 (2026-09-29): with the .olean loader's module-trust rules (upstream f972378f5), `--parallel` refuses ReplayForged3, ReplayForged, ReplayRedeclare and ReplayCrossA+B at import, and PARAGON's admission-gate and demotion-call arms stayed GREEN under their own mutation; they were re-aimed to shapes their layer alone defends (the gate with the inductive-block refusals kept, on ReplayForgedCtor's forged_ctor_false; the shared demotion pass, on --single-pass's cross_uses_forged), each measured red in the lane's own target dir first. Four arms were added for the round's layers: the sharded worker's replay gate (its module now loads with rules 1 and 3 left to it), the stub-upgrade confinement under a replay policy, per-constant-verify's refusal of a module that redeclares an import's name unmergeably, and the sequential replay's refusal of a definition over a resident axiom (ReplayForgedBoolDef / ReplayForgedIndOverAx, which per-constant-verify and the sequential stamp modes verified or stamped before the fix). Round 4 (2026-09-29, the review of round 3): arms for holes measured on the round-3 head: the sharded worker's replay of its module's PRIVATE declarations (ReplayForgedPriv: `priv_user : False` over a private self-reference was verified) and the sequential replay's refusal of a definition over an elided opaque (ReplayHonestOpaqueAx + ReplayForgedOpaqueDef + ReplayForgedOpaqueUse under `--single-pass`: `forged_op_use : False` was stamped); the round-3 sequential arm was re-aimed at the predicate that replaced its pattern; and a third arm for a hole older than round 3, the loader's stub upgrade filling the kernel's `Quot` (ReplayForgedQuotDef: `--parallel` stamped `quot_def_false : False`). 2026-10-17 adds an arm for plan item kernel-result-sort-whnf-elim (22b5d8b54, R37): the same result-level mutation turns replay_forged_lane_tests::delta_prop::test_per_constant_verify_delta_prop_family_follows_leans_result_level red; the delta-Prop tests live in the battery's child module `replay_forged_lane_tests/delta_prop.rs`. 2026-10-22 adds two arms for R112 (docs/DECISIONS.md): the coverage refusal in crates/clean-olean/src/replay_families.rs removed (per-constant-verify verifies ReplayForgedAllGhost's and ReplayForgedAllOther's proofs of False) and the kernel admission's block-level `isRec` (crates/clean-kernel/src/env/inductive_builder.rs) put back per type (the sequential stamp-verified modes stamp ReplayForgedMutualEta's `forged_hma_eta`); the tests live in the battery's child module replay_forged_lane_tests/block_cover.rs. 2026-10-22 adds four arms for R113 and its review (docs/DECISIONS.md R113): the --incremental closure key back to .olean bytes only (crates/clean-mathverse/src/cli/import_cache.rs), the artifact reader's placement rule removed (the sharded worker verifies a misplaced module), the loader's trailer refusal removed (the sharded worker verifies a module whose .olean.private carries a trailer), and the artifact reader's value comparison removed (per-constant-verify reads ReplayPartsValDis without naming the disagreement); the tests live in the battery's child modules replay_forged_lane_tests/{misplaced,trailer,parts}.rs and in import_cache.rs. 2026-10-23 adds three arms for R131 (docs/DECISIONS.md R131): the sharded worker's refusal of a refused stub completion by name and the import refusal of one (S1), and the artifact rule's stub exception scoped to a module-system artifact (S2/S3), plus three for the re-check lanes' opt-in to the import refusal (the sharded worker's imports, the sequential stamp lanes' closure, PARAGON's base); the tests live in replay_forged_lane_tests/stubs.rs. 2026-10-24 adds two arms for R142: the loader's resident-value invariant, which the sharded worker refuses by name, and the incremental replay's refusal of every use of a target it did not admit while the environment resolves its name to another declaration (crates/clean-mathverse/src/verify/incremental/not_admitted.rs). The tests live in replay_forged_lane_tests/values.rs. 2026-10-25: the arm for the .olean loader's stub-upgrade guard on a quotient primitive (not per-constant-verify's canonical-quotient guard, which stays) moved to olean-replay-order (R142's invariant also refuses the filled `Quot` in every lane here, so this row's test could no longer fail under that mutation alone).",
         "replayed": {
-          "script_sha256": "0d80b0d7d573f3b28a6fe23f77b134ef61bd35cbec41b41814c4d4bd066fee08",
+          "script_sha256": "15f233906b2eee5b93377b99e24201e8d948ea2080ab1138f5404914320c30c0",
           "inputs_sha256": null,
           "by": "its recorded arms replayed green"
         }
@@ -5763,15 +5801,16 @@
         "kind": "selftest-inline",
         "flag": "--selftest",
         "ref": "scripts/check_authority_sites.py --selftest",
-        "date": "2026-11-16",
-        "script_sha256": "713cf10ca1945e1fb9df73d17db9e3c03e62fc55ffc6da576eb51bc49484b87b",
-        "note": "65 arms. On synthetic Clean and Trust trees: a planted mint in a new function, a second mint in a named function, a production mint after a #[cfg(test)] on a struct field, a struct field before an impl, an enum variant, a block statement, a match arm and a semicolon-free macro_rules! (six arms that ended green, the mint hidden as test code, under the scanner of 72bb210ba, measured 2026-11-12) with three controls where the attribute does bind to a test fn, const fn or impl; a sibling-tier label (TrustLevel::AxiomDependent, AddConstResult::UnsafeAccepted) and a kernel-named counter (`kernel_verified += 1`, `kernel_verified_names.push`) in a new function, with the classifier's spelling tables covering the other tiers and `kernel_rechecked = true`; a kernel claim whose only token is a parameter and one whose entry is a variable, not a call (KERNEL EVIDENCE); a declared wrapper that stays green, one that stopped calling its entry and one that only calls itself; a Trust mint citing a Clean wrapper declared at Trust's Clean pin (green) and one citing this tree's wrapper list (refused); the first-risk ceiling (a matching header above the ceiling, a hand-raised ceiling, a deleted ceiling, --write refusing growth and writing nothing, --rebase-risk with a reason raising and recording it, a resolution lowering it, and --rebase-risk not raising past the count); --clean-only refusing a Clean plant; a new enum carrying an authority-shaped variant, a new read, a new checker root, a checker call that leaves its function (and one that survives only in a comment), a stale row, an unclassified row, a first-risk list that disagrees with the rows, a Clean site left unexamined, a Trust row with no TCB answer, a verb whose anchor is gone or lost its evidence, a second consumer of the reference token and a Certified status planted in Trust; for the link census a new Trust manifest linking a carrier of Clean's checkers, a named manifest that starts linking clean-ck0, a carrier link with no route, and a stale link. On the REAL tree (committed arms, replayed by --selftest): a copy of crates/clean-mathverse/src/shard_verify/constant_verify.rs matches the real artifact's rows (control), and against the real artifact a new mint function, a production mint after a #[cfg(test)] struct field, a push into kernel_verified_names, and the named mint's add_decl replaced (CHECKER MOVED) each fail.",
+        "date": "2026-11-19",
+        "script_sha256": "246d4cc40a04b13fce62464494da87c1d8d14565bd6ef1fe2cbf400dfa86d495",
+        "note": "83 arms, including the P3 NDJSON reader entry, removal, missing measurement and entry-local checker path controls (including 12 Decision-15 four-comparison sealed-token consumer controls: undeclared token consumer, each omitted comparison among statement_digest / env_chain / root_digest / level_bound_at_instantiation, comment-only comparison, familyConstant grant bypass, and complete positive control). On synthetic Clean and Trust trees: a planted mint in a new function, a second mint in a named function, a production mint after a #[cfg(test)] on a struct field, a struct field before an impl, an enum variant, a block statement, a match arm and a semicolon-free macro_rules! (six arms that ended green, the mint hidden as test code, under the scanner of 72bb210ba, measured 2026-11-12) with three controls where the attribute does bind to a test fn, const fn or impl; a sibling-tier label (TrustLevel::AxiomDependent, AddConstResult::UnsafeAccepted) and a kernel-named counter (`kernel_verified += 1`, `kernel_verified_names.push`) in a new function, with the classifier's spelling tables covering the other tiers and `kernel_rechecked = true`; a kernel claim whose only token is a parameter and one whose entry is a variable, not a call (KERNEL EVIDENCE); a declared wrapper that stays green, one that stopped calling its entry and one that only calls itself; a Trust mint citing a Clean wrapper declared at Trust's Clean pin (green) and one citing this tree's wrapper list (refused); the first-risk ceiling (a matching header above the ceiling, a hand-raised ceiling, a deleted ceiling, --write refusing growth and writing nothing, --rebase-risk with a reason raising and recording it, a resolution lowering it, and --rebase-risk not raising past the count); --clean-only refusing a Clean plant; a new enum carrying an authority-shaped variant, a new read, a new checker root, a checker call that leaves its function (and one that survives only in a comment), a stale row, an unclassified row, a first-risk list that disagrees with the rows, a Clean site left unexamined, a Trust row with no TCB answer, a verb whose anchor is gone or lost its evidence, a second consumer of the reference token and a Certified status planted in Trust; for the link census a new Trust manifest linking a carrier of Clean's checkers, a named manifest that starts linking clean-ck0, a carrier link with no route, and a stale link. On the REAL tree (committed arms, replayed by --selftest): a copy of crates/clean-mathverse/src/shard_verify/constant_verify.rs matches the real artifact's rows (control), and against the real artifact a new mint function, a production mint after a #[cfg(test)] struct field, a push into kernel_verified_names, and the named mint's add_decl replaced (CHECKER MOVED) each fail.",
         "inputs": {
+          "reports/self-proof-p3-2026-11-12/patched_kernel_control.json": "4d55756754b5783cdcd0c69611e8c0ef6ce9eeb5c93c8ca2fcc1d3c3cbfb1c13",
           "scripts/check_add_decl_ratchet.py": "b9eaa60152e79830c91f610b92314325f338832b35944b655d75208f6e288288"
         },
         "replayed": {
-          "script_sha256": "713cf10ca1945e1fb9df73d17db9e3c03e62fc55ffc6da576eb51bc49484b87b",
-          "inputs_sha256": "48716b286f7cb0ccfe380f4e5395cf64c8149a1b62558a86f6a233dbd2a04045",
+          "script_sha256": "246d4cc40a04b13fce62464494da87c1d8d14565bd6ef1fe2cbf400dfa86d495",
+          "inputs_sha256": "dbc88ee837c9035f0ccb7f1092486644c273173d87c2014eab0f75e3348314ae",
           "by": "`scripts/check_authority_sites.py --selftest` exited 0"
         }
       },
@@ -5876,23 +5915,27 @@
         "kind": "selftest-inline",
         "flag": "--selftest",
         "ref": "python3 scripts/lean4lean_recheck.py --selftest",
-        "date": "2026-11-13",
+        "date": "2026-11-18",
         "note": "A stub binary through the real process, timeout and output path: count, stray-output and coverage checks, the runner's Ax0 controls, and the decision classes (refused, kernel-raised-then-panicked, crashed-before-deciding, undecided): a crash before the kernel decided is never judged, a panic is never a refusal. No Lean4Lean binary is run by this demonstration; no stub is a vote.",
         "inputs": {
           "crates/clean-olean/tests/fixtures/kernel_arena/round-2026-09/lean-arena-round-2026-09-tests.tar.gz": "98a69742b538296c5f413d0527dfeef8c4d1815fe64b12c8623cd33de63bee0d",
           "crates/clean-olean/tests/fixtures/kernel_arena/round-2026-09/round-2026-09.table.json": "ec5c0df495687af100094df0a7ddda2234e94671da4114246558aff4d6c98c08",
-          "data/lean4lean_q4_arena_reasons.json": "e7dea483c4937296a5e29e70c76f2b0bc943a016cd5eb319bf1e3c413e4afde5",
-          "data/lean4lean_q4_pin.json": "196e379d6dff6abffe41ab2f21644db60026219b972891c95e76f1ca50bedcfb",
+          "data/lean4lean_q4_arena_reasons.json": "5ca8deb25db26d780ea5e7d0b61a1f1d068dad8f1a2a09a2744fdd6a4cd3177a",
+          "data/lean4lean_q4_patches/0001-strict-isProp-structure-reduction.patch": "155a722e87a9130b0e4a6448941ebe5e8f07c4088a3c8af385e3dced5027d6ac",
+          "data/lean4lean_q4_patches/0002-pass-strict-isProp-to-recursors.patch": "aabdd2fea4ca91078a0d4c2fb194f868ac0d1d466dbfa58ce4296222af06ecb9",
+          "data/lean4lean_q4_patches/0003-mapEnvM-declTypeMismatch-maps-env.patch": "c64d3b0b9863d6c0fdc0d56b5d1b2ce866ca007139432dff89d24d19fecf041d",
+          "data/lean4lean_q4_pin.json": "a1f3478b630ec6f4204df2fab68f8f4ee0d5ebfe0a96bb3686489fa0c4ab9863",
           "reports/self-proof-q3-2026-11-12/empty-export.ndjson": "cc289e5f658e2e6048a1a7ca01f7507399deaee24ad08f92b35e12e3bb183f58",
           "reports/self-proof-q3-2026-11-12/extra-axiom.ndjson": "02287bb5cc83317682f9000a48ef99dd06b90d7b040fb2f3bd0ee4014f720d47",
           "reports/self-proof-q3-2026-11-12/wrong-statement-propext.ndjson": "fd34a3d95272f48ea5ab5942bb69df9f3cdf116e8f264830853ee78a43a16bf1",
-          "scripts/lean4lean_selftest.py": "b3770fa8f9306e8c42ded008ab956797035640a486ff4efe6a164210e8f46738",
+          "reports/self-proof-q4-corrected-reference-2026-11-18/control-observation.json": "510f2771f4e2e03ec1ec03db0ab2f5939accc4c294e4ea48c28c488b79a9a4a4",
+          "scripts/lean4lean_selftest.py": "61ab91ca755055feeed860c7e33163251eb0f7450a74a910587243b865cbf790",
           "scripts/nanoda_recheck.py": "37b490e417ee010d219407a2252372b47053853ed147715ef248d1dae7de9e0e"
         },
-        "script_sha256": "15c07b659973c07598baf33a77a3b3f1c5ad3764a2d1b5c95c7460d46def98b2",
+        "script_sha256": "7fce67cfb06cf74aac38c81dc85806e9d42069b896f38189b9e2b407887c7696",
         "replayed": {
-          "script_sha256": "15c07b659973c07598baf33a77a3b3f1c5ad3764a2d1b5c95c7460d46def98b2",
-          "inputs_sha256": "d2cf6ebd96718276d90427abba2d04b53544d8b9c5772dba75121c124f3d401c",
+          "script_sha256": "7fce67cfb06cf74aac38c81dc85806e9d42069b896f38189b9e2b407887c7696",
+          "inputs_sha256": "8d65c3e5601185736bdcbe3cfa9ad0390b1e47d2bdc6b27a7ecec3c71a9d21f9",
           "by": "`python3 scripts/lean4lean_recheck.py --selftest` exited 0"
         }
       },
@@ -5928,6 +5971,57 @@
       "note": "Q4 subject library: the Ax0 restriction every member reads (one immutable byte snapshot per subject) and fenced Clean's refusal classification. A library of scripts/kstar_recheck.py; row added 2026-11-13 (Q4 residuals)."
     },
     {
+      "id": "kstar_inputs",
+      "path": "scripts/kstar_inputs.py",
+      "kind": "gate",
+      "claims": "evidence",
+      "wired_by": [
+        "scripts/kstar_recheck.py",
+        "scripts/verify_runner.py"
+      ],
+      "demonstrated": {
+        "kind": "selftest-inline",
+        "flag": "--selftest",
+        "ref": "python3 scripts/kstar_inputs.py --selftest",
+        "date": "2026-11-19",
+        "note": "Runs scripts/kstar_selftest.py's input_controls (the driver's self-test runs them too) over a synthetic git tree: an include_str! target outside crates/ makes a record stale; each kind of compile-time read the docstring lists under Evaluated is an input, among them a macro include read against the invoking file, a metavariable carrying '..' past its literal prefix, CARGO_MANIFEST_DIR and a declared OUT_DIR file; files under a literal prefix that no invocation names are not; no input of the 2026-11-13 rule is dropped; sixteen refusals hold for their named reason; and one FORM_ARMS arm per form or group the docstring lists under Evaluated or Refused (61 arms since the second 2026-11-19 correction, 8 evaluated and 53 refused, each a synthetic tree; 54 checked against stock rustc/cargo 1.97.1 when KSTAR_STOCK_RUSTC and KSTAR_STOCK_CARGO name them). No record verdict.",
+        "inputs": {
+          "data/lean4lean_q4_arena_reasons.json": "5ca8deb25db26d780ea5e7d0b61a1f1d068dad8f1a2a09a2744fdd6a4cd3177a",
+          "data/lean4lean_q4_patches/0001-strict-isProp-structure-reduction.patch": "155a722e87a9130b0e4a6448941ebe5e8f07c4088a3c8af385e3dced5027d6ac",
+          "data/lean4lean_q4_patches/0002-pass-strict-isProp-to-recursors.patch": "aabdd2fea4ca91078a0d4c2fb194f868ac0d1d466dbfa58ce4296222af06ecb9",
+          "data/lean4lean_q4_patches/0003-mapEnvM-declTypeMismatch-maps-env.patch": "c64d3b0b9863d6c0fdc0d56b5d1b2ce866ca007139432dff89d24d19fecf041d",
+          "data/lean4lean_q4_pin.json": "a1f3478b630ec6f4204df2fab68f8f4ee0d5ebfe0a96bb3686489fa0c4ab9863",
+          "reports/self-proof-q3-2026-11-12/extra-axiom.ndjson": "02287bb5cc83317682f9000a48ef99dd06b90d7b040fb2f3bd0ee4014f720d47",
+          "reports/self-proof-q3-2026-11-12/forged-recursor.ndjson": "8c5c3d6e450cd92b6a44f7fe29dfcc4f5181495b850a35f23cc234ecee94ecc1",
+          "reports/self-proof-q3-2026-11-12/ill-typed-body.ndjson": "d5bdd8e30e77638c1bcfd6e4e7e6c557096bcbf18497dacbf39fe72e280c5430",
+          "reports/self-proof-q4-corrected-reference-2026-11-18/control-observation.json": "510f2771f4e2e03ec1ec03db0ab2f5939accc4c294e4ea48c28c488b79a9a4a4",
+          "scripts/check_add_decl_ratchet.py": "b9eaa60152e79830c91f610b92314325f338832b35944b655d75208f6e288288",
+          "scripts/kstar_recheck.py": "f7e991be8fdad4fb272ff55dc12c237fe9ac9186e5959eac8a8f2419f477af3c",
+          "scripts/kstar_recheck.sh": "4fce99ee6aacbc0b28cc36226eeb484fedf75e9c3a9b65e2653f97f497776d37",
+          "scripts/kstar_selftest.py": "c2ff70d1c36fc4ed20a39b996a6c369bc4f2d63239354eb6f6fd28d9073c11c5",
+          "scripts/kstar_subjects.py": "950dfce66a74c5d05d2aeb09fd9ec6d7ac9c4e8937da0fa7ab3a9fb77a4aa32c",
+          "scripts/kstar_subjects_selftest.py": "f4c7693dd6c8d51a4939bf8b6031033268b828d38ff9a05fb22531bb8dffda5f",
+          "scripts/lean4lean_recheck.py": "7fce67cfb06cf74aac38c81dc85806e9d42069b896f38189b9e2b407887c7696",
+          "scripts/lean4lean_selftest.py": "61ab91ca755055feeed860c7e33163251eb0f7450a74a910587243b865cbf790",
+          "scripts/lean_export_replay.sh": "e6ae21362ac8b597a95d94daa760bcd7de18b4fa3efde99d5ac5e18d1a62b1f6",
+          "scripts/lean_export_replay/Upstream.lean": "828db1cc7189368441c93dac0567cc62adbb079bcd3c750d15f2a8de6f150f6f",
+          "scripts/nanoda_recheck.py": "37b490e417ee010d219407a2252372b47053853ed147715ef248d1dae7de9e0e"
+        },
+        "script_sha256": "7e38027e12d9679af6be73b480dd5203be702a49740e5c5fb406c327989b19f8",
+        "replayed": {
+          "script_sha256": "7e38027e12d9679af6be73b480dd5203be702a49740e5c5fb406c327989b19f8",
+          "inputs_sha256": "2ba2ab53b44084e875ceae87e0dbe93b13606d72237d5f98aa1204b48da15c04",
+          "by": "`python3 scripts/kstar_inputs.py --selftest` exited 0"
+        }
+      },
+      "waiver": null,
+      "note": "Q4 source-input rule: a coarse conjunct of scripts/kstar_recheck.py --check-record, and the set the Q4 receipt's clean-tree check reads. Since 2026-11-19 it no longer decides freshness alone: freshness rests on the members' build read sets (cargo's dep-info; docs/DECISIONS.md, 2026-11-19, \"Q4 freshness rests on the members' build read sets\"), and a moved input or a refusal here still makes a record stale or not knowable. A library of the driver, with its own row since 2026-11-19 so that the verdict set's lane (c) counts its lines (docs/DECISIONS.md, 2026-11-19, \"Q4 source inputs: evaluate an include or refuse\").",
+      "source_scan": {
+        "kind": "raw-lines",
+        "note": "Reads Rust text through the reference lexer's spans (scripts/check_add_decl_ratchet.py: NONCODE_RE, strip_noncode, strip_comments_keep_strings): a match counts only where it starts in code, comments between tokens are skipped, and an attribute or macro argument is delimited by bracket balancing in code. Cargo manifests and Cargo configuration are parsed with tomllib. For a form the docstring lists under Evaluated (since the second 2026-11-19 correction only forms this tree uses) the file stock rustc or cargo reads is an input; a form it lists under Refused raises; a mention in a comment or string only ever ADDS what a plain literal names. The rule claims nothing about forms it does not list (docs/DECISIONS.md, 2026-11-19, and its corrections), and its docstring names the fourth round's known misses, left unfixed since the rule became a conjunct."
+      }
+    },
+    {
       "id": "check_lean_axiom_census",
       "path": "scripts/check_lean_axiom_census.py",
       "kind": "gate",
@@ -5945,11 +6039,11 @@
         "ref": "python3 scripts/check_lean_axiom_census.py --self-test",
         "replayable": false,
         "date": "2026-11-17",
-        "script_sha256": "924ec0babda746ae61bc0c70e52237831364ae164a1fe1d8136aa3d8d0b7b38e",
+        "script_sha256": "95ad5fbcb2435f9803964ff216255a4b0588865faef94b82a9606728dbd99cec",
         "note": "Real pinned-Lean fixture: private/module selection, planted axiom and sorry, dropped/added declaration, closure growth (also under mint), stale source, missing output row, failed build and absent pin. Also package-qualified keys: adding a package requires mint, dropping it refuses, and new-package forbidden axioms refuse even under mint.",
         "replayed": {
-          "script_sha256": "924ec0babda746ae61bc0c70e52237831364ae164a1fe1d8136aa3d8d0b7b38e",
-          "inputs_sha256": "dfc98a7a0e2447db7257c0a6fc75cf390e46fed0adae89df0806f112da33b2ba",
+          "script_sha256": "95ad5fbcb2435f9803964ff216255a4b0588865faef94b82a9606728dbd99cec",
+          "inputs_sha256": "59f3abee0c707c48d1e98dc34c70ae13470d8577d85880cc7641288823e599d9",
           "by": "`python3 scripts/check_lean_axiom_census.py --self-test` exited 0"
         },
         "inputs": {
@@ -5965,9 +6059,18 @@
           "theories/kcheck_c7_p2/lean-toolchain": "ce4c4e3d87434b9663f46de25ce34b48a0cf0d392e0a320a0787b4674a2d7b61",
           "theories/kcheck_capstone/lean-toolchain": "ce4c4e3d87434b9663f46de25ce34b48a0cf0d392e0a320a0787b4674a2d7b61",
           "theories/kcheck_eval/lean-toolchain": "ce4c4e3d87434b9663f46de25ce34b48a0cf0d392e0a320a0787b4674a2d7b61",
+          "theories/kcheck_init_slice/lean-toolchain": "ce4c4e3d87434b9663f46de25ce34b48a0cf0d392e0a320a0787b4674a2d7b61",
           "theories/kcheck_labelled/lean-toolchain": "ce4c4e3d87434b9663f46de25ce34b48a0cf0d392e0a320a0787b4674a2d7b61",
           "theories/kcheck_loader/lean-toolchain": "ce4c4e3d87434b9663f46de25ce34b48a0cf0d392e0a320a0787b4674a2d7b61",
           "theories/kcheck_m5_m6/lean-toolchain": "ce4c4e3d87434b9663f46de25ce34b48a0cf0d392e0a320a0787b4674a2d7b61",
+          "theories/kcheck_s1_interface/lean-toolchain": "ce4c4e3d87434b9663f46de25ce34b48a0cf0d392e0a320a0787b4674a2d7b61",
+          "theories/kcheck_s2_bool_prod/lean-toolchain": "ce4c4e3d87434b9663f46de25ce34b48a0cf0d392e0a320a0787b4674a2d7b61",
+          "theories/kcheck_s3_acc/lean-toolchain": "ce4c4e3d87434b9663f46de25ce34b48a0cf0d392e0a320a0787b4674a2d7b61",
+          "theories/kcheck_s4_exists/lean-toolchain": "ce4c4e3d87434b9663f46de25ce34b48a0cf0d392e0a320a0787b4674a2d7b61",
+          "theories/kcheck_s5_quot/lean-toolchain": "ce4c4e3d87434b9663f46de25ce34b48a0cf0d392e0a320a0787b4674a2d7b61",
+          "theories/kcheck_s6_full_binops/lean-toolchain": "ce4c4e3d87434b9663f46de25ce34b48a0cf0d392e0a320a0787b4674a2d7b61",
+          "theories/kcheck_s6_nat_arith/lean-toolchain": "ce4c4e3d87434b9663f46de25ce34b48a0cf0d392e0a320a0787b4674a2d7b61",
+          "theories/kcheck_s6_string_accel/lean-toolchain": "ce4c4e3d87434b9663f46de25ce34b48a0cf0d392e0a320a0787b4674a2d7b61",
           "theories/kcheck_sort_bounds/lean-toolchain": "ce4c4e3d87434b9663f46de25ce34b48a0cf0d392e0a320a0787b4674a2d7b61",
           "theories/kcheck_sound/lean-toolchain": "ce4c4e3d87434b9663f46de25ce34b48a0cf0d392e0a320a0787b4674a2d7b61",
           "theories/kcheck_soundness/lean-toolchain": "ce4c4e3d87434b9663f46de25ce34b48a0cf0d392e0a320a0787b4674a2d7b61",
@@ -6015,11 +6118,11 @@
         "flag": "--selftest",
         "ref": "python3 scripts/self_proof_elab_probe.py --selftest",
         "replayable": false,
-        "date": "2026-11-14",
+        "date": "2026-11-18",
         "note": "Exercises actual child timing/RSS and timeout reaping, classifier acceptance/refusals, profile validation, package inventory, a missing adopted-checker probe and source-path collision refusal before staging.",
-        "script_sha256": "dbd178396a631c9ba7cdd3bc3624598238accd46e583f1d59717447bec0169ea",
+        "script_sha256": "eb60c78f501344950a0370aa83e45d4bb938d0f3929b4306696c25576bd28b1b",
         "replayed": {
-          "script_sha256": "dbd178396a631c9ba7cdd3bc3624598238accd46e583f1d59717447bec0169ea",
+          "script_sha256": "eb60c78f501344950a0370aa83e45d4bb938d0f3929b4306696c25576bd28b1b",
           "inputs_sha256": null,
           "by": "`python3 scripts/self_proof_elab_probe.py --selftest` exited 0"
         }
@@ -6057,11 +6160,11 @@
         "kind": "mutation-record",
         "ref": "data/gate_demonstrations.json",
         "replayable": true,
-        "date": "2026-11-16",
-        "script_sha256": "033de35ee6f280580b6a139eefab0794f064ca5548a270eda446d011e7a6d7c9",
-        "note": "Eleven arms, replayed with `scripts/check_gate_registry.py --demonstrate cic-l-qualification`; each runs the one test of the target against a mutated tree. Four mutate the theory's Lean source (theories/cic_l/CICL/ListSupportCases.lean), so the pinned Lean recompiles the package and Lean's own kernel still accepts it: a theorem restated (the statement pin refuses), a private axiom added (the reference entry refuses it as a direct target, which the `CICL.` name filter never made it), a proof rewritten through `Classical.choice` with its statement unchanged (the observed axiom closure refuses) and a theorem added with no pin (the inventory refuses). The fifth moves the test's root to a module that reaches less than ORDER lists. Three mutate E7's census (data/lean_axiom_census.json) and nothing else: a row that drops an axiom the kernel's walk of the admitted declaration reaches (the lower bound refuses it by name), a renamed row (the census inventory refuses) and a row that names an axiom Lean's rule cannot reach from the admitted declaration (the upper bound refuses it by name). The last three were added by the E1/E2 fix-up (2026-11-13) and are refused before anything compiles: theories/cic_l/lean-toolchain names another Lean than the workspace pin (the toolchain check), the census's cic_l header names another Lean (the census-Lean check), and the census states one declaration in two rows, a forged row claiming no axiom before the real one, which a map keyed by name would drop unread (the one-row check). The selection partition and the prefix-filter cross-check have no arm: no tracked input but evidence.rs or the loader can make either fire first, so their demonstration is the test's own planted control over the real selection. Each arm must turn the test red with the refusal it names.",
+        "date": "2026-11-19",
+        "script_sha256": "545fa4ce17d0c67a8f1056fb18746983e63b417ce23ff38ac7549e10fe6eb440",
+        "note": "Eleven arms, replayed with `scripts/check_gate_registry.py --demonstrate cic-l-qualification`; each runs the one test of the target against a mutated tree. Four mutate the theory's Lean source (theories/cic_l/CICL/ListSupportCases.lean), so the pinned Lean recompiles the package and Lean's own kernel still accepts it: a theorem restated (the statement pin refuses), a private axiom added (the reference entry refuses it as a direct target, which the `CICL.` name filter never made it), a proof rewritten through `Classical.choice` with its statement unchanged (the observed axiom closure refuses) and a theorem added with no pin (the inventory refuses). The fifth makes the test's root reach less than ORDER lists: since 2026-11-17 (the root became the generated import-only aggregate `CleanQualification.cic_l`, 81f9976c43) it plants that in the aggregate generator (crates/clean-olean/src/test_support/pinned_lean.rs drops ORDER's last root, keyed as recipe RECIPE_VERSION | (1 << 31), a value no real recipe takes that still moves with each real bump, so the fixture cache can serve it neither the full aggregate, a real recipe's entry, nor an older recipe's partial aggregate), where it used to point THEORY_ROOT at a partial module. Three mutate E7's census (data/lean_axiom_census.json) and nothing else: a row that drops an axiom the kernel's walk of the admitted declaration reaches (the lower bound refuses it by name), a renamed row (the census inventory refuses) and a row that names an axiom Lean's rule cannot reach from the admitted declaration (the upper bound refuses it by name). The last three were added by the E1/E2 fix-up (2026-11-13) and are refused before anything compiles: theories/cic_l/lean-toolchain names another Lean than the workspace pin (the toolchain check), the census's cic_l header names another Lean (the census-Lean check), and the census states one declaration in two rows, a forged row claiming no axiom before the real one, which a map keyed by name would drop unread (the one-row check). The selection partition and the prefix-filter cross-check have no arm: no tracked input but evidence.rs or the loader can make either fire first, so their demonstration is the test's own planted control over the real selection. Each arm must turn the test red with the refusal it names.",
         "replayed": {
-          "script_sha256": "033de35ee6f280580b6a139eefab0794f064ca5548a270eda446d011e7a6d7c9",
+          "script_sha256": "545fa4ce17d0c67a8f1056fb18746983e63b417ce23ff38ac7549e10fe6eb440",
           "inputs_sha256": null,
           "by": "its recorded arms replayed green"
         }
@@ -6082,36 +6185,40 @@
         "kind": "selftest-inline",
         "flag": "--selftest",
         "ref": "scripts/kstar_recheck.sh --selftest",
-        "date": "2026-11-17",
-        "note": "Local orchestration checks: missing reports/members, mismatched counts/axioms, timeout/crash, accepted controls, incidental failures and red/missing records; standing subject substitution and missing-identity controls. Since 2026-11-17 also the source-input rule (scripts/kstar_inputs.py) over a synthetic git tree: an include_str! target outside crates/ makes a record stale; each kind of compile-time read (include_str!/include_bytes!/include!, concat!/CARGO_MANIFEST_DIR, a macro-metavariable wildcard, #[path] and its modules, a build script's literal and data-named reads, tracked non-Rust files under crates/, a path dependency outside crates/) is an input; no input of the 2026-11-13 rule is dropped; and a code use naming no file, OUT_DIR without a build script and a path dependency outside the repository refuse. No stub verdict is a quorum vote.",
+        "date": "2026-11-19",
+        "note": "Local orchestration checks: missing reports/members, mismatched counts/axioms, timeout/crash, accepted controls, incidental failures and red/missing records; standing subject substitution and missing-identity controls. Since 2026-11-17 also the source-input rule (scripts/kstar_inputs.py) over a synthetic git tree: an include_str! target outside crates/ makes a record stale; each kind of compile-time read (include_str!/include_bytes!/include!, concat!/CARGO_MANIFEST_DIR, a macro include read against each invoking file, #[path] and its modules, a build script's literal and declared reads, tracked non-Rust files under crates/, a path dependency outside crates/) is an input; no input of the 2026-11-13 rule is dropped; sixteen refusals hold for their named reason; and one arm per form or group the rule's docstring lists under Evaluated or Refused (since the second 2026-11-19 correction, Evaluated holds only forms this tree uses). Since 2026-11-19 (\"Q4 freshness rests on the members' build read sets\") also the build read set: a record fresh in every other conjunct is accepted with it and never fresh without it, a changed or deleted listed file makes it stale, the dep-info parser reads escaped paths and refuses malformed ones, item 1's fail-closed refusals hold on a fake target directory (both cargo layouts), and, when KSTAR_STOCK_CARGO names stock cargo 1.97.1, a synthetic crate's dep-info lists exactly the files the arm expects. Since the 2026-11-19 correction of that entry also: the build-start stamp (a file changed at or after it, not clean before or after the build, untracked, or other than its blob at the build's or the record's HEAD refuses; so do a missing, foreign or failed build-start record and HEAD moving), --build-member's own recording, listed symbolic links (a link, a path through one, the repository or a target-directory file reached through one), malformed build read sets as not knowable, and the replay recording the set and checking it again at the end of the run; with stock cargo 1.97.1, a file edited during a build (cargo rebuilds it; the rule refuses), an edit whose mtime was reset (cargo misses it; the rule refuses) and a debugger_visualizer read through a link (cargo lists the link; the rule refuses). No stub verdict is a quorum vote.",
         "inputs": {
-          "data/lean4lean_q4_arena_reasons.json": "e7dea483c4937296a5e29e70c76f2b0bc943a016cd5eb319bf1e3c413e4afde5",
-          "data/lean4lean_q4_pin.json": "196e379d6dff6abffe41ab2f21644db60026219b972891c95e76f1ca50bedcfb",
+          "data/lean4lean_q4_arena_reasons.json": "5ca8deb25db26d780ea5e7d0b61a1f1d068dad8f1a2a09a2744fdd6a4cd3177a",
+          "data/lean4lean_q4_patches/0001-strict-isProp-structure-reduction.patch": "155a722e87a9130b0e4a6448941ebe5e8f07c4088a3c8af385e3dced5027d6ac",
+          "data/lean4lean_q4_patches/0002-pass-strict-isProp-to-recursors.patch": "aabdd2fea4ca91078a0d4c2fb194f868ac0d1d466dbfa58ce4296222af06ecb9",
+          "data/lean4lean_q4_patches/0003-mapEnvM-declTypeMismatch-maps-env.patch": "c64d3b0b9863d6c0fdc0d56b5d1b2ce866ca007139432dff89d24d19fecf041d",
+          "data/lean4lean_q4_pin.json": "a1f3478b630ec6f4204df2fab68f8f4ee0d5ebfe0a96bb3686489fa0c4ab9863",
           "reports/self-proof-q3-2026-11-12/extra-axiom.ndjson": "02287bb5cc83317682f9000a48ef99dd06b90d7b040fb2f3bd0ee4014f720d47",
           "reports/self-proof-q3-2026-11-12/forged-recursor.ndjson": "8c5c3d6e450cd92b6a44f7fe29dfcc4f5181495b850a35f23cc234ecee94ecc1",
           "reports/self-proof-q3-2026-11-12/ill-typed-body.ndjson": "d5bdd8e30e77638c1bcfd6e4e7e6c557096bcbf18497dacbf39fe72e280c5430",
+          "reports/self-proof-q4-corrected-reference-2026-11-18/control-observation.json": "510f2771f4e2e03ec1ec03db0ab2f5939accc4c294e4ea48c28c488b79a9a4a4",
           "scripts/check_add_decl_ratchet.py": "b9eaa60152e79830c91f610b92314325f338832b35944b655d75208f6e288288",
-          "scripts/kstar_inputs.py": "481d360347269f3dbb2b19c67423287c31684481dc8ac3c69a91a74d5b0e9426",
-          "scripts/kstar_recheck.py": "bb4cad2a9a658c028eac7641f8b9c47b0f749fd2c1562edea1ddecc5115996b5",
-          "scripts/kstar_recheck.sh": "092b336ff8e274d03b7ae72793f139424740c3a7e333665c83c18ef6668aff57",
-          "scripts/kstar_selftest.py": "b353754c094ac509ac26ae4cc4d26da3d44fac86c4d170b9f91409335ec4a11a",
+          "scripts/kstar_inputs.py": "7e38027e12d9679af6be73b480dd5203be702a49740e5c5fb406c327989b19f8",
+          "scripts/kstar_recheck.py": "f7e991be8fdad4fb272ff55dc12c237fe9ac9186e5959eac8a8f2419f477af3c",
+          "scripts/kstar_recheck.sh": "4fce99ee6aacbc0b28cc36226eeb484fedf75e9c3a9b65e2653f97f497776d37",
+          "scripts/kstar_selftest.py": "c2ff70d1c36fc4ed20a39b996a6c369bc4f2d63239354eb6f6fd28d9073c11c5",
           "scripts/kstar_subjects.py": "950dfce66a74c5d05d2aeb09fd9ec6d7ac9c4e8937da0fa7ab3a9fb77a4aa32c",
           "scripts/kstar_subjects_selftest.py": "f4c7693dd6c8d51a4939bf8b6031033268b828d38ff9a05fb22531bb8dffda5f",
-          "scripts/lean4lean_recheck.py": "15c07b659973c07598baf33a77a3b3f1c5ad3764a2d1b5c95c7460d46def98b2",
-          "scripts/lean4lean_selftest.py": "b3770fa8f9306e8c42ded008ab956797035640a486ff4efe6a164210e8f46738",
+          "scripts/lean4lean_recheck.py": "7fce67cfb06cf74aac38c81dc85806e9d42069b896f38189b9e2b407887c7696",
+          "scripts/lean4lean_selftest.py": "61ab91ca755055feeed860c7e33163251eb0f7450a74a910587243b865cbf790",
           "scripts/lean_export_replay.sh": "e6ae21362ac8b597a95d94daa760bcd7de18b4fa3efde99d5ac5e18d1a62b1f6",
           "scripts/lean_export_replay/Upstream.lean": "828db1cc7189368441c93dac0567cc62adbb079bcd3c750d15f2a8de6f150f6f",
           "scripts/nanoda_recheck.py": "37b490e417ee010d219407a2252372b47053853ed147715ef248d1dae7de9e0e"
         },
-        "script_sha256": "092b336ff8e274d03b7ae72793f139424740c3a7e333665c83c18ef6668aff57",
+        "script_sha256": "4fce99ee6aacbc0b28cc36226eeb484fedf75e9c3a9b65e2653f97f497776d37",
         "replayed": {
-          "script_sha256": "092b336ff8e274d03b7ae72793f139424740c3a7e333665c83c18ef6668aff57",
-          "inputs_sha256": "2ed4167feefc4df56b1a761669889a32194704362dc1e82c394fa4c15bdcd13b",
+          "script_sha256": "4fce99ee6aacbc0b28cc36226eeb484fedf75e9c3a9b65e2653f97f497776d37",
+          "inputs_sha256": "77482ffd24674c12b40e8bf2355107023390206acb2107ea17156bb63eb720f1",
           "by": "`scripts/kstar_recheck.sh --selftest` exited 0"
         }
       },
       "waiver": null,
-      "note": "Q4 standing suite row gate::kstar-recheck checks the dated replay record and current source inputs, and requires all four binaries at their identities. Missing, red or stale records exit nonzero. The selftest demonstrates orchestration only; real agreement and every control remain required. No member refusal is weakened."
+      "note": "Q4 standing suite row gate::kstar-recheck checks the dated replay record: its build read set (build_reads: for clean-reference and ck0-stock, every repository file cargo's dep-info lists with its sha256, minted from a build stamped by --build-member; a set of any other shape is not knowable), then the current source inputs, and requires all four binaries at their identities. Missing, red or stale records exit nonzero. A build with any tracked path not clean before or after it refuses, listed or not. Outside the repository nothing is hashed: the receipt's compiler identity pins the Rust toolchain. Uncovered residuals: the bytes under CARGO_HOME (Cargo.lock, in the source-input conjunct, pins registry archive checksums and git revisions, not the extracted sources, which cargo does not re-verify); Cargo configuration outside the repository ($CARGO_HOME/config.toml and .cargo/config.toml in parent directories); the build environment (RUSTFLAGS and other variables); the linker and system libraries; clean-olean's build script reading the installed Lean toolchain's .olean parts with no rerun-if-changed (data/kstar_build_reads.json, outside); and inside the repository an untracked file read unlisted, and an edit reverted with its mtime restored, which benign cp -p or shutil.copy2 restores do (scripts/bump-trust-ir-pin.sh rollback, scripts/crystal_perturb_meta_tag_shl.sh). The selftest demonstrates orchestration only; real agreement and every control remain required. No member refusal is weakened."
     },
     {
       "id": "kstar_recheck_driver",
@@ -6125,39 +6232,43 @@
         "kind": "selftest-inline",
         "flag": "--selftest",
         "ref": "python3 scripts/kstar_recheck.py --selftest",
-        "date": "2026-11-17",
-        "note": "Inherits the orchestration self-test, the source-input arms included; real verdicts are separate.",
+        "date": "2026-11-19",
+        "note": "Inherits the orchestration self-test, the source-input and build-read-set arms included; real verdicts are separate.",
         "inputs": {
-          "data/lean4lean_q4_arena_reasons.json": "e7dea483c4937296a5e29e70c76f2b0bc943a016cd5eb319bf1e3c413e4afde5",
-          "data/lean4lean_q4_pin.json": "196e379d6dff6abffe41ab2f21644db60026219b972891c95e76f1ca50bedcfb",
+          "data/lean4lean_q4_arena_reasons.json": "5ca8deb25db26d780ea5e7d0b61a1f1d068dad8f1a2a09a2744fdd6a4cd3177a",
+          "data/lean4lean_q4_patches/0001-strict-isProp-structure-reduction.patch": "155a722e87a9130b0e4a6448941ebe5e8f07c4088a3c8af385e3dced5027d6ac",
+          "data/lean4lean_q4_patches/0002-pass-strict-isProp-to-recursors.patch": "aabdd2fea4ca91078a0d4c2fb194f868ac0d1d466dbfa58ce4296222af06ecb9",
+          "data/lean4lean_q4_patches/0003-mapEnvM-declTypeMismatch-maps-env.patch": "c64d3b0b9863d6c0fdc0d56b5d1b2ce866ca007139432dff89d24d19fecf041d",
+          "data/lean4lean_q4_pin.json": "a1f3478b630ec6f4204df2fab68f8f4ee0d5ebfe0a96bb3686489fa0c4ab9863",
           "reports/self-proof-q3-2026-11-12/extra-axiom.ndjson": "02287bb5cc83317682f9000a48ef99dd06b90d7b040fb2f3bd0ee4014f720d47",
           "reports/self-proof-q3-2026-11-12/forged-recursor.ndjson": "8c5c3d6e450cd92b6a44f7fe29dfcc4f5181495b850a35f23cc234ecee94ecc1",
           "reports/self-proof-q3-2026-11-12/ill-typed-body.ndjson": "d5bdd8e30e77638c1bcfd6e4e7e6c557096bcbf18497dacbf39fe72e280c5430",
+          "reports/self-proof-q4-corrected-reference-2026-11-18/control-observation.json": "510f2771f4e2e03ec1ec03db0ab2f5939accc4c294e4ea48c28c488b79a9a4a4",
           "scripts/check_add_decl_ratchet.py": "b9eaa60152e79830c91f610b92314325f338832b35944b655d75208f6e288288",
-          "scripts/kstar_inputs.py": "481d360347269f3dbb2b19c67423287c31684481dc8ac3c69a91a74d5b0e9426",
-          "scripts/kstar_recheck.py": "bb4cad2a9a658c028eac7641f8b9c47b0f749fd2c1562edea1ddecc5115996b5",
-          "scripts/kstar_recheck.sh": "092b336ff8e274d03b7ae72793f139424740c3a7e333665c83c18ef6668aff57",
-          "scripts/kstar_selftest.py": "b353754c094ac509ac26ae4cc4d26da3d44fac86c4d170b9f91409335ec4a11a",
+          "scripts/kstar_inputs.py": "7e38027e12d9679af6be73b480dd5203be702a49740e5c5fb406c327989b19f8",
+          "scripts/kstar_recheck.py": "f7e991be8fdad4fb272ff55dc12c237fe9ac9186e5959eac8a8f2419f477af3c",
+          "scripts/kstar_recheck.sh": "4fce99ee6aacbc0b28cc36226eeb484fedf75e9c3a9b65e2653f97f497776d37",
+          "scripts/kstar_selftest.py": "c2ff70d1c36fc4ed20a39b996a6c369bc4f2d63239354eb6f6fd28d9073c11c5",
           "scripts/kstar_subjects.py": "950dfce66a74c5d05d2aeb09fd9ec6d7ac9c4e8937da0fa7ab3a9fb77a4aa32c",
           "scripts/kstar_subjects_selftest.py": "f4c7693dd6c8d51a4939bf8b6031033268b828d38ff9a05fb22531bb8dffda5f",
-          "scripts/lean4lean_recheck.py": "15c07b659973c07598baf33a77a3b3f1c5ad3764a2d1b5c95c7460d46def98b2",
-          "scripts/lean4lean_selftest.py": "b3770fa8f9306e8c42ded008ab956797035640a486ff4efe6a164210e8f46738",
+          "scripts/lean4lean_recheck.py": "7fce67cfb06cf74aac38c81dc85806e9d42069b896f38189b9e2b407887c7696",
+          "scripts/lean4lean_selftest.py": "61ab91ca755055feeed860c7e33163251eb0f7450a74a910587243b865cbf790",
           "scripts/lean_export_replay.sh": "e6ae21362ac8b597a95d94daa760bcd7de18b4fa3efde99d5ac5e18d1a62b1f6",
           "scripts/lean_export_replay/Upstream.lean": "828db1cc7189368441c93dac0567cc62adbb079bcd3c750d15f2a8de6f150f6f",
           "scripts/nanoda_recheck.py": "37b490e417ee010d219407a2252372b47053853ed147715ef248d1dae7de9e0e"
         },
-        "script_sha256": "bb4cad2a9a658c028eac7641f8b9c47b0f749fd2c1562edea1ddecc5115996b5",
+        "script_sha256": "f7e991be8fdad4fb272ff55dc12c237fe9ac9186e5959eac8a8f2419f477af3c",
         "replayed": {
-          "script_sha256": "bb4cad2a9a658c028eac7641f8b9c47b0f749fd2c1562edea1ddecc5115996b5",
-          "inputs_sha256": "2ed4167feefc4df56b1a761669889a32194704362dc1e82c394fa4c15bdcd13b",
+          "script_sha256": "f7e991be8fdad4fb272ff55dc12c237fe9ac9186e5959eac8a8f2419f477af3c",
+          "inputs_sha256": "77482ffd24674c12b40e8bf2355107023390206acb2107ea17156bb63eb720f1",
           "by": "`python3 scripts/kstar_recheck.py --selftest` exited 0"
         }
       },
       "waiver": null,
-      "note": "Q4 Python driver. Mints replay.json; --check-record rejects red, missing or stale results and unavailable members. Its source inputs are every file a member's build reads, by the rule in scripts/kstar_inputs.py (docs/DECISIONS.md 2026-11-17). No compiler or checker proof claim.",
+      "note": "Q4 Python driver. --build-member runs a member's build command stamped as cargo stamps a unit (a build-start record beside the binary: start mtime, HEAD and dirty tracked paths before and after, exit status, binary sha256). Mints replay.json, with each Rust member's build read set (build_reads: every repository file cargo's dep-info beside the member binary lists, keyed as listed and never through a symbolic link, with its sha256; refused when the dep-info is missing, older than the binary or of other bytes, when the build-start record is missing, foreign or failed or HEAD moved, when a listed file is unreadable, changed at or after the build's start, not clean before or after it, untracked or other than its blob at the build's or the record's HEAD, when a listed path is or passes through a symbolic link, or is outside the repository, the target directory, Cargo's home and the toolchain, or when a repository build script in the graph printed no rerun-if-changed). --check-record rejects red, missing or stale results and unavailable members: a record is fresh only when it carries a build read set for clean-reference and ck0-stock whose files all keep their digests, and its source inputs (the files scripts/kstar_inputs.py names, a coarse conjunct since 2026-11-19) keep theirs (docs/DECISIONS.md 2026-11-17, 2026-11-19 with its corrections, and 2026-11-19 \"Q4 freshness rests on the members' build read sets\" with its correction). No compiler or checker proof claim.",
       "source_scan": {
         "kind": "raw-lines",
-        "note": "Through scripts/kstar_inputs.py it matches raw Rust text (include_str!/include_bytes!/include!, #[path], a build script's string literals) and Cargo.toml path keys under crates/ and the path packages they reach, to choose the files whose digests decide freshness. A match only ever ADDS a file to the hashed set, so prose can make a record staler, never fresher. The reference lexer (scripts/check_add_decl_ratchet.py NONCODE_RE) separates code from comments and strings only to decide refusal: a use in code that names no file raises, a mention elsewhere adds what it names exactly."
+        "note": "It parses cargo's dep-info exactly as cargo writes it (one rule, `\\ ` the only escape) and hashes the repository files it lists: that read set decides freshness. Through scripts/kstar_inputs.py it also reads Rust text (include_str!/include_bytes!/include!, #[path], mod, macro_rules!, a build script's string literals) and tomllib-parsed Cargo manifests, to choose the files whose digests are the coarse conjunct. A mention in a comment or string only ever ADDS a file, so prose can make a record staler, never fresher. The reference lexer (scripts/check_add_decl_ratchet.py NONCODE_RE) decides what is code: a form in code that the rule's docstring lists under Evaluated is evaluated, one it lists under Refused raises, and the rule claims nothing about forms its docstring does not list."
       }
     },
     {
@@ -6278,55 +6389,167 @@
       "waiver": null
     },
     {
-      "id": "self_proof_scoreboard",
-      "path": "scripts/self_proof_scoreboard.py",
+      "id": "self_proof_fleet_product",
+      "path": "scripts/self_proof_fleet_product.py",
+      "kind": "tool",
+      "claims": "none",
+      "wired_by": [],
+      "demonstrated": null,
+      "waiver": null,
+      "tool_reason": "The fleet CLI and its tests import this Product Planning helper. It reads Clean evidence for planning and can publish measurements on explicit request. The --check subprocess calls scripts/self_proof_scoreboard.py, which owns that verdict. No enforcement runner invokes this helper."
+    },
+    {
+      "id": "self_proof_fleet_product_test",
+      "path": "scripts/self_proof_fleet_product_test.py",
+      "kind": "tool",
+      "claims": "none",
+      "wired_by": [],
+      "demonstrated": null,
+      "waiver": null,
+      "tool_reason": "Exercises Product Planning with temporary fixtures and a simulated Scoreboard subprocess. The --check literal belongs to the simulated subprocess, and the fleet timeline path names a temporary copy."
+    },
+    {
+      "id": "run_w0_scoreboard_gate",
+      "path": "scripts/run_w0_scoreboard_gate.sh",
       "kind": "gate",
       "claims": "evidence",
-      "source_scan": {
-        "kind": "lexed",
-        "note": "Reads theories/kcheck_labelled/**/*.lean for a `theorem ... : C3Owes checker` head after blanking comments and string literals (blank_noncode_lean), so prose that states the claim does not count as the theorem. Every other figure is a JSON read."
-      },
       "wired_by": [
         "scripts/local_gate.sh"
       ],
       "demonstrated": {
+        "kind": "selftest-file",
+        "ref": "scripts/test_run_w0_scoreboard_gate.py",
+        "date": "2026-11-18",
+        "note": "Exercises the shell orchestration with synthetic Targo events and the real nonvacuous wrapper. The native comparator retains its independent fixed-fixture mutation replay.",
+        "script_sha256": "9da3c051a804e7097cf28b9994a09d4d7262a0ebfecdbd0466fa2736bf64a2b5",
+        "replayed": {
+          "script_sha256": "9da3c051a804e7097cf28b9994a09d4d7262a0ebfecdbd0466fa2736bf64a2b5",
+          "inputs_sha256": "4f4b87cd5541fb7b3dac716b4c8c41e9f3b45ae5027ab7d0c6a8f4fc21cd68b2",
+          "by": "`scripts/test_run_w0_scoreboard_gate.py` exited 0"
+        },
+        "inputs": {
+          "scripts/cargo_test_nonvacuous.sh": "341f2d9f9a67b8b90c41092dbfbe43a994c2752d62e993ad118289602901b43a",
+          "scripts/kcheck_coverage_export.py": "98cd261f65827d3fe707e96e9f7442b388a46f78175d2cb96742e4ec4fda0a9f",
+          "scripts/self_proof_fleet_w0.py": "cb7ea3c95ef61b9af7cda5082ca933952537055e7c818b46332926463eafd1a9"
+        }
+      },
+      "waiver": null
+    },
+    {
+      "id": "test_run_w0_scoreboard_gate",
+      "path": "scripts/test_run_w0_scoreboard_gate.py",
+      "kind": "tool",
+      "claims": "none",
+      "wired_by": [],
+      "demonstrated": null,
+      "waiver": null,
+      "tool_reason": "Runs the W0 orchestration regression tests in disposable fixture repositories."
+    },
+    {
+      "id": "self_proof_fleet_w0",
+      "path": "scripts/self_proof_fleet_w0.py",
+      "kind": "tool",
+      "claims": "none",
+      "wired_by": [
+        "scripts/run_w0_scoreboard_gate.sh"
+      ],
+      "demonstrated": null,
+      "waiver": null,
+      "tool_reason": "The Fleet CLI validates pinned native W0 reads and explicitly exports an already qualified executable and its build-custody receipt. It also retains optional W0 gate qualification metadata. Clean supplies the native saved-board verdict."
+    },
+    {
+      "id": "self_proof_scoreboard",
+      "path": "scripts/self_proof_scoreboard.py",
+      "kind": "tool",
+      "claims": "none",
+      "source_scan": {
+        "kind": "lexed",
+        "note": "Reads theories/kcheck_labelled/**/*.lean for a `theorem ... : C3Owes checker` head after blanking comments and string literals (blank_noncode_lean), so prose that states the claim does not count as the theorem. Every other figure is a JSON read."
+      },
+      "wired_by": [],
+      "demonstrated": {
         "kind": "selftest-inline",
         "flag": "--self-test",
         "ref": "python3 scripts/self_proof_scoreboard.py --self-test",
-        "date": "2026-11-16",
+        "date": "2026-11-18",
         "note": "22 arms: a record that states a better figure than its sources and a missing record are each refused; a headline theorem spelled only in a comment, a nested block comment or a string, soundness taken as a hypothesis, and another checker's soundness are not counted; a missing source artifact reads as a stated absence, never a figure; through the real loader of the coverage record, a stale record gives neither figure and is reported by its fixed reason alone, a refused record and a reader that crashes give no figure, an accepted declaration is not counted as a decided one, and the printed board says `0 real declarations` beside the accepted count with its three labels, or ABSENT.",
-        "script_sha256": "587bf69ac95f759ff58166ab54a36b54f35571f064e48a15fdad00df6384d717",
+        "script_sha256": "adb26c8f81a4f613331eeaa737d7ce59429a465f99ed8ff4270f39665f73eed3",
         "replayed": {
-          "script_sha256": "587bf69ac95f759ff58166ab54a36b54f35571f064e48a15fdad00df6384d717",
-          "inputs_sha256": "5d36e7e7e0b683d6b364e2dddd1ac2a4eca43a5647e5f4cb6666b900730f745f",
+          "script_sha256": "adb26c8f81a4f613331eeaa737d7ce59429a465f99ed8ff4270f39665f73eed3",
+          "inputs_sha256": "dfb61495e9b54508f5cd3c96ef0954e75e9a5f933bf149ceb8d6129d97288039",
           "by": "`python3 scripts/self_proof_scoreboard.py --self-test` exited 0"
         },
         "inputs": {
-          "scripts/kcheck_coverage.py": "232babb7c432fb2d660e4b984c341b346b00169414aeed243aa71b1189d19ffd",
+          "scripts/kcheck_coverage.py": "6fd376474f00c911bb6c1dd91d2f8d7bb482ced737dca627fb9b9afc2023cd7c",
           "scripts/kcheck_coverage_export.py": "98cd261f65827d3fe707e96e9f7442b388a46f78175d2cb96742e4ec4fda0a9f",
           "scripts/kcheck_coverage_readers.py": "6c7d5a77ab1323993c4cfb0ed00e439519e16c0f7dc64a552f7cd72e2793125d",
           "scripts/kcheck_coverage_selftest.py": "f45e4a9e9023670d1988284d17cb3c7d5939f5ef49b647cce7419b8ed812aa09",
           "scripts/kcheck_fragment_census.py": "4c07b91b96ef51c611b6021cf97ed1b757d62a2a2bf5b398b67ee25fb4bc158e",
-          "scripts/self_proof_scoreboard_selftest.py": "42de237f6e90450884b45917947ff2b7be642c599a1ebde8f798069e3d805997"
+          "scripts/self_proof_scoreboard_selftest.py": "6f5422b3223ef1edb86bb6b178812b8dabd63e32fd075b233b21d713990d064a"
         }
       },
-      "waiver": null
+      "waiver": null,
+      "tool_reason": "Retained W0 board writer and fleet report input. The full local gate runs the native W0 test bundle and saved-board check."
+    },
+    {
+      "id": "w0-receipt-validation",
+      "path": "crates/clean-evidence/src/w0_mutation/record.rs",
+      "kind": "battery",
+      "claims": "evidence",
+      "wired_by": [],
+      "demonstrated": {
+        "kind": "mutation-record",
+        "ref": "data/gate_demonstrations.json",
+        "replayable": true,
+        "note": "Two independent receipt edits must reach the named Invalid verdict after each pristine baseline passes. Pins the record-verdict module that owns both refusals.",
+        "script_sha256": "2456ed32323415d5ee11fdd618786a7b31d815c8f33a7cd0d310e0940a120b6b",
+        "date": "2026-11-18",
+        "replayed": {
+          "script_sha256": "2456ed32323415d5ee11fdd618786a7b31d815c8f33a7cd0d310e0940a120b6b",
+          "inputs_sha256": null,
+          "by": "its recorded arms replayed green"
+        }
+      },
+      "waiver": null,
+      "note": "Opt-in standalone Rust receipt validator. Its baseline resolves the receipt's pinned Git tree and reconstructs the historical inputs. The arms change the claimed replay exit and the digest of the lowered saved board. The replay uses the locally available historical Git objects and locked cached Trust dependencies."
+    },
+    {
+      "id": "w0-scoreboard-comparator",
+      "path": "crates/clean-cli/src/cmd_evidence/w0_scoreboard.rs",
+      "kind": "battery",
+      "claims": "evidence",
+      "wired_by": [],
+      "demonstrated": {
+        "kind": "mutation-record",
+        "ref": "data/gate_demonstrations.json",
+        "replayable": true,
+        "note": "The exact fixed-fixture W0 CLI test passes before the bypass and must hit its expected exit assertion after a sandbox build with the saved comparator bypassed.",
+        "script_sha256": "406952eea5a98c83712d7ee03bff866695056b55836c605d80eba6d987e889a4",
+        "date": "2026-11-18",
+        "replayed": {
+          "script_sha256": "406952eea5a98c83712d7ee03bff866695056b55836c605d80eba6d987e889a4",
+          "inputs_sha256": null,
+          "by": "its recorded arms replayed green"
+        }
+      },
+      "waiver": null,
+      "note": "Opt-in evidence for the current Rust saved-board comparator. The checkout-built CLI test lowers the Clean P3 count by one in a fixed synthetic fixture. The comparator must refuse it. This replay uses a clone sandbox, cached locked Trust dependencies and a build-sized outer reservation."
     },
     {
       "id": "self-proof-scoreboard",
       "path": "",
       "kind": "leg",
       "claims": "evidence",
-      "implemented_by": "scripts/self_proof_scoreboard.py",
+      "implemented_by": "crates/clean-cli/src/cmd_evidence/w0_scoreboard.rs",
       "wired_by": [
         "scripts/local_gate.sh"
       ],
       "demonstrated": {
-        "kind": "selftest-inline",
-        "flag": "--self-test",
-        "ref": "python3 scripts/self_proof_scoreboard.py --self-test",
-        "date": "2026-11-15",
-        "inherited_from": "self_proof_scoreboard"
+        "kind": "mutation-record",
+        "ref": "data/gate_demonstrations.json",
+        "replayable": true,
+        "date": "2026-11-18",
+        "inherited_from": "w0-scoreboard-comparator"
       },
       "waiver": null
     },
@@ -6347,11 +6570,11 @@
         "kind": "selftest-inline",
         "flag": "--self-test",
         "ref": "python3 scripts/kcheck_coverage.py --self-test",
-        "date": "2026-11-15",
+        "date": "2026-11-18",
         "note": "147 arms. Over a small export and a hand-written honest run, the second reader refuses: a swapped statement echo; an outside, axiom or literal row printed as accepted; a declaration citing an axiom that is spelled like an accepted definition; a dropped, repeated or reordered row; an inflated or reordered summary; a changed header, name or kind; a missing or misplaced statement line; a wrong frame count, a frame off the fragment, an acceptance on no advice, a malformed frame length; an accepted row over a refused dependency; a detail that is not what the frame and the export give (level-parameter count, iota and K read token by token); and each export the checker's own reader refuses (an escape, a key written twice, an index out of sequence, a name declared twice, a term past the node cap, and eighteen more). On the real export, Nat, PUnit and Eq are the only recognised records and nine edits to their recursors, rules and flags each un-recognise them. On a scratch tree the real check() refuses a record that claims a site decision, rewords a label, raises a figure, drops or pads its source list, or names another toolchain, and reports moved sources as stale; with a stand-in toolchain, --write refuses a build that compiled other files than it lists and a tree that moved during the build. A mutation run that deletes each of the 98 refusals in turn leaves 3 alive, each an unreachable guard.",
-        "script_sha256": "232babb7c432fb2d660e4b984c341b346b00169414aeed243aa71b1189d19ffd",
+        "script_sha256": "6fd376474f00c911bb6c1dd91d2f8d7bb482ced737dca627fb9b9afc2023cd7c",
         "replayed": {
-          "script_sha256": "232babb7c432fb2d660e4b984c341b346b00169414aeed243aa71b1189d19ffd",
+          "script_sha256": "6fd376474f00c911bb6c1dd91d2f8d7bb482ced737dca627fb9b9afc2023cd7c",
           "inputs_sha256": "1a3c975e1c1b018322c00e93f52029bffe11fde7dc4efdacdbc688f25e11014e",
           "by": "`python3 scripts/kcheck_coverage.py --self-test` exited 0"
         },
@@ -6570,6 +6793,18 @@
     }
   ],
   "retired": [
+    {
+      "id": "check_trustcore_evidence_staleness",
+      "path": "scripts/check_trustcore_evidence_staleness.py",
+      "kind": "gate",
+      "claims": "evidence",
+      "retired": "2026-11-17",
+      "by": "e8-trustcore-cutover",
+      "superseded_by": [
+        "trustcore-evidence-staleness"
+      ],
+      "reason": "The standalone Rust checker compares the existing receipt pins and retains the verdict protocol. The E8 shadow qualified identical output and exit status on two fresh revisions and one stale revision. The local gate executes the checker from locked current sources in both modes. The opt-in push hook excludes the cold compilation cost."
+    },
     {
       "id": "prover_phase_0_audit",
       "path": "scripts/audits/prover_phase_0_audit.sh",

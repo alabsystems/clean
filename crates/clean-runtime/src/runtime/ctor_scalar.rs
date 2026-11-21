@@ -424,23 +424,11 @@ pub(crate) fn box_uint64(n: u64) -> LeanObjPtr {
     o
 }
 
-/// Unbox a heap-allocated `u64`.
+/// Read the low word of a tagged or heap numeric carrier.
 pub(crate) fn unbox_uint64(o: LeanObjPtr) -> u64 {
-    // SAFETY: `o` is a non-scalar heap pointer (caller precondition).
-    // Dereferencing the header to check the kind field is valid.
-    unsafe {
-        expect_obj_kind(
-            o,
-            ObjKind::Ctor,
-            "unbox_uint64: pointer is not a constructor",
-        );
-    }
-    // SAFETY: caller guarantees `o` is a heap-allocated u64 box (non-scalar,
-    // allocated with scalar_size = size_of::<u64>()). Read is within bounds.
-    unsafe {
-        let p = CleanObj::scalar_ptr(o) as *const u64;
-        std::ptr::read(p)
-    }
+    // SAFETY: caller supplies a live numeric carrier; low_word validates its
+    // layout/class, including tagged and arbitrary-width Nat representations.
+    unsafe { super::nat::low_word(o) }
 }
 
 /// Box a `u32` value. Uses a tagged pointer if the value fits (≤ MAX_SMALL),
@@ -461,16 +449,8 @@ pub(crate) fn box_uint32(n: u32) -> LeanObjPtr {
 
 /// Unbox a `u32`. Handles both tagged pointers and heap-allocated values.
 pub(crate) fn unbox_uint32(o: LeanObjPtr) -> u32 {
-    if is_scalar(o) {
-        lean_unbox(o) as u32
-    } else {
-        // SAFETY: non-scalar means heap-allocated u32 box with
-        // scalar_size = size_of::<u32>(). Read is within bounds.
-        unsafe {
-            let p = CleanObj::scalar_ptr(o) as *const u32;
-            std::ptr::read(p)
-        }
-    }
+    // SAFETY: as unbox_uint64; the narrowing is the specified low-32-bit view.
+    unsafe { super::nat::low_word(o) as u32 }
 }
 
 /// Box an `f64` value. Always heap-allocates.

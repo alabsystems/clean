@@ -148,7 +148,7 @@ pub fn split_(state: &mut ProofState) -> TacticResult {
         // condition's `Decidable` instance. Search for the first `ite` and, if
         // found, split on its instance via `Decidable.casesOn`. If there is no
         // `ite` either, fail closed.
-        _ => split_ite(state, &goal),
+        _ => split_ite(state, &goal, None),
     }
 }
 
@@ -184,7 +184,11 @@ pub fn split_(state: &mut ProofState) -> TacticResult {
 ///   term and two subgoals are pushed (false/`¬c` case first, true/`c` second)
 /// ENSURES: On Err(GoalMismatch), no `ite` was found; state unchanged
 /// ENSURES: On Err(EnvironmentMissing), `Decidable.casesOn` is not registered
-fn split_ite(state: &mut ProofState, goal: &Goal) -> TacticResult {
+pub(super) fn split_ite(
+    state: &mut ProofState,
+    goal: &Goal,
+    reserved_names: Option<&[LocalDecl]>,
+) -> TacticResult {
     // The target as the goal actually carries it (metas resolved). We search
     // for the `ite` here rather than in the WHNF'd target: WHNF delta-unfolds a
     // TOP-LEVEL `ite` (it is `is_reducible`) into its `Decidable.casesOn` body,
@@ -292,7 +296,7 @@ fn split_ite(state: &mut ProofState, goal: &Goal) -> TacticResult {
     // in scope the branch `h` hid it and `omega` — which resolves hypotheses
     // by name — read the wrong one and refused an honestly-true goal. Take
     // the first free `h`, `h1`, `h2`, … instead.
-    let h_name = super::tauto::fresh_hyp_name(&goal.local_ctx, "h");
+    let h_name = super::tauto::fresh_hyp_name(reserved_names.unwrap_or(&goal.local_ctx), "h");
     let mut false_ctx = goal.local_ctx.clone();
     false_ctx.push(LocalDecl {
         binder_info: Default::default(),
@@ -482,6 +486,10 @@ fn find_first_ite(expr: &Expr, saw_bound: &mut bool) -> Option<IteApp> {
             _ => None,
         }
     })
+}
+
+pub(super) fn contains_splittable_ite(expr: &Expr) -> bool {
+    find_first_ite(expr, &mut false).is_some()
 }
 
 /// The `and_intros` tactic repeatedly applies `And.intro` to the goal,

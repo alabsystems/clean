@@ -13,7 +13,51 @@
 //! tests pin the corrected behavior and guard against regressions in the
 //! highest-blast-radius area (operator/expression parsing).
 
-use clean_parser::{parse_file, Projection, SurfaceDecl, SurfaceExpr};
+use clean_parser::{
+    parse_file, parse_file_seeded, NotationSeed, Projection, SurfaceDecl, SurfaceExpr,
+    TacticPatterns,
+};
+
+#[test]
+fn seeded_infix_selects_the_longest_atom_before_precedence() {
+    let mut seed = NotationSeed::new();
+    seed.harvest_module_source(
+        r#"infixl:65 " ++! " => shortOp
+infixr:35 " ++!> " => longOp
+infixr:35 " <&&> " => andM
+infixr:30 " <||> " => orM"#,
+    );
+    for (source, outer, inner) in [
+        ("x ++!> y ++!> z", "longOp", "longOp"),
+        ("x <||> y <&&> z", "orM", "andM"),
+    ] {
+        let report = parse_file_seeded(
+            &format!("def answer := {source}"),
+            &TacticPatterns::default(),
+            &seed,
+        )
+        .unwrap();
+        assert!(report.diagnostics.is_empty(), "{:?}", report.diagnostics);
+        let args = as_app_of(def_value(&report.decls, "answer"), outer);
+        assert_eq!(args.len(), 2);
+        assert_eq!(as_app_of(&args[1].expr, inner).len(), 2);
+    }
+}
+
+#[test]
+fn compound_infix_requires_adjacent_tokens() {
+    let mut seed = NotationSeed::new();
+    seed.harvest_module_source(r#"infixr:35 " <&&> " => andM"#);
+    for expression in ["x < && > y", "x </- gap -/&&> y"] {
+        let source = format!("def invalid := {expression}");
+        let report = parse_file_seeded(&source, &TacticPatterns::default(), &seed).unwrap();
+        assert!(!report.diagnostics.is_empty(), "{expression}");
+        assert!(matches!(
+            report.decls.as_slice(),
+            [SurfaceDecl::RawDecl { .. }]
+        ));
+    }
+}
 
 /// Return the value term of the `def <name>` in `decls`, failing loudly if the
 /// declaration is missing or did not parse as a real `Def` (e.g. fell into
@@ -444,15 +488,16 @@ fn test_low_custom_relation_rejects_dependent_product_tail() {
 }
 
 #[test]
-fn test_low_precedence_postfix_fails_closed() {
-    let code = "postfix:50 \" !! \" => Observe\ndef rejected := p !!";
-    let decls = parse_file(code).expect("file parser should recover after the invalid declaration");
-    assert!(
-        !decls
-            .iter()
-            .any(|decl| matches!(decl, SurfaceDecl::Def { name, .. } if name.name() == clean_parser::SurfaceName::generated_path("rejected").name())),
-        "unsupported low-precedence postfix must not leave a partial definition: {decls:#?}",
-    );
+fn test_range_shaped_postfix_uses_its_declared_expansion() {
+    let report = clean_parser::parse_file_with_diagnostics(
+        "postfix:51 \"...*\" => marker\ndef exampleResult := a...* = b",
+    )
+    .expect("file parses");
+    assert!(report.diagnostics.is_empty(), "{:?}", report.diagnostics);
+    let eq = as_app_of(def_value(&report.decls, "exampleResult"), "Eq");
+    let argument = as_app_of(&eq[0].expr, "marker");
+    assert_eq!(as_ident(&argument[0].expr), "a");
+    assert_eq!(as_ident(&eq[1].expr), "b");
 }
 
 // ===========================================================================

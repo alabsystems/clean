@@ -22,6 +22,8 @@ pub enum LeanWorld {
     Lean435,
     /// Explicitly selected measured artifacts and variable visibility syntax.
     Lean436Rc2,
+    /// Stable Lean 4.36.0, explicitly selected with matching artifacts.
+    Lean436,
 }
 
 /// A world's state (R38).
@@ -65,13 +67,14 @@ pub struct UnknownLeanWorld(pub String);
 
 impl LeanWorld {
     /// Every release with an explicit source-language decision.
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 7] = [
         Self::Lean408,
         Self::Lean413,
         Self::Lean426,
         Self::Lean430Rc2,
         Self::Lean435,
         Self::Lean436Rc2,
+        Self::Lean436,
     ];
 
     /// The oracle stays at the repository's Lean 4.30 release candidate.
@@ -87,6 +90,7 @@ impl LeanWorld {
             Self::Lean430Rc2 => "v4.30.0-rc2",
             Self::Lean435 => "v4.35.0",
             Self::Lean436Rc2 => "v4.36.0-rc2",
+            Self::Lean436 => "v4.36.0",
         }
     }
 
@@ -102,18 +106,25 @@ impl LeanWorld {
     pub const fn level_profile(self) -> crate::level::LeanLevelProfile {
         match self {
             Self::Lean408 | Self::Lean413 => crate::level::LeanLevelProfile::Lean48,
-            Self::Lean426 | Self::Lean430Rc2 | Self::Lean435 | Self::Lean436Rc2 => {
+            Self::Lean426 | Self::Lean430Rc2 | Self::Lean435 | Self::Lean436Rc2 | Self::Lean436 => {
                 crate::level::LeanLevelProfile::Lean430
             }
         }
     }
 
-    /// Whether `public/private variable` is accepted. In the exact rc2 the
-    /// modifier has no semantic effect (BuiltinCommand.elabVariable discards
-    /// it). Later private-variable restrictions need a separate world decision.
+    /// Source elaboration in these worlds imports and checks the release's
+    /// `Init` over a bare replay environment. An explicit `prelude` header
+    /// starts without `Init`.
+    #[must_use]
+    pub const fn requires_genuine_init(self) -> bool {
+        matches!(self, Self::Lean435 | Self::Lean436Rc2 | Self::Lean436)
+    }
+
+    /// Whether `public/private variable` is accepted. In the admitted 4.36
+    /// releases `BuiltinCommand.elabVariable` discards the modifier.
     #[must_use]
     pub const fn variable_visibility(self) -> bool {
-        matches!(self, Self::Lean436Rc2)
+        matches!(self, Self::Lean436Rc2 | Self::Lean436)
     }
 }
 
@@ -143,9 +154,12 @@ mod tests {
         assert_eq!(LeanWorld::default(), LeanWorld::ORACLE);
         for world in LeanWorld::ALL {
             assert_eq!(world.tag().parse::<LeanWorld>(), Ok(world));
-            assert_eq!(world.variable_visibility(), world == LeanWorld::Lean436Rc2);
+            assert_eq!(
+                world.variable_visibility(),
+                matches!(world, LeanWorld::Lean436Rc2 | LeanWorld::Lean436)
+            );
         }
-        for unknown in ["v4.31.0", "v4.36.0-rc1", "v4.36.0", "v4.99.0", ""] {
+        for unknown in ["v4.31.0", "v4.36.0-rc1", "v4.99.0", ""] {
             assert_eq!(
                 unknown.parse::<LeanWorld>(),
                 Err(UnknownLeanWorld(unknown.to_owned()))

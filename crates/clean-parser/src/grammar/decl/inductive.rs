@@ -12,6 +12,23 @@ use crate::surface::*;
 use crate::ParseError;
 
 impl Parser {
+    /// Lean accepts doc syntax on both sides of a constructor's `|`, logs a
+    /// duplicate at the leading comment, and attaches that leading comment.
+    pub(in crate::grammar) fn constructor_documentation(
+        &self,
+    ) -> (Option<DocComment>, Option<DocComment>) {
+        let inner = self.documentation_before(self.pos);
+        let leading = self
+            .pos
+            .checked_sub(1)
+            .filter(|&index| matches!(self.tokens[index].kind, TokenKind::Pipe))
+            .and_then(|index| self.documentation_before(index));
+        match leading {
+            Some(leading) => (Some(leading), inner),
+            None => (inner, None),
+        }
+    }
+
     pub(in crate::grammar) fn inductive_decl_with_mods(
         &mut self,
         start_span: Span,
@@ -43,11 +60,14 @@ impl Parser {
         if self.eat(&TokenKind::Where) {
             // Parse constructors after where
             while self.eat(&TokenKind::Pipe) || self.is_ctor_start() {
+                let (documentation, duplicate_documentation) = self.constructor_documentation();
                 let ctor_span = self.current_span();
                 let ctor_name = self.raw_ident()?;
                 let ctor_ty = self.parse_ctor_type(ctor_span, &name, &binders)?;
 
                 ctors.push(SurfaceCtor {
+                    documentation,
+                    duplicate_documentation,
                     span: ctor_span,
                     name: ctor_name,
                     ty: ctor_ty,
@@ -56,11 +76,14 @@ impl Parser {
         } else {
             // Pipe-style constructors
             while self.eat(&TokenKind::Pipe) {
+                let (documentation, duplicate_documentation) = self.constructor_documentation();
                 let ctor_span = self.current_span();
                 let ctor_name = self.raw_ident()?;
                 let ctor_ty = self.parse_ctor_type(ctor_span, &name, &binders)?;
 
                 ctors.push(SurfaceCtor {
+                    documentation,
+                    duplicate_documentation,
                     span: ctor_span,
                     name: ctor_name,
                     ty: ctor_ty,
@@ -104,10 +127,13 @@ impl Parser {
         let mut ctors = Vec::new();
         if self.eat(&TokenKind::Where) {
             while self.eat(&TokenKind::Pipe) || self.is_ctor_start() {
+                let (documentation, duplicate_documentation) = self.constructor_documentation();
                 let ctor_span = self.current_span();
                 let ctor_name = self.raw_ident()?;
                 let ctor_ty = self.parse_ctor_type(ctor_span, &name, &binders)?;
                 ctors.push(SurfaceCtor {
+                    documentation,
+                    duplicate_documentation,
                     span: ctor_span,
                     name: ctor_name,
                     ty: ctor_ty,
@@ -115,10 +141,13 @@ impl Parser {
             }
         } else {
             while self.eat(&TokenKind::Pipe) {
+                let (documentation, duplicate_documentation) = self.constructor_documentation();
                 let ctor_span = self.current_span();
                 let ctor_name = self.raw_ident()?;
                 let ctor_ty = self.parse_ctor_type(ctor_span, &name, &binders)?;
                 ctors.push(SurfaceCtor {
+                    documentation,
+                    duplicate_documentation,
                     span: ctor_span,
                     name: ctor_name,
                     ty: ctor_ty,

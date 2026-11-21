@@ -59,6 +59,35 @@ impl<'a> ElabCtx<'a> {
         Ok(mut_value.unwrap_or_else(|| Expr::fvar(loop_ctx.acc_fvar)))
     }
 
+    /// The implicit discard before yielding takes a unit-valued action. The
+    /// bootstrap prelude declares Unit and PUnit separately. Keep the action's
+    /// actual type for the bind, including its universe for PUnit.
+    pub(super) fn for_body_discard_type(
+        &mut self,
+        action: &Expr,
+        u: &Level,
+    ) -> Result<Expr, ElabError> {
+        let inner =
+            self.try_extract_bind_inner_type(action)
+                .ok_or_else(|| ElabError::TypeMismatch {
+                    expected: "for-loop body action of type `m α`".into(),
+                    actual: self
+                        .infer_type(action)
+                        .map(|ty| crate::error_render::term(&self.metas.instantiate(&ty)))
+                        .unwrap_or_else(|err| format!("untypable body ({err})")),
+                })?;
+        let unit = Expr::const_str("Unit");
+        let punit = Expr::const_(Name::from_string("PUnit"), vec![Level::succ(u.clone())]);
+        if self.try_unify(&inner, &unit) || self.try_unify(&inner, &punit) {
+            Ok(inner)
+        } else {
+            Err(ElabError::TypeMismatch {
+                expected: format!("a unit-valued for-loop body ({unit} or {punit})"),
+                actual: format!("{inner}"),
+            })
+        }
+    }
+
     /// Wrap a monadic expression with ForInStep.yield for the for-loop fall-through.
     ///
     /// Generates: `expr >>= fun _ => pure (ForInStep.yield acc_value)`
@@ -78,6 +107,7 @@ impl<'a> ElabCtx<'a> {
             (loop_ctx.u_level.clone(), loop_ctx.sigma.clone())
         };
 
+        let discard_ty = self.for_body_discard_type(&expr, &u)?;
         let acc_value = self.build_loop_acc_value()?;
 
         // ForInStep.yield : {β : Type u} → β → ForInStep β
@@ -85,19 +115,6 @@ impl<'a> ElabCtx<'a> {
         let yield_expr = Expr::app(Expr::app(yield_const, sigma), acc_value);
         let yield_pure = self.mk_pure_app(yield_expr);
 
-        // expr >>= fun _ => pure (ForInStep.yield acc_value). The discard
-        // binder's domain is the exact inner type authenticated by `expr : m
-        // α`; a fresh hole here can survive because this application is assembled
-        // by hand rather than passing through ordinary application elaboration.
-        let discard_ty =
-            self.try_extract_bind_inner_type(&expr)
-                .ok_or_else(|| ElabError::TypeMismatch {
-                    expected: "for-loop body action of type `m α`".into(),
-                    actual: self
-                        .infer_type(&expr)
-                        .map(|ty| crate::error_render::term(&self.metas.instantiate(&ty)))
-                        .unwrap_or_else(|err| format!("untypable body ({err})")),
-                })?;
         let fvar_discard = self.push_local(SurfaceName::generated_path("_"), discard_ty.clone());
         let yield_abs = yield_pure.abstract_fvar(fvar_discard);
         self.pop_local();

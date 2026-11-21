@@ -124,11 +124,15 @@ pub(crate) fn simp_all_with_config(state: &mut ProofState, mut config: SimpConfi
         target_config.only_simplify = true;
         if simp(state, target_config).is_ok() {
             made_progress = true;
+            if simp_at_closed_goal(state, open_goals) {
+                return Ok(());
+            }
         }
     }
 
     // After the rest of the context has consumed the original equality proofs,
     // simplify the equality hypotheses themselves with a fresh local-lemma set.
+    let mut changed_equality = false;
     for &hyp in rewrite_hyps.iter().filter(|hyp| !erased.contains(*hyp)) {
         // An equality cannot simplify its own proposition to True using its
         // own proof. That would discard a contradictory hypothesis before
@@ -139,9 +143,21 @@ pub(crate) fn simp_all_with_config(state: &mut ProofState, mut config: SimpConfi
         let simp_lemmas = collect_simp_lemmas_cached(state, &hyp_config);
         if simp_at_fvar_with_lemmas(state, hyp, &hyp_config, &simp_lemmas).is_ok() {
             made_progress = true;
+            changed_equality = true;
             if simp_at_closed_goal(state, open_goals) {
                 return Ok(());
             }
+        }
+    }
+
+    // Constructor injectivity can turn one equality into several local rules.
+    // The target's first pass used the original constructor equality. Give
+    // it the projections of the simplified hypothesis as well.
+    if changed_equality {
+        let mut target_config = simp_all_rewrite_config(state, &config, None, &erased);
+        target_config.only_simplify = true;
+        if simp(state, target_config).is_ok() && simp_at_closed_goal(state, open_goals) {
+            return Ok(());
         }
     }
 

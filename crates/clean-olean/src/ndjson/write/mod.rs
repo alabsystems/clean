@@ -12,7 +12,8 @@
 //! `clean_export_write` binary.
 //!
 //! - [`write_export`] plans the cone of the targets over an [`Environment`]
-//!   exactly as the closed replay plans it (`recheck_closed::cone_order`) and
+//!   from the serialized expressions and their literal support, using the
+//!   closed replay's ordering algorithm (`recheck_closed::cone_order`), and
 //!   writes one record per unit, in that order: every constant a record
 //!   mentions is declared by an earlier record or by the record itself
 //!   (`ExportWriteError::UndeclaredReference` otherwise), so a reader that
@@ -44,10 +45,9 @@
 //! again: the second writing must be the first, byte for byte. The serialization states
 //! every name, level, expression node and flag of a declaration, so two
 //! declaration sequences that serialize alike are structurally equal in
-//! everything the format carries. What it does not carry is listed in
-//! `tables` (binder names, `mdata` payloads) and `records` (the `all` of a
-//! definition); a reader that rebuilt a level otherwise than written, or
-//! stored a name otherwise than written, fails the check.
+//! everything the writer carries. `tables` explains the omitted binder names
+//! and `mdata` payloads. A reader that rebuilds a level or stores a name
+//! differently from its written form fails the check.
 //!
 //! What this does NOT establish: that the declarations are well-typed (the
 //! writer checks nothing; `clean_export_check` and

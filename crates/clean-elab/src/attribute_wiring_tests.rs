@@ -419,11 +419,11 @@ fn test_collect_all_compiler_attributes_independently() {
 }
 
 // ============================================================================
-// Kernel attribute independence tests
+// Compiler enum modes and independent specialization attributes
 // ============================================================================
 
 #[test]
-fn test_kernel_attributes_are_independent_sets() {
+fn test_kernel_inline_mode_is_exclusive_and_specialization_sets_are_independent() {
     let mut env = base_env();
     let name = Name::from_string("multi_attr_fn");
 
@@ -433,8 +433,10 @@ fn test_kernel_attributes_are_independent_sets() {
     env.register_inline(name.clone());
     env.register_specialize(name.clone());
 
-    assert!(env.is_macro_inline(&name));
-    assert!(env.is_inline_if_reduce(&name));
+    // The five inline attributes share Lean's enum extension: the last
+    // registration wins, while specialization uses a separate registry.
+    assert!(!env.is_macro_inline(&name));
+    assert!(!env.is_inline_if_reduce(&name));
     assert!(env.is_nospecialize(&name));
     assert!(env.is_inline(&name));
     assert!(env.is_specialize(&name));

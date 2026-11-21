@@ -1858,7 +1858,7 @@ fn test_parse_instance_carries_compiler_attrs_only() {
     );
     let attrs = compiler_attrs_of("@[extern \"clean_sym\"] instance : Inhabited Nat := ⟨0⟩");
     assert!(
-        matches!(attrs.as_slice(), [crate::Attribute::Extern(sym)] if sym == "clean_sym"),
+        matches!(attrs.as_slice(), [crate::Attribute::ExternMetadata(metadata)] if metadata.diagnostic() == "clean_sym"),
         "{attrs:?}"
     );
     let attrs = compiler_attrs_of("@[simp, reducible] instance : Inhabited Nat := ⟨0⟩");
@@ -2713,6 +2713,32 @@ end Mathbot
 }
 
 #[test]
+fn fieldless_structure_keeps_attached_deriving_and_the_next_command() {
+    let input = "structure Empty (α : Type)\nderiving DecidableEq, Repr\n\
+                 deriving instance BEq for Empty\n";
+    let decls = Parser::parse_file(input).expect("fieldless structure and separate derive");
+    let [SurfaceDecl::Structure {
+        fields, deriving, ..
+    }, SurfaceDecl::DerivingInstance { classes, types, .. }] = decls.as_slice()
+    else {
+        panic!("expected a structure followed by its standalone command: {decls:?}");
+    };
+    assert!(fields.is_empty());
+    let names: Vec<_> = deriving.iter().map(ToString::to_string).collect();
+    assert_eq!(names, ["DecidableEq", "Repr"]);
+    assert_eq!(classes[0].to_string(), "BEq");
+    assert_eq!(types[0].to_string(), "Empty");
+
+    let input = "structure Boxed where\n  value : Nat\nderiving instance Repr for Boxed";
+    let decls = Parser::parse_file(input).expect("standalone derive following fields");
+    assert!(matches!(
+        decls.as_slice(),
+        [SurfaceDecl::Structure { deriving, .. }, SurfaceDecl::DerivingInstance { .. }]
+            if deriving.is_empty()
+    ));
+}
+
+#[test]
 fn test_parse_structure_without_deriving() {
     let decl = Parser::parse_decl(
         r"structure Point where
@@ -2974,7 +3000,7 @@ fn test_parse_syntax_with_precedence() {
 
 #[test]
 fn test_parse_syntax_with_name() {
-    let decl = Parser::parse_decl(r#"syntax [myAdd] term "+" term : term"#).unwrap();
+    let decl = Parser::parse_decl(r#"syntax (name := myAdd) term "+" term : term"#).unwrap();
     match decl {
         SurfaceDecl::Syntax { name, category, .. } => {
             assert_eq!(name, Some(crate::SurfaceName::generated_path("myAdd")));
@@ -3089,6 +3115,88 @@ fn test_parse_notation_closed_multihole_registers_and_parses() {
             "no declaration may degrade to raw error-recovery: {decl:#?}"
         );
     }
+}
+
+#[test]
+fn compound_notation_atoms_preserve_boundaries_and_scope() {
+    fn headed_by_search(expr: &SurfaceExpr) -> bool {
+        match expr {
+            SurfaceExpr::Ident(_, name) => name.to_string() == "Search",
+            SurfaceExpr::App(_, function, _) | SurfaceExpr::Paren(_, function) => {
+                headed_by_search(function)
+            }
+            _ => false,
+        }
+    }
+    fn value<'a>(decls: &'a [SurfaceDecl], wanted: &str) -> &'a SurfaceExpr {
+        decls
+            .iter()
+            .find_map(|decl| match decl {
+                SurfaceDecl::Def { name, val, .. } if name.to_string() == wanted => {
+                    Some(val.as_ref())
+                }
+                _ => None,
+            })
+            .expect("definition")
+    }
+    let notation = r#"notation "{{ " x " | " p " }}" => Search (fun x => p)"#;
+    let src = format!(
+        "{notation}\ndef outer := {{{{ n | n = 3 }}}}\ndef argument := id {{{{ n | n = 4 }}}}"
+    );
+    let declarations = Parser::parse_file(&src).expect("parse compound atoms");
+    assert!(headed_by_search(value(&declarations, "outer")));
+    let SurfaceExpr::App(_, _, args) = value(&declarations, "argument") else {
+        panic!("expected an application");
+    };
+    assert!(headed_by_search(&args[0].expr));
+
+    for source in [
+        "{ { n | n = 3 } }",
+        "{/- gap -/{ n | n = 3 }}",
+        "{{ n | n = 3 } }",
+    ] {
+        let input = format!("{notation}\ndef separated := {source}");
+        if let Ok(decls) = Parser::parse_file(&input) {
+            for decl in decls {
+                if let SurfaceDecl::Def { val, .. } = decl {
+                    assert!(!headed_by_search(&val), "{source}");
+                }
+            }
+        }
+    }
+    let invalid = Parser::parse_decl(r#"notation "{ { " x " } }" => x"#)
+        .expect_err("Lean refuses whitespace inside a single notation atom");
+    assert!(invalid.to_string().contains("invalid atom"));
+
+    let scoped = format!("section\nlocal {notation}\ndef inside := {{{{ n | n = 3 }}}}\nend\ndef outside := {{{{ n | n = 3 }}}}");
+    let declarations = Parser::parse_file(&scoped).expect("parse section");
+    let SurfaceDecl::Section { decls, .. } = &declarations[0] else {
+        panic!("expected a section")
+    };
+    assert!(headed_by_search(value(decls, "inside")));
+    assert!(!headed_by_search(value(&declarations, "outside")));
+}
+
+#[test]
+fn mixfix_cannot_split_a_longer_registered_atom_after_a_failed_parse() {
+    let src = r#"
+notation "((" x "))" => x
+notation "(((" x " !)" => x
+def small : Nat := ((3))
+def longer : Nat := (((4 !)
+def accidental : Nat := (((5)))
+"#;
+    let report = crate::parse_file_with_diagnostics(src).expect("recover malformed declaration");
+    let defined = |expected: &str| {
+        report
+            .decls
+            .iter()
+            .any(|decl| matches!(decl, SurfaceDecl::Def {name,..} if name.to_string() == expected))
+    };
+    assert!(defined("small"));
+    assert!(defined("longer"));
+    assert!(!defined("accidental"));
+    assert!(!report.diagnostics.is_empty());
 }
 
 #[test]
@@ -4060,6 +4168,40 @@ fn test_parse_not_membership_operator() {
 }
 
 #[test]
+fn test_membership_list_implication_keeps_the_list_operand() {
+    for (operator, negated) in [("∈", false), ("∉", true)] {
+        let text = format!("l {operator} [Level.param 0] → True");
+        let SurfaceExpr::Arrow(_, domain, _) = Parser::parse_expr(&text).unwrap() else {
+            panic!("{text} must be an implication");
+        };
+        let membership = if negated {
+            let SurfaceExpr::App(_, head, args) = domain.as_ref() else {
+                panic!("{text} must negate the membership premise");
+            };
+            assert!(
+                matches!(head.as_ref(), SurfaceExpr::Ident(_, name) if name.to_string() == "Not")
+            );
+            &args[0].expr
+        } else {
+            domain.as_ref()
+        };
+        let SurfaceExpr::App(_, head, args) = membership else {
+            panic!("{text} must have a membership premise");
+        };
+        assert!(
+            matches!(head.as_ref(), SurfaceExpr::Ident(_, name) if name.to_string() == "Membership.mem")
+        );
+        assert!(
+            matches!(&args[0].expr, SurfaceExpr::App(_, head, _) if matches!(head.as_ref(), SurfaceExpr::Ident(_, name) if name.to_string() == "List.cons"))
+        );
+    }
+    assert!(matches!(
+        Parser::parse_expr("[Decidable p] → True").unwrap(),
+        SurfaceExpr::Pi(..)
+    ));
+}
+
+#[test]
 fn test_lattice_top_bot() {
     // ⊤ should parse as Top.top (Mathlib convention)
     let expr = Parser::parse_expr("⊤").unwrap();
@@ -4339,6 +4481,35 @@ fn test_struct_update_with_application_base() {
         }
         _ => panic!("Expected StructLit with application base"),
     }
+}
+
+#[test]
+fn test_struct_update_with_universe_instantiated_application_base() {
+    let expr = Parser::parse_expr("{ f.{u} x with y := 1 }").unwrap();
+    let SurfaceExpr::StructLit {
+        base: Some(base),
+        fields,
+        ..
+    } = expr
+    else {
+        panic!("expected a structure update: {expr:?}");
+    };
+    let SurfaceExpr::App(_, head, args) = *base else {
+        panic!("expected an application: {base:?}");
+    };
+    let SurfaceExpr::UniverseInst(_, reference, levels) = *head else {
+        panic!("expected universe instantiation on the head: {head:?}");
+    };
+    assert!(matches!(*reference, SurfaceExpr::Ident(_, name)
+        if name == crate::SurfaceName::generated_path("f")));
+    assert!(matches!(levels.as_slice(), [LevelExpr::Param(name)]
+        if *name == crate::SurfaceName::generated_path("u")));
+    assert!(
+        matches!(args.as_slice(), [SurfaceArg { expr: SurfaceExpr::Ident(_, name), .. }]
+        if *name == crate::SurfaceName::generated_path("x"))
+    );
+    assert_eq!(fields.len(), 1);
+    assert_eq!(fields[0].name, crate::SurfaceName::generated_path("y"));
 }
 
 #[test]
@@ -7486,6 +7657,42 @@ fn test_repeated_doc_comments_last_one_wins() {
 }
 
 #[test]
+fn test_constructor_docs_preserve_leading_and_duplicate_original_ranges() {
+    let leading = "/-- α lean-manual://bogus/leading -/";
+    let inner = "/-- β lean-manual://section/ok -/";
+    for head in ["inductive C where", "inductive C : Type"] {
+        let source = format!("{head}\n  {leading}\n  | {inner} mk\n");
+        let decls = Parser::parse_file(&source).expect("both constructor doc slots parse");
+        let SurfaceDecl::Inductive { ctors, .. } = &decls[0] else {
+            panic!("expected inductive");
+        };
+        assert_eq!(ctors.len(), 1);
+        let doc = ctors[0].documentation.as_ref().expect("leading attachment");
+        let duplicate = ctors[0]
+            .duplicate_documentation
+            .as_ref()
+            .expect("inner duplicate retained");
+        assert_eq!(doc.raw_text, " α lean-manual://bogus/leading ");
+        assert_eq!(duplicate.raw_text, " β lean-manual://section/ok ");
+        let start = source.find(leading).expect("leading range");
+        assert_eq!(doc.comment_span, Span::new(start, start + leading.len()));
+        let start = source.find(inner).expect("inner range");
+        assert_eq!(
+            duplicate.comment_span,
+            Span::new(start, start + inner.len())
+        );
+        assert_eq!(
+            &source[doc.comment_span.start..doc.comment_span.end],
+            leading
+        );
+        assert_eq!(
+            &source[duplicate.comment_span.start..duplicate.comment_span.end],
+            inner
+        );
+    }
+}
+
+#[test]
 fn test_trailing_doc_comment_with_no_decl_is_dropped() {
     let source = "def f := 1\n/-- trailing doc -/";
     let err = Parser::parse_file_with_docs(source)
@@ -9138,4 +9345,38 @@ fn term_let_do_value_stops_before_newline_have_without_recovery() {
     assert!(
         matches!(body.as_ref(), SurfaceExpr::Proj(_, base, Projection::Named(field)) if field.name() == &clean_kernel::Name::from_string("intro") && matches!(base.as_ref(), SurfaceExpr::Ident(_, name) if name.name() == &clean_kernel::Name::from_string("True")))
     );
+}
+
+#[test]
+fn test_compiler_inline_attribute_scopes_preserve_the_inner_mode() {
+    use crate::Attribute;
+    for (name, mode) in [
+        ("inline", Attribute::Inline),
+        ("noinline", Attribute::Noinline),
+        ("always_inline", Attribute::AlwaysInline),
+        ("macro_inline", Attribute::MacroInline),
+        ("inline_if_reduce", Attribute::InlineIfReduce),
+    ] {
+        for kind in ["local", "scoped"] {
+            let expected = if kind == "local" {
+                Attribute::Local(Box::new(mode.clone()))
+            } else {
+                Attribute::Scoped(Box::new(mode.clone()))
+            };
+            let command = format!("attribute [{kind} {name}] target");
+            let parsed =
+                Parser::parse_file(&command).expect("attribute command parses structurally");
+            assert!(
+                matches!(&parsed[..], [SurfaceDecl::Attribute { attrs, .. }] if attrs == &[AttributeCommandAttr::Add(expected.clone())]),
+                "{command}: {parsed:#?}"
+            );
+            let declaration = format!("@[{kind} {name}] def target : Nat := 0");
+            let parsed = Parser::parse_file(&declaration)
+                .expect("declaration attribute parses structurally");
+            assert!(
+                matches!(&parsed[..], [SurfaceDecl::Def { attrs, .. }] if attrs == &[expected]),
+                "{declaration}: {parsed:#?}"
+            );
+        }
+    }
 }

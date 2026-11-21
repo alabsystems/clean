@@ -43,9 +43,13 @@ pub(super) fn at_position(doc: &Document, position: Position) -> Option<&SourceI
         let parents = ancestors(info, &by_id)?;
         // As in Lean's termGoalAt?, an identifier head answers for its full
         // application. This does not suppress argument or nested-term info.
-        if parents
-            .iter()
-            .any(|parent| parent.application_head == Some((info.start, info.end)))
+        // Expected-type elaboration can observe the same application twice.
+        // An inner applied-head node still answers for the application; only
+        // its partial function observation is superseded by an ancestor.
+        if info.application_head != Some((info.start, info.end))
+            && parents
+                .iter()
+                .any(|parent| parent.application_head == Some((info.start, info.end)))
         {
             continue;
         }

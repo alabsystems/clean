@@ -37,6 +37,7 @@ fn rich_constant(
 ) -> ParsedConstant {
     ParsedConstant {
         definition_safety: None,
+        mutual_declarations: None,
         quot_kind: None,
         name: name.to_string(),
         kind,

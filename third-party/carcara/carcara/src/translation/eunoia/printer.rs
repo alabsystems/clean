@@ -1,3 +1,4 @@
+// Modified in Clean: typed array-lambda dialect and explicit lambda export refusal.
 //! A pretty printer for Eunoia proofs.
 use crate::translation::eunoia::ast::*;
 // Re-exporting ProofPrinter, to avoid conflicting import paths in other modules.
@@ -16,18 +17,18 @@ impl<'a> SExpFormatter<'a> {
     }
 
     /// Print lists of arguments, separated just by spaces.
-    fn print_sequence<T>(seq: &[T], func: fn(&T) -> String) -> String {
-        if seq.is_empty() {
+    fn print_sequence<T>(seq: &[T], func: fn(&T) -> io::Result<String>) -> io::Result<String> {
+        Ok(if seq.is_empty() {
             "".to_owned()
         } else {
             // { !seq.is_empty() }
-            let mut result = func(&seq[0]);
+            let mut result = func(&seq[0])?;
             for item in &seq[1..] {
                 result += " ";
-                result += &func(item);
+                result += &func(item)?;
             }
             result
-        }
+        })
     }
 
     /// Prints an s-expression with properly formatted concrete syntax, and
@@ -77,13 +78,13 @@ impl<'a> ProofPrinter for EunoiaPrinter<'a> {
 
                 EunoiaCommand::Assume { name, term } => {
                     tag = "assume".to_owned();
-                    args = vec![name.clone(), EunoiaPrinter::term_to_concrete_syntax(term)];
+                    args = vec![name.clone(), EunoiaPrinter::term_to_concrete_syntax(term)?];
                 }
 
                 EunoiaCommand::AssumePush { name, term } => {
                     tag = "assume-push".to_owned();
 
-                    args = vec![name.clone(), EunoiaPrinter::term_to_concrete_syntax(term)];
+                    args = vec![name.clone(), EunoiaPrinter::term_to_concrete_syntax(term)?];
                 }
 
                 EunoiaCommand::DeclareConst { name, eunoia_type, attrs } => {
@@ -92,11 +93,11 @@ impl<'a> ProofPrinter for EunoiaPrinter<'a> {
                     args = Vec::new();
 
                     args.push(name.clone());
-                    args.push(EunoiaPrinter::term_to_concrete_syntax(eunoia_type));
+                    args.push(EunoiaPrinter::term_to_concrete_syntax(eunoia_type)?);
 
-                    attrs.iter().for_each(|attr| {
-                        args.push(EunoiaPrinter::cons_attr_to_concrete_syntax(attr));
-                    });
+                    for attr in attrs {
+                        args.push(EunoiaPrinter::cons_attr_to_concrete_syntax(attr)?);
+                    }
                 }
 
                 EunoiaCommand::Define { name, typed_params, term, attrs } => {
@@ -109,13 +110,13 @@ impl<'a> ProofPrinter for EunoiaPrinter<'a> {
                     args.append(&mut EunoiaPrinter::eunoia_list_to_concrete_syntax(
                         typed_params,
                         &EunoiaPrinter::typed_param_to_concrete_syntax,
-                    ));
+                    )?);
 
-                    args.push(EunoiaPrinter::term_to_concrete_syntax(term));
+                    args.push(EunoiaPrinter::term_to_concrete_syntax(term)?);
 
-                    attrs.iter().for_each(|attr| {
-                        args.push(EunoiaPrinter::define_attr_to_concrete_syntax(attr));
-                    });
+                    for attr in attrs {
+                        args.push(EunoiaPrinter::define_attr_to_concrete_syntax(attr)?);
+                    }
                 }
 
                 EunoiaCommand::Program {
@@ -134,25 +135,25 @@ impl<'a> ProofPrinter for EunoiaPrinter<'a> {
                     args.append(&mut EunoiaPrinter::eunoia_list_to_concrete_syntax(
                         typed_params,
                         &EunoiaPrinter::typed_param_to_concrete_syntax,
-                    ));
+                    )?);
                     // Formal parameters.
                     args.append(&mut EunoiaPrinter::eunoia_list_to_concrete_syntax(
                         params,
                         &EunoiaPrinter::type_to_concrete_syntax,
-                    ));
+                    )?);
                     // Return type.
-                    args.push(EunoiaPrinter::type_to_concrete_syntax(ret));
+                    args.push(EunoiaPrinter::type_to_concrete_syntax(ret)?);
                     // Program's body.
                     args.append(&mut EunoiaPrinter::eunoia_list_to_concrete_syntax(
                         body,
                         &Box::new(|tuple: &(EunoiaTerm, EunoiaTerm)| {
-                            format!(
+                            Ok(format!(
                                 "({} {})",
-                                EunoiaPrinter::term_to_concrete_syntax(&tuple.0),
-                                EunoiaPrinter::term_to_concrete_syntax(&tuple.1)
-                            )
+                                EunoiaPrinter::term_to_concrete_syntax(&tuple.0)?,
+                                EunoiaPrinter::term_to_concrete_syntax(&tuple.1)?
+                            ))
                         }),
-                    ));
+                    )?);
                 }
 
                 EunoiaCommand::SetLogic { name } => {
@@ -175,7 +176,7 @@ impl<'a> ProofPrinter for EunoiaPrinter<'a> {
                     args.push(id.clone());
 
                     if let Some(term) = conclusion_clause {
-                        args.push(EunoiaPrinter::term_to_concrete_syntax(term));
+                        args.push(EunoiaPrinter::term_to_concrete_syntax(term)?);
                     };
 
                     args.push(":rule ".to_owned() + &rule.clone());
@@ -187,7 +188,7 @@ impl<'a> ProofPrinter for EunoiaPrinter<'a> {
                         args.append(&mut EunoiaPrinter::eunoia_list_to_concrete_syntax(
                             premises,
                             &EunoiaPrinter::term_to_concrete_syntax,
-                        ));
+                        )?);
                     }
 
                     let EunoiaList { list } = arguments;
@@ -196,7 +197,7 @@ impl<'a> ProofPrinter for EunoiaPrinter<'a> {
                         args.append(&mut EunoiaPrinter::eunoia_list_to_concrete_syntax(
                             arguments,
                             &EunoiaPrinter::term_to_concrete_syntax,
-                        ));
+                        )?);
                     }
                 }
 
@@ -214,7 +215,7 @@ impl<'a> ProofPrinter for EunoiaPrinter<'a> {
                     args.push(id.clone());
 
                     if let Some(term) = conclusion_clause {
-                        args.push(EunoiaPrinter::term_to_concrete_syntax(term));
+                        args.push(EunoiaPrinter::term_to_concrete_syntax(term)?);
                     };
 
                     // TODO: rule names are not equal: let -> let_elim
@@ -226,7 +227,7 @@ impl<'a> ProofPrinter for EunoiaPrinter<'a> {
                         args.append(&mut EunoiaPrinter::eunoia_list_to_concrete_syntax(
                             premises,
                             &EunoiaPrinter::term_to_concrete_syntax,
-                        ));
+                        )?);
                     };
 
                     let EunoiaList { list } = arguments;
@@ -236,7 +237,7 @@ impl<'a> ProofPrinter for EunoiaPrinter<'a> {
                         args.append(&mut EunoiaPrinter::eunoia_list_to_concrete_syntax(
                             arguments,
                             &EunoiaPrinter::term_to_concrete_syntax,
-                        ));
+                        )?);
                     }
                 }
 
@@ -259,18 +260,24 @@ impl<'a> EunoiaPrinter<'a> {
         Self { formatted_sink: dest }
     }
 
-    fn cons_attr_to_concrete_syntax(attr: &EunoiaConsAttr) -> String {
-        match attr {
+    fn cons_attr_to_concrete_syntax(attr: &EunoiaConsAttr) -> io::Result<String> {
+        Ok(match attr {
             EunoiaConsAttr::RightAssoc => ":right-assoc".to_owned(),
 
             _ => ":right-assoc".to_owned(),
-        }
+        })
     }
 
-    fn term_to_concrete_syntax(term: &EunoiaTerm) -> String {
+    fn term_to_concrete_syntax(term: &EunoiaTerm) -> io::Result<String> {
         let mut ret;
 
         match term {
+            EunoiaTerm::UnsupportedLambda => {
+                return Err(io::Error::new(
+                    io::ErrorKind::Unsupported,
+                    "Eunoia export does not represent function or array lambdas",
+                ))
+            }
             EunoiaTerm::Numeral(n) => {
                 ret = n.to_string();
             }
@@ -300,7 +307,7 @@ impl<'a> EunoiaPrinter<'a> {
             }
 
             EunoiaTerm::Type(some_type) => {
-                ret = EunoiaPrinter::type_to_concrete_syntax(some_type);
+                ret = EunoiaPrinter::type_to_concrete_syntax(some_type)?;
             }
 
             EunoiaTerm::True => {
@@ -322,7 +329,7 @@ impl<'a> EunoiaPrinter<'a> {
                         SExpFormatter::print_sequence(
                             params,
                             EunoiaPrinter::term_to_concrete_syntax
-                        )
+                        )?
                     );
                 }
             }
@@ -330,16 +337,16 @@ impl<'a> EunoiaPrinter<'a> {
             EunoiaTerm::HOApp(function, params) => {
                 ret = format!(
                     "( _ {} {})",
-                    EunoiaPrinter::term_to_concrete_syntax(function),
-                    SExpFormatter::print_sequence(params, EunoiaPrinter::term_to_concrete_syntax)
+                    EunoiaPrinter::term_to_concrete_syntax(function)?,
+                    SExpFormatter::print_sequence(params, EunoiaPrinter::term_to_concrete_syntax)?
                 );
             }
 
             EunoiaTerm::Op(operator, params) => {
                 ret = format!(
                     "({} {})",
-                    EunoiaPrinter::operator_to_concrete_syntax(operator),
-                    SExpFormatter::print_sequence(params, EunoiaPrinter::term_to_concrete_syntax)
+                    EunoiaPrinter::operator_to_concrete_syntax(operator)?,
+                    SExpFormatter::print_sequence(params, EunoiaPrinter::term_to_concrete_syntax)?
                 );
             }
 
@@ -350,7 +357,7 @@ impl<'a> EunoiaPrinter<'a> {
             EunoiaTerm::List(terms) => {
                 ret = format!(
                     "( {} )",
-                    SExpFormatter::print_sequence(terms, EunoiaPrinter::term_to_concrete_syntax)
+                    SExpFormatter::print_sequence(terms, EunoiaPrinter::term_to_concrete_syntax)?
                 );
             }
 
@@ -358,16 +365,16 @@ impl<'a> EunoiaPrinter<'a> {
                 ret = format!(
                     "( {} {} )",
                     name.clone(),
-                    EunoiaPrinter::term_to_concrete_syntax(sort)
+                    EunoiaPrinter::term_to_concrete_syntax(sort)?
                 );
             }
         }
 
-        ret
+        Ok(ret)
     }
 
-    fn type_to_concrete_syntax(some_type: &EunoiaType) -> String {
-        match some_type {
+    fn type_to_concrete_syntax(some_type: &EunoiaType) -> io::Result<String> {
+        Ok(match some_type {
             EunoiaType::Bool => "Bool".to_owned(),
 
             EunoiaType::Type => "Type".to_owned(),
@@ -382,44 +389,44 @@ impl<'a> EunoiaPrinter<'a> {
                     SExpFormatter::print_sequence(
                         kind_params,
                         EunoiaPrinter::kind_param_to_concrete_syntax
-                    ),
-                    SExpFormatter::print_sequence(dom, EunoiaPrinter::type_to_concrete_syntax),
-                    EunoiaPrinter::type_to_concrete_syntax(codom)
+                    )?,
+                    SExpFormatter::print_sequence(dom, EunoiaPrinter::type_to_concrete_syntax)?,
+                    EunoiaPrinter::type_to_concrete_syntax(codom)?
                 )
             }
-        }
+        })
     }
 
-    fn typed_param_to_concrete_syntax(param: &EunoiaTypedParam) -> String {
+    fn typed_param_to_concrete_syntax(param: &EunoiaTypedParam) -> io::Result<String> {
         let EunoiaTypedParam { name, eunoia_type, attrs } = param;
 
-        if attrs.is_empty() {
+        Ok(if attrs.is_empty() {
             format!(
                 "({} {})",
                 name.clone(),
-                EunoiaPrinter::type_to_concrete_syntax(eunoia_type)
+                EunoiaPrinter::type_to_concrete_syntax(eunoia_type)?
             )
         } else {
             // { not attrs.is_empty() }
             format!(
                 "({} {} {})",
                 name.clone(),
-                EunoiaPrinter::type_to_concrete_syntax(eunoia_type),
-                SExpFormatter::print_sequence(attrs, EunoiaPrinter::cons_attr_to_concrete_syntax)
+                EunoiaPrinter::type_to_concrete_syntax(eunoia_type)?,
+                SExpFormatter::print_sequence(attrs, EunoiaPrinter::cons_attr_to_concrete_syntax)?
             )
-        }
+        })
     }
 
-    fn define_attr_to_concrete_syntax(attr: &EunoiaDefineAttr) -> String {
-        match attr {
+    fn define_attr_to_concrete_syntax(attr: &EunoiaDefineAttr) -> io::Result<String> {
+        Ok(match attr {
             EunoiaDefineAttr::Type(some_type) => {
-                ":type ".to_owned() + &EunoiaPrinter::type_to_concrete_syntax(some_type)
+                ":type ".to_owned() + &EunoiaPrinter::type_to_concrete_syntax(some_type)?
             }
-        }
+        })
     }
 
-    fn type_attr_to_concrete_syntax(attr: &EunoiaTypeAttr) -> String {
-        match attr {
+    fn type_attr_to_concrete_syntax(attr: &EunoiaTypeAttr) -> io::Result<String> {
+        Ok(match attr {
             EunoiaTypeAttr::Var(name) => ":var ".to_owned() + &name.clone(),
 
             EunoiaTypeAttr::Implicit => ":implicit".to_owned(),
@@ -427,30 +434,30 @@ impl<'a> EunoiaPrinter<'a> {
             EunoiaTypeAttr::Requires(lhs, rhs) => {
                 format!(
                     ":requires ({} {})",
-                    EunoiaPrinter::term_to_concrete_syntax(lhs),
-                    EunoiaPrinter::term_to_concrete_syntax(rhs)
+                    EunoiaPrinter::term_to_concrete_syntax(lhs)?,
+                    EunoiaPrinter::term_to_concrete_syntax(rhs)?
                 )
             }
-        }
+        })
     }
 
-    fn kind_param_to_concrete_syntax(attr: &EunoiaKindParam) -> String {
-        match attr {
+    fn kind_param_to_concrete_syntax(attr: &EunoiaKindParam) -> io::Result<String> {
+        Ok(match attr {
             EunoiaKindParam(some_type, attrs) => {
                 format!(
                     "(! {} {})",
-                    EunoiaPrinter::type_to_concrete_syntax(some_type),
+                    EunoiaPrinter::type_to_concrete_syntax(some_type)?,
                     SExpFormatter::print_sequence(
                         attrs,
                         EunoiaPrinter::type_attr_to_concrete_syntax
-                    )
+                    )?
                 )
             }
-        }
+        })
     }
 
-    fn operator_to_concrete_syntax(op: &EunoiaOperator) -> String {
-        match op {
+    fn operator_to_concrete_syntax(op: &EunoiaOperator) -> io::Result<String> {
+        Ok(match op {
             EunoiaOperator::Xor => "xor".to_owned(),
 
             EunoiaOperator::Not => "not".to_owned(),
@@ -465,23 +472,67 @@ impl<'a> EunoiaPrinter<'a> {
             EunoiaOperator::LessThan => "<".to_owned(),
 
             EunoiaOperator::LessEq => "<=".to_owned(),
-        }
+        })
     }
 
     /// Pseudo-map over a `EunoiaList`<T>
     fn eunoia_list_to_concrete_syntax<T>(
         eunoia_list: &EunoiaList<T>,
-        to_concrete: &dyn Fn(&T) -> String,
-    ) -> Vec<String> {
+        to_concrete: &dyn Fn(&T) -> io::Result<String>,
+    ) -> io::Result<Vec<String>> {
         let mut ret = Vec::new();
 
         ret.push("(".to_owned());
 
         let EunoiaList { list } = eunoia_list;
-        list.iter().for_each(|elem| ret.push(to_concrete(elem)));
+        for elem in list {
+            ret.push(to_concrete(elem)?);
+        }
 
         ret.push(")".to_owned());
 
-        ret
+        Ok(ret)
+    }
+}
+
+#[cfg(test)]
+mod lambda_export_tests {
+    use super::*;
+    use crate::ast::{
+        pool::{PrimitivePool, TermPool},
+        Binder, BindingList, Sort, Term,
+    };
+    use crate::translation::{eunoia::alethe_2_eunoia::EunoiaTranslator, VecToVecTranslator};
+
+    // Added in Clean: no unsupported binder is silently translated to exists.
+    #[test]
+    fn unsupported_function_and_array_lambdas_fail_the_real_export_boundary() {
+        for binder in [Binder::Lambda, Binder::ArrayLambda] {
+            let mut pool = PrimitivePool::new();
+            let int = pool.add_sort(Sort::Int);
+            let x = pool.add(Term::new_var("x", int.clone()));
+            let lambda = pool.add(Term::Binder(
+                binder,
+                BindingList(vec![("x".to_owned(), int)]),
+                x,
+            ));
+            let mut translator = EunoiaTranslator::new("unused-for-refused-lambda");
+            let term = translator.translate_term(&lambda);
+            let proof = vec![EunoiaCommand::Assume { name: "a".into(), term }];
+            let mut bytes = Vec::new();
+            let mut printer = EunoiaPrinter::new(SExpFormatter::new(&mut bytes));
+            let error = printer.write_proof(&proof).unwrap_err();
+            assert_eq!(error.kind(), io::ErrorKind::Unsupported);
+            assert!(bytes.is_empty());
+        }
+        let proof = vec![EunoiaCommand::Assume {
+            name: "a".into(),
+            term: EunoiaTerm::True,
+        }];
+        let mut bytes = Vec::new();
+        EunoiaPrinter::new(SExpFormatter::new(&mut bytes))
+            .write_proof(&proof)
+            .unwrap();
+        assert_eq!(String::from_utf8(bytes).unwrap(), "(assume a true)\n");
     }
 }

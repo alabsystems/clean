@@ -29,7 +29,7 @@
 
 use clean_elab::{elaborate_decl_and_register, preprocess_decl_with_context, FileContext};
 use clean_kernel::env::Environment;
-use clean_kernel::{Expr, Name, TypeChecker};
+use clean_kernel::{Expr, ExprKind, Name, TypeChecker};
 use clean_parser::parse_file;
 
 fn const_(name: &str) -> Expr {
@@ -194,5 +194,49 @@ fn test_mixed_chain_second_then_first_reduces() {
         def_eq(&env, &const_("e"), &nat_lit(3)),
         "rv.2.1 must reduce to 3, got {:?}",
         TypeChecker::new(&env).whnf(&const_("e")).kind()
+    );
+}
+
+#[test]
+fn written_structure_projections_use_accessors_and_plain_ordinals_use_kernel_indices() {
+    let mut env = Environment::with_prelude();
+    elaborate_decls_into(
+        &mut env,
+        include_str!("fixtures/written_structure_projection.lean"),
+    );
+    let body = |name: &str| {
+        let mut value = env
+            .get_const(&Name::from_string(name))
+            .expect("fixture declaration")
+            .value
+            .as_ref()
+            .expect("definition body");
+        while let ExprKind::Lam(_, _, rest) = value.kind() {
+            value = rest;
+        }
+        value
+    };
+    let qualified = body("writtenQualified");
+    assert_eq!(body("writtenNamed"), qualified);
+    assert_eq!(body("writtenOrdinal"), qualified);
+    let ExprKind::Const(head, levels) = qualified.get_app_fn().kind() else {
+        panic!("expected the named right accessor");
+    };
+    assert_eq!(head, &Name::from_string("ProjectionBox.right"));
+    assert_eq!(levels.len(), 2);
+    assert_eq!(qualified.get_app_args().len(), 3);
+    assert!(
+        matches!(body("writtenDependent").get_app_fn().kind(), ExprKind::Const(head, _) if head == &Name::from_string("ProjectionBox.valid"))
+    );
+    assert!(
+        matches!(body("plainOrdinal").kind(), ExprKind::Proj(owner, 1, target) if owner == &Name::from_string("ProjectionPacket") && target.as_ref() == &Expr::bvar(0))
+    );
+    let rejected = try_elaborate_decls_into(
+        &mut env,
+        "theorem wrongProjectedValue : (ProjectionBox.mk 7 3 9 2 rfl).previous = 9 := rfl",
+    );
+    assert!(
+        rejected.is_err(),
+        "the wrong field must not supply the proof"
     );
 }

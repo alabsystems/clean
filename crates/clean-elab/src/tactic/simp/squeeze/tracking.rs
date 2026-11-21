@@ -53,7 +53,9 @@ pub(super) fn simp_expr_tracking(
     if budget.is_tripped() {
         return tracked_refl(expr);
     }
-    if step.result.expr != *expr && !budget.admit(&step.result.expr) {
+    if step.result.expr != *expr
+        && !budget.admit(&step.result.expr, "simplifying a subterm in squeeze_simp")
+    {
         return tracked_refl(expr);
     }
     step
@@ -111,7 +113,7 @@ fn simp_expr_tracking_inner(
         // record value/body lemma provenance.
         if !preserve_outer_let {
             let match_target = MatchTarget::new(state, goal, &result.expr);
-            for lemma in lemmas.candidates(state, goal, &result.expr) {
+            for lemma in lemmas.candidates_for_target(state, goal, &match_target) {
                 if let Some((new_expr, proof)) = try_apply_simp_lemma_with_proof(
                     state,
                     goal,

@@ -10,6 +10,7 @@ use std::io::{BufReader, Write};
 use std::path::PathBuf;
 
 use clean_kernel::kcheck_trace::advice::encode_frames;
+use clean_olean::ndjson::advice::{export_advice_frames_from, AdviceFrameSource};
 use sha2::{Digest, Sha256};
 
 fn hex(bytes: &[u8]) -> String {
@@ -17,8 +18,14 @@ fn hex(bytes: &[u8]) -> String {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let usage = "usage: kcheck_advice_emit <export.ndjson> --out <advice.bin>";
-    let mut args = std::env::args_os().skip(1);
+    let usage =
+        "usage: kcheck_advice_emit [--replay-candidates] <export.ndjson> --out <advice.bin>";
+    let mut args = std::env::args_os().skip(1).peekable();
+    let source = if args.next_if(|arg| arg == "--replay-candidates").is_some() {
+        AdviceFrameSource::ReplayCandidate
+    } else {
+        AdviceFrameSource::DiagnosticJournal
+    };
     let export = PathBuf::from(args.next().ok_or(usage)?);
     if args.next().as_deref() != Some(OsStr::new("--out")) {
         return Err(usage.into());
@@ -29,7 +36,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     let reader = BufReader::new(std::fs::File::open(&export)?);
-    let (frames, count) = clean_olean::ndjson::advice::export_advice_frames(reader)?;
+    let (frames, count) = export_advice_frames_from(reader, source)?;
     let non_empty = frames.iter().filter(|frame| !frame.is_empty()).count();
     let bytes = encode_frames(&frames);
     let sha256 = hex(&Sha256::digest(&bytes));

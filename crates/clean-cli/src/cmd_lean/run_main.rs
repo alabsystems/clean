@@ -10,13 +10,17 @@
 //! `IO UInt32`'s value as the exit status, `IO Unit` as 0.
 
 use crate::cmd_run::{exit_disposition, run_inheriting_stdio, signal_name, ExitDisposition};
-use clean_native::native_build::emit_native_c_artifact;
+use clean_native::native_build::{emit_native_c_artifact, NativeCArtifact};
 use std::path::Path;
 
 /// Build and run `main` of `file` with `args`; the exit status to end with.
 pub(crate) fn run_main(file: &Path, args: &[String]) -> i32 {
-    let built = emit_native_c_artifact(file, "main", 0)
-        .and_then(|artifact| artifact.build_in_scratch(true));
+    run_artifact(emit_native_c_artifact(file, "main", 0), args)
+}
+
+/// Link and run the C emitted from the frontend's checked environment.
+pub(crate) fn run_artifact(artifact: anyhow::Result<NativeCArtifact>, args: &[String]) -> i32 {
+    let built = artifact.and_then(|artifact| artifact.build_in_scratch(true));
     let built = match built {
         Ok(built) => built,
         Err(error) => {

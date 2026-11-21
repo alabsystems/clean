@@ -11,6 +11,7 @@
 use std::sync::Arc;
 
 use clean_kernel::{Expr, ExprKind, FVarId};
+use hashbrown::HashMap;
 
 use crate::stack_safe;
 use crate::unify::MetaState;
@@ -36,137 +37,118 @@ pub(crate) fn convert_bvars_to_metas(
     pattern: &Expr,
     metas: &mut MetaState,
     scope: &[(clean_parser::SurfaceName, FVarId, Expr)],
-) -> (Expr, hashbrown::HashMap<u32, Expr>) {
-    let mut bvar_to_meta = hashbrown::HashMap::new();
-    let result = convert_bvars_to_metas_aux(pattern, metas, scope, &mut bvar_to_meta, 0);
+) -> (Expr, HashMap<u32, Expr>) {
+    let mut bvar_to_meta = HashMap::new();
+    let result = map_pattern(pattern, |index| {
+        let replacement = bvar_to_meta.entry(index).or_insert_with(|| {
+            // The scope is the goal's locals. Each adjusted index gets the
+            // same fresh metavariable at every occurrence.
+            let meta_id = metas.fresh_with_locals(Expr::type_(), scope.to_vec());
+            Expr::fvar(MetaState::to_fvar(meta_id))
+        });
+        Some(replacement.clone())
+    });
     (result, bvar_to_meta)
 }
 
-fn convert_bvars_to_metas_aux(
-    expr: &Expr,
-    metas: &mut MetaState,
-    scope: &[(clean_parser::SurfaceName, FVarId, Expr)],
-    bvar_to_meta: &mut hashbrown::HashMap<u32, Expr>,
-    depth: u32,
-) -> Expr {
-    stack_safe(|| match expr.kind() {
-        ExprKind::BVar(idx) => {
-            // Only convert top-level BVars (not ones bound by inner lambdas).
-            // BVars with idx >= depth are pattern variables.
-            if *idx >= depth {
-                let adjusted_idx = *idx - depth;
-                if let Some(meta_expr) = bvar_to_meta.get(&adjusted_idx) {
-                    return meta_expr.clone();
-                }
-                // Create a fresh metavariable for this BVar.
-                // Use Type as a placeholder type (simp lemmas typically have type params).
-                // The scope is the GOAL's locals (see `convert_bvars_to_metas`):
-                // wide enough to bind goal subterms, still closed to
-                // binder-opened temporaries.
-                let meta_id = metas.fresh_with_locals(Expr::type_(), scope.to_vec());
-                let meta_expr = Expr::fvar(MetaState::to_fvar(meta_id));
-                bvar_to_meta.insert(adjusted_idx, meta_expr.clone());
-                meta_expr
-            } else {
-                expr.clone()
-            }
-        }
-        ExprKind::App(f, a) => {
-            let f_conv = convert_bvars_to_metas_aux(f, metas, scope, bvar_to_meta, depth);
-            let a_conv = convert_bvars_to_metas_aux(a, metas, scope, bvar_to_meta, depth);
-            Expr::app(f_conv, a_conv)
-        }
-        ExprKind::Lam(bi, ty, body) => {
-            let ty_conv = convert_bvars_to_metas_aux(ty, metas, scope, bvar_to_meta, depth);
-            let body_conv = convert_bvars_to_metas_aux(body, metas, scope, bvar_to_meta, depth + 1);
-            Expr::lam(*bi, ty_conv, body_conv)
-        }
-        ExprKind::Pi(bi, ty, body) => {
-            let ty_conv = convert_bvars_to_metas_aux(ty, metas, scope, bvar_to_meta, depth);
-            let body_conv = convert_bvars_to_metas_aux(body, metas, scope, bvar_to_meta, depth + 1);
-            Expr::pi(*bi, ty_conv, body_conv)
-        }
-        ExprKind::Let(name, ty, val, body, non_dep) => {
-            let ty_conv = convert_bvars_to_metas_aux(ty, metas, scope, bvar_to_meta, depth);
-            let val_conv = convert_bvars_to_metas_aux(val, metas, scope, bvar_to_meta, depth);
-            let body_conv = convert_bvars_to_metas_aux(body, metas, scope, bvar_to_meta, depth + 1);
-            Expr::let_named(name.clone(), ty_conv, val_conv, body_conv, *non_dep)
-        }
-        ExprKind::Proj(name, idx, e) => {
-            let e_conv = convert_bvars_to_metas_aux(e, metas, scope, bvar_to_meta, depth);
-            Expr::proj(name.clone(), *idx, e_conv)
-        }
-        ExprKind::MData(mdata, e) => {
-            let e_conv = convert_bvars_to_metas_aux(e, metas, scope, bvar_to_meta, depth);
-            Expr::mdata(mdata.clone(), e_conv)
-        }
-        ExprKind::Squash(e) => {
-            let e_conv = convert_bvars_to_metas_aux(e, metas, scope, bvar_to_meta, depth);
-            Expr::from_kind(ExprKind::Squash(Arc::new(e_conv)))
-        }
-        _ => expr.clone(),
-    })
-}
-
 /// Substitute BVars in an expression using a mapping to metavariable expressions.
-///
 /// REQUIRES: `bvar_to_meta` uses the adjusted top-level indexing from `convert_bvars_to_metas`
 /// ENSURES: Only mapped top-level BVars are replaced; inner bound BVars are preserved
-pub(crate) fn substitute_bvars_with_metas(
-    expr: &Expr,
-    bvar_to_meta: &hashbrown::HashMap<u32, Expr>,
-) -> Expr {
-    substitute_bvars_with_metas_aux(expr, bvar_to_meta, 0)
+pub(crate) fn substitute_bvars_with_metas(expr: &Expr, bvar_to_meta: &HashMap<u32, Expr>) -> Expr {
+    map_pattern(expr, |index| bvar_to_meta.get(&index).cloned())
 }
 
-fn substitute_bvars_with_metas_aux(
-    expr: &Expr,
-    bvar_to_meta: &hashbrown::HashMap<u32, Expr>,
-    depth: u32,
-) -> Expr {
-    stack_safe(|| match expr.kind() {
-        ExprKind::BVar(idx) => {
-            if *idx >= depth {
-                let adjusted_idx = *idx - depth;
-                if let Some(meta_expr) = bvar_to_meta.get(&adjusted_idx) {
-                    return meta_expr.clone();
-                }
+fn map_pattern(expr: &Expr, replace: impl FnMut(u32) -> Option<Expr>) -> Expr {
+    PatternMapper {
+        replace,
+        shared: HashMap::new(),
+    }
+    .term(expr, 0)
+}
+
+struct PatternMapper<F> {
+    replace: F,
+    // Input Arcs live for the whole conversion. Binder depth matters even
+    // when the same input node recurs, since it selects a different BVar.
+    shared: HashMap<(*const Expr, u32), Arc<Expr>>,
+}
+
+impl<F: FnMut(u32) -> Option<Expr>> PatternMapper<F> {
+    fn child(&mut self, input: &Arc<Expr>, depth: u32) -> Arc<Expr> {
+        if depth >= input.loose_bvar_range() {
+            return Arc::clone(input);
+        }
+        if Arc::strong_count(input) == 1 {
+            return Arc::new(self.term(input, depth));
+        }
+        let key = (Arc::as_ptr(input), depth);
+        if let Some(result) = self.shared.get(&key) {
+            return Arc::clone(result);
+        }
+        let result = Arc::new(self.term(input, depth));
+        self.shared.insert(key, Arc::clone(&result));
+        result
+    }
+
+    fn term(&mut self, expr: &Expr, depth: u32) -> Expr {
+        if depth >= expr.loose_bvar_range() {
+            return expr.clone();
+        }
+        stack_safe(|| match expr.kind() {
+            ExprKind::BVar(index) => (self.replace)(index - depth).unwrap_or_else(|| expr.clone()),
+            ExprKind::App(f, a) => Expr::app_arc(self.child(f, depth), self.child(a, depth)),
+            ExprKind::Lam(info, ty, body) => {
+                Expr::lam_arc(*info, self.child(ty, depth), self.child(body, depth + 1))
             }
-            expr.clone()
-        }
-        ExprKind::App(f, a) => {
-            let f_sub = substitute_bvars_with_metas_aux(f, bvar_to_meta, depth);
-            let a_sub = substitute_bvars_with_metas_aux(a, bvar_to_meta, depth);
-            Expr::app(f_sub, a_sub)
-        }
-        ExprKind::Lam(bi, ty, body) => {
-            let ty_sub = substitute_bvars_with_metas_aux(ty, bvar_to_meta, depth);
-            let body_sub = substitute_bvars_with_metas_aux(body, bvar_to_meta, depth + 1);
-            Expr::lam(*bi, ty_sub, body_sub)
-        }
-        ExprKind::Pi(bi, ty, body) => {
-            let ty_sub = substitute_bvars_with_metas_aux(ty, bvar_to_meta, depth);
-            let body_sub = substitute_bvars_with_metas_aux(body, bvar_to_meta, depth + 1);
-            Expr::pi(*bi, ty_sub, body_sub)
-        }
-        ExprKind::Let(name, ty, val, body, non_dep) => {
-            let ty_sub = substitute_bvars_with_metas_aux(ty, bvar_to_meta, depth);
-            let val_sub = substitute_bvars_with_metas_aux(val, bvar_to_meta, depth);
-            let body_sub = substitute_bvars_with_metas_aux(body, bvar_to_meta, depth + 1);
-            Expr::let_named(name.clone(), ty_sub, val_sub, body_sub, *non_dep)
-        }
-        ExprKind::Proj(name, idx, e) => {
-            let e_sub = substitute_bvars_with_metas_aux(e, bvar_to_meta, depth);
-            Expr::proj(name.clone(), *idx, e_sub)
-        }
-        ExprKind::MData(mdata, e) => {
-            let e_sub = substitute_bvars_with_metas_aux(e, bvar_to_meta, depth);
-            Expr::mdata(mdata.clone(), e_sub)
-        }
-        ExprKind::Squash(e) => {
-            let e_sub = substitute_bvars_with_metas_aux(e, bvar_to_meta, depth);
-            Expr::from_kind(ExprKind::Squash(Arc::new(e_sub)))
-        }
-        _ => expr.clone(),
-    })
+            ExprKind::Pi(info, ty, body) => {
+                Expr::pi_arc(*info, self.child(ty, depth), self.child(body, depth + 1))
+            }
+            ExprKind::Let(name, ty, val, body, non_dep) => Expr::let_named_arc(
+                name.clone(),
+                self.child(ty, depth),
+                self.child(val, depth),
+                self.child(body, depth + 1),
+                *non_dep,
+            ),
+            ExprKind::Proj(name, index, child) => {
+                Expr::proj_arc(name.clone(), *index, self.child(child, depth))
+            }
+            ExprKind::MData(data, child) => {
+                Expr::from_kind(ExprKind::MData(data.clone(), self.child(child, depth)))
+            }
+            ExprKind::Squash(child) => Expr::from_kind(ExprKind::Squash(self.child(child, depth))),
+            _ => expr.clone(),
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clean_kernel::BinderInfo;
+
+    #[test]
+    fn shared_pattern_nodes_reuse_the_result_at_the_same_binder_depth() {
+        let argument = Arc::new(Expr::bvar(1));
+        let domain = Arc::new(Expr::type_());
+        let repeated = Expr::app_arc(Arc::clone(&argument), Arc::clone(&argument));
+        let under_binder = Expr::lam_arc(BinderInfo::Default, domain, argument);
+        let pattern = Expr::app(repeated, under_binder);
+        let mut metas = MetaState::new();
+        let (mapped, replacements) = convert_bvars_to_metas(&pattern, &mut metas, &[]);
+        let ExprKind::App(repeated, under_binder) = mapped.kind() else {
+            panic!("application expected");
+        };
+        let ExprKind::App(first, second) = repeated.kind() else {
+            panic!("shared pair expected");
+        };
+        let ExprKind::Lam(_, _, bound) = under_binder.kind() else {
+            panic!("binder expected");
+        };
+        assert!(Arc::ptr_eq(first, second));
+        assert_eq!(first.as_ref(), &replacements[&1]);
+        assert_eq!(bound.as_ref(), &replacements[&0]);
+        assert_ne!(first, bound);
+        assert_eq!(mapped, substitute_bvars_with_metas(&pattern, &replacements));
+    }
 }

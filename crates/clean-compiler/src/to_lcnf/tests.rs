@@ -136,6 +136,64 @@ fn test_classify_expr_arg_prop_const() {
 }
 
 #[test]
+fn theorem_erasure_checks_its_open_argument_and_retains_data_calls() {
+    use super::scoped_application_type::scoped_proof_value_type;
+    let mut env = Environment::with_prelude();
+    env.add_decl(Declaration::Theorem {
+        name: Name::from_string("numberWitness"),
+        level_params: Vec::new(),
+        type_: Expr::arrow(Expr::const_str("Nat"), Expr::const_str("True")),
+        value: Expr::lam(
+            BinderInfo::Default,
+            Expr::const_str("Nat"),
+            Expr::const_str("True.intro"),
+        ),
+    })
+    .unwrap();
+    let mut ctx = LcnfContext::new(&env);
+    ctx.push_typed_binder(&Expr::const_str("Nat"));
+    let witness = Expr::const_str("numberWitness");
+    let applied = Expr::app(witness.clone(), Expr::bvar(0));
+    assert_eq!(
+        scoped_proof_value_type(&ctx, &applied),
+        Some(Expr::const_str("True"))
+    );
+    assert!(matches!(
+        expr_to_arg(&mut ctx, &applied).unwrap(),
+        Arg::Erased
+    ));
+    assert!(matches!(
+        expr_to_let_value(&mut ctx, &applied).unwrap(),
+        (LetValue::Erased, _)
+    ));
+    for invalid in [
+        Expr::app(witness.clone(), Expr::const_str("Bool.true")),
+        Expr::app(witness.clone(), Expr::bvar(1)),
+        Expr::app(applied, Expr::nat_lit(0)),
+    ] {
+        assert!(scoped_proof_value_type(&ctx, &invalid).is_none());
+    }
+    let data = Expr::app(Expr::const_str("Nat.succ"), Expr::bvar(0));
+    assert!(scoped_proof_value_type(&ctx, &data).is_none());
+    assert!(matches!(
+        expr_to_arg(&mut ctx, &data).unwrap(),
+        Arg::FVar(_)
+    ));
+
+    ctx.push_typed_binder(&Expr::const_str("UnavailableBinderType"));
+    let closed = Expr::app(witness.clone(), Expr::nat_lit(3));
+    assert_eq!(
+        scoped_proof_value_type(&ctx, &closed),
+        Some(Expr::const_str("True"))
+    );
+    for invalid_arg in [Expr::const_str("Bool.true"), Expr::bvar(0)] {
+        assert!(
+            scoped_proof_value_type(&ctx, &Expr::app(witness.clone(), invalid_arg)).is_none()
+        );
+    }
+}
+
+#[test]
 fn test_classify_expr_arg_type_const() {
     let mut env = make_env();
     let ty_name = add_axiom(&mut env, "MyType", Expr::type_());
@@ -2735,4 +2793,283 @@ fn test_beta_identity_value_reuses_its_single_argument_binding() {
         matches!(value, LetValue::FVar { fvar, args } if fvar == lets[0].fvar_id && args.is_empty())
     );
     assert!(ctx.bvar_stack.is_empty());
+}
+
+#[test]
+fn test_let_lambda_join_point_lowers_to_code_fun_without_pap_alias() {
+    let env = full_prelude_env();
+    let mut ctx = LcnfContext::new(&env);
+    let join_ty = Expr::pi(
+        BinderInfo::Default,
+        Expr::const_str("Nat"),
+        Expr::const_str("Bool"),
+    );
+    // let _match_join_w : Nat -> Bool := fun _ : Nat => Bool.false in _match_join_w 0
+    let join_val = Expr::lam(
+        BinderInfo::Default,
+        Expr::const_str("Nat"),
+        Expr::const_str("Bool.false"),
+    );
+    let join_call = Expr::app(Expr::bvar(0), Expr::nat_lit(0));
+    let term = Expr::let_named(
+        Name::from_string("_match_join_w"),
+        join_ty,
+        join_val,
+        join_call,
+        false,
+    );
+
+    let code = expr_to_code(&mut ctx, &term).expect("let-bound join-point lambda must lower");
+    let Code::Fun(fun_decl, continuation) = &code else {
+        panic!("expected direct Code::Fun for let-bound lambda, got {code:?}");
+    };
+    assert_eq!(fun_decl.ty, Expr::const_str("Bool"));
+    assert_eq!(fun_decl.params.len(), 1);
+    // Continuation must call `fun_decl.fvar_id` directly with 1 arg (no 0-arg PAP alias).
+    let mut cur = continuation.as_ref();
+    let mut saw_direct_call = false;
+    while let Code::Let(let_decl, rest) = cur {
+        if let LetValue::FVar { fvar, args } = &let_decl.value {
+            assert!(
+                !args.is_empty(),
+                "let-bound join-point lambda must not emit an eager 0-arg alias: {let_decl:?}"
+            );
+            if *fvar == fun_decl.fvar_id {
+                assert_eq!(args.len(), 1);
+                assert_eq!(let_decl.ty, Expr::const_str("Bool"));
+                saw_direct_call = true;
+            }
+        }
+        cur = rest.as_ref();
+    }
+    assert!(
+        saw_direct_call,
+        "continuation must call the local FunDecl directly"
+    );
+}
+
+#[test]
+fn test_value_position_let_lambda_and_bare_lambda_lower_cleanly() {
+    let env = full_prelude_env();
+    let mut ctx = LcnfContext::new(&env);
+    let outer = ctx.push_typed_binder(&Expr::const_str("Nat"));
+    // Value-position let-bound lambda: (let j : Nat -> Nat := fun x => x; j outer)
+    let join_ty = Expr::pi(
+        BinderInfo::Default,
+        Expr::const_str("Nat"),
+        Expr::const_str("Nat"),
+    );
+    let val_expr = Expr::let_named(
+        Name::from_string("_match_join_w"),
+        join_ty.clone(),
+        Expr::lam(BinderInfo::Default, Expr::const_str("Nat"), Expr::bvar(0)),
+        Expr::app(Expr::bvar(0), Expr::bvar(1)),
+        false,
+    );
+    let (lv, ty) = expr_to_let_value(&mut ctx, &val_expr).expect("value-position let-lambda");
+    assert_eq!(ty, Expr::const_str("Nat"));
+    assert!(matches!(lv, LetValue::FVar { args, .. } if args.len() == 1));
+    assert_eq!(ctx.bvar_stack, vec![outer]);
+
+    // Bare lambda reached in value position via `(let tmp := 7; fun x : Nat => x)`
+    let mut ctx2 = LcnfContext::new(&env);
+    let bare_in_let = Expr::let_named(
+        Name::from_string("tmp"),
+        Expr::const_str("Nat"),
+        Expr::nat_lit(7),
+        Expr::lam(BinderInfo::Default, Expr::const_str("Nat"), Expr::bvar(0)),
+        false,
+    );
+    let (lv2, ty2) = expr_to_let_value(&mut ctx2, &bare_in_let).expect("bare lambda in value let");
+    assert_eq!(ty2, join_ty);
+    assert!(matches!(lv2, LetValue::FVar { args, .. } if args.is_empty()));
+}
+
+#[test]
+fn test_nested_mutual_recursor_family_lowers_to_tag_dispatched_mrec() {
+    use clean_kernel::inductive::{Constructor, InductiveDecl, InductiveType};
+
+    let mut env = full_prelude_env();
+    // mutual
+    //   inductive Head | stop : Head | core : List Cert -> Head -> Head
+    //   inductive Cert | refl : Cert | reduce : Head -> Head -> Cert
+    // end
+    let head_ty = Expr::sort(Level::succ(Level::zero()));
+    let cert_ty = Expr::sort(Level::succ(Level::zero()));
+    let list_cert = Expr::app(
+        Expr::const_(Name::from_string("List"), vec![Level::zero()]),
+        Expr::const_str("Cert"),
+    );
+    let decl = InductiveDecl {
+        level_params: vec![],
+        num_params: 0,
+        types: vec![
+            InductiveType {
+                name: Name::from_string("Head"),
+                type_: head_ty,
+                constructors: vec![
+                    Constructor {
+                        name: Name::from_string("Head.stop"),
+                        type_: Expr::const_str("Head"),
+                    },
+                    Constructor {
+                        name: Name::from_string("Head.core"),
+                        type_: Expr::pi(
+                            BinderInfo::Default,
+                            list_cert,
+                            Expr::pi(
+                                BinderInfo::Default,
+                                Expr::const_str("Head"),
+                                Expr::const_str("Head"),
+                            ),
+                        ),
+                    },
+                ],
+            },
+            InductiveType {
+                name: Name::from_string("Cert"),
+                type_: cert_ty,
+                constructors: vec![
+                    Constructor {
+                        name: Name::from_string("Cert.refl"),
+                        type_: Expr::const_str("Cert"),
+                    },
+                    Constructor {
+                        name: Name::from_string("Cert.reduce"),
+                        type_: Expr::pi(
+                            BinderInfo::Default,
+                            Expr::const_str("Head"),
+                            Expr::pi(
+                                BinderInfo::Default,
+                                Expr::const_str("Head"),
+                                Expr::const_str("Cert"),
+                            ),
+                        ),
+                    },
+                ],
+            },
+        ],
+    };
+    env.add_inductive(decl)
+        .expect("register nested mutual Head/Cert");
+
+    // Eliminate `Cert.rec` (and companion `Head.rec_1`) with constant Nat motives:
+    // count total constructors across the nested mutual tree.
+    let nat_ty = Expr::const_str("Nat");
+    let m0 = Expr::lam(BinderInfo::Default, Expr::const_str("Head"), nat_ty.clone());
+    let m1 = Expr::lam(BinderInfo::Default, Expr::const_str("Cert"), nat_ty.clone());
+    let list_cert2 = Expr::app(
+        Expr::const_(Name::from_string("List"), vec![Level::zero()]),
+        Expr::const_str("Cert"),
+    );
+    let m2 = Expr::lam(BinderInfo::Default, list_cert2, nat_ty.clone());
+
+    // 6 minors:
+    // 0 Head.stop: 1
+    let min_stop = Expr::nat_lit(1);
+    // 1 Head.core (cs : List Cert) (rest : Head) (ih_cs : Nat) (ih_rest : Nat) => Nat.add ih_cs ih_rest
+    let min_core = Expr::lam(
+        BinderInfo::Default,
+        Expr::app(
+            Expr::const_(Name::from_string("List"), vec![Level::zero()]),
+            Expr::const_str("Cert"),
+        ),
+        Expr::lam(
+            BinderInfo::Default,
+            Expr::const_str("Head"),
+            Expr::lam(
+                BinderInfo::Default,
+                nat_ty.clone(),
+                Expr::lam(
+                    BinderInfo::Default,
+                    nat_ty.clone(),
+                    Expr::app(
+                        Expr::app(Expr::const_str("Nat.add"), Expr::bvar(1)),
+                        Expr::bvar(0),
+                    ),
+                ),
+            ),
+        ),
+    );
+    // 2 Cert.refl: 1
+    let min_refl = Expr::nat_lit(1);
+    // 3 Cert.reduce (ha hb : Head) (ih_a ih_b : Nat) => Nat.add ih_a ih_b
+    let min_reduce = Expr::lam(
+        BinderInfo::Default,
+        Expr::const_str("Head"),
+        Expr::lam(
+            BinderInfo::Default,
+            Expr::const_str("Head"),
+            Expr::lam(
+                BinderInfo::Default,
+                nat_ty.clone(),
+                Expr::lam(
+                    BinderInfo::Default,
+                    nat_ty.clone(),
+                    Expr::app(
+                        Expr::app(Expr::const_str("Nat.add"), Expr::bvar(1)),
+                        Expr::bvar(0),
+                    ),
+                ),
+            ),
+        ),
+    );
+    // 4 List.nil: 0
+    let min_nil = Expr::nat_lit(0);
+    // 5 List.cons (c : Cert) (cs : List Cert) (ih_c ih_cs : Nat) => Nat.add ih_c ih_cs
+    let min_cons = Expr::lam(
+        BinderInfo::Default,
+        Expr::const_str("Cert"),
+        Expr::lam(
+            BinderInfo::Default,
+            Expr::app(
+                Expr::const_(Name::from_string("List"), vec![Level::zero()]),
+                Expr::const_str("Cert"),
+            ),
+            Expr::lam(
+                BinderInfo::Default,
+                nat_ty.clone(),
+                Expr::lam(
+                    BinderInfo::Default,
+                    nat_ty.clone(),
+                    Expr::app(
+                        Expr::app(Expr::const_str("Nat.add"), Expr::bvar(1)),
+                        Expr::bvar(0),
+                    ),
+                ),
+            ),
+        ),
+    );
+
+    let mut spine = Expr::const_(
+        Name::from_string("Cert.rec"),
+        vec![Level::succ(Level::zero())],
+    );
+    for arg in [
+        m0,
+        m1,
+        m2,
+        min_stop,
+        min_core,
+        min_refl,
+        min_reduce,
+        min_nil,
+        min_cons,
+        Expr::const_str("Cert.refl"),
+    ] {
+        spine = Expr::app(spine, arg);
+    }
+
+    let mut ctx = LcnfContext::new(&env);
+    let code = expr_to_code(&mut ctx, &spine)
+        .expect("nested mutual Cert.rec + Head.rec + Head.rec_1 family must lower");
+    let rendered = format!("{code:?}");
+    assert!(
+        rendered.contains("_mrec"),
+        "expected synthesized _mrec FunDecl, got: {rendered}"
+    );
+    assert!(
+        !rendered.contains("Head.rec") && !rendered.contains("Cert.rec"),
+        "valueless kernel recursor names must not survive lowering: {rendered}"
+    );
 }

@@ -553,6 +553,16 @@ impl Syntax {
         Syntax::node_with_info(info, SyntaxKind::hole(), vec![])
     }
 
+    /// A written synthetic hole retains its optional goal name through expansion.
+    pub fn mk_synthetic_hole_with_info(info: SourceInfo, name: &SurfaceName) -> Self {
+        let children = if name.name().is_anon() {
+            Vec::new()
+        } else {
+            vec![Self::ident(name)]
+        };
+        Self::node_with_info(info, SyntaxKind::app("syntheticHole"), children)
+    }
+
     /// Create a numeric literal syntax
     pub fn mk_num(n: u64) -> Self {
         Syntax::node(SyntaxKind::num(), vec![Syntax::atom(&n.to_string())])

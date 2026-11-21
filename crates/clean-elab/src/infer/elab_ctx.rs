@@ -14,6 +14,16 @@ use super::*;
 use crate::level_role::LevelParamRole;
 use clean_kernel::ExprFolder;
 
+/// Caller-owned compatibility facts for answers saved between checker calls.
+/// State generations are process-unique across mutation and rollback; cloned
+/// states retain a generation only while they retain that generation's content.
+#[derive(PartialEq, Eq)]
+pub(super) struct CheckerCacheState {
+    metas: u64,
+    locals: u64,
+    pending_levels: Vec<(Name, Level)>,
+}
+
 /// State whose lifetime is tied to the active local-variable scope.
 ///
 /// Nested-pattern elaboration is deliberately two-phase: binding a plan pushes
@@ -385,15 +395,10 @@ impl<'a> ElabCtx<'a> {
         // (`add_level_constraint`, probes p06/p30/p31) is untouched: those
         // declarations contain no hole.
         let hole_sort = Expr::sort(self.fresh_universe_param());
-        // An anonymous `_` is Lean's NATURAL metavariable (`elabHole`,
-        // `mkFreshExprMVar … .natural`), so its context may be narrowed by the
-        // unifier's `ctxApprox` port; a named `?x` is synthetic-opaque in Lean
-        // and stays opaque here. (`?_` reaches this function as an anonymous
-        // hole — the parser does not distinguish it from `_` — which is the
-        // one place this is wider than Lean; the `refine` bridge scopes the
-        // goal it makes from such a hole to the enclosing goal, not to the
-        // metavariable's recorded locals, so a narrowed `?_` keeps its goal.)
-        let meta_id = if name.is_none() {
+        // Preserve natural-metavariable scope approximation for anonymous holes.
+        // The anonymous Name still records that a written `?_` is liftable;
+        // unlike a named synthetic hole it supplies no case tag.
+        let meta_id = if name.is_none_or(|n| n.name().is_anon()) {
             let ty_meta = self.fresh_natural_meta(hole_sort);
             self.metas
                 .fresh_natural_with_locals_at(ty_meta, self.locals.clone(), Some(span))
@@ -936,6 +941,26 @@ impl<'a> ElabCtx<'a> {
         }
     }
 
+    fn checker_cache_state(&self) -> CheckerCacheState {
+        CheckerCacheState {
+            metas: self.metas.generation(),
+            locals: self.locals.generation(),
+            pending_levels: self.pending_level_assigns.borrow().clone(),
+        }
+    }
+
+    fn save_checker_caches(&self, caches: TcCaches) {
+        let unchanged = self.tc_cache_state.borrow().as_ref() == Some(&self.checker_cache_state());
+        if unchanged {
+            self.tc_caches.replace(caches);
+        } else {
+            // A callback may have learned level constraints during this call.
+            // Do not retain answers computed before those facts were available.
+            self.tc_caches.replace(TcCaches::default());
+            self.tc_cache_state.take();
+        }
+    }
+
     /// Create a TypeChecker with the level_eq callback injected.
     ///
     /// The callback resolves fresh universe params through:
@@ -950,8 +975,21 @@ impl<'a> ElabCtx<'a> {
     /// difference between paying O(every metavariable ever created) and
     /// O(what this call can touch) on every `whnf` of instance resolution.
     fn make_tc(&self, caches: TcCaches, roots: &[&Expr]) -> TypeChecker<'_> {
-        let mut tc =
-            TypeChecker::with_context_and_caches(self.env, self.demand_local_ctx(roots), caches);
+        let state = self.checker_cache_state();
+        let compatible = self.tc_cache_state.borrow().as_ref() == Some(&state);
+        self.tc_cache_state.replace(Some(state));
+        // The caller already took this bundle out of tc_caches. Rebuilding
+        // demand_local_ctx's declaration memo cannot retire that saved bundle.
+        let caches = if compatible {
+            caches
+        } else {
+            TcCaches::default()
+        };
+        let mut tc = TypeChecker::with_context_and_caches(
+            self.env,
+            self.demand_local_ctx(roots),
+            TcCaches::default(),
+        );
         let metas = &self.metas;
         let pending = &self.pending_level_assigns;
         tc.set_level_eq_override(move |l1, l2| {
@@ -1027,7 +1065,10 @@ impl<'a> ElabCtx<'a> {
         // through it). The kernel's own `add_decl` re-check leaves this off and
         // stays transparency-blind / Lean-faithful.
         tc.set_honor_reducibility(true);
-        tc
+        // Configure the callback and reduction policy before adopting answers
+        // owned by this same elaboration context. Live configuration setters
+        // retain their ordinary invalidation behavior.
+        tc.with_configured_caches(caches)
     }
 
     /// Commit pending level assignments to MetaState.
@@ -1058,7 +1099,7 @@ impl<'a> ElabCtx<'a> {
                 expected: "valid type".to_string(),
                 actual: format!("{e}"),
             });
-        self.tc_caches.replace(tc.take_caches());
+        self.save_checker_caches(tc.take_caches());
         result
     }
 
@@ -1086,7 +1127,7 @@ impl<'a> ElabCtx<'a> {
                 expected: "valid type".to_string(),
                 actual: format!("{e}"),
             });
-        self.tc_caches.replace(tc.take_caches());
+        self.save_checker_caches(tc.take_caches());
         result
     }
 
@@ -1102,7 +1143,7 @@ impl<'a> ElabCtx<'a> {
                 expected: "valid type".to_string(),
                 actual: format!("{e}"),
             });
-        self.tc_caches.replace(tc.take_caches());
+        self.save_checker_caches(tc.take_caches());
         result
     }
 
@@ -1275,7 +1316,7 @@ impl<'a> ElabCtx<'a> {
         let tc = self.make_tc(caches, &[&instantiated]);
         let result =
             tc.whnf_with_transparency(&instantiated, clean_kernel::TransparencyMode::Instances);
-        self.tc_caches.replace(tc.take_caches());
+        self.save_checker_caches(tc.take_caches());
         result
     }
 
@@ -1291,7 +1332,7 @@ impl<'a> ElabCtx<'a> {
         let tc = self.make_tc(caches, &[&instantiated]);
         let result =
             tc.whnf_with_transparency(&instantiated, clean_kernel::TransparencyMode::Reducible);
-        self.tc_caches.replace(tc.take_caches());
+        self.save_checker_caches(tc.take_caches());
         result
     }
 
@@ -1301,7 +1342,7 @@ impl<'a> ElabCtx<'a> {
         let caches = self.tc_caches.take();
         let tc = self.make_tc(caches, &[&instantiated]);
         let result = tc.whnf(&instantiated);
-        self.tc_caches.replace(tc.take_caches());
+        self.save_checker_caches(tc.take_caches());
         result
     }
 
@@ -1314,7 +1355,7 @@ impl<'a> ElabCtx<'a> {
         let caches = self.tc_caches.take();
         let tc = self.make_tc(caches, &[&a_inst, &b_inst]);
         let result = tc.is_def_eq(&a_inst, &b_inst);
-        self.tc_caches.replace(tc.take_caches());
+        self.save_checker_caches(tc.take_caches());
         result
     }
 }

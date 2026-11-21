@@ -80,6 +80,10 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use crate::ir::{FnId, IRArg, IRBody, IRDecl, IRExpr, IRLiteral, IRType, JoinPointId, VarId};
 use crate::rc::borrow::{BorrowMap, Ownership};
 
+#[path = "rc_repair_linearity_back_edge.rs"]
+mod back_edge;
+use back_edge::{canonicalize_entering_objects, forget_binding, prune_unreachable_facts};
+
 /// Upper bound on statement visits per declaration. Join-point bodies are
 /// memoized per entry state, so honest code stays far below this; a
 /// declaration that exceeds it is refused (fail closed), never waved through.
@@ -136,6 +140,8 @@ struct Walker<'a> {
     jps: HashMap<JoinPointId, JpDef<'a>>,
     memo: HashSet<(u32, State)>,
     budget: usize,
+    /// Join points whose bodies the path is inside: a jump to one is a back edge.
+    active: Vec<JoinPointId>,
     /// A join-point id declared twice in one body: the id → body map would
     /// analyse the wrong body at one of them, so the declaration is refused.
     duplicate_jp: Option<JoinPointId>,
@@ -152,6 +158,7 @@ pub(crate) fn check_decl(decl: &IRDecl, sigs: &BorrowMap) -> Result<(), RcLinear
         jps: HashMap::new(),
         memo: HashSet::new(),
         budget: VISIT_BUDGET,
+        active: Vec::new(),
         duplicate_jp: None,
     };
     let mut bound: Vec<u32> = Vec::new();
@@ -448,15 +455,8 @@ impl<'a> Walker<'a> {
             }
             IRExpr::IsShared(v) => {
                 self.borrow_use(st, v.0, path, "tested for sharing")?;
-                if let Some(obj) = st.vars.get(&v.0).map(|s| s.obj) {
-                    st.shared_probe.insert(var.0, obj);
-                }
             }
-            IRExpr::Lit(lit) => {
-                if let Some(value) = literal_value(lit) {
-                    st.known.insert(var.0, value);
-                }
-            }
+            IRExpr::Lit(_) => {}
             IRExpr::String(_) => {}
             IRExpr::Apply { fn_id, args } => {
                 // Owned positions are consumed first; borrowed positions are
@@ -508,6 +508,18 @@ impl<'a> Walker<'a> {
             }
         }
         self.refuse_rebinding(st, var.0, path)?;
+        // A NEW object under this id: in a loop, no earlier fact carries over.
+        forget_binding(st, var.0);
+        if let IRExpr::Lit(lit) = value {
+            if let Some(value) = literal_value(lit) {
+                st.known.insert(var.0, value);
+            }
+        }
+        if let IRExpr::IsShared(v) = value {
+            if let Some(obj) = st.vars.get(&v.0).map(|s| s.obj) {
+                st.shared_probe.insert(var.0, obj);
+            }
+        }
         if ty.is_object() {
             // An object-typed literal (a tagged small value) is owned, like
             // every other freshly produced object.
@@ -885,10 +897,18 @@ impl<'a> Walker<'a> {
                 st.shared_probe.insert(param, probe);
             }
         }
+        if self.active.contains(&jp) {
+            // A back edge (see `back_edge`): rename the entering objects.
+            canonicalize_entering_objects(&mut st, params);
+        }
+        prune_unreachable_facts(&mut st);
         if !self.memo.insert((jp.0, st.clone())) {
             return Ok(());
         }
-        self.walk(body, st, format!("{path}/jp{}", jp.0))
+        self.active.push(jp);
+        let result = self.walk(body, st, format!("{path}/jp{}", jp.0));
+        self.active.pop();
+        result
     }
 
     fn end_of_life(
@@ -974,6 +994,9 @@ fn literal_value(lit: &IRLiteral) -> Option<u64> {
         IRLiteral::UInt32(v) => Some(u64::from(*v)),
         IRLiteral::UInt64(v) => Some(*v),
         IRLiteral::USize(v) => Some(*v as u64),
-        IRLiteral::NatBig(_) | IRLiteral::Float32(_) | IRLiteral::Float64(_) => None,
+        IRLiteral::NatBig(_)
+        | IRLiteral::NatLimbs(_)
+        | IRLiteral::Float32(_)
+        | IRLiteral::Float64(_) => None,
     }
 }

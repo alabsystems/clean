@@ -1,14 +1,23 @@
-# Decision procedures for trust-cg's e-graph rule statements (PKG-U6;
+# Decision procedures for trust-cg's e-graph rule statements (PKG-U6, PKG-U6b;
 # README.md). Compiled in order by the pinned `lean -o`: trust-ir's SemR (the
 # `semr` family's one copy), the rule vocabulary and the proof helpers of the
 # `eqsat_rules` family (`from eqsat_rules`: this family holds no copy and
 # changes neither), then the residue evaluator and what its outcome says of
 # SemR's (`EqsatResidue`), the procedure `exhaust8` with its soundness theorem
 # (`EqsatExhaust`), and what the procedure admits and refuses
-# (`EqsatDecideControls`).
+# (`EqsatDecideControls`); then the three procedures of PKG-U6b, each with its
+# soundness theorem and, after it, what it admits and refuses: `exhaust8p`
+# (`EqsatPacked`), `bitwiseAll` (`EqsatBitwise`) and `ringAll` (`EqsatRing`).
+# Each of the three imports `EqsatExhaust` and none imports another.
 from semr SemR
 from eqsat_rules EqsatRule
 from eqsat_rules EqsatBasics
 EqsatResidue
 EqsatExhaust
 EqsatDecideControls
+EqsatPacked
+EqsatPackedControls
+EqsatBitwise
+EqsatBitwiseControls
+EqsatRing
+EqsatRingControls

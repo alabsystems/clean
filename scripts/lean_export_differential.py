@@ -21,8 +21,6 @@ WHAT IS NORMALIZED, and nothing else (each is a field no kernel rule reads):
     anonymous name). A `letE`'s name and `nondep` flag are compared.
   * the payload of an `mdata` node (Lean's own reader of the format keeps the
     expression and drops the payload); the node itself is compared.
-  * the `all` of a `def`, `thm` or `opaque` (Clean writes the constant
-    alone). The `all` of an inductive type and of a recursor is compared.
   * the order of a block's recursors (lean4export writes them in its
     NameSet's order; Clean writes `<type>.rec` per type, then `.rec_<i>`).
     The order of a block's types and constructors is compared.
@@ -73,7 +71,6 @@ DECL_KINDS = ("axiom", "def", "thm", "opaque", "quot", "inductive")
 NORMALIZED = [
     "lam/forallE binder names",
     "mdata payloads (the node is compared)",
-    "the all of def/thm/opaque",
     "the order of a block's recursors",
     "table indices, record order, the meta line",
 ]
@@ -289,10 +286,16 @@ class Export:
             self.declare(names[0], names, canonical)
             return
         c = self.header(data)
+        if kind in ("def", "thm", "opaque"):
+            # Lean exports these names in order, including siblings outside
+            # the term dependency cone. Only this record's own name is declared.
+            members = data["all"]
+            if not isinstance(members, list) or any(type(index) is not int for index in members):
+                raise Malformed(f"{kind}.all must be an array of name indices")
+            c["all"] = [list(self.name(index)) for index in members]
         if kind == "axiom":
             c.update(isUnsafe=data["isUnsafe"])
         elif kind == "def":
-            # `all` is not compared (module docs).
             c.update(value=self.expr(data["value"]), hints=data["hints"], safety=data["safety"])
         elif kind == "thm":
             c.update(value=self.expr(data["value"]))

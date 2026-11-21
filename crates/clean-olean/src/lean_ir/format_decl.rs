@@ -14,41 +14,12 @@
 //! breaks. No width decision is involved. A newline inside a text (a name
 //! component) breaks the same way (`Layout::text`).
 
-use super::format::name_to_string;
+use super::format::{name_to_string, nat_to_string};
 use super::types::{
     Alt, Arg, CtorInfo, Decl, Expr, FnBody, Instr, IrType, LitVal, Param, Terminal,
 };
-use crate::expr::BigNat;
 
 // --- literal rendering -------------------------------------------------------
-
-/// `Nat.repr` for a value of any size (decimal).
-#[must_use]
-pub(crate) fn nat_to_string(n: &BigNat) -> String {
-    let mut limbs: Vec<u64> = n.limbs().to_vec();
-    if limbs.len() == 1 {
-        return limbs[0].to_string();
-    }
-    // Repeated division by 10^19 over little-endian limbs.
-    const CHUNK: u64 = 10_000_000_000_000_000_000;
-    let mut chunks = Vec::new();
-    while limbs.iter().any(|&l| l != 0) {
-        let mut rem: u128 = 0;
-        for limb in limbs.iter_mut().rev() {
-            let cur = (rem << 64) | u128::from(*limb);
-            *limb = u64::try_from(cur / u128::from(CHUNK)).unwrap_or(u64::MAX);
-            rem = cur % u128::from(CHUNK);
-        }
-        chunks.push(u64::try_from(rem).unwrap_or(0));
-    }
-    let mut out = chunks
-        .pop()
-        .map_or_else(|| "0".to_owned(), |c| c.to_string());
-    for chunk in chunks.iter().rev() {
-        out.push_str(&format!("{chunk:019}"));
-    }
-    out
-}
 
 /// `String.quote` (`Init/Data/Repr.lean`, `Char.quoteCore (inString := true)`).
 #[must_use]
@@ -142,7 +113,7 @@ fn fmt_expr(e: &Expr) -> String {
         Expr::Ap { x, args } => format!("app x_{}{}", x.0, fmt_args(args)),
         Expr::Box { x, .. } => format!("box x_{}", x.0),
         Expr::Unbox { x } => format!("unbox x_{}", x.0),
-        Expr::Lit(LitVal::Num(v)) => nat_to_string(v),
+        Expr::Lit(LitVal::Num(v)) => nat_to_string(v.limbs()),
         Expr::Lit(LitVal::Str(s)) => quote_string(s),
         Expr::IsShared { x } => format!("isShared x_{}", x.0),
     }

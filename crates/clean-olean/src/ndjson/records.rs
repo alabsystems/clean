@@ -87,15 +87,6 @@ fn value(
     Ok((*tables.expr(line, index)?).clone())
 }
 
-/// The `all` field of a `def`, `thm` or `opaque` record (its mutual block):
-/// every index must be bound, as for any name the record carries, but the
-/// list itself is not kept. Lean's kernel checks these declarations one by
-/// one and never reads it (an inductive's `all` is kept: it names the block).
-fn check_all(tables: &Tables, line: u64, f: &mut Fields) -> Result<(), NdjsonError> {
-    all(tables, line, f)?;
-    Ok(())
-}
-
 /// The `all` field: the names of a record's block, every index bound.
 fn all(tables: &Tables, line: u64, f: &mut Fields) -> Result<Vec<Name>, NdjsonError> {
     tables.names_of(line, &f.nat_array("all")?)
@@ -146,22 +137,23 @@ pub(crate) fn declaration(
                 "partial" => DefinitionSafety::Partial,
                 other => return Err(f.error("safety", format!("unknown safety {other:?}"))),
             };
-            check_all(tables, line, &mut f)?;
+            let all = all(tables, line, &mut f)?;
             f.finish()?;
             ExportDeclaration::Definition {
                 header,
                 value,
                 hints,
                 safety,
+                all,
             }
         }
         "thm" => {
             let mut f = Fields::new(line, "thm", data)?;
             let header = header(tables, line, &mut f, &mut taint)?;
             let value = value(tables, line, &mut f, &header.name, &mut taint)?;
-            check_all(tables, line, &mut f)?;
+            let all = all(tables, line, &mut f)?;
             f.finish()?;
-            ExportDeclaration::Theorem { header, value }
+            ExportDeclaration::Theorem { header, value, all }
         }
         "opaque" => {
             let mut f = Fields::new(line, "opaque", data)?;
@@ -179,12 +171,13 @@ pub(crate) fn declaration(
                     ))
                 }
             };
-            check_all(tables, line, &mut f)?;
+            let all = all(tables, line, &mut f)?;
             f.finish()?;
             ExportDeclaration::Opaque {
                 header,
                 value,
                 is_unsafe,
+                all,
             }
         }
         "quot" => {
@@ -243,9 +236,14 @@ fn inductive(
             });
         }
     };
+    let inductive_header = |f: &mut Fields| -> Result<_, NdjsonError> {
+        let (mut header, index) = header_at(tables, line, f)?;
+        header.type_ = tables.inductive_expr(line, index)?;
+        Ok((header, index))
+    };
     for item in types {
         let mut f = Fields::new(line, "InductiveVal", item)?;
-        let (header, type_index) = header_at(tables, line, &mut f)?;
+        let (header, type_index) = inductive_header(&mut f)?;
         note(type_index, &header.name, "inductive type's type");
         block.types.push(ExportInductiveType {
             header,
@@ -262,7 +260,7 @@ fn inductive(
     }
     for item in ctors {
         let mut f = Fields::new(line, "ConstructorVal", item)?;
-        let (header, type_index) = header_at(tables, line, &mut f)?;
+        let (header, type_index) = inductive_header(&mut f)?;
         note(type_index, &header.name, "constructor type");
         block.ctors.push(ExportConstructor {
             header,
@@ -276,7 +274,7 @@ fn inductive(
     }
     for item in recs {
         let mut f = Fields::new(line, "RecursorVal", item)?;
-        let (header, type_index) = header_at(tables, line, &mut f)?;
+        let (header, type_index) = inductive_header(&mut f)?;
         note(type_index, &header.name, "recursor type");
         let all = all(tables, line, &mut f)?;
         let num_params = f.nat_u32("numParams")?;
@@ -293,7 +291,7 @@ fn inductive(
             rules.push(ExportRecursorRule {
                 ctor,
                 nfields,
-                rhs: (*tables.expr(line, rhs_index)?).clone(),
+                rhs: tables.inductive_expr(line, rhs_index)?,
             });
             r.finish()?;
         }

@@ -18,6 +18,19 @@ compiler, Lake, and LSP implementations — but those surfaces lack Lean-wide
 parity, and several replacement-evidence lanes are missing or stubbed. The
 commit-pinned source assessment is `docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md`.
 
+## Role in the Trust toolchain
+
+Clean checks Lean proofs and independently replays supported proof terms from
+compiler frontends. The TLA+ integration with
+[TY](https://github.com/alabsystems/ty) checks model and lowering obligations.
+TY elaborates TLA+ and owns state exploration, TrustIR carries typed operations
+and evidence, and TrustCG emits native code for supported paths. TLC supplies
+the independent reference for model-checking verdicts and exploration counts.
+
+Executable Clean and Lean lowering follow their own compiler gates. Linking
+their native code with Rust and TY model operations requires checked lowering,
+compatible ABIs, and authenticated runtime providers for the linked image.
+
 ## Why Clean?
 
 Clean is built for uses where theorem proving is a component inside another
@@ -384,8 +397,9 @@ gate (`docs/DECISIONS.md` R35, in a development checkout).
 
 ```bash
 just                 # list workflows
-just ci              # the landing gate: fmt-check + lint-coverage + clippy + test-fast
+just ci              # the landing gate: fmt-check + lint-coverage + clippy + test-fast + test-reduction-bound
 just test-fast       # publish smoke surface (the workspace default-members)
+just test-reduction-bound  # proofs/reduction_bound.lean: statements, definitions, witnesses, axioms
 just gate            # local fail-closed soundness + quality gate
 just install-hooks   # opt-in: install the tracked pre-push hook repo-wide
 

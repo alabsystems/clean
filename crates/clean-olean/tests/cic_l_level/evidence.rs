@@ -123,7 +123,7 @@ const MEANING_DIGEST_FIXTURE_SOURCE: &[u8] = include_bytes!("../support/meaning_
 /// These separate hashes bind both files and their boundary. Moving either
 /// pin stales the registry row `cic-l-qualification`, which pins this file.
 const MEANING_DIGEST_SOURCE_SHA256: &str =
-    "0d583f6abf7c831bf61fc773423ced0c21651b0257ff1884e1811c72f1fadcec";
+    "982e9afc5099e30659f2913e1acf9abc45faf9b4ae24312a646ca7e3d6ea3f3c";
 const MEANING_DIGEST_FIXTURE_SOURCE_SHA256: &str =
     "e6c834f2c10f2720a3fde512aa80878269264a8b78f374d39d5ab9d5bd155371";
 

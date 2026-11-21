@@ -121,6 +121,30 @@ impl<'a> ElabCtx<'a> {
         heq_stx: &SurfaceExpr,
         h_stx: &SurfaceExpr,
     ) -> Result<Option<Expr>, ElabError> {
+        let mut missing_endpoint = false;
+        if self.metas.preserve_cast_endpoints {
+            return self.elab_subst_attempt(heq_stx, h_stx, true, &mut missing_endpoint);
+        }
+
+        // Keep every successful orientation, including one that uses a reduced
+        // endpoint. Retry only our own occurrence miss, after rolling back the
+        // original proof and (in inference mode) value elaboration.
+        let ordinary = self.with_local_scope_rollback(|ctx| {
+            ctx.elab_subst_attempt(heq_stx, h_stx, false, &mut missing_endpoint)
+        });
+        if missing_endpoint && matches!(ordinary, Err(ElabError::InvalidSubst { .. })) {
+            return self.elab_subst_attempt(heq_stx, h_stx, true, &mut missing_endpoint);
+        }
+        ordinary
+    }
+
+    fn elab_subst_attempt(
+        &mut self,
+        heq_stx: &SurfaceExpr,
+        h_stx: &SurfaceExpr,
+        preserve_endpoints: bool,
+        missing_endpoint: &mut bool,
+    ) -> Result<Option<Expr>, ElabError> {
         // Lean :458 `tryPostponeIfHasMVars?` — Clean cannot postpone; take the
         // expected type as currently known (metas instantiated). A still-bare
         // metavariable gives the occurrence search nothing to abstract, so
@@ -136,7 +160,13 @@ impl<'a> ElabCtx<'a> {
         });
 
         // Lean :461-462 — elaborate the equation with NO expected type.
-        let heq = self.elaborate_with_expected_type(heq_stx, None)?;
+        // Endpoint spelling determines which occurrences the motive abstracts.
+        // Restore the enclosing mode before checking the value, including on error.
+        let enclosing =
+            std::mem::replace(&mut self.metas.preserve_cast_endpoints, preserve_endpoints);
+        let heq = self.elaborate_with_expected_type(heq_stx, None);
+        self.metas.preserve_cast_endpoints = enclosing;
+        let heq = heq?;
         let heq_ty = self.infer_type(&heq)?;
         let Some(eq) = self.match_eq_type(&heq_ty) else {
             return Ok(None);
@@ -144,9 +174,11 @@ impl<'a> ElabCtx<'a> {
 
         match expected {
             Some(expected) => self
-                .elab_subst_with_expected(heq, eq, &expected, h_stx)
+                .elab_subst_with_expected(heq, eq, &expected, h_stx, missing_endpoint)
                 .map(Some),
-            None => self.elab_subst_infer(heq, eq, h_stx).map(Some),
+            None => self
+                .elab_subst_infer(heq, eq, h_stx, missing_endpoint)
+                .map(Some),
         }
     }
 
@@ -170,7 +202,8 @@ impl<'a> ElabCtx<'a> {
         if contains_expr(ty, side) {
             return Some(abstract_over(ty, side));
         }
-        let surface = find_defeq_subterm_with(ty, side, &mut |a, b| self.is_def_eq(a, b))?;
+        let surface =
+            find_defeq_subterm_with(self.env, ty, side, &mut |a, b| self.is_def_eq(a, b))?;
         Some(abstract_over(ty, &surface))
     }
 
@@ -187,6 +220,7 @@ impl<'a> ElabCtx<'a> {
         eq: EqSides,
         expected: &Expr,
         h_stx: &SurfaceExpr,
+        missing_endpoint: &mut bool,
     ) -> Result<Expr, ElabError> {
         let EqSides { alpha, lhs, rhs, u } = eq;
 
@@ -201,6 +235,7 @@ impl<'a> ElabCtx<'a> {
                 let symm = mk_eq_symm(&u, &alpha, &lhs, &rhs, heq);
                 (symm, rhs, lhs, abst)
             } else {
+                *missing_endpoint = true;
                 return Err(ElabError::InvalidSubst {
                     detail: format!(
                         "the expected result type of the cast is `{expected}`, but neither \
@@ -332,6 +367,7 @@ impl<'a> ElabCtx<'a> {
         heq: Expr,
         eq: EqSides,
         h_stx: &SurfaceExpr,
+        missing_endpoint: &mut bool,
     ) -> Result<Expr, ElabError> {
         let EqSides { alpha, lhs, rhs, u } = eq;
         let h = self.elaborate_with_expected_type(h_stx, None)?;
@@ -344,6 +380,7 @@ impl<'a> ElabCtx<'a> {
             let symm = mk_eq_symm(&u, &alpha, &lhs, &rhs, heq);
             (symm, rhs, lhs, abst)
         } else {
+            *missing_endpoint = true;
             return Err(ElabError::InvalidSubst {
                 detail: format!(
                     "neither side of the equality (`{lhs}` / `{rhs}`) is mentioned in the \

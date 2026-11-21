@@ -203,7 +203,7 @@ def SInt.div (a b : Int) : SOut Int :=
 /-- num-bigint `%` on BigInt: remainder takes the sign of the dividend; panics on zero. -/
 def SInt.rem (a b : Int) : SOut Int :=
   match SInt.beq b 0 with
-  | true => SOut.panic "attempt to calculate the remainder with a divisor of zero"
+  | true => SOut.panic "attempt to divide by zero"
   | false => SOut.ok (SInt.ofSignedNat (SInt.isNeg a) (SInt.abs a % SInt.abs b))
 
 /-- libspecr `Int::rem_euclid` -/
@@ -372,7 +372,7 @@ def SSize.add (a b : Int) : SOut Int :=
 def SSize.mul (a b : Int) : SOut Int :=
   match SSize.from_bytes (a * b) with
   | some s => SOut.ok s
-  | none => SOut.panic "called `Option::unwrap()` on a `None` value (Size * Int)"
+  | none => SOut.panic "called `Option::unwrap()` on a `None` value"
 def SSize.align_to (s a : Int) : SOut Int :=
   SOut.bind (SInt.next_multiple_of s a) (fun m =>
     match SSize.from_bytes m with

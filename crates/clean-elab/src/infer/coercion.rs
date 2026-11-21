@@ -427,19 +427,9 @@ impl<'a> ElabCtx<'a> {
             return Some(coercion);
         }
 
-        // Step 1b4: Built-in `α → Option α` lift via `Option.some`. Lean coerces
-        // a value into an `Option` position through `instCoeSome`/`CoeTail`
-        // (`↑a = some a`); Clean's prelude registers no such `Coe` instance, so
-        // — mirroring the built-in `Nat → Int` step above — the elaborator emits
-        // `@Option.some α expr` directly, the exact value Lean's coercion
-        // reduces to. Placed AFTER the `Coe`-instance/subtype/numeric steps so a
-        // genuine imported instance (or a subtype whose base is `Option α`)
-        // still wins; ungated on the `Coe` class like its siblings. Sound:
-        // `Option.some : {α} → α → Option α` is total and the emitted term is
-        // kernel-re-checked; the elem-type unification is scoped, so a
-        // non-matching payload (e.g. `Bool` against `Option Nat`) declines and
-        // the honest mismatch is reported.
-        if let Some(coercion) = self.try_coerce_option_some(expr, &from_whnf, &to_whnf) {
+        // The bundled prelude supplies Option.some without the default Init
+        // coercion instance. SDK modules use the visible Coe instances above.
+        if let Some(coercion) = self.try_coerce_bootstrap_option_some(expr, &from_whnf, &to_whnf) {
             return Some(coercion);
         }
 
@@ -491,18 +481,21 @@ impl<'a> ElabCtx<'a> {
         // When a `Bool` is expected but the value is a decidable `Prop`
         // (e.g. `a = b`, `a < b` used where a `Bool` is wanted — a match arm
         // whose branch type is `Bool`, or a `def f … : Bool := a = b`), insert
-        // `@decide p inst`, mirroring Lean 4's `(p : Prop) → Bool` coercion via
+        // `@Decidable.decide p inst`, mirroring Lean 4's `(p : Prop) → Bool` coercion via
         // `[Decidable p]`. We require:
         //   * `to` reduces to `Bool`,
         //   * `from` is `Prop` (`Sort 0`) — i.e. `expr` is itself the
         //     proposition being coerced, not a proof of it,
         //   * a `Decidable expr` instance resolves, and
-        //   * the Bool-valued `decide` constant is present.
-        // The produced term is `@decide expr inst : Bool`; the kernel re-checks
-        // it, so an unsound instance simply fails to type-check.
+        //   * the Bool-valued decision function is present.
+        // `decide` is an exported surface alias in Lean. Its kernel name is
+        // `Decidable.decide`. The kernel re-checks the produced application.
         if matches!(to_whnf.kind(), ExprKind::Const(n, _) if n.to_string() == "Bool")
             && matches!(from_whnf.kind(), ExprKind::Sort(lvl) if lvl.is_zero())
-            && self.env.get_const(&Name::from_string("decide")).is_some()
+            && self
+                .env
+                .get_const(&Name::from_string("Decidable.decide"))
+                .is_some()
             && self.instances.is_class(&Name::from_string("Decidable"))
         {
             // The proposition to decide is the expression itself (its type is Prop).
@@ -512,9 +505,11 @@ impl<'a> ElabCtx<'a> {
                 prop.clone(),
             );
             if let Some(inst_expr) = self.resolve_instance(&decidable_goal) {
-                // @decide prop inst
                 let coercion = Expr::app(
-                    Expr::app(Expr::const_(Name::from_string("decide"), vec![]), prop),
+                    Expr::app(
+                        Expr::const_(Name::from_string("Decidable.decide"), vec![]),
+                        prop,
+                    ),
                     inst_expr,
                 );
                 return Some(coercion);
@@ -755,35 +750,24 @@ impl<'a> ElabCtx<'a> {
         }
     }
 
-    /// Built-in `α → Option α` lift via `@Option.some.{u} α expr` (Lean's
-    /// `instCoeSome` — `↑a = some a`).
-    ///
-    /// The expected type `to_whnf` is matched against a saturated
-    /// `@Option.{u} α` application; the universe level `u` is taken from the
-    /// target's own `Option.{u}` head — NOT a fresh metavar — so the emitted
-    /// coercion is level-closed against the very type the caller demanded
-    /// (mirroring `try_coerce_subtype_val`'s level handling).
-    ///
-    /// Accepts only when the source type `from_whnf` unifies with the element
-    /// type `α` (scoped via `push_scope`/`commit`, so a non-matching source —
-    /// `Bool` against `Option Nat` — leaves no partial metavar state and
-    /// returns `None`, preserving the honest `TypeMismatch`).
-    ///
-    /// SOUNDNESS: the emitted `@Option.some α expr` is kernel-re-checked like
-    /// any elaborated term — a wrong element type or level fails to type-check
-    /// rather than passing silently. No kernel/TCB code is touched.
-    fn try_coerce_option_some(
+    /// Supply the default option lift only for the bundled local prelude.
+    fn try_coerce_bootstrap_option_some(
         &mut self,
         expr: &Expr,
         from_whnf: &Expr,
         to_whnf: &Expr,
     ) -> Option<Expr> {
-        // Match `@Option.{u} α` (head `Const("Option")` applied to the element).
-        let head = to_whnf.get_app_fn();
-        let ExprKind::Const(name, levels) = head.kind() else {
+        let ExprKind::Const(name, levels) = to_whnf.get_app_fn().kind() else {
             return None;
         };
-        if name.to_string() != "Option" {
+        if *name != Name::interned("Option")
+            || !self.env.models_lean_init()
+            || self.env.get_const(&Name::interned("optionCoe")).is_some()
+            || !matches!(
+                self.env.get_constant_origin(name),
+                None | Some(clean_kernel::env::ConstantOrigin::Kernel { .. })
+            )
+        {
             return None;
         }
         let args = to_whnf.get_app_args();

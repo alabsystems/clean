@@ -6,6 +6,29 @@
 //! entry. Every theorem has an actual positive/False pair, nine headlines have
 //! independent schemas, and nine forged statements are refused.
 //! No native compiler, whole M4 or checker soundness claim follows.
+//!
+//! A contract's or forged statement's pin is the meaning digest
+//! (`support/meaning_digest.rs`) of its proposition definition in
+//! `CICLNatModel.Contracts` over the package of the fixture family `cic_l_nat_model`
+//! (`cic_l`, `cic_l_model`, `kcheck_spec`, `cic_l_nat_model`): the definition and every
+//! package definition, inductive type, constructor and compiler auxiliary it
+//! reaches, down to Init, so a pin moves when a relation or function the
+//! statement names is redefined. The native inventory's per-declaration
+//! digests are unchanged. Re-pin with `CLEAN_REPIN_STATEMENT_PINS=1
+//! scripts/heavy_gate.sh run 16 cic-l-nat-model-repin -- "$(rustup run trust rustc
+//! --print sysroot)/bin/targo" --unverified test -p clean-olean --locked --test
+//! cic_l_nat_model`: the run rewrites `theories/cic_l_nat_model/statement_pins.json` and still fails, and the next
+//! run without the variable, after a rebuild, confirms it. Until the pending
+//! re-qualification of `CICLModel.NatStoredSubstitution` lands (merge
+//! `ce7d8d2905` added the private `instantiate_expansion` and four `match_1`
+//! auxiliaries there and stopped realizing `CICL.Expr.instantiate.eq_1`, so
+//! the subject denominator below no longer reads 373: 377 at that merge, 376
+//! at the merge of 2026-11-19), the test stops before
+//! its pins and that file still holds the proposition expressions' digests;
+//! that re-qualification re-pins it with this command.
+
+#[path = "support/meaning_digest.rs"]
+mod meaning_digest;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write;
@@ -21,6 +44,7 @@ use clean_olean::{
     load_module_with_deps, read_artifact, reference_base_closed, require_pinned_lean_lib_path,
     ArtifactDepth,
 };
+use meaning_digest::{MeaningDigests, Package};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
@@ -528,12 +552,31 @@ fn nat_model_replays_with_exact_scope_and_real_negative_controls() {
             .clone()
             .expect("schema definition")
     };
+    let package = Package::of_fixture(
+        &compiled,
+        "cic_l_nat_model",
+        &["cic_l", "cic_l_model", "kcheck_spec", "cic_l_nat_model"],
+    );
     let mut pins = BTreeMap::new();
-    for (_, pin) in CONTRACTS.iter().chain(FORGED) {
-        assert!(pins
-            .insert((*pin).to_owned(), digest(&statement(pin)))
-            .is_none());
+    {
+        let digests = MeaningDigests::new(kernel.environment(), &package);
+        let mut roots = Vec::new();
+        for (_, pin) in CONTRACTS.iter().chain(FORGED) {
+            let root = name(&format!("CICLNatModel.Contracts.{pin}"));
+            let digest = digests
+                .digest(&root)
+                .unwrap_or_else(|error| panic!("{error}"));
+            assert!(pins.insert((*pin).to_owned(), digest).is_none());
+            roots.push(root);
+        }
+        eprintln!(
+            "{}",
+            digests
+                .describe(&package, &roots)
+                .unwrap_or_else(|error| panic!("{error}"))
+        );
     }
+    assert_eq!(pins.len(), 18, "9 contracts and 9 forged statements");
     for (index, (theorem, pin)) in CONTRACTS.iter().enumerate() {
         let proof = loaded.get_const(&name(theorem)).expect("headline theorem");
         assert!(targets.contains(&name(theorem)));
@@ -584,8 +627,11 @@ fn nat_model_replays_with_exact_scope_and_real_negative_controls() {
         inventory, committed_inventory,
         "Nat model declaration/axiom inventory changed"
     );
-    assert_eq!(
-        pins, committed_pins,
-        "Nat model contract statements changed"
-    );
+    if let Err(failure) = meaning_digest::check_pins(
+        &pins,
+        &committed_pins,
+        "theories/cic_l_nat_model/statement_pins.json",
+    ) {
+        panic!("Nat model contract statements changed: {failure}");
+    }
 }

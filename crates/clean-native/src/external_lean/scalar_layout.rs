@@ -199,7 +199,7 @@ impl ExternalLeanProgram {
         let (plan, recursors, roots_vec) = discovery::discover(self, &mut roots, &budget)
             .map_err(|e| failure.fail(S::Discovery, e))?;
         // Capture original rows/attributes BEFORE replay or record digesting.
-        for source in &self.source_capture().sources {
+        for source in &self.custody.sources {
             let mut work = budget.borrow_mut();
             work.text(&source.module)
                 .and_then(|()| work.text(&source.path))
@@ -209,7 +209,7 @@ impl ExternalLeanProgram {
         let capture = Arc::new(RuntimeScopedEnvironmentCapture::capture(
             &self.base,
             &self.env,
-            self.source_capture().sources.clone(),
+            self.custody.sources.clone(),
             &plan,
         ));
         failure.capture = Some(Arc::clone(&capture));

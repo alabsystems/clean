@@ -14,7 +14,6 @@
 //!   keeps none, so the writer writes the anonymous name (index 0). Fewer
 //!   name, level and expression records follow (terms that differed only in
 //!   a binder name share one record), never more.
-//! - the `all` of a `def` or `thm`: written as the declaration alone.
 //! - indices: both number in order of first use, but over different record
 //!   sets, so the numbers differ.
 //!
@@ -71,6 +70,40 @@ fn meta() -> ExportWriteMeta {
         lean_version: "4.30.0-rc2".to_owned(),
         lean_githash: "3dc1a088b6d2d8eafe25a7cd7ec7b58d731bd7cc".to_owned(),
     }
+}
+
+#[test]
+fn measured_world_export_keeps_its_own_header_when_replay_declines_it() {
+    let meta = ExportWriteMeta::for_source_world(clean_kernel::LeanWorld::Lean435)
+        .expect("measured source world");
+    let mut env = clean_kernel::Environment::new();
+    let name = Name::from_string("Statement");
+    env.add_decl(clean_kernel::env::Declaration::Definition {
+        name: name.clone(),
+        level_params: Vec::new(),
+        type_: Expr::sort(Level::succ(Level::zero())),
+        value: Expr::sort(Level::zero()),
+        is_reducible: true,
+    })
+    .expect("checked definition");
+    let mut output = Vec::new();
+    let summary = write_export(&env, &BTreeSet::from([name]), &meta, &mut output)
+        .expect("write the checked declaration");
+    assert_eq!(summary.declarations, 1);
+    let header: serde_json::Value =
+        serde_json::from_slice(output.split(|b| *b == b'\n').next().unwrap())
+            .expect("export header");
+    assert_eq!(header["meta"]["lean"]["version"], "4.35.0");
+    assert_eq!(
+        header["meta"]["lean"]["githash"],
+        "eb6cafb7290e8bd5f2937522d8d804f58f02bafc"
+    );
+    let verdict = crate::ndjson::check_export_reader(output.as_slice(), Default::default());
+    assert_eq!(verdict.exit, crate::ndjson::ExitClass::Decline);
+    assert_eq!(
+        verdict.reader_error.expect("version decline").rule,
+        "lean-version-unmapped"
+    );
 }
 
 fn read(bytes: &[u8]) -> Vec<ExportDeclaration> {
@@ -183,16 +216,6 @@ fn test_writer_output_is_deterministic_with_dense_indices_in_order() {
     }
 }
 
-/// `declaration` with the fields the kernel does not keep as Lean stored them
-/// set to one value: a definition's unfolding hint.
-fn without_hints(declaration: &ExportDeclaration) -> ExportDeclaration {
-    let mut out = declaration.clone();
-    if let ExportDeclaration::Definition { hints, .. } = &mut out {
-        *hints = ReducibilityHintsData::Opaque;
-    }
-    out
-}
-
 #[test]
 fn test_writer_cone_of_a_loaded_export_is_the_export() {
     for (name, minted) in all_fixtures() {
@@ -214,44 +237,12 @@ fn test_writer_cone_of_a_loaded_export_is_the_export() {
             .unwrap_or_else(|e| panic!("{name}: {e}"));
         assert_eq!(summary.declarations, targets.len(), "{name}");
 
-        // The same declarations, in the planner's order instead of Lean's:
-        // compared by name. A hint is the kernel's unfolding priority, which
-        // the loader may have adjusted, and is compared only for its kind of
-        // difference below.
+        // The dependency planner may reorder declarations. Compare every field by name.
         let key = |d: &ExportDeclaration| d.declared_names()[0].to_unambiguous_string();
-        let lean: BTreeMap<String, ExportDeclaration> = from_lean
-            .iter()
-            .map(|d| (key(d), without_hints(d)))
-            .collect();
         let from_clean = read(&written);
-        let clean: BTreeMap<String, ExportDeclaration> = from_clean
-            .iter()
-            .map(|d| (key(d), without_hints(d)))
-            .collect();
-        assert_eq!(
-            lean.keys().collect::<Vec<_>>(),
-            clean.keys().collect::<Vec<_>>(),
-            "{name}"
-        );
-        for (declared, expected) in &lean {
-            assert_eq!(Some(expected), clean.get(declared), "{name}: {declared}");
-        }
-        let hints = |all: &[ExportDeclaration]| -> BTreeMap<String, ReducibilityHintsData> {
-            all.iter()
-                .filter_map(|d| match d {
-                    ExportDeclaration::Definition { hints, .. } => Some((key(d), *hints)),
-                    _ => None,
-                })
-                .collect()
-        };
-        let (lean_hints, clean_hints) = (hints(&from_lean), hints(&from_clean));
-        for (declared, stored) in &lean_hints {
-            let written = clean_hints[declared];
-            assert!(
-                written == *stored || written == ReducibilityHintsData::Abbrev,
-                "{name}: {declared} stored {stored:?}, written {written:?}"
-            );
-        }
+        let lean: BTreeMap<_, _> = from_lean.iter().map(|d| (key(d), d)).collect();
+        let clean: BTreeMap<_, _> = from_clean.iter().map(|d| (key(d), d)).collect();
+        assert_eq!(lean, clean, "{name}");
         // Every record's references are to earlier records.
         let mut declared: BTreeSet<Name> = BTreeSet::new();
         for declaration in &from_clean {
@@ -282,7 +273,286 @@ fn definition(name: &str, type_: Expr, value: Expr) -> ExportDeclaration {
         value,
         hints: ReducibilityHintsData::Regular(7),
         safety: DefinitionSafety::Safe,
+        all: vec![Name::from_string(name)],
     }
+}
+
+fn source_inductive() -> clean_kernel::Environment {
+    use clean_kernel::inductive::{Constructor, InductiveDecl, InductiveType};
+
+    let mut env = clean_kernel::Environment::new();
+    let name = Name::from_string("Chain");
+    let chain = Expr::const_(name.clone(), vec![]);
+    env.add_inductive(InductiveDecl {
+        level_params: vec![],
+        num_params: 0,
+        types: vec![InductiveType {
+            name: name.clone(),
+            type_: Expr::type_(),
+            constructors: vec![
+                Constructor {
+                    name: name.clone().str("nil"),
+                    type_: chain.clone(),
+                },
+                Constructor {
+                    name: name.str("cons"),
+                    type_: Expr::arrow(chain.clone(), chain),
+                },
+            ],
+        }],
+    })
+    .expect("source inductive registers its two wrapper definitions");
+    env
+}
+
+#[test]
+fn source_eliminator_export_preserves_the_resident_definitions() {
+    let env = source_inductive();
+    let chain = Name::from_string("Chain");
+    let primitive = chain.clone().str("rec");
+    let targets = BTreeSet::from([chain.clone().str("casesOn"), chain.clone().str("recOn")]);
+    let mut bytes = Vec::new();
+    write_export(&env, &targets, &meta(), &mut bytes).expect("export source eliminators");
+    let declarations = read(&bytes);
+    let [ExportDeclaration::Inductive(block), definitions @ ..] = declarations.as_slice() else {
+        panic!("the primitive block precedes the definitions that use it");
+    };
+    assert_eq!(block.recs.len(), 1);
+    assert_eq!(block.recs[0].header.name, primitive);
+    let mut found = BTreeSet::new();
+    for definition in definitions {
+        let ExportDeclaration::Definition { header, value, .. } = definition else {
+            panic!("a wrapper must carry its definitional body");
+        };
+        let resident = env.get_const(&header.name).expect("resident wrapper");
+        assert_eq!(header.type_, resident.type_);
+        assert_eq!(header.level_params, resident.level_params);
+        assert_eq!(Some(value), resident.value.as_ref());
+        assert!(found.insert(header.name.clone()));
+    }
+    assert_eq!(found, targets);
+
+    bytes.clear();
+    write_export(&env, &BTreeSet::from([chain]), &meta(), &mut bytes).expect("primitive block");
+    assert!(matches!(
+        read(&bytes).as_slice(),
+        [ExportDeclaration::Inductive(_)]
+    ));
+}
+
+#[test]
+fn source_eliminator_export_refuses_a_bodyless_or_foreign_mirror() {
+    use clean_kernel::env::{Declaration, TrustedEnvExt};
+
+    let env = source_inductive();
+    let family = Name::from_string("Chain");
+    let cases = family.clone().str("casesOn");
+    let mut bodyless = env.clone();
+    assert!(bodyless.forget_value(&cases));
+
+    // A similarly named definition in another namespace is not this family's
+    // eliminator, even when its resident type, body and mirror agree.
+    let foreign_name = Name::from_string("Foreign.casesOn");
+    let mut foreign = env;
+    let mut mirror = foreign.get_recursor(&cases).expect("native mirror").clone();
+    mirror.name = foreign_name.clone();
+    let value = foreign.get_const(&cases).unwrap().value.clone().unwrap();
+    foreign
+        .add_decl(Declaration::Definition {
+            name: foreign_name.clone(),
+            level_params: mirror.level_params.clone(),
+            type_: mirror.type_.clone(),
+            value,
+            is_reducible: false,
+        })
+        .expect("foreign definition");
+    foreign.register_recursor(mirror);
+
+    for (env, bad) in [(bodyless, cases), (foreign, foreign_name)] {
+        let err = write_export(
+            &env,
+            &BTreeSet::from([family.clone()]),
+            &meta(),
+            &mut Vec::new(),
+        )
+        .expect_err("an unrepresentable primitive stops the export");
+        assert!(
+            matches!(err, ExportWriteError::BlockShape { block, problem }
+            if block == "Chain" && problem.contains(&bad.to_unambiguous_string()))
+        );
+    }
+}
+
+/// Export serializes a resident rule body. Its ordinary constant reference
+/// must therefore be declared even when the constructors never mention it.
+#[test]
+fn export_cone_follows_a_resident_recursor_rule() {
+    let mut nat = read(&fixture("nat_add_literal.ndjson")).remove(0);
+    let ExportDeclaration::Inductive(block) = &mut nat else {
+        panic!("the minted first record is the Nat block");
+    };
+    assert_eq!(block.types[0].header.name, Name::from_string("Nat"));
+    let name = Name::from_string("OnlyInRule");
+    let type_ = Expr::sort(Level::succ(Level::zero()));
+    let rhs = &mut block.recs[0].rules[0].rhs;
+    // The importer checks this rule against the one it regenerates. The
+    // unused argument keeps the written dependency and beta-reduces away.
+    *rhs = Expr::app(
+        Expr::lam(BinderInfo::Default, type_.clone(), rhs.clone()),
+        Expr::const_(name.clone(), vec![]),
+    );
+    let helper = definition("OnlyInRule", type_, Expr::sort(Level::zero()));
+    let (source, _) = write(&[helper, nat.clone()], Spelling::new());
+    let loaded = load_export(NdjsonSource::new(source.as_slice()).expect("a header"))
+        .expect("the structural records load");
+    assert!(loaded.refused.is_empty(), "{:?}", loaded.refused);
+    let mut bytes = Vec::new();
+    write_export(
+        &loaded.env,
+        &[Name::from_string("Nat")].into(),
+        &meta(),
+        &mut bytes,
+    )
+    .expect("the recursor rule's dependency is included");
+    let exported = read(&bytes);
+    assert_eq!(exported.len(), 2);
+    assert_eq!(exported[0].declared_names(), [&name]);
+    assert_eq!(exported[1], nat);
+}
+
+/// The same environment has both conversion helpers available. A String
+/// constant reference uses the type alone. A literal leaf uses the helpers.
+#[test]
+fn export_cone_includes_support_for_literal_leaves() {
+    let prop = Expr::sort(Level::zero());
+    let type_ = Expr::sort(Level::succ(Level::zero()));
+    let string = Expr::const_(Name::from_string("String"), vec![]);
+    let mut declarations = Vec::new();
+    for name in ["String", "Nat", "Char.ofNat", "String.ofList"] {
+        declarations.push(definition(name, type_.clone(), prop.clone()));
+    }
+    declarations.push(definition("TypeOnly", type_.clone(), string.clone()));
+    declarations.push(definition("Text", string, Expr::str_lit("text")));
+    // Exercise an implicit Nat reference independently of the declared type.
+    declarations.push(definition("Number", type_, Expr::nat_lit(7)));
+    let (source, _) = write(&declarations, Spelling::new());
+    let loaded = load_export(NdjsonSource::new(source.as_slice()).expect("a header"))
+        .expect("the structural records load");
+    for (root, expected) in [
+        ("TypeOnly", &["String", "TypeOnly"][..]),
+        (
+            "Text",
+            &["Char.ofNat", "String", "String.ofList", "Text"][..],
+        ),
+        ("Number", &["Nat", "Number"][..]),
+    ] {
+        let mut bytes = Vec::new();
+        write_export(
+            &loaded.env,
+            &[Name::from_string(root)].into(),
+            &meta(),
+            &mut bytes,
+        )
+        .expect("the single root exports");
+        let declarations = read(&bytes);
+        let actual: BTreeSet<_> = declarations
+            .iter()
+            .flat_map(ExportDeclaration::declared_names)
+            .map(ToString::to_string)
+            .collect();
+        assert_eq!(
+            actual,
+            expected.iter().map(|s| (*s).to_owned()).collect(),
+            "{root}"
+        );
+        assert_eq!(
+            declarations.last().expect("root").declared_names()[0],
+            &Name::from_string(root)
+        );
+    }
+}
+
+#[test]
+fn ordinary_mutual_names_round_trip_without_declaring_their_siblings() {
+    let sibling = Name::from_string("Sibling").num(3);
+    let prop = Expr::sort(Level::zero());
+    let type_ = Expr::sort(Level::succ(Level::zero()));
+    let declarations = vec![
+        ExportDeclaration::Definition {
+            header: header("D", &[], type_.clone()),
+            value: prop.clone(),
+            hints: ReducibilityHintsData::Regular(7),
+            safety: DefinitionSafety::Safe,
+            all: vec![sibling.clone(), Name::from_string("D"), sibling.clone()],
+        },
+        ExportDeclaration::Theorem {
+            header: header("T", &[], type_.clone()),
+            value: prop.clone(),
+            all: vec![sibling, Name::from_string("T")],
+        },
+        ExportDeclaration::Opaque {
+            header: header("O", &[], type_),
+            value: prop,
+            is_unsafe: false,
+            all: Vec::new(),
+        },
+    ];
+    let (written, summary) = write(&declarations, Spelling::new());
+    assert_eq!(summary.declarations, 3);
+    assert_eq!(read(&written), declarations);
+    check_export_round_trip(written.as_slice(), &summary).expect("identical mutual-name records");
+
+    let mut loaded =
+        load_export(NdjsonSource::new(written.as_slice()).expect("header")).expect("load");
+    assert!(loaded.refused.is_empty());
+    let name = Name::from_string("D");
+    let targets = loaded.declared.iter().map(|d| d.name.clone()).collect();
+    let mut output = Vec::new();
+    write_cone(
+        &loaded.env,
+        &targets,
+        &meta(),
+        loaded.written_names.clone(),
+        &mut output,
+    )
+    .expect("export installed declarations");
+    let expected: BTreeMap<_, _> = declarations
+        .iter()
+        .map(|d| (d.declared_names()[0].clone(), d))
+        .collect();
+    let resident = read(&output);
+    for d in &resident {
+        assert_eq!(*expected.get(d.declared_names()[0]).expect("source"), d);
+    }
+    assert_eq!(resident.len(), declarations.len());
+
+    // Reusing even the identical syntax in a freshly installed definition must retire
+    // its imported annotations, also when the old environment still exists in a clone.
+    let old = loaded.env.clone();
+    assert!(loaded.env.forget_decl(&name));
+    loaded
+        .env
+        .add_decl(clean_kernel::env::Declaration::Definition {
+            name: name.clone(),
+            level_params: Vec::new(),
+            type_: Expr::sort(Level::succ(Level::zero())),
+            value: Expr::sort(Level::zero()),
+            is_reducible: true,
+        })
+        .expect("replacement definition");
+    assert!(crate::import::export_fields::ExportFields::for_constant(&old, &name).is_some());
+    output.clear();
+    write_export(
+        &loaded.env,
+        &BTreeSet::from([name.clone()]),
+        &meta(),
+        &mut output,
+    )
+    .expect("replacement export");
+    assert!(
+        matches!(&read(&output)[0], ExportDeclaration::Definition { all, hints: ReducibilityHintsData::Abbrev, .. }
+        if all == std::slice::from_ref(&name))
+    );
 }
 
 /// Records of the kinds no minted fixture has: an axiom, an opaque constant,
@@ -305,6 +575,7 @@ fn handwritten() -> Vec<ExportDeclaration> {
             header: header("O", &[], Expr::sort(Level::succ(Level::zero()))),
             value: prop.clone(),
             is_unsafe: false,
+            all: vec![Name::from_string("O")],
         },
         definition(
             "D",

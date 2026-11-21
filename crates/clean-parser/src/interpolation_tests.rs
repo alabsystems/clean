@@ -11,7 +11,7 @@ use crate::{SurfaceExpr, SurfaceLit};
 
 #[test]
 fn parse_interpolation_handles_literals_exprs_and_escapes() {
-    let parts = parse_interpolation(r#"hello \{x\} {name}\n"#).unwrap();
+    let parts = parse_interpolation(r#"hello \{x} {name}\n"#).unwrap();
     assert_eq!(parts.len(), 3);
     assert!(matches!(
         &parts[0],
@@ -46,46 +46,95 @@ fn parse_interpolation_reports_errors() {
         InterpolationError::EmptyInterpolation { offset: 6 }
     ));
     assert!(matches!(
-        parse_interpolation("hello }").unwrap_err(),
-        InterpolationError::UnmatchedCloseBrace { offset: 6 }
+        parse_interpolation(r"hello \}").unwrap_err(),
+        InterpolationError::InvalidEscape { offset: 7 }
     ));
 }
 
 #[test]
-fn desugar_interpolation_uses_string_append_and_to_string() {
+fn closing_braces_in_interpolated_literals_follow_lean() {
+    for prefix in ["s!", "m!", "f!"] {
+        let valid = [prefix, r#""\{.v = {"word"}}}""#].concat();
+        let expr = crate::parse_expr(&valid).unwrap();
+        let SurfaceExpr::InterpolatedStr { parts, .. } = expr else {
+            panic!("expected interpolation: {expr:?}");
+        };
+        assert!(matches!(
+            &parts[..],
+            [
+                InterpolationPart::Literal(start),
+                InterpolationPart::Expr(SurfaceExpr::Lit(_, SurfaceLit::String(word))),
+                InterpolationPart::Literal(end)
+            ] if start == "{.v = " && word == "word" && end == "}}"
+        ));
+
+        let invalid = [prefix, r#""\}""#].concat();
+        let error = crate::parse_expr(&invalid).unwrap_err();
+        assert!(
+            error.to_string().contains("invalid escape sequence"),
+            "{error}"
+        );
+    }
+}
+
+fn string_body(expr: &SurfaceExpr) -> &SurfaceExpr {
+    let SurfaceExpr::Ascription(_, body, ty) = expr else {
+        panic!("s! must have its String ascription: {expr:?}");
+    };
+    assert!(matches!(ty.as_ref(), SurfaceExpr::Ident(_, name)
+        if name.name() == crate::SurfaceName::generated_path("String").name()
+            && name.is_global_reference()));
+    body
+}
+
+fn call_args<'a>(expr: &'a SurfaceExpr, canonical: &str) -> &'a [crate::SurfaceArg] {
+    let SurfaceExpr::App(_, head, args) = expr else {
+        panic!("expected {canonical} application: {expr:?}");
+    };
+    assert!(
+        matches!(head.as_ref(), SurfaceExpr::Ident(_, name)
+        if name.name() == crate::SurfaceName::generated_path(canonical).name()
+            && name.is_global_reference()),
+        "expected hygienic {canonical}: {head:?}"
+    );
+    args
+}
+
+#[test]
+fn desugar_interpolation_converts_every_chunk_and_appends_left_to_right() {
     let expr = desugar_interpolation(vec![
         InterpolationPart::Literal("Hello ".to_owned()),
-        InterpolationPart::Expr(SurfaceExpr::ident("x")),
+        InterpolationPart::Expr(crate::parse_expr("x").expect("lexical hole parses")),
         InterpolationPart::Literal("!".to_owned()),
     ]);
+    let outer = call_args(string_body(&expr), "HAppend.hAppend");
+    assert_eq!(outer.len(), 2);
+    let left = call_args(&outer[0].expr, "HAppend.hAppend");
+    assert_eq!(left.len(), 2);
+    let first = call_args(&left[0].expr, "ToString.toString");
+    let middle = call_args(&left[1].expr, "ToString.toString");
+    let last = call_args(&outer[1].expr, "ToString.toString");
+    assert_eq!(first.len(), 1);
+    assert_eq!(middle.len(), 1);
+    assert_eq!(last.len(), 1);
+    assert!(matches!(&first[0].expr, SurfaceExpr::Lit(_, SurfaceLit::String(s)) if s == "Hello "));
+    assert!(matches!(&middle[0].expr, SurfaceExpr::Ident(_, name)
+        if name.name() == crate::SurfaceName::generated_path("x").name()
+            && !name.is_global_reference()));
+    assert!(matches!(&last[0].expr, SurfaceExpr::Lit(_, SurfaceLit::String(s)) if s == "!"));
+}
 
-    match expr {
-        SurfaceExpr::App(_, func, args) => {
-            assert!(
-                matches!(func.as_ref(), SurfaceExpr::Ident(_, name) if (name).name() == crate::SurfaceName::generated_path("String.append").name())
-            );
-            assert_eq!(args.len(), 2);
-            assert!(
-                matches!(&args[0].expr, SurfaceExpr::Lit(_, SurfaceLit::String(s)) if s == "Hello ")
-            );
-            match &args[1].expr {
-                SurfaceExpr::App(_, inner_func, inner_args) => {
-                    assert!(
-                        matches!(inner_func.as_ref(), SurfaceExpr::Ident(_, name) if (name).name() == crate::SurfaceName::generated_path("String.append").name())
-                    );
-                    assert!(
-                        matches!(&inner_args[0].expr, SurfaceExpr::App(_, to_string, _)
-                        if matches!(to_string.as_ref(), SurfaceExpr::Ident(_, name) if (name).name() == crate::SurfaceName::generated_path("toString").name()))
-                    );
-                    assert!(
-                        matches!(&inner_args[1].expr, SurfaceExpr::Lit(_, SurfaceLit::String(s)) if s == "!")
-                    );
-                }
-                other => panic!("expected nested String.append, got {other:?}"),
-            }
-        }
-        other => panic!("expected String.append chain, got {other:?}"),
-    }
+#[test]
+fn desugar_interpolation_skips_empty_literals_without_converting_an_empty_prefix() {
+    let expr = desugar_interpolation(vec![
+        InterpolationPart::Literal(String::new()),
+        InterpolationPart::Expr(SurfaceExpr::ident("x")),
+        InterpolationPart::Literal(String::new()),
+    ]);
+    let args = call_args(string_body(&expr), "ToString.toString");
+    assert_eq!(args.len(), 1);
+    assert!(matches!(&args[0].expr, SurfaceExpr::Ident(_, name)
+        if name.name() == crate::SurfaceName::generated_path("x").name()));
 }
 
 #[test]
@@ -137,49 +186,42 @@ fn parse_interpolation_empty_input() {
 }
 
 #[test]
-fn desugar_interpolation_empty_parts_produces_empty_string() {
-    let expr = desugar_interpolation(vec![]);
-    assert!(
-        matches!(&expr, SurfaceExpr::Lit(_, SurfaceLit::String(s)) if s.is_empty()),
-        "expected empty string literal, got {expr:?}"
-    );
-}
-
-#[test]
-fn desugar_interpolation_single_literal() {
-    let expr = desugar_interpolation(vec![InterpolationPart::Literal("hello".to_owned())]);
-    assert!(
-        matches!(&expr, SurfaceExpr::Lit(_, SurfaceLit::String(s)) if s == "hello"),
-        "expected \"hello\" literal, got {expr:?}"
-    );
-}
-
-#[test]
-fn desugar_interpolation_single_expr_wraps_in_to_string() {
-    let expr = desugar_interpolation(vec![InterpolationPart::Expr(SurfaceExpr::nat(42))]);
-    match &expr {
-        SurfaceExpr::App(_, func, args) => {
-            assert!(
-                matches!(func.as_ref(), SurfaceExpr::Ident(_, n) if (n).name() == crate::SurfaceName::generated_path("toString").name()),
-                "expected toString, got {func:?}"
-            );
-            assert_eq!(args.len(), 1);
-            assert!(matches!(
-                &args[0].expr,
-                SurfaceExpr::Lit(_, SurfaceLit::Nat(42))
-            ));
-        }
-        other => panic!("expected toString 42, got {other:?}"),
+fn desugar_interpolation_empty_parts_converts_the_empty_string() {
+    for parts in [vec![], vec![InterpolationPart::Literal(String::new())]] {
+        let expr = desugar_interpolation(parts);
+        let args = call_args(string_body(&expr), "ToString.toString");
+        assert_eq!(args.len(), 1);
+        assert!(
+            matches!(&args[0].expr, SurfaceExpr::Lit(_, SurfaceLit::String(s)) if s.is_empty())
+        );
     }
+}
+
+#[test]
+fn desugar_interpolation_single_literal_is_converted() {
+    let expr = desugar_interpolation(vec![InterpolationPart::Literal("hello".to_owned())]);
+    let args = call_args(string_body(&expr), "ToString.toString");
+    assert_eq!(args.len(), 1);
+    assert!(matches!(&args[0].expr, SurfaceExpr::Lit(_, SurfaceLit::String(s)) if s == "hello"));
+}
+
+#[test]
+fn desugar_interpolation_single_expr_wraps_in_canonical_to_string() {
+    let expr = desugar_interpolation(vec![InterpolationPart::Expr(SurfaceExpr::nat(42))]);
+    let args = call_args(string_body(&expr), "ToString.toString");
+    assert_eq!(args.len(), 1);
+    assert!(matches!(
+        &args[0].expr,
+        SurfaceExpr::Lit(_, SurfaceLit::Nat(42))
+    ));
 }
 
 #[test]
 fn desugar_prefixed_interpolation_s_empty() {
     let expr = desugar_prefixed_interpolation(InterpolatedStringKind::String, "").unwrap();
-    assert!(
-        matches!(&expr, SurfaceExpr::Lit(_, SurfaceLit::String(s)) if s.is_empty()),
-        "expected empty string, got {expr:?}"
-    );
+    let args = call_args(string_body(&expr), "ToString.toString");
+    assert_eq!(args.len(), 1);
+    assert!(matches!(&args[0].expr, SurfaceExpr::Lit(_, SurfaceLit::String(s)) if s.is_empty()));
 }
 
 #[test]

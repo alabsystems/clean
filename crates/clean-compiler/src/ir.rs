@@ -261,6 +261,22 @@ impl CtorInfo {
     }
 }
 
+pub(crate) fn canonical_nat_limbs(limbs: &[u64]) -> bool {
+    limbs.len() >= 3 && limbs.last().is_some_and(|limb| *limb != 0)
+}
+
+fn deserialize_nat_limbs<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Vec<u64>, D::Error> {
+    let limbs = Vec::<u64>::deserialize(deserializer)?;
+    if canonical_nat_limbs(&limbs) {
+        return Ok(limbs);
+    }
+    Err(serde::de::Error::custom(
+        "wide Nat literal requires at least three limbs and a nonzero top limb",
+    ))
+}
+
 /// IR literal value.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum IRLiteral {
@@ -282,6 +298,10 @@ pub enum IRLiteral {
     /// `clean_nat_big` (RUNG B). The emitter fails closed above two limbs, so the
     /// value is always `< 2^128`. Backs `UInt64.size = 2^64` and friends.
     NatBig(u128),
+    /// A `Nat` literal `>= 2^128`, carried as canonical little-endian `u64`
+    /// limbs (`len >= 3`, non-zero top limb). C/TrustIR retain the limb fold;
+    /// Rust uses its owned runtime word constructor. Existing wire slots stay fixed.
+    NatLimbs(#[serde(deserialize_with = "deserialize_nat_limbs")] Vec<u64>),
     /// 32-bit float.
     Float32(f32),
     /// 64-bit float.

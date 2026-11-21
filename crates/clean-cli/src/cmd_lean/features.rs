@@ -23,17 +23,18 @@ where Clean's outcome has no Lean counterpart: a synthetic `sorry` nobody report
 resting on `trustedArith`/`trustedAy`, a kernel or re-validation failure, an exhausted \
 per-declaration budget are errors.\n\n\
 The command line is pinned Lean's, per release: the nearest `lean-toolchain` above the \
-working directory (or `CLEAN_LEAN_VERSION`) picks Lean 4.8.0 or 4.30.0-rc2; one that reads \
+working directory (or `CLEAN_LEAN_VERSION`) picks Lean 4.8.0, 4.30.0-rc2 or 4.36.0; one that reads \
 `clean`, as `clean lake new` and `clean lake init` write it, picks Clean's pin, as an absent \
 `lean-toolchain` does; any other toolchain is refused by name. Honoured: FILE, `--stdin`, \
-`--run FILE args…` (through `clean run`'s native path), `-D name=value` (G50's option table; \
+`--run FILE args…` (stable 4.36.0 reuses the environment that checked the file), `-D name=value` (G50's option table; \
 `printMessageEndPos` is honoured here), `--json`, `-R/--root`, `-q`, `-E/--error=kind`, \
-`--deps`, `--src-deps`, `--help`. `--version`, `-V` and `-g` report CLEAN's identity, never a \
-Lean commit. Everything Clean cannot honour — `-o`, `-i`, `-c`, `-b`, `--server`, `--worker`, \
-`--plugin`, `--load-dynlib`, `--setup`, `-t`, `-M`, `-T`, `-j`, `-s`, `--profile`, `--stats`, \
-`--features`, `--print-prefix`, `--print-libdir` — is refused by name (`clean: ... is not \
-supported: <why>`) with exit status 1. `scripts/lean_front_door_diff.py` measures it byte for \
-byte against pinned Lean.",
+`--deps`, `--src-deps`, `--help`. Lean 4.30.0-rc2 and 4.36.0 also support `--deps-json`. `--version`, `-V` and `-g` report CLEAN's identity, never a \
+Lean commit. In the Lean 4.36.0 dialect, `--print-prefix` and `--print-libdir` identify the selected SDK and `--features` reports optional compiler backends. The `-o` option writes Lean-format artifacts for checked axiom and \
+theorem modules. Clean refuses source features that need native records it cannot yet write. \
+Clean refuses `-i`, `-c`, `-b`, `--server`, `--worker`, \
+`--plugin`, `--load-dynlib`, `--setup`, `-t`, `-M`, `-T`, `-j`, `-s`, `--profile`, and `--stats` \
+by name and exits with status 1. \
+`scripts/lean_front_door_diff.py` measures it byte for byte against pinned Lean.",
     category: Category::Dev,
     stability: Stability::Experimental,
     examples: &[

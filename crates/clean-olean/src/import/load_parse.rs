@@ -100,7 +100,7 @@ pub(crate) struct LoadConstant {
     pub(crate) kernel_all: Vec<Name>,
     pub(crate) kernel_ctors: Vec<Name>,
     pub(crate) kernel_inductive: Option<Name>,
-    /// Runtime-only preserved mutual-definition/theorem/opaque group. None
+    /// Ordered source mutual-definition/theorem/opaque group. None
     /// means not applicable or absent in the explicitly supported legacy ABI.
     pub(crate) runtime_mutual: Option<Vec<Name>>,
     /// Raw pointer to the type expression (or 0 if absent).
@@ -185,7 +185,10 @@ pub(crate) fn parse_header_module(bytes: Vec<u8>) -> OleanResult<LoadModule> {
 }
 
 /// Read a ModuleData `Array Name` (field 1, `constNames`) as typed names.
-fn read_typed_name_array(region: &CompactedRegion<'_>, ptr: u64) -> OleanResult<(Vec<Name>, bool)> {
+pub(crate) fn read_typed_name_array(
+    region: &CompactedRegion<'_>,
+    ptr: u64,
+) -> OleanResult<(Vec<Name>, bool)> {
     if !is_ptr(ptr) {
         return Ok((Vec::new(), false));
     }

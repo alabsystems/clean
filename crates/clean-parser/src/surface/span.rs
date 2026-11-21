@@ -8,7 +8,7 @@
 ///
 /// Represents a byte range `[start, end)` in the source text.
 /// Used for error messages and source mapping.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Span {
     pub start: usize,
     pub end: usize,

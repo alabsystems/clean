@@ -320,6 +320,7 @@ mod algebra_nat_bitwise_def;
 mod algebra_nat_ble_le_proof;
 mod algebra_nat_dec_eq_proof;
 mod algebra_nat_dec_le_proof;
+mod algebra_nat_distrib_aliases;
 mod algebra_nat_div2_lt_self_proof;
 #[cfg(any(test, feature = "math-overlays"))]
 mod algebra_nat_eight_mul_pow_two_add_two_le_proof;
@@ -328,6 +329,9 @@ mod algebra_nat_eq_of_testbit_proof;
 mod algebra_nat_forty_eight_pow_eq_split_proof;
 #[cfg(any(test, feature = "math-overlays"))]
 mod algebra_nat_four_mul_pow_eq_proof;
+mod algebra_nat_high_bit_bound_proof;
+mod algebra_nat_land_bound_proof;
+mod algebra_nat_land_fuel_proof;
 mod algebra_nat_left_distrib_proof;
 mod algebra_nat_mul_assoc_proof;
 mod algebra_nat_mul_cancel_proof;
@@ -368,6 +372,8 @@ mod algebra_nat_testbit_def;
 mod algebra_nat_testbit_lt_pow_proof;
 #[cfg(any(test, feature = "math-overlays"))]
 mod algebra_nat_three_e_add_five_bound_proof;
+mod algebra_nat_xor_bound_proof;
+mod algebra_nat_xor_fuel_proof;
 #[cfg(any(test, feature = "math-overlays"))]
 mod algebra_nat_xor_involution_proof;
 mod algebra_nat_zero_add_proof;
@@ -1224,6 +1230,7 @@ mod cutting_planes;
 mod cutting_planes_theorems;
 mod data;
 mod data_bool_ops;
+mod data_bytearray_extract;
 mod data_collection_ops;
 mod data_control_lazy;
 mod data_dvd;
@@ -1235,6 +1242,7 @@ mod data_fun_flip;
 mod data_fun_id;
 mod data_functor;
 mod data_getelem;
+mod data_getelem_decidable;
 mod data_getelem_list;
 mod data_inhabited_core;
 mod data_insert_singleton;
@@ -1258,17 +1266,22 @@ mod data_typeclasses_tostring_float;
 mod data_types;
 mod data_types_arithmetic;
 mod data_types_bitvec;
+mod data_types_bitvec_arith;
+mod data_types_bitvec_distrib;
 mod data_types_bitvec_shift;
 mod data_types_bool_simp;
 mod data_types_collections;
 mod data_types_finset;
 mod data_types_int_euclidean;
 mod data_types_int_lemmas;
+mod data_types_list_foldl;
 mod data_types_list_perm;
 mod data_types_multiset;
 mod data_types_nat;
 mod data_types_nat_div_mod_lemmas;
 mod data_types_nat_lemmas;
+mod data_types_nat_modular;
+mod data_types_nat_remainder_unique;
 mod data_types_nat_sub_simp;
 mod data_types_nat_ulp_round_lemmas;
 mod data_types_uint;
@@ -1871,6 +1884,10 @@ mod tree_width_resolution_theorems;
 #[cfg(any(test, feature = "math-overlays"))]
 mod type_theory;
 mod uint_floor_tonat_lemmas;
+mod uint_land_tonat_proofs;
+mod uint_shiftleft_tonat_proofs;
+mod uint_shiftright_tonat_proofs;
+mod uint_xor_tonat_proofs;
 #[cfg(any(test, feature = "math-overlays"))]
 mod verified_proof_search;
 #[cfg(any(test, feature = "math-overlays"))]
@@ -1895,9 +1912,14 @@ mod aesop;
 pub use aesop::{AesopIndexMode, AesopRule, AesopRuleBuilder, AesopRulePhase, AesopRuleSet};
 
 // Core types - extracted for organization (see #1161)
+mod compiler_extern;
 mod extension_storage;
 mod matcher;
 mod types;
+pub use compiler_extern::{
+    CompilerExternArity, CompilerExternDescriptor, CompilerExternEntry, CompilerExternIncomplete,
+    CompilerExternMetadata, CompilerExternMetadataError,
+};
 pub use matcher::{MatcherAltInfo, MatcherDetails, MatcherInfo, MatcherOverlap};
 pub use types::{
     collect_fvar_ids_for_diagnostics, ConstantInfo, ConstantKind, Declaration, EnvError,
@@ -1964,6 +1986,7 @@ mod inductive_recursor_types_mutual;
 mod inductive_rel_family;
 mod inductive_reregistration;
 mod inductive_result_sort;
+mod inductive_source_constructors;
 mod rec_apply;
 
 // Type class, aesop rule, and attribute registries - extracted for organization (see #1161)
@@ -4491,6 +4514,9 @@ impl Environment {
         // `List.mapM` exactly as before.
         if !self.suppress_lossy_structure_stubs {
             self.init_list_mapm()?;
+            self.init_byte_array()?;
+            self.register_bytearray_extract()?;
+            self.init_list_form()?;
         }
         // For-loop infrastructure: the `ForInStep` inductive, the `ForIn` type
         // class + `ForIn.forIn` method, and the `List` instance. Without these,
@@ -4572,6 +4598,7 @@ impl Environment {
         self.init_decidable()?;
         self.init_ite()?;
         self.init_dite()?;
+        self.init_bytearray_and_decidable_indexing()?;
         // `of_decide_eq_true` / `of_decide_eq_false` — the decide soundness +
         // completeness bridges. Back the Trust spec-elab MACHINE-INT equality
         // certified monitor (§1.1): `u64 a == b` decides via `decide (Eq a b)`
@@ -4741,6 +4768,10 @@ impl Environment {
         // `k < 2^n` is `false`. Plain `Nat.rec` on the bit index over the
         // constructive div2/testBit foundation + `Nat.pow_two_succ` (rung 3).
         self.register_nat_testbit_lt_pow_proof()?;
+        // Both input bounds yield canonical XOR bounds and width-fuel agreement.
+        self.register_nat_xor_fuel_proof()?;
+        // Canonical AND uses the same actual bit basis, with its own checked proofs.
+        self.register_nat_land_fuel_proof()?;
         // Parseval ladder rung 4b: the bit pattern of `2^n + k` for `k < 2^n`.
         // `Nat.testBit_add_two_pow_self` (bit n is set) and
         // `Nat.testBit_add_two_pow_lo` (bits below n agree with k), plus the
@@ -4785,6 +4816,7 @@ impl Environment {
         // Idempotent, self-seeding. Zero axioms, `add_decl`-rechecked;
         // olean-supplied under import mode.
         self.register_bitvec_of_nat()?;
+        self.register_bitvec_arithmetic()?;
         self.register_bitvec_shifts()?;
         // Universal half-ulp rounding bound, proven constructively down to the
         // foundational axioms (empty domain-axiom closure): the round primitive
@@ -4884,6 +4916,10 @@ impl Environment {
         self.init_nat_floor_order_lemmas()?;
         self.init_nat_floor_min_lemmas()?;
         self.init_uint_floor_tonat_lemmas()?;
+        self.register_uint_xor_tonat_proofs()?;
+        self.register_uint_land_tonat_proofs()?;
+        self.register_uint_shiftright_tonat_proofs()?;
+        self.register_uint_shiftleft_tonat_proofs()?;
         // `Nat.lt_of_lt_of_le` and `Nat.lt_trans` were ALREADY kernel-checked
         // constructive theorems, reachable only through `init_nat_trans_lt_le_lt`
         // / `init_nat_lt_trans` / `init_smt_bridge_nat_order_lemmas` — none of
@@ -4914,6 +4950,12 @@ impl Environment {
         // no-ops and no existing instance changes its registration order.
         // Import-mode gated inside.
         self.init_fin_arith()?;
+        self.register_bitvec_dec_eq_instance()?;
+        self.register_nat_modular_identities()?;
+        self.register_nat_distrib_aliases()?;
+        self.register_nat_remainder_uniqueness()?;
+        self.register_bitvec_distributivity()?;
+        self.register_list_foldl_cons()?;
         Ok(())
     }
 
@@ -5146,7 +5188,7 @@ impl Environment {
                 kind: ConstantKind::Axiom,
             };
             let name = val.name;
-            self.constants.insert(name.clone(), const_info);
+            self.install_resident_constant(name.clone(), const_info);
             // Quotient primitives are installed by the kernel from canonical
             // builders, not imported through an unchecked declaration path.
             self.declaration_verification
@@ -5229,8 +5271,15 @@ impl Environment {
     /// Install a lazy [`ConstantSource`] for trusted-closure constants (the
     /// zero-copy mmap loader). Constants in `constants` always take precedence; the
     /// source is consulted only on a miss. Replacing the source drops the previous.
+    ///
+    /// Installing or replacing a source changes what a lazily served name
+    /// resolves to while the eager table, and so `num_constants`, stays as it
+    /// was. The generation moves so that no cache keyed on
+    /// `(generation, num_constants)` (the native-fold verdicts among them)
+    /// keeps an answer about the previous source's content.
     pub fn set_constant_source(&mut self, source: std::sync::Arc<dyn ConstantSource>) {
         self.lazy_source = Some(source);
+        self.generation += 1;
     }
 
     /// Swap the installed lazy source for a fresh view with cleared
@@ -5353,6 +5402,7 @@ impl Environment {
             }
         }
         for name in &elided_names {
+            self.extension_states.forget_declaration(name);
             self.declaration_verification.remove(name);
         }
         if stats.total_elided() > 0 {
@@ -5420,10 +5470,14 @@ impl Environment {
             reducibility: Reducibility::Irreducible,
             kind: ConstantKind::Axiom,
         };
-        self.constants.insert(name.clone(), info);
+        self.install_resident_constant(name.clone(), info);
         // A Skolem axiom is an explicit assumption, not a checked proof.
         self.declaration_verification
             .insert(name, DeclarationVerification::Unchecked);
+        // An insert over an existing name keeps the constant count, so only
+        // the generation tells generation-keyed caches (the native-fold
+        // verdicts among them) that the name's content changed.
+        self.generation += 1;
     }
 
     /// Get the parameter names for a constant (if registered).
@@ -5821,13 +5875,33 @@ impl Environment {
         self.quotients.len()
     }
 
+    /// Insert a resident record and retire metadata bound to the record displaced.
+    fn install_resident_constant(&mut self, name: Name, info: ConstantInfo) {
+        if let Some(previous) = self.constants.insert(name, info) {
+            self.extension_states.forget_declaration(&previous.name);
+        }
+    }
+
+    fn extend_resident_constants(&mut self, entries: impl Iterator<Item = (Name, ConstantInfo)>) {
+        self.constants.reserve(entries.size_hint().0);
+        for (name, info) in entries {
+            self.install_resident_constant(name, info);
+        }
+    }
+
+    fn remove_resident_constant(&mut self, name: &Name) -> Option<ConstantInfo> {
+        let previous = self.constants.remove(name)?;
+        self.extension_states.forget_declaration(name);
+        Some(previous)
+    }
+
     /// Remove a constant by name (test-only).
     ///
     /// Used to simulate .olean loading gaps where certain constants
     /// (like noConfusionType) are not serialized and must be regenerated.
     #[cfg(test)]
     pub fn remove_constant(&mut self, name: &Name) {
-        self.constants.remove(name);
+        self.remove_resident_constant(name);
         self.declaration_verification.remove(name);
     }
 
@@ -5855,11 +5929,20 @@ impl Environment {
     /// once a theorem's schematic type can no longer be reused, dropping it keeps
     /// the resident set bounded instead of growing with the whole corpus.
     /// Returns `true` if the constant existed.
+    ///
+    /// A removal moves the generation as well as the count. Moving the count
+    /// alone is not enough for a cache keyed on `(generation, num_constants)`
+    /// (the native-fold verdicts among them): an insert that does not bump,
+    /// such as `check_inductive_well_typed`'s provisional family, brings the
+    /// count back to its value before the removal, while what the removed
+    /// name resolves to (absent, or a lazily served constant it shadowed)
+    /// has changed.
     pub fn forget_decl(&mut self, name: &Name) -> bool {
-        let removed = self.constants.remove(name).is_some();
+        let removed = self.remove_resident_constant(name).is_some();
         if removed {
             self.declaration_verification.remove(name);
             self.forget_matcher_info(name);
+            self.generation += 1;
         }
         removed
     }
@@ -5953,7 +6036,7 @@ impl Environment {
         if !self.staged_headers.remove(name) {
             return false;
         }
-        self.constants.remove(name);
+        self.remove_resident_constant(name);
         self.declaration_verification.remove(name);
         self.constant_origins.remove(name);
         self.param_names.remove(name);
@@ -5997,19 +6080,21 @@ impl Environment {
             // Removal only: the caller supplies a name, not a new packet. Eager
             // precedence retains the existing type/kind/levels while preventing
             // later lazy materialization from restoring the removed value.
-            self.constants.insert(name.clone(), info);
+            self.install_resident_constant(name.clone(), info);
             changed = true;
         }
         if let Some(ci) = self.constants.get_mut(name) {
-            changed |= ci.value.take().is_some()
-                || ci.reducibility != Reducibility::Opaque
-                || ci.is_reducible;
+            let erased_body = ci.value.take().is_some();
+            changed |= erased_body || ci.reducibility != Reducibility::Opaque || ci.is_reducible;
             ci.reducibility = Reducibility::Opaque;
             ci.is_reducible = false;
             // The exact payload that earned any previous verification stamp
             // no longer exists. Missing provenance is the conservative state;
             // certification will report the elided value explicitly.
             changed |= self.declaration_verification.remove(name).is_some();
+            if erased_body {
+                self.extension_states.forget_declaration(name);
+            }
             if changed {
                 // Native-fold authority and other content-dependent caches must
                 // observe eager elision even when the constant count stays fixed.
@@ -6069,6 +6154,7 @@ impl Environment {
                 }
             }
             if elided {
+                self.extension_states.forget_declaration(name);
                 self.declaration_verification.remove(name);
             }
         }
@@ -6086,7 +6172,7 @@ impl Environment {
     #[cfg(test)]
     pub(crate) fn add_constant_for_test(&mut self, info: ConstantInfo) {
         let name = info.name.clone();
-        self.constants.insert(name.clone(), info);
+        self.install_resident_constant(name.clone(), info);
         self.declaration_verification
             .insert(name, DeclarationVerification::Unchecked);
     }
@@ -6132,7 +6218,7 @@ impl Environment {
     #[doc(hidden)]
     pub fn add_constant_unchecked_for_test(&mut self, info: ConstantInfo) {
         let name = info.name.clone();
-        self.constants.insert(name.clone(), info);
+        self.install_resident_constant(name.clone(), info);
         self.declaration_verification
             .insert(name, DeclarationVerification::Unchecked);
     }
@@ -6155,7 +6241,7 @@ impl Environment {
     pub(crate) fn discharge_axiom_for_redefinition(&mut self, name: &Name) -> bool {
         if let Some(info) = self.constants.get(name) {
             if matches!(info.kind, ConstantKind::Axiom) {
-                self.constants.remove(name);
+                self.remove_resident_constant(name);
                 self.declaration_verification.remove(name);
                 self.generation += 1;
                 return true;
@@ -6201,7 +6287,7 @@ impl Environment {
         }
         match self.constants.get(name) {
             Some(info) if matches!(info.kind, ConstantKind::Axiom) && info.value.is_none() => {
-                self.constants.remove(name);
+                self.remove_resident_constant(name);
                 self.declaration_verification.remove(name);
                 self.generation += 1;
                 true
@@ -6617,7 +6703,7 @@ impl Environment {
     pub(crate) fn test_clone_member(&mut self, from: &Name, to: &Name) {
         if let Some(mut c) = self.constants.get(from).cloned() {
             c.name = to.clone();
-            self.constants.insert(to.clone(), c);
+            self.install_resident_constant(to.clone(), c);
         }
         if let Some(v) = self.declaration_verification.get(from).cloned() {
             self.declaration_verification.insert(to.clone(), v);

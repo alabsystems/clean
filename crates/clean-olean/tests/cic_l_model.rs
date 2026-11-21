@@ -21,6 +21,8 @@
 //! variable confirms it.
 #[path = "support/meaning_digest.rs"]
 mod meaning_digest;
+#[path = "cic_l_model/rule_family_bindings.rs"]
+mod rule_family_bindings;
 
 use meaning_digest::{MeaningDigests, Package};
 use sha2::{Digest, Sha256};
@@ -417,6 +419,147 @@ fn model_axiom_census_with_exceptions(
         ));
     }
     Ok(foundations.into_iter().collect())
+}
+
+fn check_model_family_binding(
+    binding: &rule_family_bindings::Binding,
+    loaded: &Environment,
+    admitted: &Environment,
+) {
+    let constructor = binding
+        .constructor
+        .strip_prefix("CICL.CoreJudgmentIn.")
+        .expect("binding constructor under CoreJudgmentIn");
+    let contract = binding
+        .contract
+        .strip_prefix("CICL.Model.Contracts.")
+        .expect("binding proposition under the independent contracts");
+    let named_local = binding.family == rule_family_bindings::NAMED_LOCAL_FAMILY;
+    let core_contract = if named_local { "ruleBvar" } else { contract };
+    assert!(
+        CORE_RULE_CONTRACTS.contains(&(constructor, core_contract)),
+        "inventory model binding must agree with the independent core rule roster"
+    );
+
+    let foundational = [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk",
+        "Quot.sound",
+        "propext",
+    ]
+    .map(str::to_owned)
+    .into_iter()
+    .collect::<BTreeSet<_>>();
+    let propext = BTreeSet::from(["propext".to_owned()]);
+    let empty = BTreeSet::new();
+    let constructor_foundations = match constructor {
+        "sort" | "letE" | "lam" | "app" | "pi" | "bvar" | "mdata" => &empty,
+        "constant" => &propext,
+        _ => panic!("unqualified model binding constructor {constructor}"),
+    };
+    let check_subject = |subject: &str, module: &str, expected: &BTreeSet<String>| {
+        let name = Name::from_string(subject);
+        assert_eq!(
+            loaded
+                .get_constant_origin(&name)
+                .and_then(|origin| origin.module_name()),
+            Some(module),
+            "wrong source owner for {subject}"
+        );
+        assert!(
+            !loaded.is_unsafe(&name) && !loaded.is_partial(&name),
+            "inventory binding needs a safe total declaration: {subject}"
+        );
+        let closure = model_axiom_census(admitted, &name).expect("foundational binding closure");
+        assert_eq!(&closure, expected, "binding closure changed for {subject}");
+        name
+    };
+    let constructor_name = check_subject(
+        &binding.constructor,
+        &binding.constructor_module,
+        constructor_foundations,
+    );
+    let carrier = Name::from_string("CICL.CoreJudgmentIn");
+    assert!(
+        admitted
+            .get_constructor(&constructor_name)
+            .is_some_and(|ctor| ctor.inductive_name == carrier),
+        "{constructor_name} must be a constructor of CoreJudgmentIn"
+    );
+    if constructor == "constant" {
+        let substitution = check_subject("CICL.levelSubstitution", "CICL.Declaration", &propext);
+        let declaration = admitted
+            .get_const(&substitution)
+            .expect("fenced universe substitution definition");
+        assert!(
+            declaration.kind == ConstantKind::Definition && declaration.value.is_some(),
+            "{substitution} must be a bodyful definition"
+        );
+    }
+
+    if named_local {
+        let mut bridge_foundations = foundational.clone();
+        bridge_foundations.remove("Quot.ind");
+        for (subject, module, kind, closure) in [
+            (
+                "CICL.lookupType",
+                "CICL.CoreTyping",
+                ConstantKind::Definition,
+                &empty,
+            ),
+            (
+                "CICL.LocalContextRules.inferFVar",
+                "CICL.LocalContextRules",
+                ConstantKind::Definition,
+                &empty,
+            ),
+            (
+                "CICL.LocalContextRules.inferFVar_iff_lookupType",
+                "CICL.LocalContextRules",
+                ConstantKind::Theorem,
+                &bridge_foundations,
+            ),
+        ] {
+            let name = check_subject(subject, module, closure);
+            let declaration = admitted
+                .get_const(&name)
+                .expect("fenced local lookup declaration");
+            assert_eq!(
+                declaration.kind, kind,
+                "wrong declaration kind for {subject}"
+            );
+            assert!(declaration.value.is_some(), "missing body for {subject}");
+        }
+    }
+
+    for (subject, module, kind) in [
+        (&binding.lemma, &binding.lemma_module, ConstantKind::Theorem),
+        (
+            &binding.contract,
+            &binding.contract_module,
+            ConstantKind::Definition,
+        ),
+        (
+            &binding.mutation,
+            &binding.mutation_module,
+            ConstantKind::Definition,
+        ),
+    ] {
+        let name = check_subject(subject, module, &foundational);
+        let declaration = admitted
+            .get_const(&name)
+            .expect("fenced binding declaration");
+        assert_eq!(
+            declaration.kind, kind,
+            "wrong declaration kind for {subject}"
+        );
+        assert!(declaration.value.is_some(), "missing body for {subject}");
+        if kind == ConstantKind::Definition {
+            assert!(declaration.type_.is_prop(), "{subject} must define a Prop");
+        }
+    }
 }
 
 fn model_choice_exception_names(
@@ -1009,7 +1152,7 @@ fn model_contracts_recheck_with_named_axiom_exceptions() {
         "../../../theories/cic_l_model/model_statement_pins.json"
     ))
     .expect("committed model statement pins");
-    assert_eq!(pins.len(), 708, "exact contract denominator");
+    assert_eq!(pins.len(), 715, "exact contract denominator");
     // Every pin's meaning digest over what the kernel admitted, printed before
     // any is compared, so one run of a changed set shows all of them.
     let (measured_pins, described) = pin_digests(kernel.environment());
@@ -1066,6 +1209,12 @@ fn model_contracts_recheck_with_named_axiom_exceptions() {
     let rule_inventory: serde_json::Value =
         serde_json::from_str(include_str!("../../../data/cic_l_rule_inventory.json"))
             .expect("committed CIC_L rule inventory");
+    let family_bindings =
+        rule_family_bindings::read(&rule_inventory, &contract_replays, &mutant_replays)
+            .expect("declared core rule family model bindings");
+    for binding in &family_bindings {
+        check_model_family_binding(binding, &loaded, kernel.environment());
+    }
     let mut expected_controls: std::collections::BTreeMap<String, String> =
         std::collections::BTreeMap::new();
     let mut expected_model_controls: std::collections::BTreeMap<String, String> =
@@ -1269,6 +1418,12 @@ fn model_contracts_recheck_with_named_axiom_exceptions() {
         "model targets {}, paired contracts {paired_count}, targeted mutations {mutation_count}",
         targets.len()
     );
+    for binding in &family_bindings {
+        eprintln!(
+            "model-family-replay family={} constructor={} lemma={} contract={} refused_mutation={}",
+            binding.family, binding.constructor, binding.lemma, binding.contract, binding.mutation
+        );
+    }
 }
 
 // These environments are checked declaration fixtures for the census itself,

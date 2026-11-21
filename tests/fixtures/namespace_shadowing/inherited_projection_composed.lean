@@ -20,13 +20,10 @@
 --                                       which resolves the CONSTANT `MyDer.widget`.
 --   `viaChain x := x.toMyBase.widget` — `toMyBase` IS an own field of `MyDer` and
 --                                       `widget` IS an own field of `MyBase`, so
---                                       BOTH hops are direct kernel `Proj`s and the
---                                       body is exactly the spine
---                                       `name_resolution::compose_subobject_projection`
---                                       builds (pinned shape-for-shape in
---                                       `subobject_projection_tests`).
--- The companion Rust test checks those two bodies really are a `Const` and a
--- `Proj` spine, so the `rfl` below is not comparing a term with itself.
+--                                       its body applies MyBase.widget to the
+--                                       result of MyDer.toMyBase on x.
+-- The companion Rust test checks the generated constant and the ordered
+-- direct-field accessors down to the original record argument.
 
 universe u
 

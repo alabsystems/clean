@@ -35,9 +35,9 @@ pub fn surface_decl_name(decl: &SurfaceDecl) -> Option<String> {
         SurfaceDecl::Alias { names, .. } => names.first().map(|(name, _)| surface_name_label(name)),
         SurfaceDecl::Instance { name, .. } => name.as_ref().map(surface_name_label),
         SurfaceDecl::Section { name, .. } => name.as_ref().map(surface_name_label),
-        SurfaceDecl::Print { name, .. } | SurfaceDecl::PrintAxioms { name, .. } => {
-            Some(surface_name_label(name))
-        }
+        SurfaceDecl::Print { name, .. }
+        | SurfaceDecl::PrintAxioms { name, .. }
+        | SurfaceDecl::PrintEquations { name, .. } => Some(surface_name_label(name)),
         SurfaceDecl::DeclareSyntaxCat { name, .. } => Some(surface_name_label(name)),
         SurfaceDecl::Syntax { name, .. } | SurfaceDecl::MacroRules { name, .. } => {
             name.as_ref().map(surface_name_label)
@@ -85,6 +85,7 @@ pub fn surface_decl_span(decl: &SurfaceDecl) -> Option<Span> {
         | SurfaceDecl::Reduce { span, .. }
         | SurfaceDecl::Print { span, .. }
         | SurfaceDecl::PrintAxioms { span, .. }
+        | SurfaceDecl::PrintEquations { span, .. }
         | SurfaceDecl::Guard { span, .. }
         | SurfaceDecl::GuardMsgs { span, .. }
         | SurfaceDecl::Mutual { span, .. }

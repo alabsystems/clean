@@ -12,7 +12,7 @@ use clean_kernel::{Environment, ExprKind, Name};
 use super::expr::extract_equality_full;
 use super::types::{SimpIndexMode, SimpLemma};
 
-pub(super) fn collect(
+pub(crate) fn collect(
     env: &Environment,
     definition: &Name,
     priority: u32,

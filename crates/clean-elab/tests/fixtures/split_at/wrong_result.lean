@@ -1,0 +1,3 @@
+theorem split_wrong (p : Prop) [Decidable p]
+  (h : if p then True else False) : ¬ p := by
+  split at h <;> simp_all

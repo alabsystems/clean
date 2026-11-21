@@ -130,7 +130,7 @@ fn fold_head_tail(head: &str) -> String {
 /// Lean's kernel evaluates `Lean.reduceNat c` BY NAME with compiled code
 /// (`reduce_native`), which a replayed export does not have, so pinned Lean
 /// refuses the theorem ("(kernel) (interpreter) unknown declaration 'c'");
-/// under any other name it unfolds the identity and admits it.
+/// under another name it unfolds the transparent identity and leaves the opaque stuck.
 pub fn forged_reduce_nat(head: &str, opaque: bool) -> String {
     let text = archived("bad/other/nat-lit-add-bad.ndjson");
     let prefix: Vec<&str> = text.lines().take(101).collect();

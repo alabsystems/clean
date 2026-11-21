@@ -3,21 +3,66 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use clean_kernel::env::ConstantKind;
+use clean_kernel::env::{ConstantKind, TrustedEnvExt};
 use clean_kernel::{Environment, Expr, Name};
 
 use crate::{ElabError, ElabResult};
+
+/// The constructor matchers generated or reused during recursive lowering.
+pub(crate) type GeneratedMatchers = Vec<(Name, clean_kernel::env::MatcherInfo)>;
 
 /// Evidence minted only after authoritative source registration succeeds.
 /// It cannot authorize an axiom replacement and is consumed by a staging mirror.
 pub(crate) struct PublishedSourceResult<'a> {
     result: &'a ElabResult,
+    matchers: GeneratedMatchers,
+    pub(crate) registered_names: Vec<Name>,
 }
 
 impl PublishedSourceResult<'_> {
-    pub(crate) fn mirror_into(self, staging: &mut Environment) -> Result<(), ElabError> {
-        crate::register::register_elab_result(staging, self.result)
+    pub(crate) fn mirror_into(
+        self,
+        staging: &mut Environment,
+        published: &Environment,
+        decl: &clean_parser::SurfaceDecl,
+        names: &BTreeSet<Name>,
+    ) -> Result<(), ElabError> {
+        crate::register::register_elab_result_with_matchers(staging, self.result, &self.matchers)?;
+        // Later source bodies elaborate in this environment. The registered
+        // kernel telescope retains binder kinds, while the source declaration
+        // supplies the names used by named arguments.
+        crate::register::register_param_names(staging, decl, self.result);
+        // An attribute on the published declaration may override its default
+        // reducibility. Later tactics must see the same unfolding boundary.
+        for name in names {
+            if let (Some(hint), Some(staged)) = (
+                published.get_reducibility(name),
+                staging.get_reducibility(name),
+            ) {
+                if hint != staged {
+                    staging.set_reducibility(name, hint);
+                }
+            }
+        }
+        Ok(())
     }
+}
+
+/// Register generated matcher definitions and their elaborator metadata atomically.
+/// Reused resident matchers keep the same metadata equality check as new rows.
+pub(crate) fn register_source_with_matchers<'a>(
+    env: &mut Environment,
+    result: &'a ElabResult,
+    matchers: GeneratedMatchers,
+) -> Result<PublishedSourceResult<'a>, ElabError> {
+    preflight_source_slots(env, result)?;
+    let registered_names =
+        crate::register::register_elab_result_with_matchers(env, result, &matchers)?;
+    Ok(PublishedSourceResult {
+        result,
+        matchers,
+        registered_names,
+    })
 }
 
 /// Check explicit typed and derived source outputs before registration. Names
@@ -27,9 +72,7 @@ pub(crate) fn register_source<'a>(
     env: &mut Environment,
     result: &'a ElabResult,
 ) -> Result<PublishedSourceResult<'a>, ElabError> {
-    preflight_source_slots(env, result)?;
-    crate::register::register_elab_result(env, result)?;
-    Ok(PublishedSourceResult { result })
+    register_source_with_matchers(env, result, Vec::new())
 }
 
 fn collision(name: &Name) -> ElabError {
@@ -202,4 +245,53 @@ pub(crate) fn complete_fact_bootstrap(env: &mut Environment) -> Result<(), ElabE
     crate::register::register_param_names(&mut candidate, declaration, &result);
     *env = candidate;
     Ok(())
+}
+
+#[cfg(test)]
+mod matcher_tests {
+    use super::*;
+    use clean_kernel::env::MatcherInfo;
+    use clean_kernel::BinderInfo;
+
+    #[test]
+    fn inconsistent_reused_matcher_preserves_the_whole_source_transaction() {
+        let mut env = Environment::with_prelude();
+        let definition = |name: &str| {
+            let nat = Expr::const_str("Nat");
+            ElabResult::Definition {
+                name: Name::from_string(name),
+                universe_params: vec![],
+                ty: Expr::arrow(nat.clone(), Expr::arrow(nat.clone(), nat.clone())),
+                val: Expr::lam(
+                    BinderInfo::Default,
+                    nat.clone(),
+                    Expr::lam(BinderInfo::Default, nat, Expr::bvar(1)),
+                ),
+                modifiers: Default::default(),
+            }
+        };
+        let resident = Name::from_string("priorMatcher");
+        register_source(&mut env, &definition("priorMatcher")).unwrap();
+        let prior = MatcherInfo {
+            num_params: 0,
+            num_discrs: 1,
+            alt_num_params: vec![],
+            u_elim_pos: None,
+            discr_names: vec![None],
+            details: None,
+        };
+        env.register_matcher_info(resident.clone(), prior.clone())
+            .unwrap();
+        let mut changed = prior.clone();
+        changed.discr_names[0] = Some(Name::from_string("h"));
+        let candidate = definition("newDefinition");
+        let result =
+            register_source_with_matchers(&mut env, &candidate, vec![(resident.clone(), changed)]);
+        assert!(matches!(
+            result,
+            Err(ElabError::KernelRegistrationFailed { .. })
+        ));
+        assert!(env.get_const(&Name::from_string("newDefinition")).is_none());
+        assert_eq!(env.get_matcher_info(&resident), Some(&prior));
+    }
 }

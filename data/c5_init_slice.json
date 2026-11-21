@@ -1,0 +1,582 @@
+{
+  "schema": "clean.c5_init_slice/v1",
+  "plan_unit": "C5",
+  "lean_toolchain": "leanprover/lean4:v4.30.0-rc2",
+  "lean_githash": "3dc1a088b6d2d8eafe25a7cd7ec7b58d731bd7cc",
+  "loader_proved": false,
+  "loader_note": "The Init.Prelude + Init.Core slice extractor and advice emitter are unproved interim producers (not authority); single-declaration NDJSON 3.1.0 + LEB128 byte frames are additionally cross-checked through KCheckLoader.loader while full production multi-record export-stream loading remains open under C6.",
+  "base_families": [
+    "PUnit",
+    "Eq",
+    "Nat"
+  ],
+  "summary_counts": {
+    "accepted_both_count": 42,
+    "accepted_base_family_blocks": 3,
+    "accepted_ordinary_init_declarations": 39,
+    "accepted_using_iota_count": 1,
+    "accepted_using_k_count": 1,
+    "kcheck_only_level_shape_count": 3,
+    "structure_eta_refused_count": 2,
+    "forged_refused_count": 12,
+    "forged_corpus_acceptances": 0,
+    "total_audited_rows": 59
+  },
+  "source_hashes": {
+    "KCheckInitSlice/Accounting.lean": "d27019cd14553732e4dd995c6e0c541ecbefab42056f8ef54505c2e7c088d4c2",
+    "KCheckInitSlice/Contracts.lean": "94aed322c362c28fc0bfbdeaaae0c8e5e720f2e4f5401127531a7d2f04a3b33e",
+    "KCheckInitSlice/InitCorpus.lean": "6ac75262dea3402ced015874b375e2a65a4179a151a4011e464a4e8caea95657",
+    "KCheckInitSlice/LevelDivergence.lean": "ee9370ebfbecec4d8821ce5c681c9a40acefea1f17a286dc6f7140d11b5a61f7",
+    "KCheckInitSlice/RefusalCorpus.lean": "abcc0b3f699fccfccceed640a39369a5259eb9bc740480c0123febeec66af112"
+  },
+  "accepted_both": [
+    {
+      "step": 1,
+      "name": "PUnit",
+      "source_module": "Init.Prelude",
+      "kind": "inductiveBlock",
+      "level_params": 1,
+      "token_count": 0,
+      "uses_iota": false,
+      "uses_k": false
+    },
+    {
+      "step": 2,
+      "name": "Eq",
+      "source_module": "Init.Prelude",
+      "kind": "inductiveBlock",
+      "level_params": 1,
+      "token_count": 0,
+      "uses_iota": false,
+      "uses_k": false
+    },
+    {
+      "step": 3,
+      "name": "Nat",
+      "source_module": "Init.Prelude",
+      "kind": "inductiveBlock",
+      "level_params": 0,
+      "token_count": 0,
+      "uses_iota": false,
+      "uses_k": false
+    },
+    {
+      "step": 4,
+      "name": "id",
+      "source_module": "Init.Prelude",
+      "kind": "definition",
+      "level_params": 1,
+      "token_count": 9,
+      "uses_iota": false,
+      "uses_k": false
+    },
+    {
+      "step": 5,
+      "name": "Function.const",
+      "source_module": "Init.Prelude",
+      "kind": "definition",
+      "level_params": 2,
+      "token_count": 15,
+      "uses_iota": false,
+      "uses_k": false
+    },
+    {
+      "step": 6,
+      "name": "Function.comp",
+      "source_module": "Init.Prelude",
+      "kind": "definition",
+      "level_params": 3,
+      "token_count": 33,
+      "uses_iota": false,
+      "uses_k": false
+    },
+    {
+      "step": 7,
+      "name": "Unit",
+      "source_module": "Init.Prelude",
+      "kind": "definition",
+      "level_params": 0,
+      "token_count": 3,
+      "uses_iota": false,
+      "uses_k": false
+    },
+    {
+      "step": 8,
+      "name": "Unit.unit",
+      "source_module": "Init.Prelude",
+      "kind": "definition",
+      "level_params": 0,
+      "token_count": 4,
+      "uses_iota": false,
+      "uses_k": false
+    },
+    {
+      "step": 9,
+      "name": "PUnit.casesOn",
+      "source_module": "Init.Prelude",
+      "kind": "definition",
+      "level_params": 2,
+      "token_count": 28,
+      "uses_iota": false,
+      "uses_k": false
+    },
+    {
+      "step": 10,
+      "name": "PUnit.recOn",
+      "source_module": "Init.Prelude",
+      "kind": "definition",
+      "level_params": 2,
+      "token_count": 28,
+      "uses_iota": false,
+      "uses_k": false
+    },
+    {
+      "step": 11,
+      "name": "rfl",
+      "source_module": "Init.Prelude",
+      "kind": "definition",
+      "level_params": 1,
+      "token_count": 19,
+      "uses_iota": false,
+      "uses_k": false
+    },
+    {
+      "step": 12,
+      "name": "id_eq",
+      "source_module": "Init.Prelude",
+      "kind": "theoremDecl",
+      "level_params": 1,
+      "token_count": 42,
+      "uses_iota": false,
+      "uses_k": false
+    },
+    {
+      "step": 13,
+      "name": "Eq.recOn",
+      "source_module": "Init.Prelude",
+      "kind": "definition",
+      "level_params": 2,
+      "token_count": 85,
+      "uses_iota": false,
+      "uses_k": false
+    },
+    {
+      "step": 14,
+      "name": "Eq.ndrec",
+      "source_module": "Init.Prelude",
+      "kind": "definition",
+      "level_params": 2,
+      "token_count": 93,
+      "uses_iota": false,
+      "uses_k": false
+    },
+    {
+      "step": 15,
+      "name": "Eq.casesOn",
+      "source_module": "Init.Prelude",
+      "kind": "definition",
+      "level_params": 2,
+      "token_count": 85,
+      "uses_iota": false,
+      "uses_k": false
+    },
+    {
+      "step": 16,
+      "name": "cast",
+      "source_module": "Init.Prelude",
+      "kind": "definition",
+      "level_params": 1,
+      "token_count": 71,
+      "uses_iota": false,
+      "uses_k": false
+    },
+    {
+      "step": 17,
+      "name": "Eq.subst",
+      "source_module": "Init.Prelude",
+      "kind": "theoremDecl",
+      "level_params": 1,
+      "token_count": 55,
+      "uses_iota": false,
+      "uses_k": false
+    },
+    {
+      "step": 18,
+      "name": "Eq.symm",
+      "source_module": "Init.Prelude",
+      "kind": "theoremDecl",
+      "level_params": 1,
+      "token_count": 87,
+      "uses_iota": false,
+      "uses_k": false
+    },
+    {
+      "step": 19,
+      "name": "Eq.trans",
+      "source_module": "Init.Prelude",
+      "kind": "theoremDecl",
+      "level_params": 1,
+      "token_count": 105,
+      "uses_iota": false,
+      "uses_k": false
+    },
+    {
+      "step": 20,
+      "name": "PUnit.ext",
+      "source_module": "Init.Core",
+      "kind": "theoremDecl",
+      "level_params": 1,
+      "token_count": 187,
+      "uses_iota": false,
+      "uses_k": false
+    },
+    {
+      "step": 21,
+      "name": "cast_eq",
+      "source_module": "Init.Core",
+      "kind": "theoremDecl",
+      "level_params": 1,
+      "token_count": 80,
+      "uses_iota": false,
+      "uses_k": true
+    },
+    {
+      "step": 22,
+      "name": "congrArg",
+      "source_module": "Init.Prelude",
+      "kind": "theoremDecl",
+      "level_params": 2,
+      "token_count": 111,
+      "uses_iota": false,
+      "uses_k": false
+    },
+    {
+      "step": 23,
+      "name": "congrFun'",
+      "source_module": "Init.Prelude",
+      "kind": "theoremDecl",
+      "level_params": 2,
+      "token_count": 125,
+      "uses_iota": false,
+      "uses_k": false
+    },
+    {
+      "step": 24,
+      "name": "congrFun",
+      "source_module": "Init.Prelude",
+      "kind": "theoremDecl",
+      "level_params": 2,
+      "token_count": 153,
+      "uses_iota": false,
+      "uses_k": false
+    },
+    {
+      "step": 25,
+      "name": "congr",
+      "source_module": "Init.Prelude",
+      "kind": "theoremDecl",
+      "level_params": 2,
+      "token_count": 193,
+      "uses_iota": false,
+      "uses_k": false
+    },
+    {
+      "step": 26,
+      "name": "Nat.recOn",
+      "source_module": "Init.Prelude",
+      "kind": "definition",
+      "level_params": 1,
+      "token_count": 53,
+      "uses_iota": false,
+      "uses_k": false
+    },
+    {
+      "step": 27,
+      "name": "Nat.casesOn",
+      "source_module": "Init.Prelude",
+      "kind": "definition",
+      "level_params": 1,
+      "token_count": 51,
+      "uses_iota": false,
+      "uses_k": false
+    },
+    {
+      "step": 28,
+      "name": "Nat.noConfusionType",
+      "source_module": "Init.Prelude",
+      "kind": "definition",
+      "level_params": 1,
+      "token_count": 102,
+      "uses_iota": false,
+      "uses_k": false
+    },
+    {
+      "step": 29,
+      "name": "Nat.noConfusion",
+      "source_module": "Init.Prelude",
+      "kind": "definition",
+      "level_params": 1,
+      "token_count": 320,
+      "uses_iota": true,
+      "uses_k": false
+    },
+    {
+      "step": 30,
+      "name": "proof_irrel",
+      "source_module": "Init.Core",
+      "kind": "theoremDecl",
+      "level_params": 0,
+      "token_count": 32,
+      "uses_iota": false,
+      "uses_k": false
+    },
+    {
+      "step": 31,
+      "name": "PUnit.subsingleton",
+      "source_module": "Init.Core",
+      "kind": "theoremDecl",
+      "level_params": 1,
+      "token_count": 187,
+      "uses_iota": false,
+      "uses_k": false
+    },
+    {
+      "step": 32,
+      "name": "Eq.mp",
+      "source_module": "Init.Core",
+      "kind": "definition",
+      "level_params": 1,
+      "token_count": 71,
+      "uses_iota": false,
+      "uses_k": false
+    },
+    {
+      "step": 33,
+      "name": "Eq.mpr",
+      "source_module": "Init.Core",
+      "kind": "definition",
+      "level_params": 1,
+      "token_count": 79,
+      "uses_iota": false,
+      "uses_k": false
+    },
+    {
+      "step": 34,
+      "name": "Eq.substr",
+      "source_module": "Init.Core",
+      "kind": "theoremDecl",
+      "level_params": 1,
+      "token_count": 101,
+      "uses_iota": false,
+      "uses_k": false
+    },
+    {
+      "step": 35,
+      "name": "Eq.ndrecOn",
+      "source_module": "Init.Core",
+      "kind": "definition",
+      "level_params": 2,
+      "token_count": 55,
+      "uses_iota": false,
+      "uses_k": false
+    },
+    {
+      "step": 36,
+      "name": "Function.id_comp",
+      "source_module": "Init.Core",
+      "kind": "theoremDecl",
+      "level_params": 2,
+      "token_count": 96,
+      "uses_iota": false,
+      "uses_k": false
+    },
+    {
+      "step": 37,
+      "name": "Function.comp_id",
+      "source_module": "Init.Core",
+      "kind": "theoremDecl",
+      "level_params": 2,
+      "token_count": 98,
+      "uses_iota": false,
+      "uses_k": false
+    },
+    {
+      "step": 38,
+      "name": "Function.const_apply",
+      "source_module": "Init.Core",
+      "kind": "theoremDecl",
+      "level_params": 2,
+      "token_count": 68,
+      "uses_iota": false,
+      "uses_k": false
+    },
+    {
+      "step": 39,
+      "name": "Function.comp_apply",
+      "source_module": "Init.Core",
+      "kind": "theoremDecl",
+      "level_params": 3,
+      "token_count": 106,
+      "uses_iota": false,
+      "uses_k": false
+    },
+    {
+      "step": 40,
+      "name": "flip",
+      "source_module": "Init.Core",
+      "kind": "definition",
+      "level_params": 3,
+      "token_count": 33,
+      "uses_iota": false,
+      "uses_k": false
+    },
+    {
+      "step": 41,
+      "name": "imp_intro",
+      "source_module": "Init.Core",
+      "kind": "theoremDecl",
+      "level_params": 0,
+      "token_count": 15,
+      "uses_iota": false,
+      "uses_k": false
+    },
+    {
+      "step": 42,
+      "name": "imp_imp_imp",
+      "source_module": "Init.Core",
+      "kind": "theoremDecl",
+      "level_params": 0,
+      "token_count": 58,
+      "uses_iota": false,
+      "uses_k": false
+    }
+  ],
+  "kcheck_only_level_shape": [
+    {
+      "name": "LevelGap.d1",
+      "source_module": "LevelGapKernelVerdicts",
+      "lean_kernel_verdict": "refused_level_shape",
+      "kcheck_verdict": "accepted",
+      "uses_iota": false,
+      "uses_k": false
+    },
+    {
+      "name": "LevelGap.Kd3",
+      "source_module": "LevelGapKernelVerdicts",
+      "lean_kernel_verdict": "refused_level_shape",
+      "kcheck_verdict": "accepted",
+      "uses_iota": false,
+      "uses_k": false
+    },
+    {
+      "name": "LevelGap.Kd4",
+      "source_module": "LevelGapKernelVerdicts",
+      "lean_kernel_verdict": "refused_level_shape",
+      "kcheck_verdict": "accepted",
+      "uses_iota": false,
+      "uses_k": false
+    }
+  ],
+  "structure_eta_refused": [
+    {
+      "name": "Unit.ext",
+      "source_module": "Init.Ext",
+      "kcheck_verdict": "refused",
+      "uses_iota": false,
+      "uses_k": false
+    },
+    {
+      "name": "Prod.eta",
+      "source_module": "Init.Core",
+      "kcheck_verdict": "refused",
+      "uses_iota": false,
+      "uses_k": false
+    }
+  ],
+  "forged_refused": [
+    {
+      "name": "Forged.falseAxiom",
+      "source_module": "ForgedCorpus",
+      "kcheck_verdict": "refused",
+      "uses_iota": false,
+      "uses_k": false
+    },
+    {
+      "name": "Forged.partialLoop",
+      "source_module": "ForgedCorpus",
+      "kcheck_verdict": "refused",
+      "uses_iota": false,
+      "uses_k": false
+    },
+    {
+      "name": "Forged.unsafeCast",
+      "source_module": "ForgedCorpus",
+      "kcheck_verdict": "refused",
+      "uses_iota": false,
+      "uses_k": false
+    },
+    {
+      "name": "Forged.typeInType",
+      "source_module": "ForgedCorpus",
+      "kcheck_verdict": "refused",
+      "uses_iota": false,
+      "uses_k": false
+    },
+    {
+      "name": "Forged.thmNotProp",
+      "source_module": "ForgedCorpus",
+      "kcheck_verdict": "refused",
+      "uses_iota": false,
+      "uses_k": false
+    },
+    {
+      "name": "Forged.looseBVar",
+      "source_module": "ForgedCorpus",
+      "kcheck_verdict": "refused",
+      "uses_iota": false,
+      "uses_k": false
+    },
+    {
+      "name": "Forged.levelOob",
+      "source_module": "ForgedCorpus",
+      "kcheck_verdict": "refused",
+      "uses_iota": false,
+      "uses_k": false
+    },
+    {
+      "name": "id",
+      "source_module": "ForgedCorpus",
+      "kcheck_verdict": "refused",
+      "uses_iota": false,
+      "uses_k": false
+    },
+    {
+      "name": "Forged.wrongBetaDom",
+      "source_module": "ForgedCorpus",
+      "kcheck_verdict": "refused",
+      "uses_iota": false,
+      "uses_k": false
+    },
+    {
+      "name": "Forged.kOnNat",
+      "source_module": "ForgedCorpus",
+      "kcheck_verdict": "refused",
+      "uses_iota": false,
+      "uses_k": true
+    },
+    {
+      "name": "Forged.depthZero",
+      "source_module": "ForgedCorpus",
+      "kcheck_verdict": "refused",
+      "uses_iota": false,
+      "uses_k": false
+    },
+    {
+      "name": "Forged.trailingAdvice",
+      "source_module": "ForgedCorpus",
+      "kcheck_verdict": "refused",
+      "uses_iota": false,
+      "uses_k": false
+    }
+  ]
+}

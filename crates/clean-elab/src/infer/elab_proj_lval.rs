@@ -38,6 +38,7 @@ impl<'a> ElabCtx<'a> {
         receiver: &Expr,
         receiver_ty: &Expr,
         field_name: &SurfaceName,
+        receiver_capture: Option<&mut DotHeadCapture>,
     ) -> Result<Option<Expr>, ElabError> {
         // A δ-chain in a well-formed environment is finite; the bound only
         // keeps a malformed one from looping.
@@ -48,7 +49,12 @@ impl<'a> ElabCtx<'a> {
             if matches!(recv_ty.kind(), ExprKind::Pi(..)) {
                 // `.forallE` names `Function.<field>`; a `∀` does not unfold,
                 // so a miss here ends the search (Lean rethrows).
-                return Ok(self.apply_function_namespace_field(field_name, &recv, &recv_ty));
+                return Ok(self.apply_function_namespace_field(
+                    field_name,
+                    &recv,
+                    &recv_ty,
+                    receiver_capture,
+                ));
             }
             if let ExprKind::Const(head, _) = recv_ty.get_app_fn().kind() {
                 let name =
@@ -69,7 +75,14 @@ impl<'a> ElabCtx<'a> {
                         let type_name = head.clone();
                         let fn_expr = Expr::const_(name, levels);
                         return self
-                            .apply_dot_receiver(fn_expr, &fn_type, &recv, &recv_ty, &type_name)
+                            .apply_or_capture_dot_receiver(
+                                fn_expr,
+                                &fn_type,
+                                &recv,
+                                &recv_ty,
+                                &type_name,
+                                receiver_capture,
+                            )
                             .map(Some);
                     }
                 }
@@ -147,6 +160,7 @@ impl<'a> ElabCtx<'a> {
         field_name: &SurfaceName,
         receiver: &Expr,
         receiver_ty: &Expr,
+        receiver_capture: Option<&mut DotHeadCapture>,
     ) -> Option<Expr> {
         let fn_ns_name = SurfaceName::generated_path("Function")
             .append(field_name)
@@ -167,6 +181,13 @@ impl<'a> ElabCtx<'a> {
             const_type.instantiate_level_params_direct(&const_level_params, &levels)
         };
         let fn_expr = Expr::const_(fn_ns_name, levels);
+        if let Some(DotHeadCapture::Named(capture)) = receiver_capture {
+            *capture = Some(NamedDotReceiver {
+                term: receiver.clone(),
+                namespace: Name::from_string("Function"),
+            });
+            return Some(fn_expr);
+        }
         // Lean's `addLValArg` (App.lean:1587-1626) scans the WHOLE parameter
         // telescope — implicits included — for the first parameter that
         // `typeMatchesBaseName` accepts, which for the `Function` namespace is

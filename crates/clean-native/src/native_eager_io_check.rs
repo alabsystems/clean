@@ -325,14 +325,14 @@ impl Checker<'_> {
                 let ty = self
                     .local_type(*id)
                     .ok_or_else(|| self.refuse("it applies a local the audit has no type for"))?;
-                self.walk_args("a local function", &ty, Some(&ty), &args, false)
+                self.walk_args("a local function", &ty, Some(&ty), &args, false, None)
             }
             _ => {
                 self.walk(head)?;
                 let ty = self.tc().infer_type(head).map_err(|err| {
                     self.refuse(format!("the audit could not type an applied term ({err})"))
                 })?;
-                self.walk_args("an applied term", &ty, None, &args, false)
+                self.walk_args("an applied term", &ty, None, &args, false, Some(head))
             }
         }
     }
@@ -347,7 +347,7 @@ impl Checker<'_> {
                 break;
             };
             let (ty, body) = (ty.as_ref().clone(), body.as_ref().clone());
-            self.walk_arg("a local function", arg, Some(&ty), Some(&ty), false)?;
+            self.walk_arg("a local function", arg, Some(&ty), Some(&ty), false, None)?;
             let fv = self.enter(&Name::anon(), &ty, Some(arg));
             cur = body.instantiate(&fv);
             consumed += 1;
@@ -382,7 +382,7 @@ impl Checker<'_> {
             ("Pure.pure", [m, _, alpha, a]) => {
                 self.check_monad("Pure.pure", m)?;
                 let alpha = (*alpha).clone();
-                return self.walk_arg("Pure.pure", a, Some(&alpha), None, false);
+                return self.walk_arg("Pure.pure", a, Some(&alpha), None, false, None);
             }
             _ if is_monad_axiom(name) => {
                 return Err(self.refuse(format!(
@@ -407,7 +407,7 @@ impl Checker<'_> {
         };
         let declared = self.env.get_const(name).map(|info| info.type_.clone());
         let selector = is_branch_selector(self.env, name);
-        self.walk_args(&text, &ty, declared.as_ref(), args, selector)
+        self.walk_args(&text, &ty, declared.as_ref(), args, selector, None)
     }
 
     /// Walk the arguments of a call against the callee's type telescope.
@@ -421,10 +421,11 @@ impl Checker<'_> {
         declared: Option<&Expr>,
         args: &[&Expr],
         selector: bool,
+        applied_head: Option<&Expr>,
     ) -> Result<(), EagerIoRefusal> {
         let mut ty = Some(fn_ty.clone());
         let mut declared = declared.cloned();
-        for arg in args {
+        for (index, arg) in args.iter().enumerate() {
             let domain = match ty.take().and_then(|t| self.as_pi(&t)) {
                 Some((domain, body)) => {
                     ty = Some(body.instantiate(arg));
@@ -448,6 +449,7 @@ impl Checker<'_> {
                 domain.as_ref(),
                 declared_domain.as_ref(),
                 selector,
+                applied_head.map(|head| (head, index + 1)),
             )?;
         }
         Ok(())
@@ -470,11 +472,21 @@ impl Checker<'_> {
         domain: Option<&Expr>,
         declared: Option<&Expr>,
         selector: bool,
+        applied_at: Option<(&Expr, usize)>,
     ) -> Result<(), EagerIoRefusal> {
+        // Attach the site only to the argument that fails its own check. A
+        // failure inside the argument has its own callee and position.
+        let refuse = |reason: String| match applied_at {
+            Some((head, position)) => self.refuse(format!(
+                "{reason} (while checking argument {position} of {})",
+                applied_head_description(head)
+            )),
+            None => self.refuse(reason),
+        };
         let domain = match domain {
             Some(d) => d.clone(),
             None => self.tc().infer_type(arg).map_err(|err| {
-                self.refuse(format!(
+                refuse(format!(
                     "the audit could not type an argument of `{callee}` ({err})"
                 ))
             })?,
@@ -483,7 +495,7 @@ impl Checker<'_> {
             return Ok(());
         }
         if self.action_type(&domain) {
-            return Err(self.refuse(format!(
+            return Err(refuse(format!(
                 "an action is passed as an argument to `{callee}`, so it runs when the \
                  argument is evaluated instead of where `{callee}` uses it"
             )));
@@ -492,7 +504,7 @@ impl Checker<'_> {
             && self.action_returning(&domain)
             && !declared.is_some_and(|d| is_action_returning(self.env, d))
         {
-            return Err(self.refuse(format!(
+            return Err(refuse(format!(
                 "a function returning an action is passed to `{callee}`, whose parameter is not \
                  declared as one, so `{callee}` may apply it where nothing sequences the action"
             )));
@@ -528,6 +540,22 @@ impl Checker<'_> {
             op: op.to_string(),
             monad: m.to_string(),
         })
+    }
+}
+
+/// Describe the head retained by the fallback without expanding its body.
+fn applied_head_description(head: &Expr) -> String {
+    match head.kind() {
+        ExprKind::Proj(structure, index, _) => {
+            format!("projection `{structure}` field {index} (zero-based)")
+        }
+        ExprKind::Let(name, ..) => format!("let binding `{name}`"),
+        ExprKind::BVar(index) => format!("bound variable {index}"),
+        ExprKind::Sort(_) => "a sort".to_string(),
+        ExprKind::Pi(..) => "a forall expression".to_string(),
+        ExprKind::Lit(_) => "a literal".to_string(),
+        // The spine and walk_app handle the remaining core forms.
+        _ => "a non-core expression".to_string(),
     }
 }
 

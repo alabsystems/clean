@@ -1,0 +1,1359 @@
+{
+  "schema": "clean.self_proof_fleet_timeline.v1",
+  "events": [
+    {
+      "date": "2026-08-10",
+      "kind": "measurement",
+      "unit": "Crystal",
+      "summary": "The earlier Crystal route lowered and spliced the Rust Level::is_zero body into 28 instructions with a reproducible lineage digest. This measured one compiler path.",
+      "source": "docs/analysis/crystal-a0-a1-measured-2026-08-10.md"
+    },
+    {
+      "date": "2026-09-17",
+      "kind": "blocker",
+      "unit": "KR1",
+      "summary": "The import audit showed that the Rust check labelled full could check a target against unchecked dependencies already in its environment. A dependency-closed replay was needed to ground an authority claim.",
+      "source": "reports/2026-09-17-clean-authority-recheck-closure.md"
+    },
+    {
+      "date": "2026-10-15",
+      "kind": "decision",
+      "unit": "authority",
+      "summary": "Decision R29 selected a Lean-defined kcheck as the intended authority, with per-bound semantic soundness and independent rechecking. The fenced Rust kernel retained authority pending qualification. New Crystal chains on the kernel route stopped.",
+      "source": "docs/DECISIONS.md"
+    },
+    {
+      "date": "2026-10-26",
+      "kind": "wiring",
+      "unit": "KR1",
+      "summary": "Decision R161 made the fenced reference entry re-admit each reached inductive family in its forced theory, including positivity and universe checks. The tampered-lemma control also exited nonzero through the Clean binary.",
+      "source": "docs/DECISIONS.md"
+    },
+    {
+      "date": "2026-11-11",
+      "kind": "measurement",
+      "unit": "C3",
+      "summary": "The audit recorded a partial CIC_L typed core with 20 rules and 48 audited general theorems. At that checkpoint the executable kcheck, its semantic soundness theorem and shipped authority were still missing.",
+      "source": "docs/SELF_PROOF_AUDIT_2026-11-11.md"
+    },
+    {
+      "date": "2026-11-12",
+      "kind": "decision",
+      "unit": "authority",
+      "summary": "The adopted execution plan made clean-kernel an untrusted advice producer by design, set completeness relative to advice, and stopped the remaining Crystal work. It required artifact-backed compilation, licenses, authority, trusted rows and lineage.",
+      "source": "docs/plans/SELF_PROOF_EXECUTION_PLAN_2026-11-12.md"
+    },
+    {
+      "date": "2026-11-13",
+      "kind": "wiring",
+      "unit": "Q1",
+      "summary": "Clean wrote its in-memory terms as Lean NDJSON and replayed the CIC_L export through its fenced Rust reference entry and pinned Lean. The writer now supplied a common input for independent checkers.",
+      "source": "reports/self-proof-q1-2026-11-13/README.md"
+    },
+    {
+      "date": "2026-11-14",
+      "kind": "proof",
+      "unit": "C3",
+      "summary": "The bounded model interpreted the ten Eq, PUnit and Nat signature entries and their computation equations. The qualified model included a concrete equality derivation and refusals for an understated bound and an appended axiom of falsity.",
+      "source": "reports/m4-core-integration-2026-11-14/README.md"
+    },
+    {
+      "date": "2026-11-14",
+      "kind": "measurement",
+      "unit": "C3",
+      "summary": "Pinned Lean and the fenced Rust kernel rechecked the adopted C2 checker. The report counted 115 ground cases, 24 forged runs and 54 checker-definition pins.",
+      "source": "reports/c2-current-replay-2026-11-14/README.md"
+    },
+    {
+      "date": "2026-11-14",
+      "kind": "proof",
+      "unit": "C3",
+      "summary": "Commit 606edc2d07 assembled KCheck.CompleteSound.c3Owes at the specified type for the actual checker. The beta and unfolding proofs discharged the last head-law hypotheses of the five-member induction.",
+      "source": "theories/kcheck_labelled/KCheck/CompleteSound.lean"
+    },
+    {
+      "date": "2026-11-14",
+      "kind": "blocker",
+      "unit": "W1",
+      "summary": "At c5d6273bd7 the Clean census elaborated 5 of 127 theory modules, including zero of ten adopted-checker modules. Running KCheckLabelledMain.lean with --decl main exited 1 before execution at CICL.Level.bool_or_cases (unknown identifier or) and produced no stdout.",
+      "source": "reports/self-proof-elab/baseline.json"
+    },
+    {
+      "date": "2026-11-15",
+      "kind": "measurement",
+      "unit": "C3",
+      "summary": "The full C3 replay rechecked 2,406 subjects across 57 modules in pinned Lean and fenced Clean, with 325 named C3 proofs and corresponding False controls. The result establishes semantic soundness per bound under the specified base.",
+      "source": "reports/c3-complete-sound-2026-11-15/new-kernel-qualification/qualification.json"
+    },
+    {
+      "date": "2026-11-15",
+      "kind": "decision",
+      "unit": "W5",
+      "summary": "The owner prioritized W1–W5. The first production site must use a sealed checker verdict before new specification, model or checker families are widened.",
+      "source": "designs/2026-11-15-self-proof-wired-first.md"
+    },
+    {
+      "date": "2026-11-15",
+      "kind": "measurement",
+      "unit": "C4-C5",
+      "summary": "Improving the untrusted advice search raised the interim upstream-Lean replay from 9 to all 22 in-fragment declarations on the same 256-ordinary-declaration Prelude fixture. All 13 earlier misses had valid advice. Both coverage records report zero production decisions.",
+      "source": "reports/self-proof-interim-thread-2026-11-15/advice_search/README.md"
+    },
+    {
+      "date": "2026-11-15",
+      "kind": "blocker",
+      "unit": "W2",
+      "summary": "The Trust island probe for CICL.Level exited 1 on the prelude header, the Init import and the lemma reached through it. This measured one installed compiler and one module.",
+      "source": "reports/self-proof-island-probe-2026-11-15/README.md"
+    },
+    {
+      "date": "2026-11-16",
+      "kind": "decision",
+      "unit": "A",
+      "summary": "The amendment added a sixth in-fact condition. The Rust model functions in the deciding binary must refine the Lean model over compiler-bound bytes. D0 reopened the alignment lane under its declared scope.",
+      "source": "docs/plans/SELF_PROOF_EXECUTION_PLAN_2026-11-12.md"
+    },
+    {
+      "date": "2026-11-16",
+      "kind": "measurement",
+      "unit": "Q4",
+      "summary": "All four readers accepted the pinned CIC_L and Ax0-restricted Init subjects. Stock ck0 accepted all 57,418 Init declarations after previously refusing 3,220. Q4 remained red because Lean4Lean failed its arena and forged-input qualification.",
+      "source": "reports/self-proof-q4-ck0-2026-11-16/README.md"
+    },
+    {
+      "date": "2026-11-17",
+      "kind": "measurement",
+      "unit": "Q1",
+      "summary": "The single-root KCheck.CompleteSound.kcheck_sound export contained 4,402 records and 4,912 named declarations. Pinned Lean and fenced Clean admitted both original streams with propext and Quot.sound permitted.",
+      "source": "reports/self-proof-root-export-2026-11-17/README.md"
+    },
+    {
+      "date": "2026-11-17",
+      "kind": "blocker",
+      "unit": "self-admission-prefix",
+      "summary": "Direct KCheck.kcheckBytes replay accepted the initial Nat block then refused List on the upstream export. On the Clean export it refused the initial Iff block at line 55. Both runs stopped before the soundness theorem.",
+      "source": "reports/self-proof-root-export-2026-11-17/README.md"
+    },
+    {
+      "date": "2026-11-17",
+      "kind": "blocker",
+      "unit": "Q4",
+      "summary": "Stock ck0 admitted 4,906 of 4,912 declarations on each original soundness-proof stream. It exhausted its pinned budget at KCheck.conv_sound_step and five dependent declarations failed. The qualified Lean4Lean vote was unavailable.",
+      "source": "reports/self-proof-root-export-2026-11-17/README.md"
+    },
+    {
+      "date": "2026-11-17",
+      "kind": "measurement",
+      "unit": "C4-C5",
+      "summary": "Rebuilding the interim checker and replaying the recorded advice reproduced 22 of 22 in-fragment admissions among 256 ordinary declarations. The retained coverage evidence reports zero production decisions.",
+      "source": "data/kcheck_coverage.json"
+    },
+    {
+      "date": "2026-11-17",
+      "kind": "measurement",
+      "unit": "Q1",
+      "summary": "The corrected Clean export preserved source reducibility hints and ordered mutual names. Its revised dependency ordering retained 4,912 declarations, all admitted by pinned Lean and fenced Clean on the final babb0075 stream.",
+      "source": "reports/self-proof-root-export-2026-11-17/source-fidelity/README.md"
+    },
+    {
+      "date": "2026-11-17",
+      "kind": "blocker",
+      "unit": "self-admission-prefix",
+      "summary": "The adopted checker again refused Iff at line 55 on the corrected stream. All 3,151 bytes after the header in the first declaration prefix matched the earlier input, and the actual verdict was unchanged.",
+      "source": "reports/self-proof-root-export-2026-11-17/source-fidelity/README.md"
+    },
+    {
+      "date": "2026-11-17",
+      "kind": "wiring",
+      "unit": "CL-03",
+      "summary": "Clean exported a checked source file and replayed all 10 fixture declarations in a fresh fenced kernel. Swapping one theorem’s proof produced a TypeMismatch at that theorem. The full soundness-proof export retained its exact bytes.",
+      "source": "docs/DECISIONS.md#2026-11-17--export-the-declarations-registered-by-a-source-check"
+    },
+    {
+      "date": "2026-11-17",
+      "kind": "proof",
+      "unit": "W1",
+      "summary": "At b71adf4772, pinned Lean and leanchecker checked that the isolated decoder computes the reference UTF-8 result for every List UInt8, with propext as its sole axiom. Generated C and TrustCG matched three test inputs. The full adopted checker still needs a Clean source run with byte-exact output.",
+      "source": "reports/w1-uint8-native-2026-11-17/README.md#isolated-utf-8-decoder"
+    },
+    {
+      "date": "2026-11-17",
+      "kind": "measurement",
+      "unit": "W1",
+      "summary": "At c72b683711, generated C and the TrustCG object each matched pinned Lean on six inputs. Three used the shipped String-to-ByteArray bridge with empty text, all four UTF-8 widths and an embedded NUL. Clean source-checked 17 layout roots. Compiling the String source projection still refused at native-string-carrier. W1 still requires the full Clean source run of KCheckLabelledMain.lean with byte-exact output.",
+      "source": "reports/w1-uint8-native-2026-11-17/README.md#isolated-utf-8-decoder",
+      "source_revision": "c72b68371186c66ab0debdd8e2714877d3bab6c7",
+      "source_sha256": "e0ce5f5d0ade45527e47187659a94e4e60f7b46563e95b1e650dc2d47436fa8b",
+      "replay_source": "reports/w1-uint8-native-2026-11-17/decoder/replay.sh",
+      "replay_sha256": "0250dc1080610f3e4c3ccec40aa9b3e4b309decb98428b1a3d22e9a79111856d"
+    },
+    {
+      "date": "2026-11-17",
+      "kind": "proof",
+      "unit": "W1",
+      "summary": "At c08933d6cd, pinned Lean and fresh leanchecker checked that the reference decoder and the table decoder return the Unicode scalar values of every Lean String. The encoded witness uses propext and Quot.sound. The two String.toList corollaries also use Classical.choice. Changing a decoded character value failed the proof. Native execution evidence covers the measured inputs. W1 still requires Clean to run the complete adopted checker from source.",
+      "source": "reports/w1-uint8-native-2026-11-17/README.md#isolated-utf-8-decoder",
+      "source_revision": "c08933d6cd27e219f820c4bb797dea0af5de7fde",
+      "source_sha256": "ad60235618cba59d422e4fa7d9efee774dcfe821b406c06b277e4d9f18254bed",
+      "replay_source": "reports/w1-uint8-native-2026-11-17/decoder/replay.sh",
+      "replay_sha256": "0de22ce12d8a7349c8754309e7a42c57d0866c32aa72eb703e617ff54f9fe22a"
+    },
+    {
+      "date": "2026-11-17",
+      "kind": "blocker",
+      "unit": "Q4",
+      "summary": "In the fourth-member qualification experiment, a Lean4Lean renderer fix restored the expected type-mismatch refusals. A separate candidate patch accepted a proof of False on an arena control. Qualification stopped, and the unpatched upstream member retained its pin and remained unqualified.",
+      "source": "reports/self-proof-l4l-patched-2026-11-17/README.md"
+    },
+    {
+      "date": "2026-11-17",
+      "kind": "measurement",
+      "unit": "Q4",
+      "input_sha256": "babb0075273649e57cb3f0ec963c1f508e798f58998e0e7dcdb1b5616508c206",
+      "stock_result_sha256": "a1cdaa381b0484d6a4f68dbafb9a2ec15526118220f23889f3a3ffe24f1efafa",
+      "brief": "Stock ck0 admitted 4,906 of 4,912 names. Six refusals included the soundness theorem. Lean4Lean still lacks a qualified vote.",
+      "summary": "Stock ck0 admitted 4,906 of 4,912 names on the corrected proof export. KCheck.conv_sound_step exhausted its pinned budget, and five dependents were refused, including the root. Every per-name verdict matched the earlier Clean export. Lean4Lean still lacks a qualified vote.",
+      "source": "reports/self-proof-root-export-2026-11-17/source-fidelity/ck0/README.md"
+    },
+    {
+      "date": "2026-11-17",
+      "kind": "blocker",
+      "unit": "Q4",
+      "input_sha256": "babb0075273649e57cb3f0ec963c1f508e798f58998e0e7dcdb1b5616508c206",
+      "stock_result_sha256": "a1cdaa381b0484d6a4f68dbafb9a2ec15526118220f23889f3a3ffe24f1efafa",
+      "brief": "Inferring the proof body of KCheck.conv_sound_step used 2,096,959 of 2,097,152 steps. Two diagnostic runs reproduced every stock verdict.",
+      "summary": "Stock ck0 spent 2,096,959 of its 2,097,152 steps inferring the proof body of KCheck.conv_sound_step. A definitional-equality call requested one more step with zero remaining. Two observer runs reproduced the entire stock verdict stream. The independent member still admits 4,906 of 4,912 declarations.",
+      "source": "reports/self-proof-root-export-2026-11-17/source-fidelity/ck0/guard-attribution/README.md"
+    },
+    {
+      "date": "2026-11-17",
+      "kind": "blocker",
+      "unit": "Q4",
+      "input_sha256": "babb0075273649e57cb3f0ec963c1f508e798f58998e0e7dcdb1b5616508c206",
+      "stock_result_sha256": "a1cdaa381b0484d6a4f68dbafb9a2ec15526118220f23889f3a3ffe24f1efafa",
+      "brief": "Inferring the proof body of KCheck.conv_sound_step used 2,096,959 of 2,097,152 steps. The allowance ran out in the seventh token case, pi.",
+      "summary": "Stock ck0 completed six token cases before it ran out of steps inferring the seventh, pi. The remaining 15 cases were never entered. Two diagnostic replays matched every stock verdict and the prior guard trace. The completed const case consumed the most steps of any completed case.",
+      "source": "reports/self-proof-root-export-2026-11-17/source-fidelity/ck0/guard-attribution/branch-cost/README.md"
+    },
+    {
+      "date": "2026-11-17",
+      "kind": "measurement",
+      "unit": "PR-28",
+      "obligation": "Q4",
+      "baseline_input_sha256": "babb0075273649e57cb3f0ec963c1f508e798f58998e0e7dcdb1b5616508c206",
+      "input_sha256": "17e3501dbd8689e7a241227c1711df4b06b3edd6184353feb01af672c9284f62",
+      "result_sha256": "59c519e96c5b616551c20c8bc476a11895d167f0a6dfc447df857d83ecb6018a",
+      "brief": "Stock ck0 admitted all 4,913 candidate declarations, including the soundness theorem, at the same per-declaration step limit. Clean’s adopted checker still refused Iff.",
+      "summary": "Extracting the const case into one checked helper preserved the caller and root statements and their axiom closures. Stock ck0 went from 4,906 of 4,912 baseline admissions to 4,913 of 4,913 candidate admissions. Pinned Lean and fenced Clean also admitted the complete candidate. Both adopted-checker probes stopped at Iff.",
+      "source": "reports/self-proof-const-branch-trial/README.md"
+    },
+    {
+      "date": "2026-11-17",
+      "kind": "blocker",
+      "unit": "W6",
+      "obligation": "X3-X5",
+      "summary": "On genuine Init, pinned Lean and Clean 0.9.4's C backend printed the same 14 bytes for a single IO.println. TrustCG refused at link-demand because l_IO_println takes three pointers and the selected shim takes one. Sequencing two IO.println calls hit native-eager-io on both Clean backends before linking. These console probes ran in the clean-compiler-unvalidated lane with a C runtime and host cc. W6 still requires the original checker’s verdict bytes on the controlled compiler path.",
+      "source": "reports/self-proof-w6-console-2026-11-17/README.md",
+      "source_revision": "550b430cc9db12d8c40ff85ca4fcc62dfad34a13",
+      "source_sha256": "afda2ae96bfea17d251f6761c07c4a0cd36f05d9a8f23f6e9cc2e651ffaf3e06",
+      "clean_binary_revision": "ca8e256472eb00a8e4fdfa9d1e42401750d3273e",
+      "clean_binary_sha256": "d69dcdf02c7b06260fe437fa56bc1c9b3cc7fc19dd71f7650f3413241298902a"
+    },
+    {
+      "date": "2026-11-17",
+      "kind": "measurement",
+      "unit": "PR-29",
+      "obligation": "Q4",
+      "related_obligations": ["self-admission-prefix", "self-admission"],
+      "input_sha256": "17e3501dbd8689e7a241227c1711df4b06b3edd6184353feb01af672c9284f62",
+      "qualification_sha256": "f140a59ac24471a29d69e7e01c811aeeb5522f037fd67f2169e0a5dc1e0d2718",
+      "brief": "The current Clean proof reproduced the trial bytes. Pinned Lean, fenced Clean and stock ck0 admitted all 4,913 names and the soundness root. Clean’s adopted checker stopped at Iff.",
+      "summary": "PR-29 qualified the const-helper proof on Clean main. Lean, fenced Clean and stock ck0 admitted the root and all 4,913 names on PR-28’s bytes. Adopted kcheck refused Iff at line 55, with 0 of 4,403 records admitted. The fourth vote and compiled authority remain open.",
+      "source": "reports/self-proof-const-helper-adoption/README.md"
+    },
+    {
+      "date": "2026-11-17",
+      "kind": "measurement",
+      "unit": "PR-30",
+      "obligation": "self-admission-prefix",
+      "related_obligations": [
+        "self-admission"
+      ],
+      "input_sha256": "17e3501dbd8689e7a241227c1711df4b06b3edd6184353feb01af672c9284f62",
+      "historical_input_sha256": "d45ae797d16b41851542805f5fbc064b7fc6e3bfc6bfb03ebd2d449589466bba",
+      "qualification_sha256": "7aa075a504b3bcdc57e96f54cd8f2eca7e08f451ec9d3b41ad2d7abe1e37c1f1",
+      "source_revision": "434c489988450bba3ba4fc2bebb13872e47bd315",
+      "source_sha256": "954c77bf7e4ff47bd54380939ba52a9d0ef76dd578e19377936819feab6ebc3a",
+      "source": "reports/self-proof-prefix-measurement/README.md",
+      "brief": "Current Clean stopped at Iff before any receipt. The historical upstream export admitted the Nat block and stopped at List.",
+      "summary": "The ordered empty-advice runner issued 0 of 4,403 possible record receipts on the current Clean export, stopping at Iff at line 55. On the historical upstream export it issued one Nat receipt covering four names, then refused List at line 116. Ten controls and five comparisons qualified the measurement on those two different inputs."
+    },
+    {
+      "date": "2026-11-17",
+      "kind": "measurement",
+      "unit": "PR-31",
+      "obligation": "S2-S3",
+      "related_obligations": [
+        "self-admission"
+      ],
+      "input_sha256": "17e3501dbd8689e7a241227c1711df4b06b3edd6184353feb01af672c9284f62",
+      "qualification_sha256": "bfee94013a582c92258274c8fa036efd436297119e43b54e695f8e7ec681a6a9",
+      "source_revision": "19397daa48131bc0aa5845af4b6bb3c47cb95add",
+      "source_sha256": "29d52c4d49a45ba60b1a6fba550ec0d9dee7082bf426f964c0da3285cbce2d1a",
+      "source": "reports/self-proof-statement-dependencies/README.md",
+      "brief": "The unchanged root statement brings Iff, List and Quot into the current export through its specification and checker.",
+      "summary": "The wire export and a fresh pinned Lean build agreed on 13 distinct constant references from the soundness theorem’s type to Iff, List and Quot. The audit followed downstream types and values and never read the root proof body. Rewriting that final body alone leaves these three dependencies in the complete export."
+    },
+    {
+      "date": "2026-11-17",
+      "kind": "measurement",
+      "unit": "W1",
+      "brief": "Fenced Clean rechecked the Unicode decoder proofs and rejected both shifted-codepoint goals.",
+      "summary": "Fenced Clean rebuilt from c08933d6cd replayed the published 34a11f22a0 fixture after pinned Lean elaboration. The subject’s 3,582 admitted declarations included three Unicode-meaning theorem roots and the contract goals. Both original goals passed and both shifted-codepoint goals produced a kernel type mismatch. The replay exited 0. Its portable manifest and rebuilt executable have different digests from the earlier recorded run. W1 still requires Clean to run the complete adopted checker from source.",
+      "source_revision": "565e4e8fb3f84648ec216e83b74fd1c9ad7cccdb",
+      "source": "reports/w1-uint8-native-2026-11-17/decoder/fenced-portable-replay.txt",
+      "source_sha256": "8c1f338327863ae10e3615d0d75dad64feccdd3000de25abf31220490044d155",
+      "replay_revision": "34a11f22a01f19a1c5b3bb770fc488c9c8c0f2dd",
+      "replay_source": "reports/w1-uint8-native-2026-11-17/decoder/fenced-subject.json",
+      "replay_sha256": "53697dd3b76abbd4309c925ea6a3567cecc83b191896b0107d779fb50cdfd4f9",
+      "replayer_source_revision": "c08933d6cd27e219f820c4bb797dea0af5de7fde"
+    },
+    {
+      "date": "2026-11-17",
+      "kind": "measurement",
+      "unit": "W6",
+      "obligation": "X3-X5",
+      "related_obligations": [
+        "PR-32"
+      ],
+      "source_revision": "23d452bc8e2e6fdb889f893bfb2e3f67f987b9e0",
+      "source": "reports/self-proof-w6-console-2026-11-17/README.md",
+      "source_sha256": "e0efe3d54639eaf49a0d17448349845b3c45ff598b5776a3cab030d106b7008d",
+      "receipt_sha256": "b6e53a7c705abac896e9bb0f287c17b4ba73087f0957f84b12e48f0e93ff1fab",
+      "module_digest": "sha256:8cad5d46d6030637ff402b25cfd9a894621378156cca5850737e6c2a6925b425",
+      "clean_binary_revision": "0e4b67d04448c27b79abfed9aa4e1a0a12f6869c",
+      "clean_binary_sha256": "c6ed44f63af903e827756672a9dc4fabfaf7fcf4aaeb5aa1c98390cb943951af",
+      "brief": "TrustCG linked and ran genuine Init println on the same module that previously refused. Two-action sequencing still refuses.",
+      "summary": "PR-32 moved the genuine Init println module from link-demand to 14 stdout bytes matching pinned Lean. Genuine Unicode print, stderr and the bootstrap program also produced their expected child streams. Public object emission on the genuine signature and two-action sequencing still refused. Lowering was unvalidated and the executable used the C runtime. W6 integration supplies no production checker verdict."
+    },
+    {
+      "date": "2026-11-17",
+      "kind": "blocker",
+      "unit": "W2",
+      "related_obligations": ["PR-34"],
+      "source": "reports/self-proof-island-probe-2026-11-15/installed-2026-11-17.json",
+      "source_revision": "c6005f44246d1c8609ff6b9b149e4869d1ab220a",
+      "source_sha256": "4b4e215a8bcb5f430f9ae2108e018d2746943fbe7dd4ac09ad598b7559afbb97",
+      "brief": "Installed Trust recognizes prelude but refuses the module’s existing implicit Init environment.",
+      "summary": "Trust 0.14 refused the unchanged Level module with three diagnostics. The header requires a fresh environment, Init.Data.Nat.MinMax is unresolved, and the proof cannot find max_eq_left. A headerless identity theorem registered and emitted metadata. Its changed statement failed at type checking and emitted none. The three W2 gaps remain open."
+    },
+    {
+      "date": "2026-11-17",
+      "kind": "wiring",
+      "unit": "W1",
+      "related_obligations": [
+        "PR-33"
+      ],
+      "source": "reports/self-proof-elab/README.md",
+      "source_revision": "274119c2e6ed2e7093d47b766c8022a17505d7e2",
+      "brief": "The source census now separates legacy and adopted checker imports.",
+      "summary": "The previous runner combined both checkers and refused two unrelated KCheck/InferSound.lean files. The repaired runner matched all 440 ordered sources in their declared package closures. The adopted closure included 425 ordered files and its main. A real path collision within one closure still refused before any copy. This qualifies staging. Checker execution and the full census retain their own exit tests.",
+      "source_sha256": "4aa3dc28e362590b64cdb67def10a4b94b2be4a5fe64e69c341082f63fc3632a"
+    },
+    {
+      "date": "2026-11-17",
+      "kind": "blocker",
+      "unit": "Q4",
+      "source": "reports/self-proof-q4-reference-intake-2026-11-17/observation.json",
+      "source_revision": "2b6675b3fa3b213e6ca4366a310c73e97574d45a",
+      "brief": "The arena archive distinguishes an ordinary Lean kernel refusal from a Lean4Lean panic on identical bytes.",
+      "summary": "Official Lean 4.34.0 rejected the retained control with a kernel diagnostic and no panic. The pinned Lean4Lean run emitted a panic on the same bytes. The archive comparison executed zero kernels and contributed no fourth vote on the soundness root. The stopped candidate still requires a separate qualification decision.",
+      "source_sha256": "f63283fc3b6a05233994e3423a06897a6efa0ba36b8ccfcc70b89dc431f16d43"
+    },
+    {
+      "date": "2026-11-17",
+      "kind": "measurement",
+      "unit": "PR-36",
+      "obligation": "C4-C5",
+      "source": "reports/self-proof-prelude-native-advice/qualification.json",
+      "source_revision": "d66308e9a8bed37e54f753979d473cd22b3f79df",
+      "input_sha256": "d5b0062a92a82c626d0ba96108440ff6ba928e03ef74cd8709e648d71256cadf",
+      "brief": "Diagnostic native advice admitted 8 of the same 22 Prelude declarations admitted by searched advice.",
+      "summary": "The raw diagnostic advice stream stopped at the first nonempty outside frame. Preserving all in-fragment frames and clearing 197 outside frames gave eight admissions, eight direct refusals and six dependency refusals. Reciprocal one-frame swaps isolated Unit.unit and five dependent rows. Corrupted advice and a changed proof body both refused. The interim run made zero production decisions.",
+      "source_sha256": "67197c7b4b28589a4904831d45268b25854c91e63c246af5abc61b68ee6c9c5e"
+    },
+    {
+      "date": "2026-11-17",
+      "kind": "blocker",
+      "unit": "W1",
+      "related_obligations": [
+        "PR-33",
+        "PR-35"
+      ],
+      "source": "reports/self-proof-w1-current-execution-2026-11-17/entry/execution.json",
+      "source_revision": "6a75660ceb8cb076dbc9792ead255fee6e754237",
+      "brief": "A fresh Clean authority-profile binary ran the actual labelled main and produced zero of the expected 5,110 bytes.",
+      "summary": "Clean source 3bf3cf494e ran the original adopted checker from its four-package source closure and exited 1 in 27.042 seconds without a timeout. CICL.Level.bool_or_cases refused at the Boolean or notation. The same binary printed the correct Nat control and rejected the changed equality. The separate official intake on the earlier runner stopped at its package collision before a census.",
+      "source_sha256": "b9fa09d2f71a57656303a173427eeb10b306b9bf813733a059025ac49673984f"
+    },
+    {
+      "date": "2026-11-17",
+      "kind": "measurement",
+      "unit": "PR-37",
+      "obligation": "C4-C5",
+      "source": "reports/self-proof-prelude-candidate-wire/qualification.json",
+      "source_revision": "07b50334ee6975b9c26d81b084d4168955c65d37",
+      "source_sha256": "de10b65abfa743fcc79552f8b49906e74204e537de7d5f619cdf05f38b0f7d40",
+      "input_sha256": "d5b0062a92a82c626d0ba96108440ff6ba928e03ef74cd8709e648d71256cadf",
+      "brief": "Genuine native advice raised admissions from 8 to 21 of the same 22 Prelude declarations.",
+      "summary": "Every earlier admission was retained. Unit.unit and its five previously blocked dependants admitted. Nat.noConfusion was the sole refusal and its genuine candidate was empty. The default journal and the new candidate emitter preserved all 310 records. The interim checker refused a corrupted id token and a wrong optParam body."
+    },
+    {
+      "date": "2026-11-17",
+      "kind": "wiring",
+      "unit": "PR-38",
+      "obligation": "C4-C5",
+      "source": "reports/self-proof-prelude-advice-transport/qualification.json",
+      "source_revision": "b403dc2191ede826fd4391347993c8e525a1ef26",
+      "source_sha256": "06b29cd624ee9a590a4b6c6de2c6ef44668558ab411dacc2e4bc76e5e1ac41dc",
+      "input_sha256": "d5b0062a92a82c626d0ba96108440ff6ba928e03ef74cd8709e648d71256cadf",
+      "brief": "A fleet worker can now produce the advice file and replay it directly through the interim checker.",
+      "summary": "The producer cleared 97 nonempty frames outside the supported Prelude fragment and preserved all in-fragment native bytes. The unchanged interim checker reproduced the 21 admissions and one refusal byte for byte. It admitted all four in-fragment declarations on a separate 23-record Nat export. A changed emitter digest preserved the previous file. These runs made zero production decisions."
+    },
+    {
+      "date": "2026-11-17",
+      "kind": "blocker",
+      "unit": "PR-39",
+      "obligation": "C4-C5",
+      "source": "reports/self-proof-prelude-native-budget/registered-exit.json",
+      "source_revision": "ae6c8926b8d8800b4a3594479d7f8b527fb6e1e5",
+      "source_sha256": "8d7f19d98b6ddf3cc5212c8d9311725521b948a504c19727233b040b90f131b3",
+      "input_sha256": "d5b0062a92a82c626d0ba96108440ff6ba928e03ef74cd8709e648d71256cadf",
+      "brief": "Raising the native advice search budget to 3.2 million operations still left Nat.noConfusion without a candidate.",
+      "summary": "Seven bounded trials kept the native default at 21 of 22. At 100,000 operations the native search exhausted its budget in 0.650 seconds. At 3.2 million it completed in 18.029 seconds and identified a conversion it could not solve. The independently searched Nat.noConfusion frame admitted the 22nd declaration and both target-specific corruptions refused it. Cancellation preserved the earlier output file."
+    },
+    {
+      "date": "2026-11-17",
+      "kind": "wiring",
+      "unit": "PR-35",
+      "obligation": "W1",
+      "source": "reports/self-proof-bool-notation-2026-11-17/qualification.json",
+      "source_revision": "436efb1a14b94fe65ce3a5b3400f580d2c9f8f2e",
+      "brief": "Clean now accepts the original Boolean theorem that stopped the earlier checker-source run.",
+      "summary": "The corrected parser resolves Boolean notation to the qualified standard definitions. Source-matched Clean and pinned Lean agreed on all 18 cases, including six deliberately false proofs and legal shadowing. The isolated CICL.Level.bool_or_cases and its explicit spelling both passed. Three bootstrap controls and a focused parser test also passed. The complete checker entry has its own W1 execution gate.",
+      "source_sha256": "e99a498d77026d187bd6ec3228032be97190b257a21f132407de9df2e1914f00"
+    },
+    {
+      "date": "2026-11-17",
+      "kind": "proof",
+      "unit": "W6",
+      "source": "reports/self-proof-w6-console-2026-11-17/executable-prefix-independent-readback.json",
+      "source_revision": "f9cd86246656a87dd28d134d8ce0ccb9188ce410",
+      "brief": "Pinned Lean rechecked the executable byte-prefix test against the standard string instance used to count checker verdicts.",
+      "summary": "The comparison holds for every pair of strings. For a supplied pattern dictionary it requires equality with the standard instance. A fresh independent Lean kernel replay succeeded using propext, Classical.choice and Quot.sound. A changed claim that \"ab\" lacks prefix \"a\" refused. The source proof leaves the compiler’s dictionary binding and byte/string lowering gates open.",
+      "source_sha256": "b47c092f568e09e1684be1d7380ecb41462f4d1d62fd0f3416d8aceaf0ce0c98"
+    },
+    {
+      "date": "2026-11-17",
+      "kind": "measurement",
+      "unit": "PR-40",
+      "obligation": "C4-C5",
+      "source": "reports/self-proof-prelude-native-conversion/registered-exit.json",
+      "source_revision": "848b4a4dfe3dc291682807ade7152940344f3098",
+      "source_sha256": "ad9392269ea779062dd4e53ab87fbb48688bc03444a73c0283109e0bbe7a4f37",
+      "input_sha256": "d5b0062a92a82c626d0ba96108440ff6ba928e03ef74cd8709e648d71256cadf",
+      "brief": "Two typed beta reductions at byte 353 isolated the native search decision that lost Nat.noConfusion.",
+      "summary": "The two applied lambdas reduce to the same neutral term. On the genuine input, the native search spent its default budget comparing the lambda bodies before trying either top-level reduction. At a raised budget, further normalization reached a stuck Nat.rec. Either ordering of the independent 11-byte searched segment admitted the declaration through the unchanged checker. Five named negative controls refused. Genuine native emission is a separate package."
+    },
+    {
+      "date": "2026-11-17",
+      "kind": "blocker",
+      "unit": "PR-33",
+      "obligation": "W1",
+      "related_obligations": [
+        "PR-43"
+      ],
+      "source": "reports/self-proof-w1-current-execution-2026-11-17/post-notation/progress.json",
+      "source_revision": "7d70a10de7e514d7ba85e2755065c5d289e4d5a3",
+      "source_sha256": "e830c1162842b02798aba00b78ca48374e9c23f8be46e60bcdaa1e3ce88d275f",
+      "brief": "The adopted checker passed the earlier Boolean refusal and reached a universe nonzero theorem. Clean still emitted zero of 5,110 bytes.",
+      "summary": "Clean source 436efb1a14 ran the genuine checker entry in 29.826 seconds and refused CICL.Level.neverZero_semNonzero. The first complete checkpoint had two of 440 modules recorded and both elaborated. The full census and a separate diagnosis of the tactic proof remained in flight."
+    },
+    {
+      "date": "2026-11-17",
+      "kind": "measurement",
+      "unit": "PR-43",
+      "obligation": "W1",
+      "related_obligations": [
+        "PR-44",
+        "PR-45"
+      ],
+      "source": "reports/self-proof-w1-nonzero-elaboration/qualification.json",
+      "source_revision": "173fcf2695ea854bb9e6a033dd0e99e0cc07d5a0",
+      "source_sha256": "6ba8ceb8545603c9764dd2d7f47928187a8deda9318a0efca8a7e78a8e671e83",
+      "brief": "A one-binder change in the universe proof moved the checker entry to a different source refusal.",
+      "summary": "Pinned Lean accepted both complete universe modules. With the original binder the frozen Clean binary refused CICL.Level.neverZero_semNonzero. Renaming only its introduced equality proof advanced the temporary checker entry to CICL.Expr.mapLevels_comp. Both runs emitted zero of 5,110 bytes. The independent reduced controls identified the namespace collision in intro and preserved both wrong-proof refusals."
+    },
+    {
+      "date": "2026-11-17",
+      "kind": "measurement",
+      "unit": "PR-42",
+      "obligation": "C4-C5",
+      "source": "reports/self-proof-prelude-advice-transport/paired-beta/independent-transport.json",
+      "source_revision": "a50873c99135909e91f69f425423fc03b8da44d9",
+      "source_sha256": "0df5e7029eab068ad7b472e0ecb7534ae339041711eb79041e62604300def90f",
+      "input_sha256": "d5b0062a92a82c626d0ba96108440ff6ba928e03ef74cd8709e648d71256cadf",
+      "brief": "Genuine native advice now admits all 22 in-fragment Prelude declarations, including Nat.noConfusion.",
+      "summary": "An independent worker prepared and executed the candidate from producer 2534117513 at the original native budget. The unchanged interim checker admitted all 22 eligible Prelude declarations on the identical 310-record export and all four eligible declarations on a second 23-record export. The prepared bytes and complete transcripts are retained. Both were reproduced from the published inputs. These runs made zero production decisions."
+    },
+    {
+      "date": "2026-11-17",
+      "kind": "measurement",
+      "unit": "PR-45",
+      "obligation": "W1",
+      "related_obligations": [
+        "PR-46"
+      ],
+      "source": "reports/self-proof-w1-map-composition/qualification.json",
+      "source_revision": "80830e348855ec43938d0dd06a72755c90eae753",
+      "source_sha256": "a04f3bacbdd629baf294a94f81889cc770d86126bd8ed0af71c1204e143bdfa5",
+      "brief": "The next expression theorem is proved by both readers when its list-composition case is explicit. Clean loses the original simplification rule during matching.",
+      "summary": "The unchanged Expr module had 9 of 10 declarations in frozen Clean. Its original mapLevels_comp statement passed with an explicit proof of the const branch. A trace showed that the requested list lemma was indexed and tried, then failed in unification before proof validation. Of 28 controls, pinned Lean accepted 26 and Clean accepted 15. Both rejected the two deliberately false cases."
+    },
+    {
+      "date": "2026-11-17",
+      "kind": "measurement",
+      "unit": "PR-33",
+      "obligation": "W1",
+      "related_obligations": [
+        "PR-44",
+        "PR-46",
+        "PR-47"
+      ],
+      "source": "reports/self-proof-w1-current-execution-2026-11-17/post-notation/package-progress.json",
+      "source_revision": "36f1a9b3bfa2901cbe5fae9b8e94eeedcdbc2df0",
+      "source_sha256": "5e951595868eb3fcc297d50060dc8116cbfb418149d0ba519a452a51816e09b9",
+      "brief": "All 68 specification modules ran. Four elaborated and two named theorems accounted for the 64 first refusals.",
+      "summary": "In the genuine frozen 109-of-440 checkpoint the specification package recorded 61 first refusals naming mapLevels_comp and three naming neverZero_semNonzero. Of the 41 model modules then measured, 39 first named RawSet.related_refl and two first named mapLevels_comp. The adopted main still refused with zero of the expected 5,110 bytes."
+    },
+    {
+      "date": "2026-11-17",
+      "kind": "measurement",
+      "unit": "PR-47",
+      "obligation": "W1",
+      "related_obligations": [
+        "PR-48"
+      ],
+      "source": "reports/self-proof-w1-rawset-reflexivity/qualification.json",
+      "source_revision": "17674675b824cd34397fc53c49287ad629cdd9c8",
+      "brief": "An explicit recursor advances the same RawSets module from five to seven of 17 declarations.",
+      "summary": "Frozen Clean refused the original RawSet.related_refl induction proof. Pinned Lean and frozen Clean both accepted its unchanged statement with the genuine explicit RawSet recursor. Across 18 cases both rejected the three false proofs. The resulting frontend repair targets the missing pointwise hypothesis.",
+      "source_sha256": "409e8c122b56f8e9e5233e20a55402f4bcff55b0dd0ac1960024ae1dd055e1a2"
+    },
+    {
+      "date": "2026-11-17",
+      "kind": "measurement",
+      "unit": "PR-49",
+      "obligation": "C4-C5",
+      "source": "reports/self-proof-native-init-slice/qualification.json",
+      "source_revision": "ebcd7b02e06af91769becd428e2e6e43c450e3e9",
+      "brief": "Native advice admitted all 39 original declarations in the named Prelude and Core slice.",
+      "summary": "The native producer emitted 39 nonempty frames on 42 records. Pinned Lean rechecked all 49 contained names, with zero extra axioms, and compared every declaration equal to its resident environment. The unchanged interim checker refused two corrupted reductions and a wrong identity body. Compiled production decisions remain zero.",
+      "source_sha256": "30f458df5a9b8e0eee518c8996243f18ccc73b8060e0afc734a226343e6bc1d2"
+    },
+    {
+      "date": "2026-11-17",
+      "kind": "measurement",
+      "unit": "PR-52",
+      "obligation": "C4-C5",
+      "source": "reports/self-proof-native-level-shapes/observations.json",
+      "source_revision": "7797c62725ad06cbcb3ba97d02228afaea98c5ce",
+      "brief": "Three universe-level examples pass with specified advice. The native producer supplies no frame for any of them.",
+      "summary": "Identical raw declaration bytes reached pinned Lean and the interim checker. Lean refused all three named level examples. The checker accepted them with DEPTH 6, STOP, SORT and refused three empty native frames. Three corrected controls passed both readers. Both refused an ill-typed sort.",
+      "source_sha256": "8e091ae4b1883d17f8fd66e88afa100fbec40c645f441da9e679cc0183670169"
+    },
+    {
+      "date": "2026-11-17",
+      "kind": "measurement",
+      "unit": "PR-53",
+      "obligation": "C4-C5",
+      "source": "reports/self-proof-native-structure-eta/observations.json",
+      "source_revision": "73d216000a24587aa0a2dd9cb1b985c1b56ad789",
+      "brief": "The original Unit.ext reaches the checker and is refused. The original Prod.eta is excluded earlier because it cites Prod.",
+      "summary": "Lean accepted and matched both original exports. Unit.ext is in Init.Ext and reproduced the three historical advice refusals. The original Prod.eta from Init.Core cited the unsupported Prod family. The historical projection refusal was measured on a different term over PUnit. The module query also confirmed all 39 ordinary Init attributions.",
+      "source_sha256": "162e487e141977f58db870cb74462ca0bcc967ee2f0593c9b4652dc5c929e1bd"
+    },
+    {
+      "date": "2026-11-17",
+      "kind": "measurement",
+      "unit": "PR-48",
+      "obligation": "W1",
+      "source": "reports/self-proof-w1-current-execution-2026-11-17/README.md#an-isolated-model-fix-and-the-executable",
+      "source_revision": "8cb2b54c3638ab24cbf862ec886764e9727c8ec2",
+      "brief": "The original RawSets module gained three declarations, from 5 to 8 of 15. The same compiler stopped earlier in the executable, at eval_subst.",
+      "summary": "The source-built pointwise induction candidate elaborated the original related_refl theorem. The actual adopted entry refused eval_subst after 27.584 seconds and produced 0 of 5,110 bytes. The positive executable and false-theorem controls passed. The fleet qualification now requires the original 18-declaration Level module as well as the model gain.",
+      "source_sha256": "d564a3c426f9dc04bc352f0093142ee925d1ae47baa19a1dc75b9306b6dc8e8f"
+    },
+    {
+      "date": "2026-11-17",
+      "kind": "measurement",
+      "unit": "W3",
+      "measurement": "digest-library",
+      "source": "reports/w3-digest-library-2026-11-17/qualification.json",
+      "source_revision": "d1fcb93841ee1c00f8657feacea37cc5c4e32c74",
+      "source_sha256": "ea54b3ac0976ef7b75e6eb697ece9f79f46b0f6303cb83b743650ad865ef679e",
+      "brief": "The canonical meaning-digest library passed five source checks, including a consumer with test support disabled.",
+      "summary": "A normal dependency computed a digest from a kernel-checked definition. The qualification also passed seven constructed-environment controls, a Lean-built mutation test, a source-custody test, strict lint and formatting. The main-branch comparison preserved all 3,723 qualified source inputs and 175 pin and axiom-closure files byte for byte. Same-session checking of the adopted proof modules in Trust remains open."
+    },
+    {
+      "date": "2026-11-18",
+      "kind": "measurement",
+      "unit": "PR-54",
+      "source": "reports/c5-init-slice-2026-11-16/eta-module-qualification/qualification.json",
+      "source_revision": "945bea0b8b75530282ecce139c1cf9f10923e161",
+      "source_sha256": "1fd9fd0ce395733c484e805e1d46ea4f28fb79218be49da149468b4d0eff58ff",
+      "brief": "Fresh Lean and fenced Clean checked the corrected Init.Ext ownership of Unit.ext. The audited slice accepted 42 positives and rejected 12 forgeries.",
+      "summary": "The formal 59-row ledger records Unit.ext in Init.Ext and Prod.eta in Init.Core. Both engines rechecked the ledger and rejected swapped-owner controls. One declaration meaning changed among 400 pins. All 160 theorem statements and axiom closures stayed fixed. The qualified slice contains 39 ordinary declarations and three recognized base families. These results concern the slice.",
+      "obligation": "C4-C5"
+    },
+    {
+      "date": "2026-11-18",
+      "kind": "blocker",
+      "unit": "W6",
+      "source": "reports/self-proof-w6-console-2026-11-17/native_byte_prefix/object-validation.json",
+      "source_revision": "e22822c7b833ca7318bfdd0637e5fcc2109836f1",
+      "source_sha256": "a82ffe38677abf93a8f773565a8be12aea0636ba2e1a797223a2d23eb7ef163e",
+      "brief": "The byte-equality arithmetic is proved for every UInt8 pair. The installed backend still reports 22 machine instructions without proof on the equality object.",
+      "summary": "Pinned Lean rechecked the tagged arithmetic with propext and Quot.sound. Changing the low tag bit to zero failed the word and tag proofs. TrustCG 0.7.0 reproduced the two compatibility objects byte for byte and refused both under strict licensing. Proof-required emission on the equality object reported 22 uncovered instructions across 11 opcode kinds, beginning with AArch64::StpPreIndex. W6 still requires the original checker entry and its expected 5,110 bytes through the controlled compiler path."
+    },
+    {
+      "date": "2026-11-18",
+      "kind": "measurement",
+      "unit": "W1",
+      "related_obligations": [
+        "W3"
+      ],
+      "source": "reports/self-proof-w1-current-execution-2026-11-17/entry-imports/soundness-source.json.gz",
+      "source_revision": "23c89ed475a6419f072af9f0e71b4eb46ed07da7",
+      "source_sha256": "649222ac9412bfec6f35c8569e68c98c9454f8f104e2156f6b52680cdd78357e",
+      "brief": "The executable imports 28 local modules. The soundness proof imports 179. They share 27, and the proof reaches both Sets and RawSets.",
+      "summary": "Pinned Lean traced source headers at the frozen census revision and the combined frontend candidate. The two runs agreed on all source digests and edges. The executable has 11 labelled-checker imports, six specification imports and 11 CIC_L imports. The proof source has 179 imports, including 66 model modules. KCheck.CheckerCases is the only executable library module outside the proof path. The two census views preserve their original verdicts. Literal self-admission and compiled authority remain separate gates."
+    },
+    {
+      "date": "2026-11-18",
+      "kind": "measurement",
+      "unit": "PR-33",
+      "obligation": "W1",
+      "related_obligations": [
+        "W3"
+      ],
+      "source": "reports/self-proof-w1-current-execution-2026-11-17/entry-imports/census-scopes.json",
+      "source_revision": "6f8e81e4f05a95570f51557bcb2b80923ceb45ea",
+      "source_sha256": "26b1e5fcc8335ecf92573cde619f40d32a6d310f6d5ede566dd5befb09c91d1f",
+      "brief": "Frozen Clean elaborated 3 of 28 executable imports and 3 of 180 proof-source modules. Its actual checker entry emitted 0 of 5,110 expected bytes.",
+      "summary": "All 440 modules were measured. Five elaborated, 435 refused and none timed out. Of 177 soundness-source refusals, 174 first named RawSet.related_refl, Level.neverZero_semNonzero or Expr.mapLevels_comp. The unchanged CompleteSound module and actual checker entry both stopped in LevelDecide. These counts measure frozen compiler 436efb1a14. The literal proof replay and production authority retain their own evidence."
+    },
+    {
+      "date": "2026-11-18",
+      "kind": "measurement",
+      "unit": "PR-50",
+      "obligation": "W1",
+      "source": "reports/self-proof-w1-current-execution-2026-11-17/joined-entry.json",
+      "source_revision": "819ac9e63a5721b35703f871724e87379c8623d5",
+      "source_sha256": "64c9f1130d0ed0ecde530a0877a99b708d4e59ef3caed318c1c41c4be73d622f",
+      "brief": "The combined compiler passed the earlier Level and Expr failures on the original checker entry. Its next refusal is in the Eq family proof.",
+      "summary": "On compiler ba5e993738 the genuine checker entry ran 94.393 seconds, exited 1 in CICL.BaseFamilies.Eq.declarations_levelScoped and emitted 0 of 5,110 expected bytes. The all_goals exact step found a Nat.le versus CICL.Level.rec mismatch. A real Nat executable returned 2 and the wrong equality was refused. PR-50 retains this frontier."
+    },
+    {
+      "date": "2026-11-18",
+      "kind": "measurement",
+      "unit": "W1",
+      "source": "reports/self-proof-w1-current-execution-2026-11-17/entry-imports/joined-library-comparison.json",
+      "source_revision": "131b9573dfe85c33c9d12309d17fbddb4b5a6535",
+      "source_sha256": "b1d0fddfa82801b24a0a0d202090d0576d8c7b4a6f606e7c4aaf585c7eb99fa1",
+      "brief": "Clean elaborated 7 of the same 28 original checker imports, up from 3. The real checker entry reached the Eq proof.",
+      "summary": "Declaration, Expr, LevelDecide and Substitution now elaborate on the source-built ba5e993738 compiler. Every former pass remained. Twenty-one original modules refused and none timed out. Seventeen first refused the same Eq-family proof. The independent checker-entry process still emitted zero of 5,110 bytes. The frozen proof-source census and literal self-admission have separate subjects."
+    },
+    {
+      "date": "2026-11-18",
+      "kind": "measurement",
+      "unit": "PR-50",
+      "obligation": "W1",
+      "source": "reports/self-proof-w1-repeat-goals/qualified-6cb439.json",
+      "source_revision": "f1401ec92357a9a422376562504ae8312a7f5d7b",
+      "source_sha256": "5907a43d5d081bee37f7d07628f1e3060ecfc5527d3faf762cca731bd2463693",
+      "brief": "Clean and pinned Lean admitted all 36 original Eq-family declarations. The combined Clean compiler also matched all 14 repetition controls.",
+      "summary": "The unchanged Eq source includes declarations_levelScoped and recType_ne_type. Twelve tactic controls passed and two intentionally impossible tactics refused. The unchanged checker entry then reached the named Metadata argument in QuotientSyntax.type_closed."
+    },
+    {
+      "date": "2026-11-18",
+      "kind": "measurement",
+      "unit": "PR-58",
+      "obligation": "W1",
+      "source": "reports/self-proof-w1-quotient-induction/joined/registered-checks.json",
+      "source_revision": "ab5d951f73840daeac9a3ff8f36f0bf1f5e7c743",
+      "source_sha256": "411457d9a17daa82bbff71ca90a73e5a46e84a22ebe37af8df55d55299fc4497",
+      "brief": "Clean checked all seven declarations through the original SetValue.ext proof, up from six. All thirteen eliminator tests passed.",
+      "summary": "Both nested quotient inductions now elaborate on the original closed type abbreviation. Seven wrong bodies continued to refuse across the thirty-source comparison. A separate polymorphic change case still refuses. The registered original-source check and all thirteen affected Rust tests completed."
+    },
+    {
+      "date": "2026-11-18",
+      "kind": "measurement",
+      "unit": "PR-59",
+      "obligation": "W1",
+      "source": "reports/self-proof-w1-token-indexing/pr59/qualification.json",
+      "source_revision": "a9488f38a6bf19499b95d0e204d3667d75d6193b",
+      "source_sha256": "54f1cf0b2fb28c0e4a760f2ee5f0ae2c4f844e5dbbeff7e4ca49e194d9d436fa",
+      "brief": "The original Token module moved from 9 to 12 of 16 declarations. The unedited byte decoder now checks.",
+      "summary": "The prefix through KCheck.readNat moved from two to three of three. Nineteen paired sources exercised checked indexing and deliberately incorrect terms. The remaining four declarations use List.flatMap or ByteArray.extract. PR-61 and PR-62 each own one pair."
+    },
+    {
+      "date": "2026-11-18",
+      "kind": "measurement",
+      "unit": "PR-60",
+      "obligation": "W1",
+      "source": "reports/self-proof-w1-current-execution-2026-11-17/second-entry.json",
+      "source_revision": "fa07eb31e65370baf351e0c83abb54d3c9ff8552",
+      "source_sha256": "4114c632244146581deaaf5ae4cb5ab53d168795682aa2dd12928d90ef4f5b56",
+      "brief": "The unchanged checker entry passed the Eq-family proof and reached the named Metadata argument in QuotientSyntax.type_closed. It emitted 0 of 5,110 bytes.",
+      "summary": "On compiler 6cb439141b61 the original checker entry exited 1 after 110.140 seconds. The four package trees, entry, pinned Lean SDK, prelude and expected output agree with the previous Eq refusal. The Nat executable returned 2 and the false equality was refused. PR-60 owns this ordinary source elaboration failure."
+    },
+    {
+      "date": "2026-11-18",
+      "kind": "measurement",
+      "unit": "PR-60",
+      "obligation": "W1",
+      "source": "reports/self-proof-w1-named-field-arguments/integration/qualification.json",
+      "source_revision": "d8d7ccacdb7e7789e0b415113109f4da685f76f7",
+      "source_sha256": "6a7a769ec0088b8d87a9371bf10653f9edeaf11f4acac83c20bc6e4ce752104b",
+      "brief": "The ordinary compiler now checks all 25 original declarations through QuotientSyntax.type_closed, up from 24. All eight field-argument controls match pinned Lean.",
+      "summary": "The same check accepts direct, dotted, parenthesized and inferred fields. Unknown and duplicate arguments, an incorrectly typed argument and a false equality refuse at their intended checks. An independent suite of 31 additional source expectations confirms the earlier receiver reversal is corrected."
+    },
+    {
+      "date": "2026-11-18",
+      "kind": "measurement",
+      "unit": "PR-60",
+      "obligation": "W1",
+      "source": "reports/self-proof-w1-current-execution-2026-11-17/third-entry.json",
+      "source_revision": "241eebf7630aad33b051d2d004ec07712451346a",
+      "source_sha256": "dc6a16f3d1b208b4321e48c0081d1f4b5b8fd8b6e73c57af488b71b39e130f7e",
+      "brief": "The corrected compiler emitted 0 of 5,110 expected bytes before the unchanged 120-second checker timeout.",
+      "summary": "The process reached the 120-second cap after 120.051 seconds and returned no verdict on the entry. The fixture, four theory trees and pinned SDK agree with the prior 110.140-second QuotientSyntax refusal. The Nat control returned 2 and the planted false equality was refused."
+    },
+    {
+      "date": "2026-11-18",
+      "kind": "blocker",
+      "unit": "PR-63",
+      "obligation": "W1",
+      "source": "reports/self-proof-w1-current-execution-2026-11-17/third-entry-diagnostic.json",
+      "source_revision": "e428b26f3db5494c9a21ccc3483098ad160a1f16",
+      "source_sha256": "3209a457ef0026d4314c351c34960cae6cb8eeae54008db974f9786e39f8d3fa",
+      "brief": "A longer diagnostic reached QuotientSyntax.Packet. Checked structure registration rejected a free variable after 140.479 seconds. The checker emitted 0 of 5,110 bytes.",
+      "summary": "The original 120-second series timed out. The same compiler, SDK, four original theory trees and output fixture were used with a 600-second diagnostic cap. The process exited 1 at CICL.QuotientSyntax.Packet with free variable 0 in the declaration. Nat returned 2 and the false equality was refused. PR-63 targets source elaboration and checked registration for this parameterized structure."
+    },
+    {
+      "date": "2026-11-18",
+      "kind": "measurement",
+      "unit": "PR-63",
+      "obligation": "W1",
+      "source": "reports/self-proof-w1-quotient-packet/qualification.json",
+      "source_revision": "086ada7722a9830db7970e454c6d6fbc8db85b44",
+      "source_sha256": "69175d9ee9628d88e8aa6ebe43f54865626357a381cda459d9c912c927c85e89",
+      "brief": "Clean registered the original six-field quotient Packet. The unchanged prefix moved from 29 to 30 of 30 declarations.",
+      "summary": "The repaired frontend binds the enclosing variables the structure and its constructor use. Clean and pinned Lean admitted all five valid small controls and refused the malformed field and changed equality. All six local imports matched the baseline. Ambient mutual recursion remains open."
+    },
+    {
+      "date": "2026-11-18",
+      "kind": "blocker",
+      "unit": "PR-64",
+      "obligation": "W1",
+      "source": "reports/self-proof-w1-current-execution-2026-11-17/fourth-entry-diagnostic.json",
+      "source_revision": "8001220e4281b9f057686ad52560f4b2c650169b",
+      "source_sha256": "44d357923cf7cb5a929ac2cd62ff5e39ca9a4cd3db2897eb4b9a2780f9524c37",
+      "brief": "The original checker entry advanced beyond Packet to mapLevels_respectExpr. Its rewrite refused after 145.029 seconds, with 0 of 5,110 expected bytes.",
+      "summary": "The standard 120-second execution timed out. The same source-built compiler on the same unmodified theory and SDK exited 1 under the separate 600-second cap. The named mapLevels_respectTemplate rewrite reported no matching term. Both ordinary controls completed. PR-64 owns the next source diagnosis."
+    },
+    {
+      "date": "2026-11-18",
+      "kind": "measurement",
+      "unit": "W1",
+      "source": "reports/self-proof-w1-current-execution-2026-11-17/entry-imports/named-field-library-comparison.json",
+      "source_revision": "a42e5f5364534fe67a3a60370764b616fd763708",
+      "source_sha256": "941aad04caa793a9f9615b3d15c70e7466a08ff23b405ae59dfb98aab5f44dac",
+      "brief": "Clean elaborated 8 of the same 28 checker imports, up from 7 and originally 3. Five refused and fifteen timed out.",
+      "summary": "On source 70853956d651, eight of the same 28 original modules elaborated, five refused, and fifteen timed out at the 120-second process limit. All seven previous passes held and CICL/PrimitiveEqLiterals.lean newly elaborated. The earlier totals were three and seven. Literal self-admission has its own input and measurement."
+    },
+    {
+      "date": "2026-11-18",
+      "kind": "measurement",
+      "unit": "PR-64",
+      "obligation": "W1",
+      "source": "reports/self-proof-w1-map-levels-respect/README.md",
+      "source_revision": "65cb1e107f16cdb272708c9708b640308839fb09",
+      "source_sha256": "d9a9bffe296ed74560c4db738ec7a76d9d9ed930899704228f74a5f7b8d3dc02",
+      "brief": "Clean admitted 48 of 49 original declarations. The generic rewrite refused. Giving its arguments explicitly admitted the complete proof.",
+      "summary": "Pinned Lean admitted all 49 original declarations. Splitting the two rewrites still failed on Clean. Both checkers rejected a false body for the same proposition and a false indexed equality. The independent nested example reproduced the difference. Identify the internal cause, qualify the unchanged proof and re-run the full entry."
+    },
+    {
+      "date": "2026-11-18",
+      "kind": "measurement",
+      "unit": "W4",
+      "source": "reports/self-proof-native-proof-prefix/qualification.json",
+      "source_revision": "b27ede86f6bf0aae3e61558856e05e78d9fd4539",
+      "source_sha256": "9354bb0e420e541784ec18bf5b1a19aee0b95da6903323bc642691a026ba7d85",
+      "brief": "Native advice admitted Eq.ndrec, rfl and Eq.symm among the first 24 proof-stream records. Clearing the last frame made Eq.symm refuse.",
+      "summary": "The interim loader classified twenty initial records outside its fragment, beginning with Iff. It recognised Eq and the checker admitted all three ordinary in-fragment declarations. The negative kept the export identical and the first 23 outcomes held. The separate strict result remains zero consecutive admissions and this measurement credits no production decisions."
+    },
+    {
+      "date": "2026-11-18",
+      "kind": "measurement",
+      "unit": "Q4",
+      "summary": "The corrected Lean4Lean member qualifies all 193 original arena cases with zero crashes or wrong verdicts. At frozen source 6196c31005, all four members accept the unchanged soundness root with 4,913 names and, separately, original CIC_L with 3,491 names and Ax0 Init with 57,418. Every named control refuses. Latest Main input freshness remains separately qualified; authority and self-admission limits remain.",
+      "source": "reports/self-proof-q4-corrected-reference-2026-11-18/README.md"
+    },
+    {
+      "date": "2026-11-18",
+      "kind": "measurement",
+      "unit": "Q4",
+      "source": "reports/self-proof-q4-corrected-reference-2026-11-18/root/replay.json",
+      "source_revision": "b44ca88b93a496d30ee66212e0dc2ba0498abb3a",
+      "source_sha256": "6d91b4c7f9c62ba56c66a2603428fb596780bd7a7ae1882520c6f2e8f813b5af",
+      "brief": "All four independent recheckers accepted the unchanged 4,913-name soundness export at source 6196c31005. The adopted checker still refused Iff.",
+      "summary": "Qualified Lean4Lean joined pinned Lean, fenced Clean and stock ck0 on identical bytes. Its member count is 4,400 under its own declaration convention. The three named controls refused under the runner policy. This records a frozen source epoch. The later join changed 23 declared inputs and requires its own replay."
+    },
+    {
+      "date": "2026-11-18",
+      "kind": "measurement",
+      "unit": "PR-64",
+      "obligation": "W1",
+      "source": "reports/self-proof-w1-map-levels-respect/qualification.json",
+      "source_revision": "abc5bcadbccad7c377f54d735c44855555ad039a",
+      "source_sha256": "d3acd4aced4c8540d989aa8a0ec7cbe261bd7225a289feaf623de9333d619687",
+      "brief": "Clean now checks all 49 original declarations through mapLevels_respectExpr, up from 48. Both deliberately false proofs still refuse.",
+      "summary": "The ordinary source frontend consumes only the positional binders generated for a supplied dotted receiver. Pinned Lean agreed on all 49 declarations. Both controlled comparisons passed their registered exits. PR-65 tracks the separate grouped-target tactic-parity suite."
+    },
+    {
+      "date": "2026-11-18",
+      "kind": "blocker",
+      "unit": "PR-66",
+      "obligation": "W1",
+      "source": "reports/self-proof-w1-current-execution-2026-11-17/fifth-entry-diagnostic.json",
+      "source_revision": "a8e7584ba54ce85342bf0adabd45fd03cb850ba8",
+      "source_sha256": "897a047c633181aa471abf199cc94eae604a85dd6bfa51eba53f3086c0029e37",
+      "brief": "The full checker got past the quotient rewrite and refused an inconsistent import of type_levelScoped after 217.594 seconds. It emitted 0 of 5,110 bytes.",
+      "summary": "The four original package trees, source entry, SDK and expected bytes were unchanged. The standard 120-second test timed out. The distinct 600-second diagnostic exited 1 at the source-import consistency gate. The positive Nat and false theorem controls retained their verdicts."
+    },
+    {
+      "date": "2026-11-18",
+      "kind": "measurement",
+      "unit": "Q4",
+      "source": "reports/self-proof-q4-corrected-reference-2026-11-18/main-362fac/root/replay.json",
+      "source_revision": "5c00902a6e8b389a531df374c1f8f1c3de61070a",
+      "source_sha256": "c389f15600fc849b8bfacccb0fc8f981548c21641f03812ac4058b69c264132a",
+      "input_sha256": "17e3501dbd8689e7a241227c1711df4b06b3edd6184353feb01af672c9284f62",
+      "brief": "All four recheckers again accepted the same 4,913-name proof export at frozen source cfaa8ca036. The adopted checker’s first refusal was Iff.",
+      "summary": "The root replay at cfaa8ca03633f881564c8c7e776553db039565f2 used the same proof bytes as the earlier 6196c310 replay. The Lean4Lean qualification exited 0 and all four members refused the extra axiom, ill-typed body and forged recursor controls."
+    },
+    {
+      "date": "2026-11-18",
+      "kind": "blocker",
+      "unit": "Q4",
+      "source": "reports/self-proof-q4-corrected-reference-2026-11-18/publication/final-main/publication-source-comparison.json",
+      "source_revision": "5c00902a6e8b389a531df374c1f8f1c3de61070a",
+      "source_sha256": "7f1f20332ce562e7c88261ee7f854dc4cb621b4ced08debe4343a214d1043ff3",
+      "summary": "The final publication comparison against bc746eb09a found 17 changed global inputs since the cfaa8ca036 root and standing replays. The current-source record check refused stale inputs. A fresh quorum claim requires replay over the joined input set."
+    },
+    {
+      "date": "2026-11-18",
+      "kind": "measurement",
+      "unit": "PR-61",
+      "obligation": "W1",
+      "source": "reports/self-proof-w1-token-followups/joined/qualification.json",
+      "source_revision": "51a1142c772cd72a7357bca77a9b098999d0fac6",
+      "source_sha256": "5abba30ec4e1c3305b2fbc077a4c7d2b55cc4192cfbd0e31db0472e27fa74ba0",
+      "brief": "The original Token module advanced from 12 to 14 of 16 declarations. Both encoders passed and both wrong proofs refused.",
+      "summary": "Clean and pinned Lean checked the ordered encoding laws. The joined compiler also retained all 49 declarations through the original quotient rewrite. The two remaining Token refusals are the frame splitter and its dependent declaration, under PR-62."
+    },
+    {
+      "date": "2026-11-18",
+      "kind": "measurement",
+      "unit": "PR-67",
+      "obligation": "W4",
+      "source": "reports/self-proof-native-proof-prefix/matcher/qualification.json",
+      "source_revision": "6397ebc8522763dbb85223531203b239257f1bb0",
+      "source_sha256": "0fbd1865f2e1c5734a14d175a1e12638dbe78deb659b0033f5cb0543e2a5790f",
+      "qualification_sha256": "0fbd1865f2e1c5734a14d175a1e12638dbe78deb659b0033f5cb0543e2a5790f",
+      "input_sha256": "17e3501dbd8689e7a241227c1711df4b06b3edd6184353feb01af672c9284f62",
+      "brief": "The interim checker admitted nine ordinary declarations in the first 87 proof records, including Nat.ble.match_1. Clearing only its advice made the matcher refuse.",
+      "summary": "Three base families were recognised and 75 records were outside the fragment. All 24 earlier rows and frames matched the previous experiment. The final matcher used one universe parameter and a 240-byte frame. No production verdict or consecutive self-admission was credited."
+    },
+    {
+      "date": "2026-11-18",
+      "kind": "measurement",
+      "unit": "PR-65",
+      "obligation": "W1",
+      "source": "reports/self-proof-w1-map-levels-respect/grouped-target/qualification.json",
+      "source_revision": "539d72f39d544d772f3153687f89ead66abd8813",
+      "source_sha256": "4c5fe3b546bbd005b7b08fac0b45b3eaf3f5d71ce22844321ea6f18f687d227d",
+      "brief": "Grouped rewrites moved from 13 to 19 of 19 required source outcomes. The full checker still refused the same import and emitted 0 of 5,110 bytes.",
+      "summary": "The ordinary compiler matched all 19 source outcomes and retained both false-equality refusals, the original 49/49 quotient declarations and 14/16 Token declarations. The independent rule, binder and let controls agreed with pinned Lean. Before and after, the same complete entry reported CICL.QuotientSyntax.type_levelScoped disagreed with its own import closure. Both Nat controls printed 2 and both false arithmetic proofs refused. PR-66 owns that remaining entry failure."
+    },
+    {
+      "date": "2026-11-18",
+      "kind": "measurement",
+      "unit": "PR-68",
+      "obligation": "W1",
+      "source": "reports/self-proof-w1-psigma-source/before.json.gz",
+      "source_revision": "4a798c4b64e9f6963aed9a3ca18445c8e36c47cc",
+      "source_sha256": "fe433d38e4939d45a298855adfdb45780d5afca83b15b7972dc904ec9c6146ec",
+      "brief": "The original PSigma syntax module passed 15 of 28 named declarations in Clean. Writing 0 and 1 explicitly made its first refused theorem pass.",
+      "summary": "Pinned Lean passed every original declaration. Clean reported 13 theorem refusals and separately refused the line-20 universe command, giving 15 of 29 CLI rows. Both compilers refused the deliberately wrong proof. PR-69 owns elaborating the original change tactic against its focused target."
+    },
+    {
+      "date": "2026-11-18",
+      "kind": "measurement",
+      "unit": "PR-70",
+      "obligation": "W3",
+      "source": "reports/self-proof-w3-advice-start/qualification.json",
+      "source_revision": "8caecd5cbddd8c8b2f82a88f49bafb03b2e3c783",
+      "source_sha256": "567366ca1e19d592184b7b3c4bbb5d4a84c9d4e5968ffabe4cb97d2418f8424e",
+      "brief": "One original checker definition matches its adopted pin. Both type and body agree under kernel definitional equality.",
+      "summary": "Clean elaborated the original KCheck.Advice.start. Its type and body are definitionally equal to the upstream resident, and its adopted C2 definition pin matches. The altered result and extra argument both miss the pin. Canonical W3 checking in the Trust compiler remains open."
+    },
+    {
+      "date": "2026-11-18",
+      "kind": "measurement",
+      "unit": "PR-69",
+      "obligation": "W1",
+      "source": "reports/self-proof-w1-psigma-source/after.json.gz",
+      "source_revision": "e11fa6353771f115821ae1d2e0929ea7327f910b",
+      "source_sha256": "522fd71215605d896f5e904665bf672432e07da7b33c7e383f7fa4713c0c84b8",
+      "brief": "Seven original proofs now pass. The PSigma syntax module advanced from 15 to 22 of 28 names, with six refusals rooted at one list-membership helper.",
+      "summary": "Clean and pinned Lean agree on the original familyType_closed proof, the equivalent explicit bound and the deliberate wrong proof. Clean accepted 22 of 28 named declarations in the original module, and the separate section command still refused. The first case-binder diagnostic and five direct callers account for the six named refusals."
+    },
+    {
+      "date": "2026-11-18",
+      "kind": "blocker",
+      "unit": "PR-72",
+      "obligation": "W1",
+      "source": "reports/self-proof-w1-psigma-source/case-binders/qualification.json",
+      "source_revision": "51ff9448ba26556acf8c3b9daee99f4ebefda4b6",
+      "source_sha256": "dece7425cab87e1f5f85870bbff37df047fd47353dbeb274a13ecb04713086f4",
+      "brief": "The original list-membership proof passes pinned Lean and fails Clean. Dropping its first case argument reverses those outcomes. Five more theorems depend on this helper.",
+      "summary": "The original two nested List.Mem.tail alternatives give two source names. Clean reports one case binder. Replacing the wildcard with a name preserves both outcomes, while deleting it makes Clean accept and pinned Lean refuse the missing membership hypothesis. Both reject the changed head proof. The remaining five named module failures report the missing helper."
+    },
+    {
+      "date": "2026-11-18",
+      "kind": "measurement",
+      "unit": "PR-62",
+      "obligation": "W1",
+      "source": "reports/self-proof-w1-token-followups/extract-source-2026-11-18/main-708f/joined-original-counts.json",
+      "source_revision": "c561df0b827808fbe0f45608dfe106a8249d3d7f",
+      "source_sha256": "77ee2fae528517fcae336332381771ed4526febf704ec380df5b9b4b2b76f178",
+      "brief": "Clean checked all sixteen original Token declarations.",
+      "summary": "The frame splitter and its recursive helper joined the two encoders. Both retained source runs accept all 16 declarations, 20 with the frame laws and 18 with the encoding laws. Clean and pinned Lean reject all four changed proofs. Full checker execution has its own gate."
+    },
+    {
+      "date": "2026-11-18",
+      "kind": "measurement",
+      "unit": "PR-73",
+      "obligation": "W1",
+      "source": "reports/self-proof-w1-psigma-source/case-binders/after/qualification.json",
+      "source_revision": "12dcb61f074cb655b11276c800d1b1f0476875df",
+      "source_sha256": "40b2be7a1f11ed03d937e48aad9354426310fb4ee59111daec5550dd33ef227d",
+      "brief": "All 28 original PSigma syntax declarations now pass. A separately counted section command still refuses.",
+      "summary": "Restoring the indexed constructor positions recovered levels_scoped and five callers. Both readers accept the original two-position spelling and refuse both wrong variants. The full 426-source entry again produced zero of 5,110 bytes and identified the original quotient import discrepancy after 251.953 seconds."
+    },
+    {
+      "date": "2026-11-18",
+      "kind": "measurement",
+      "unit": "PR-70",
+      "obligation": "W3",
+      "source": "reports/self-proof-w3-advice-start/canonical/qualification.json",
+      "source_revision": "505dde6065ad38395d848f69860a49e062458b1d",
+      "source_sha256": "d18f4afa04517d25c3edffc8c4dda8ca6a98cc0feccc4c80b55c783f21e2c26b",
+      "brief": "Advice.start matches under kernel equality. Its canonical digest differs at the stored definition height.",
+      "summary": "The production digest library examined the 196 names owned by Token and reached seven for this root. Six records match exactly. The root records height 1 in Clean and 2 in Lean. Changing that byte only in a control aligns the digests. Both type/body mutations keep distinct digests. Genuine canonical matches remain zero of one."
+    },
+    {
+      "date": "2026-11-18",
+      "kind": "measurement",
+      "unit": "PR-74",
+      "obligation": "W1",
+      "source": "reports/self-proof-w1-psigma-source/section-universe/qualification.json",
+      "source_revision": "4edf2ec35930bdc9b6fdb0d338c932ad1df01c09",
+      "source_sha256": "f79f6a640c6c671e9912154a157c95a13694892961d5f998423535c82a5aed76",
+      "brief": "Clean and pinned Lean now check the entire unchanged PSigma syntax file, including its section command.",
+      "summary": "The original 28 declarations remain admitted and the separate section refusal fell from one to zero. Both readers still refuse the expired universe and the incorrect proof. All six indexed and change source cases retain their outcomes. The full checker run still refuses the original quotient import, with zero of 5,110 bytes."
+    },
+    {
+      "date": "2026-11-18",
+      "kind": "measurement",
+      "unit": "PR-71",
+      "source": "reports/parity-arm-forged-foundation-2026-11-18/remediation/qualification.json",
+      "source_revision": "b2b07b2d346b4504a283497c27fbc6e4ee09acb3",
+      "source_sha256": "b6350440baad0b5f81e126f0c59bf11a1833e17989bfc1c5ec80647977619530",
+      "brief": "The Rust parity shortcut now requires a checked arithmetic proof with zero logical foundations.",
+      "summary": "All eight parity tests and both checker name censuses passed. An otherwise certified true arithmetic proof using genuine propext is refused by the shortcut. Existing ordinary arithmetic checks pass. This qualifies the affected general-kernel source and does not change the strict self-admission or production counts."
+    },
+    {
+      "date": "2026-11-18",
+      "kind": "measurement",
+      "unit": "S2",
+      "source": "reports/self-proof-prefix-measurement/iff-wire.json",
+      "source_revision": "600dbf998edca80e1294ed8bb16c12e729a690d5",
+      "source_sha256": "78ab69c44197bc55ecccd7f3e7345bb322f9a43dbd444e214ce8617f5b23b329",
+      "brief": "The first refused Iff block now has a byte-pinned fixture and a control that changes only its recursor rule.",
+      "summary": "The 3,329-byte first record and five normalized comparisons identify the former, constructor, recursor type, metadata and computation rule. The changed-rule control fails only the rule comparison. This supplies inputs for S2\u2013S3. The strict checker still admits zero of the 4,403 records."
+    },
+    {
+      "date": "2026-11-18",
+      "kind": "blocker",
+      "unit": "W1",
+      "source": "reports/self-proof-w1-psigma-source/section-universe/joined-imports/full-entry.json",
+      "source_revision": "d2e9578ecf7352e95b31446045829510c8891d0b",
+      "source_sha256": "29b8debd262d2168c53cf2721b94f5654b2dfd2355c381cef6441db5885b0c07",
+      "brief": "The newly rebuilt checker still emits zero of 5,110 expected bytes at the quotient import.",
+      "summary": "After integrating both source repairs, the arithmetic guard and staged source binder publication, the unchanged 426-source checker entry exited 1 after 182.582 seconds. The original QuotientSyntax.type_levelScoped import disagreement remains the first execution blocker. The independent positive control printed 2 and the wrong proof refused."
+    },
+    {
+      "date": "2026-11-18",
+      "kind": "blocker",
+      "unit": "W3",
+      "source": "reports/self-proof-w3-advice-exhausted/before-require.stdout",
+      "source_revision": "3ae24a827fcb774dcecae80d2adfa2a3a6ede7bb",
+      "source_sha256": "2f856ead43385f24772a5450f32857c74a483c5718762fea28aab4994ac0c476",
+      "brief": "On the earlier Clean compiler, pinned Lean refused the cursor body at the unknown constant decide.",
+      "summary": "The ordinary Clean compiler at ceba5ae314 checked all 16 original Token declarations. Its cursor predicate still failed body checking in the unchanged upstream environment. Replacing the inclusive boundary with a strict comparison changed exactly the at-end example. E1 PR-76 has an executable test for matched and crossed resident kernels."
+    },
+    {
+      "date": "2026-11-18",
+      "kind": "measurement",
+      "unit": "W3",
+      "source": "reports/self-proof-w3-advice-start/source-identity/original.meaning.json",
+      "source_revision": "92e53be70913539f30b7c6289393786b73cafd1c",
+      "source_sha256": "2666a62a4df4474da78fc08452853e5c490b46f7da77d3d7eab83cd5ffde65af",
+      "brief": "The unchanged Advice.start source now matches its upstream canonical digest in the prefix and whole Token module.",
+      "summary": "The source-produced regular numeral instance and downstream height now agree with pinned Lean. All seven reachable records across the 196-name module inventory match. The existing C2 pin and both kernel equalities hold. Two well-typed changed definitions give different digests. This advances one checker definition and leaves the same-session Trust build, compiled verdicts and strict self-admission open."
+    },
+    {
+      "date": "2026-11-18",
+      "kind": "blocker",
+      "unit": "W1",
+      "source": "reports/self-proof-w3-advice-start/source-identity/checker-entry/execution.json",
+      "source_revision": "a635c84f8d0d0879550d56a2b979c0436c57090e",
+      "source_sha256": "8ab2a9ad2fbdbb5a7b918c286a533ade2468188ea7f249305fc532af05c8c343",
+      "brief": "The Advice.start compiler still emits zero of 5,110 expected bytes at the quotient import.",
+      "summary": "Staging the unchanged 426 Lean files and running the original checker entry on the compiler that matched the canonical Advice.start digest took 183.255 seconds and exited 1. The Nat program printed 2 and the wrong theorem was refused. The blocking qualified name is CICL.QuotientSyntax.type_levelScoped."
+    },
+    {
+      "date": "2026-11-18",
+      "kind": "measurement",
+      "unit": "W3",
+      "source": "reports/self-proof-w3-advice-exhausted/source/kernel/replay.stdout",
+      "source_revision": "923f3f5f04386f2c91756bc260aabe9682ea6c03",
+      "source_sha256": "5ca5f89e8986957e09d8dc4b5eee9a4d6bdff7b2a989f2d8e3a3e570708875c8",
+      "brief": "Pinned Lean now checks Clean’s original Advice.exhausted body and distinguishes the strict comparator.",
+      "summary": "Both complete Token sources check 16 of 16 declarations. The original and strict exported bodies are well typed in both environments, agree with their matching definitions, and differ when crossed. The universal cursor laws hold with zero axioms in Lean. The canonical package digest still differs at this source, with seven reachable local names versus nine in the resident. Strict self-admission and compiled decisions retain their separate gates."
+    },
+    {
+      "date": "2026-11-18",
+      "kind": "blocker",
+      "unit": "W1",
+      "source": "reports/self-proof-w3-advice-exhausted/source/checker-entry/execution.json",
+      "source_revision": "a758dbc4ac7d97d0f7d1d25a1d735ec1462fdb42",
+      "source_sha256": "8703452b8dfee7409fdb521ed99da49c892c8590cb0483942180d92511e4d29b",
+      "brief": "The compiler that fixed the exported cursor still stops at the same quotient import.",
+      "summary": "The unchanged 426-file checker entry returned zero of 5,110 expected output bytes in 252.398 seconds. It exited 1 under the 600-second cap at CICL.QuotientSyntax.type_levelScoped. The positive program printed 2 and the false theorem was refused. PR-66 retains the first whole-checker blocker."
+    },
+    {
+      "date": "2026-11-18",
+      "kind": "measurement",
+      "unit": "W3",
+      "source": "reports/self-proof-w3-advice-exhausted/source/read-bounds/axioms.txt",
+      "source_revision": "b6e687af8ade9b5408a4febb99c211cb9a5a5d4a",
+      "source_sha256": "06e0ef80d006e577b3badab6a55d2bb4831f81285732d29d5b3ef11b0db27301",
+      "brief": "Pinned Lean proved that a successful advice read cannot overrun the bytes and is exhausted exactly at their end.",
+      "summary": "Every successful original read preserves its bytes, strictly advances, and ends at or before their size. The general proofs use propext and Quot.sound. A two-tag source witness proves with zero axioms that the first successful read is nonfinal. The deliberately false exact-end conclusion was rejected. The ordinary Clean source compiler stopped during import before checking the proof client."
+    },
+    {
+      "date": "2026-11-18",
+      "kind": "measurement",
+      "unit": "W3",
+      "source": "reports/self-proof-w3-advice-exhausted/source/read-bounds/independent/result.json",
+      "source_revision": "62f24cf03918b77c236b7acb192f5dad9152645b",
+      "source_sha256": "71167d00c59de9f6d03964b84e30d42fb66d7ba32204e1d0837afcb2e4abd75a",
+      "brief": "Fenced Clean and stock ck0 each rechecked the entire 1,542-name export of the successful-read proofs.",
+      "summary": "The unchanged four-root package admitted every named declaration in both readers, including the exact-end proof. Replacing only that proof body with its proposition made both reject the same declaration and accept the other 1,541. The fenced reader also refused the genuine stream when Quot.sound was omitted from the permitted axioms. This is independent proof-body checking under the fenced kernel. Strict self-admission remains at zero."
+    },
+    {
+      "date": "2026-11-18",
+      "kind": "measurement",
+      "unit": "W2",
+      "source": "reports/self-proof-w3-advice-exhausted/source/trust-codegen/positions.tsv",
+      "source_revision": "8acfbe2036510870b7f569a5fca8376c03b71210",
+      "source_sha256": "8020db6870e4c79ad7920cc1ce8142ecd09b1cabaa6d9ff4f175697ce0e93db9",
+      "brief": "TrustCG-linked programs returned all six expected cursor values for the original and strict predicates.",
+      "summary": "The feature-built compiler and TrustCG 0.7.0 reproduced the inclusive and strict boundary readings using a C runtime. Separate programs executed two successive tokens, a multibyte operand and a truncation case. All ten receipts reported clean-compiler-unvalidated and zero kernel translation-validation certificates. They give executable behavior for these original source consumers. The complete checker island and production authority remain open."
+    },
+    {
+      "date": "2026-11-18",
+      "kind": "blocker",
+      "unit": "W1",
+      "source": "reports/self-proof-w3-advice-exhausted/source/priority/checker-entry/execution.json",
+      "source_revision": "c72054830ff8303bd3c733bd04525adbfdeb0a7c",
+      "source_sha256": "9aa48248c09a1336153eda108f86d58ea760963aaeabf4df5ddaa8ed01a95f91",
+      "brief": "The full checker still emitted zero bytes on the compiler that executed the TrustCG cursor examples.",
+      "summary": "The 426-file original entry exited 1 in 210.209 seconds at CICL.QuotientSyntax.type_levelScoped. It emitted zero of the expected 5,110 bytes under the 600-second cap. The positive and false-theorem controls retained their respective pass and refusal. The six compiled cursor readings and complete checker execution have independent receipts."
+    },
+    {
+      "date": "2026-11-18",
+      "kind": "measurement",
+      "unit": "S2-S3",
+      "related_obligations": ["self-admission-prefix"],
+      "source": "reports/bool-original-2026-11-18/qualification.json",
+      "source_revision": "4937cdd146a35de3ad33026991d39d64c090351f",
+      "source_sha256": "87451ce63b43ba2a43ad3a02927963b84b82179975125ae0275cea85518c1ca6",
+      "input_sha256": "17e3501dbd8689e7a241227c1711df4b06b3edd6184353feb01af672c9284f62",
+      "brief": "A standalone checker under pinned Lean replayed the first 88 records of the soundness export through Bool.",
+      "summary": "The standalone run returned 88 ordered receipts, 131 environment entries and 17 families through Bool. Pinned Lean rechecked its soundness proof per universe bound relative to the inherited base. Canonical literal storage for record 76 remains open. On the same export, the adopted checker still stops at Iff with zero consecutive admissions. Production decisions by compiled kcheck remain zero."
+    },
+    {
+      "date": "2026-11-18",
+      "kind": "measurement",
+      "unit": "W1",
+      "source": "reports/self-proof-w1-adopted-parse-census-2026-11-18/c188262b-census.json",
+      "source_revision": "0b23eb9cf78154646db05a874d52082a8be8e0b6",
+      "source_sha256": "d5341f71a6ce2d98167640286c9ded753a27ca14e6ba901f6a813ba1f635d536",
+      "brief": "Clean parsed 27 of the same 29 original modules in the adopted checker entry, up from 25.",
+      "summary": "The revision-checked c188262b compiler parsed every declaration without recovery in KCheckSpec.Term and KCheckSpec.PSigmaProjectionData. KCheck.Kernel still recovered at the refutable do-let, and KCheckLabelledMain at the tuple loop binder. Each module source digest matched the frozen census. This measures parsing only."
+    },
+    {
+      "date": "2026-11-18",
+      "kind": "blocker",
+      "unit": "W1",
+      "source": "reports/self-proof-w1-adopted-parse-census-2026-11-18/c188262b-entry/execution.json",
+      "source_revision": "afd58061b56dc3260f1d6f4e243a639f17b258ef",
+      "source_sha256": "dc2549520415a0f10cf4685f7b51adbf415f0fce1b28b869abbdbbd4d99df537",
+      "brief": "The unchanged checker entry stopped in the original imax proof on the c188262b dev build.",
+      "summary": "The default-feature compiler exited 1 after 133.325 seconds at CICL.Level.eval_imax_succ and emitted 0 of the expected 5,110 bytes. Both execution controls passed. Pinned Lean compiled and fresh-checked the full original module. The older installed ca8e2564 compiler executed a consumer of the original source prefix through the same theorem."
+    },
+    {
+      "date": "2026-11-18",
+      "kind": "measurement",
+      "unit": "W1",
+      "source": "reports/self-proof-w1-adopted-parse-census-2026-11-18/969e824a-entry/execution.json",
+      "source_revision": "7f30ea90a91964535dfe41f65347680e2bc19588",
+      "brief": "Clean passed the original imax proof and returned to the quotient import disagreement.",
+      "summary": "At 969e824a the source consumer printed 1. The unchanged full checker entry exited 1 at CICL.QuotientSyntax.type_levelScoped in 532.397 seconds and emitted 0 of the expected 5,110 bytes. Both controls retained their expected verdicts. Source and artifact imports accept the original imax proof. A separate simplifier gap remains for an explicitly spelled successor.",
+      "source_sha256": "5edd16028294a2455f1e53ca34caa6a458f908d919d89b48f1e7cc312606b3b1"
+    },
+    {
+      "date": "2026-11-18",
+      "kind": "measurement",
+      "unit": "S2-S3",
+      "related_obligations": [
+        "self-admission-prefix"
+      ],
+      "source": "reports/add-ordered-original-2026-11-18/recheck.log",
+      "source_revision": "2d52893995f81bb82aa5ede16b92c1390e85c6ed",
+      "input_sha256": "17e3501dbd8689e7a241227c1711df4b06b3edd6184353feb01af672c9284f62",
+      "brief": "The ordered source replay reached record 105, Add, on the original soundness export.",
+      "summary": "The standalone replay under pinned Lean returned 105 ordered receipts, 158 entries and 21 families. Its source and numeric inputs match the first 4,215 physical lines. The recorded fresh check covers 71 declarations and six refusal controls. Soundness is per modeled universe bound and relative to the inherited base. The record-76 literal bridge still needs its canonical representation. Adopted checker self-admission and production authority have independent gates.",
+      "source_sha256": "81a893b32bf7be636117c145f6d137ba40f8a73df6ff7b7ddd6bb20d6ac747a7"
+    },
+    {
+      "date": "2026-11-18",
+      "kind": "measurement",
+      "unit": "S2-S3",
+      "related_obligations": [
+        "self-admission-prefix"
+      ],
+      "source": "reports/add-ordinary-original-2026-11-18/recheck.log",
+      "source_revision": "2044b52321e7c636c8070bdfd44eee4af39f83ab",
+      "source_sha256": "3bf78e9bd14a957fa18dd05584083781fccc63639bf17ddbed3d3c876b2aae23",
+      "input_sha256": "17e3501dbd8689e7a241227c1711df4b06b3edd6184353feb01af672c9284f62",
+      "brief": "The standalone source runner replayed 108 consecutive original records through instHAdd.",
+      "summary": "On the soundness export, pinned Lean replayed records 106–108 (instAddNat, Add.add and instHAdd) after the qualified 105. The runner returned 108 receipts, 161 entries and 21 families. Its fresh check covered 121 declarations and seven refusal controls. Soundness is per modeled bound relative to the inherited base, and record 76 still owes its canonical literal bridge. The adopted checker accepted 0 of 4,403 records."
+    },
+    {
+      "date": "2026-11-19",
+      "kind": "proof",
+      "unit": "S2-S3",
+      "related_obligations": [
+        "self-admission-prefix"
+      ],
+      "source": "reports/self-proof-iff-guard-2026-11-19/README.md",
+      "source_revision": "c50d975a4c1af3dd5673e9746c1868e4e09ad785",
+      "source_sha256": "f40439e31c9ed0aa14542894ff8716fe6a7169a4d5ac07996f0fd55581e915f2",
+      "replay_source": "reports/self-proof-iff-guard-2026-11-19/fenced/writer-join-reader.json",
+      "replay_sha256": "c57767c467205ae9319018b5703be171729d94335ec905f723a74678fdb2c359",
+      "brief": "The guarded standalone Iff transaction preserves validity for any valid input environment.",
+      "summary": "At each modeled bound and for every advice string, check_sound_valid proves that successful installation preserves validity after checking the stored Eq, Eq.refl and Eq.rec records. The original Iff frame succeeded on a valid non-rooted input. Fenced Clean accepted 4,971 of 4,971 declarations and refused the target when its proof was replaced by its type. The adopted checker still stopped at Iff with 0 of 4,403 records, and compiled kcheck had made zero production decisions."
+    },
+    {
+      "date": "2026-11-19",
+      "kind": "blocker",
+      "unit": "W1",
+      "source": "reports/self-proof-w1-adopted-parse-census-2026-11-18/b7e85e3e-authority-entry/execution.json",
+      "source_revision": "76dc22a17a630a287ef5844473c764f996eb2813",
+      "source_sha256": "68612c3e8019a96a2676836973ef292d973db2dab413656d60bc1d3ef296139c",
+      "clean_binary_revision": "b7e85e3e8b2454377a372c529fc1066ff1c441ae",
+      "clean_binary_sha256": "b6341b6b2c9b191e81559babb13234639ca8f788593743d5637129ca81f994e4",
+      "brief": "After the Lean 4.36 CLI update, Clean still stopped at the quotient import while running the original checker.",
+      "summary": "The default-feature b7e85e3e compiler ran the original checker entry with the same 426 staged sources and pinned Lean 4.30.0-rc2 SDK. It exited 1 after 116.939 seconds at CICL.QuotientSyntax.type_levelScoped and emitted 0 of 5,110 expected stdout bytes. The Nat control printed 2 and the false theorem was refused. This measures Clean executing the checker source, before a checker verdict."
+    },
+    {
+      "date": "2026-11-19",
+      "kind": "measurement",
+      "unit": "W1",
+      "source": "reports/self-proof-w1-adopted-parse-census-2026-11-18/b27a07da-authority-entry/comparison.json",
+      "source_revision": "78145fe4784eeb6693a3c83738d23be3f4269417",
+      "source_sha256": "72b609e33361b18e302ade38dbf1aa61b0e30623f0c53ba205bb276245727cda",
+      "brief": "The frontend repair brought the original checker entry to 28 of 29 source modules parsing completely.",
+      "summary": "At b27a07da all 26 declaration groups in KCheck.Kernel parsed with zero recovery diagnostics. The 29 source hashes match the earlier census. The tuple loop in KCheckLabelledMain remains the only parser recovery. The original executable entry still stopped at the quotient import disagreement and emitted 0 of 5,110 bytes in 117.317 seconds. The positive and false-theorem controls passed."
+    },
+    {
+      "date": "2026-11-19",
+      "kind": "measurement",
+      "unit": "W1",
+      "source": "reports/self-proof-w1-current-execution-2026-11-17/quotient-simplification-2026-11-19/run/execution.json",
+      "source_revision": "1a115796963065dbe7c98b4654c616fd7529eb39",
+      "source_sha256": "48d9c282c0f1ffd3abeb55298680aec2a71dfa25eaa9fb5564b5f606489aafeb",
+      "brief": "On a fixed compiler the revised quotient proof took the full checker to its 900-second cap.",
+      "summary": "On the identical ac5d4adf compiler only one of 29 named sources changed. The original whole entry reported the quotient disagreement after 142.805 seconds. The revised proof produced the same 33 import messages and zero stdout bytes, with no terminal diagnostic before the 900-second cap. Both controls passed."
+    },
+    {
+      "date": "2026-11-19",
+      "kind": "measurement",
+      "unit": "W1",
+      "source": "reports/self-proof-w1-quotient-closure/single-import-2026-11-19/revised-proof.json",
+      "source_revision": "7294cf2297eea4e09733257f44ba867bcc66558a",
+      "source_sha256": "5e84f083f760f71d7ca7b526b69ab1b2c50b7befbe22cef4636fa89241b58e3e",
+      "brief": "The simplified quotient proof moved the native seven-module consumer past its previous import disagreement.",
+      "summary": "The same native compiler and unchanged consumer on the original proof refused CICL.QuotientSyntax.type_levelScoped. The revised seven-module source reached Lean.Name.anonymous._override and produced no stdout. Only QuotientSyntax.lean changed among the libraries. Both source versions returned 2 in pinned Lean. This result measures the reduced program."
+    },
+    {
+      "date": "2026-11-19",
+      "kind": "blocker",
+      "unit": "W1",
+      "source": "reports/self-proof-w1-term-data-landing-2026-11-19/matched-compiler/publication/execution.json",
+      "source_revision": "b7d6e4315cd77d6a672e439f2dbb6b242845924e",
+      "source_sha256": "b27c478db5b33d53dc55652cc89a63648b3eda965cea5fc50771396fd0bdc174",
+      "clean_binary_revision": "f8df1ceb5e18eb6160846c178636484592433cdd",
+      "clean_binary_sha256": "18be52097c9d5f6da72b449d4e547e71f002b603865884fa9287e43e9cb732af",
+      "brief": "Clean stopped at KCheckSpec.Term.piArity while compiling the published checker entry.",
+      "summary": "The compiler and checker source both came from f8df1ceb5e. The full source run exited 1 after 49.383 seconds at the recursive definition in KCheckSpec/TermData.lean and printed 0 of 5,110 expected bytes. The arithmetic control printed 2 and Clean refused the false theorem. Compilation stopped before the checker main ran."
+    },
+    {
+      "date": "2026-11-19",
+      "kind": "blocker",
+      "unit": "W1",
+      "source": "reports/self-proof-w1-checker-equivalence-2026-11-19/execution/streaming/integrated-source/streaming-result.json",
+      "source_revision": "b438045a08ae1b9246b11f8e24ab5218b424af70",
+      "source_sha256": "683ec66d698ac03a4675211f3d2129ec2d560b4d81b5a3f3a5e92ac163b9a146",
+      "replay_source": "reports/self-proof-w1-checker-equivalence-2026-11-19/execution/streaming/integrated-source/result.json",
+      "replay_sha256": "a305b81ac81f8081d50c0c5050cd2f108b563475cd1396d3fc549d2f2c1bdaf5",
+      "clean_binary_revision": "5f069d3391990241fca62e12de109e16640b236b",
+      "clean_binary_sha256": "6e97a38368b5db37cc49781c69a1fb79c3750598c63f6f317be5a63b48f1f722",
+      "brief": "The integrated compiler reached native Array.mk after the checker switched to streaming output.",
+      "summary": "The integrated development compiler 5f069d3391 refused the historical main loop at native-eager-io. Changing only the output loop, with the other 427 project sources identical and compiled imports from the pinned SDK alone, reached the native Array.mk binding. Both runs exited 1 with 0 of 5,110 expected bytes. Pinned Lean printed all 115 results for each entry. The separate adopted self-admission measurement remained 0 of 4,403 records."
+    },
+    {
+      "date": "2026-11-19",
+      "kind": "blocker",
+      "unit": "W1",
+      "source": "reports/self-proof-w1-native-rows-2026-11-19/char-import-join.tar.gz",
+      "source_revision": "bffc547da2fc9ef7681f96903e9cc1d020c4ead9",
+      "source_sha256": "0975887d856fb8ca1e7a42821eb1bd7bcb0f9965d2add793be58c5b5d9a19265",
+      "clean_binary_revision": "13134417e82103737b15a761363f52b8b6070d0e",
+      "clean_binary_sha256": "4b3fe9d16663f7b5f1d738f26c67239af9cce51ff72cbc67f9a9771ed78e0ca1",
+      "brief": "Published Clean 13134417e8 stopped at KCheckSpec.Term.piArity and printed 0 of 5,110 checker bytes.",
+      "summary": "The compiler and all 25 reachable project modules came from published revision 13134417e8. On the pinned Lean 4.30.0-rc2 SDK, Clean refused the recursive definition KCheckSpec.Term.piArity before the maintained checker entry ran. It exited 1 after 269.535 seconds and printed 0 of 5,110 expected bytes across 115 cases. The arithmetic control printed 2 and Clean rejected the changed theorem."
+    },
+    {
+      "date": "2026-11-19",
+      "kind": "blocker",
+      "unit": "W1",
+      "source": "reports/self-proof-w1-native-rows-2026-11-19/pinned-world-selection/published/result.json",
+      "source_revision": "bc1effe3647c696c936243dcbab0b3d23648cdd1",
+      "source_sha256": "b4f3af49cfd3c05312e3d9f34829439d31c4ea1cb09c0fbfdb712d231ffef1cb",
+      "replay_source": "reports/self-proof-w1-native-rows-2026-11-19/pinned-world-selection/published/outputs.tar.gz",
+      "replay_sha256": "238655f5f4c94e39db2f5ca1d935da3db296a14306cea3441e2a3e21a318aee8",
+      "clean_binary_revision": "813a18f5bc36f2bc7c5b5b6c24f4c770cd68b61c",
+      "clean_binary_sha256": "f4bb5e00f03f0c9252bbc6bc9bf90201a5f437799be8b53657eac9d58fa7cf36",
+      "brief": "Published Clean still refused the 4.30 world opaque for Unit and needed the live UInt32 extern for a status.",
+      "summary": "At 813a18f5bc the ordinary CLI replayed seven pinned SDK programs after the change to world-field erasure. It refused the world opaque on the unit-return and both explicit-bind entries, and the UInt32 extern on the two status entries. The single print and wrong-type controls agreed with Lean. The whole checker stopped at KCheckSpec.Term.piArity after 291.274 seconds and printed 0 of 5,110 expected bytes."
+    },
+    {
+      "date": "2026-11-19",
+      "kind": "blocker",
+      "unit": "W1",
+      "source": "reports/self-proof-w1-native-rows-2026-11-19/pinned-world-selection/uint32-of-nat/result.json",
+      "source_revision": "d9d4270be123a9b6a941e4ffb08e5d93d8c7542d",
+      "source_sha256": "bb6db9c2d09867e522cfbff7f8adf64cb5884f42334a8acbafa4ba9a8be40d2d",
+      "replay_source": "reports/self-proof-w1-native-rows-2026-11-19/pinned-world-selection/uint32-of-nat/ordinary.tar.gz",
+      "replay_sha256": "b8993b3729f6bf179522db747c23dab747cbca98c8a8bede7079a10be6082795",
+      "clean_binary_revision": "56541579a8c75d8da0939c11931601fa0e501d9b",
+      "clean_binary_sha256": "adeec92fbd396dfac7a83012b516682ce68fe3e5cbf811be34c7411afadb4943",
+      "brief": "Pinned Clean runs five full-width UInt32 conversions and reaches the world opaque on the two direct status entries.",
+      "summary": "On 56541579a8 five Nat-returning entries produced the exact SDK values up to a 152-bit input. The same five previously refused UInt32.ofNat. The direct status 7 and 23 entries now refuse IO.RealWorld.nonemptyType. The full checker still refuses Term.piArity and emits 0 of 5,110 bytes. Fresh original-export replays measured 0 adopted and 108 standalone records."
+    },
+    {
+      "date": "2026-11-19",
+      "kind": "blocker",
+      "unit": "W1",
+      "source": "reports/self-proof-w1-native-rows-2026-11-19/pinned-world-selection/direct-state/checked-context.json",
+      "source_revision": "c42412b6ee7f792f3a7b7a2d4e17a0e686bd26e4",
+      "source_sha256": "6dc5fa082ab019386f7723fe205aec4024ebf3f167349bfab2eeafae58b8e8dd",
+      "replay_source": "reports/self-proof-w1-native-rows-2026-11-19/pinned-world-selection/direct-state/checked-context.tar.gz",
+      "replay_sha256": "d276e53b46e8673ddd6d0ed0c1b4ca2da5dabcfd7a1dfcd71030b018ff29c462",
+      "clean_binary_revision": "6876fa6cbff9561cfbc69f4a0cde2d75567cf7b6",
+      "clean_binary_sha256": "b874bb553bfbf033c22f77294495a7b9197a86f0c5ea231395d2c926b279b6f2",
+      "brief": "Ordinary Clean runs the pinned direct IO exits 7 and 23. The complete checker still stops at piArity.",
+      "summary": "On arm64 macOS the ordinary CLI returned the same exit codes as pinned Lean on both direct status sources. An external payload refused. The checked-context API refused a mixed SDK input and ran its genuine control. The complete checker still emitted 0 of 5,110 bytes at Term.piArity, with zero compiled production decisions."
+    },
+    {
+      "date": "2026-11-19",
+      "kind": "blocker",
+      "unit": "W1",
+      "source": "reports/self-proof-w1-native-rows-2026-11-19/pinned-world-selection/direct-unit/boxed.json",
+      "source_revision": "cc194bb2ac5f7dc2b00333e0918ef633878d9227",
+      "source_sha256": "3cf52c7031ddc4a8e861c373c2028eb55c766d66a0bb71e00ed7905ace2ce621",
+      "replay_source": "reports/self-proof-w1-native-rows-2026-11-19/pinned-world-selection/direct-unit/boxed-ordinary.tar.gz",
+      "replay_sha256": "a6f6c143e713fa66b68c19c9c0ca2d66e05ca20239f1d384df99c15d3290d8d2",
+      "clean_binary_revision": "8d066c17ba5761ee423b57431373b1255c1db7c5",
+      "clean_binary_sha256": "7407d279d1c1e42b233f35a0747ca59b03773467863468b6fbbff8639dba2d20",
+      "brief": "Ordinary Clean runs the direct Unit success and delivers the canonical Unit to both measured helpers. The full checker still stops at piArity.",
+      "summary": "On arm64 macOS the genuine Unit entry exits 0 and the two status entries exit 7 and 23. All seven independently observed Unit returns now carry the singleton expected by the SDK. Identical checker sources still produced 0 of 5,110 bytes and zero production decisions."
+    },
+    {
+      "date": "2026-11-19",
+      "kind": "blocker",
+      "unit": "W1",
+      "source": "reports/self-proof-w1-native-rows-2026-11-19/pinned-world-selection/nat-add/results.json",
+      "source_revision": "2f96406f75c9e749a5089f5eb8e48188ae70c785",
+      "source_sha256": "1f3ffe2c81497d6a0e11324b9593146eeb2a087750500378c619c35513780340",
+      "replay_source": "reports/self-proof-w1-native-rows-2026-11-19/pinned-world-selection/nat-add/ordinary.tar.gz",
+      "replay_sha256": "5baac2aed2cf1fbc67d49bab0870d005057be661a6724e7245d655529d64f6e7",
+      "clean_binary_revision": "8e1c47d615dbe81f80077e32dab4b957eeceb14f",
+      "clean_binary_sha256": "7c98f7f1c63ba2567a40e7c6bd33d5257ebb902fe8770a8f7eeecc3d774eecc4",
+      "brief": "Ordinary Clean runs the three pinned checker counter expressions and prints full-width natural results. The complete checker still stops at piArity.",
+      "summary": "On arm64 macOS the three counter expressions printed 115, 43 and 72. Twelve ordinary Nat entries matched the pinned SDK, including sums with live heap operands. The renderer stops at the IO bind method and the full checker emitted 0 of 5,110 expected bytes with zero production decisions."
+    },
+    {
+      "date": "2026-11-19",
+      "kind": "blocker",
+      "unit": "W1",
+      "source": "reports/self-proof-w1-native-rows-2026-11-19/pinned-world-selection/direct-error/results.json",
+      "source_revision": "fe3a68a854b5cbf74c5fb1e106175d2f356ed70c",
+      "source_sha256": "6915f2df53485830f31fcaeb13795562d38809bfddb4014a6b5f9c1922e25025",
+      "replay_source": "reports/self-proof-w1-native-rows-2026-11-19/pinned-world-selection/direct-error/qualified.tar.gz",
+      "replay_sha256": "bc3e2b7c5c219f0266bcab3790623d5b962960da356f0f721d7529329a39aea0",
+      "clean_binary_revision": "f2d9f4e32164b8d87a92e43f30d2c0d96a112653",
+      "clean_binary_sha256": "26e25306b8c8f9beeb289632874bbd92c2bb6811d8cf7b57ab9d6cbe7ab234f4",
+      "brief": "The ordinary pinned native entry executes direct literal user errors. The complete checker still reaches piArity.",
+      "summary": "Eight direct literal IO errors on arm64 macOS returned the reference status and exception bytes. A redirected constructor refused before linking. The original renderer still reaches its bind method and the full checker emitted 0 of 5,110 bytes, with zero production decisions."
+    }
+  ]
+}

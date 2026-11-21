@@ -278,6 +278,27 @@ impl Parser {
             };
             self.expect(&TokenKind::ColonEq)?;
             let mut val = self.parse_do_elem_expr()?;
+            // A lowercase constructor with named fields shares the local
+            // function header. A fallback within this layout makes it a
+            // refutable pattern.
+            if !is_mut
+                && ret_ty.is_none()
+                && !self.at_dedent()
+                && self.check(&TokenKind::Pipe)
+                && params.iter().all(|param| {
+                    param.ty.is_none()
+                        && param.default.is_none()
+                        && param.info == SurfaceBinderInfo::Explicit
+                })
+            {
+                self.advance();
+                let fields = params
+                    .into_iter()
+                    .map(|param| SurfacePattern::Var(param.name))
+                    .collect();
+                let pat = SurfacePattern::Ctor(binder.name, fields);
+                return self.parse_do_let_else(start_span, pat, val, false);
+            }
             if let Some(ret_ty) = ret_ty {
                 let span = val.span().merge(ret_ty.span());
                 val = SurfaceExpr::Ascription(span, Box::new(val), Box::new(ret_ty));
@@ -298,7 +319,7 @@ impl Parser {
             // Check for refutable bind with simple identifier: `let x <- e | fallback`
             if !is_mut && self.eat(&TokenKind::Pipe) {
                 let pat = SurfacePattern::Var(binder.name.clone());
-                return self.parse_do_let_else(start_span, pat, val);
+                return self.parse_do_let_else(start_span, pat, val, true);
             }
 
             let span = start_span.merge(val.span());
@@ -391,7 +412,9 @@ impl Parser {
         // an explicit else; defer to the refutable machinery for that shape.
         if matches!(self.current_kind(), TokenKind::Pipe) {
             self.eat(&TokenKind::Pipe);
-            return self.parse_do_let_else(start_span, pat, value).map(Some);
+            return self
+                .parse_do_let_else(start_span, pat, value, is_monadic)
+                .map(Some);
         }
 
         // Consume the remaining do-sequence as the single (irrefutable) arm body.
@@ -579,24 +602,32 @@ impl Parser {
             })
     }
 
-    /// Parse `for x in xs do doSeq` within a do block.
+    /// Parse `for pattern in xs do doSeq` within a do block.
     ///
     /// Lean 4 desugars this to `ForIn.forIn xs init (fun x acc => ...)`.
     /// We capture it as a first-class do element for proper desugaring.
     fn parse_do_for(&mut self, start_span: Span) -> Result<DoElem, ParseError> {
-        // Parse binding variable
-        let name = match self.current_kind() {
-            TokenKind::Ident(_) => self.ident()?,
+        let pattern_span = self.current_span();
+        let (name, pattern) = match self.current_kind() {
+            TokenKind::Ident(_) => (self.ident()?, None),
             TokenKind::Underscore => {
                 self.advance();
-                SurfaceName::generated_path("_")
+                (SurfaceName::generated_path("_"), None)
+            }
+            TokenKind::LParen | TokenKind::LAngle => {
+                let pattern = self.pattern()?;
+                // A numeric Name component cannot come from a source identifier.
+                let fresh = clean_kernel::Name::anon()
+                    .str("_for")
+                    .num(pattern_span.start as u64);
+                (SurfaceName::from_name(fresh), Some(pattern))
             }
             _ => {
                 return Err(ParseError::UnexpectedToken {
                     line: self.current_line(),
                     col: self.current_span().start,
                     message: format!(
-                        "expected identifier in for loop, got {:?}",
+                        "expected identifier or parenthesized pattern in for loop, got {:?}",
                         self.current_kind()
                     ),
                 })
@@ -637,8 +668,24 @@ impl Parser {
         }
 
         let body = self.parse_do_seq()?;
-        let binder = SurfaceBinder::new_typed(name, None, SurfaceBinderInfo::Explicit);
         let end_span = body.last().map_or(start_span, |e| e.span());
+        // Lean expands a patterned loop to an ordinary loop with a fresh
+        // binder and a do-match around the original body.
+        let body = if let Some(pattern) = pattern {
+            let span = pattern_span.merge(end_span);
+            vec![DoElem::Match(
+                span,
+                vec![SurfaceExpr::Ident(pattern_span, name.clone())],
+                vec![DoMatchArm {
+                    span,
+                    patterns: vec![pattern],
+                    body,
+                }],
+            )]
+        } else {
+            body
+        };
+        let binder = SurfaceBinder::new_typed(name, None, SurfaceBinderInfo::Explicit);
         Ok(DoElem::For(
             start_span.merge(end_span),
             binder,

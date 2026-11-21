@@ -40,8 +40,12 @@ pub(super) fn validate_rec(
             // caller can never author an eliminator's levels. This closes the
             // bypass where an imported `.rec`/`.casesOn` dodges the `ElimRef`
             // arity kill (Codex review A3).
+            // A checked inductive or constructor can share one of these names.
+            // In particular, a derived recursor type refers to its own constructors.
             if env.is_recursor(name)
-                || (is_recursor_name(name) && env.inductive_large_elim(name).is_none())
+                || (is_recursor_name(name)
+                    && env.inductive_large_elim(name).is_none()
+                    && env.constructor_arity(name).is_none())
             {
                 return Err(ValidateError::RecursorAsConst { name: name.clone() });
             }

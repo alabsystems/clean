@@ -38,6 +38,14 @@ use super::proof_manipulation::cases;
 /// ENSURES: On Ok, the field equations are added to the context as `h_inj…`
 /// ENSURES: On Err(HypothesisNotFound), `hyp_name` is not in the local context
 pub fn injection(state: &mut ProofState, hyp_name: &clean_parser::SurfaceName) -> TacticResult {
+    injection_with_names(state, hyp_name, &[])
+}
+
+pub(crate) fn injection_with_names(
+    state: &mut ProofState,
+    hyp_name: &clean_parser::SurfaceName,
+    names: &[clean_parser::SurfaceName],
+) -> TacticResult {
     let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
 
     // Find the hypothesis
@@ -87,21 +95,36 @@ pub fn injection(state: &mut ProofState, hyp_name: &clean_parser::SurfaceName) -
         &Expr::fvar(hyp_decl.fvar),
         Some(hyp_decl.fvar),
     )?;
-    let InjectionOutcome::Subgoal { num_eqs } = outcome else {
-        return Ok(());
+    let num_eqs = match outcome {
+        InjectionOutcome::Solved => 0,
+        InjectionOutcome::Subgoal { num_eqs } => num_eqs,
     };
+    if names.len() > num_eqs {
+        return Err(TacticError::GoalMismatch(format!(
+            "injection: too many field names ({} for {num_eqs} equalities)",
+            names.len()
+        )));
+    }
+    if matches!(outcome, InjectionOutcome::Solved) {
+        return Ok(());
+    }
 
-    // `injectionIntro`: introduce each field equation, `HEq` → `Eq` when the
-    // two types agree.
+    // Names and anonymous placeholders each consume one actual field
+    // equation. Unnamed fields keep the generated names of bare injection.
     for i in 0..num_eqs {
-        let suffix = if num_eqs > 1 {
-            format!("_inj_{}", i + 1)
-        } else {
-            "_inj".to_owned()
+        let inj_name = match names.get(i) {
+            Some(name) if !name.is_unescaped_component("_") => name.clone(),
+            _ => {
+                let suffix = if num_eqs > 1 {
+                    format!("_inj_{}", i + 1)
+                } else {
+                    "_inj".to_owned()
+                };
+                let base = super::pattern::names::generated_suffix(hyp_name, &suffix);
+                let ctx = &state.current_goal().ok_or(TacticError::NoGoals)?.local_ctx;
+                super::pattern::util::generate_fresh_hyp_name(ctx, &base)
+            }
         };
-        let base = super::pattern::names::generated_suffix(hyp_name, &suffix);
-        let ctx = &state.current_goal().ok_or(TacticError::NoGoals)?.local_ctx;
-        let inj_name = super::pattern::util::generate_fresh_hyp_name(ctx, &base);
         super::proof_term::intro(state, &inj_name)?;
         super::cases_unify_eqs::heq_local_to_eq(state, &inj_name)?;
     }

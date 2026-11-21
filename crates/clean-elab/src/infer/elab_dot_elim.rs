@@ -20,16 +20,18 @@
 //! What is modelled, and nothing more:
 //!
 //! * The term must be a bare `x.f` (an identifier receiver, no arguments)
-//!   ascribed a WRITTEN type with no metavariable, `(x.f : T)`: Lean
-//!   elaborates `x.f` against `T` there whatever the context holds. This is
+//!   ascribed a WRITTEN type with no metavariable, `(x.f : T)`, or the whole
+//!   body of a definition whose declared result `T` has none
+//!   (`def d (x : E) : T := x.f`, from `elab_def_body`): Lean elaborates
+//!   `x.f` against `T` there whatever the context holds. The ascription is
 //!   also the shape the parser gives `let g (a : A) : T := x.f`. No other
 //!   expected type is trusted. The ambient `current_expected_type` keeps
 //!   whatever an enclosing site left there (a tactic block's goal, say, under
 //!   a tactic `let`, where Lean passes no expected type at all), and a type
 //!   DERIVED from it (an `if` branch, a `let` body, an ascription `_` filled
 //!   from the context) inherits that staleness. The site is recorded with the
-//!   written type ([`DotElimState::arm_expected`], from `elab_ascription`)
-//!   and matched by `elab_proj` against the term it elaborates, which must
+//!   written type ([`DotElimState::arm_expected`], from `elab_ascription` and
+//!   `elab_def_body`) and matched by `elab_proj` against the term it elaborates, which must
 //!   still have that type as its expected type.
 //! * The head is `T.casesOn`, `T.rec` or `T.recOn` for an inductive with one
 //!   motive, no indices and no minor premises, so its type is `{params} →
@@ -39,10 +41,10 @@
 //!   metavariable. Then the motive `fun t => C[t]` is closed and type-correct
 //!   exactly when `C[x]` is, so Lean's "motive is not type correct" cannot
 //!   arise, and `kabstract` of a variable is abstraction of that variable.
-//! * `rec`/`recOn` only at a proposition: Lean compiles a definition, and
-//!   whether its code generator accepts a recursor depends on the head
-//!   (`x.rec : Nat` compiles, `x.recOn : Nat` does not) in ways `clean check`
-//!   does not model.
+//! * `rec`/`recOn` only at a proposition or in a `noncomputable def`: Lean
+//!   compiles any other definition, and whether its code generator accepts a
+//!   recursor depends on the head (`x.rec : Nat` compiles, `x.recOn : Nat`
+//!   does not) in ways `clean check` does not model.
 //!
 //! Everything else that reaches an explicit motive this way is refused by
 //! name, except an application whose first argument is a positional motive
@@ -98,6 +100,9 @@ pub(super) struct DotElimState {
     expected: Option<(DotSite, Expr)>,
     app_head: Option<(DotSite, DotHeadArgs)>,
     frame: Option<DotElimFrame>,
+    /// The enclosing declaration is `noncomputable`: no code is generated for
+    /// it, so a recursor at data is not the code generator's to refuse.
+    uncompiled: bool,
 }
 
 /// Saved state handed back to the `restore_*` functions.
@@ -205,6 +210,16 @@ impl DotElimState {
         self.app_head = saved.0;
     }
 
+    /// Enter the body of a declaration that is (`true`) or is not compiled.
+    /// Returns the flag to restore once that body ends.
+    pub(super) fn enter_uncompiled(&mut self, uncompiled: bool) -> bool {
+        std::mem::replace(&mut self.uncompiled, uncompiled)
+    }
+
+    pub(super) fn restore_uncompiled(&mut self, saved: bool) {
+        self.uncompiled = saved;
+    }
+
     pub(super) fn restore_frame(&mut self, saved: SavedFrame) {
         self.expected = saved.expected;
         self.app_head = saved.app_head;
@@ -255,6 +270,17 @@ impl<'a> ElabCtx<'a> {
             app_head,
             frame,
         }
+    }
+
+    /// Recursor helpers imported as ordinary definitions retain their family's
+    /// motive/major-premise application semantics.
+    pub(super) fn is_dot_recursor_family_member(&self, name: &Name, namespace: &Name) -> bool {
+        self.env.get_recursor(name).is_some()
+            || (elim_head(name, namespace).is_some()
+                && self
+                    .env
+                    .get_recursor(&Name::append(namespace, "rec"))
+                    .is_some())
     }
 
     /// Field notation on a recursor-family head with an explicit motive, from
@@ -453,7 +479,7 @@ impl<'a> ElabCtx<'a> {
         if !self.try_unify(&motive_ty, &motive_val_ty) {
             return Err(refuse(&head_name, "the motive does not fit the eliminator"));
         }
-        if matches!(head, ElimHead::Rec | ElimHead::RecOn) {
+        if matches!(head, ElimHead::Rec | ElimHead::RecOn) && !self.dot_elim.uncompiled {
             let level = self.metas.instantiate_level(&level);
             if !level.is_zero() {
                 return Err(refuse(

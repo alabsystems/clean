@@ -179,6 +179,7 @@ impl AutoBoundCollector {
                 self.collect_from_let(binder, val, body);
             }
             SurfaceExpr::Paren(_, inner)
+            | SurfaceExpr::Borrowed(_, inner)
             | SurfaceExpr::OutParam(_, inner)
             | SurfaceExpr::SemiOutParam(_, inner)
             | SurfaceExpr::NamedArg(_, _, inner)

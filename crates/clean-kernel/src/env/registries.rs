@@ -858,6 +858,7 @@ impl Environment {
 
     /// Register an extern binding.
     pub fn register_extern(&mut self, decl_name: Name, extern_name: String) {
+        self.clear_extern_metadata(&decl_name);
         self.extern_bindings.insert(decl_name, extern_name);
     }
 
@@ -907,32 +908,42 @@ impl Environment {
 
     /// Register an inline hint.
     pub fn register_inline(&mut self, name: Name) {
+        super::csimp::register_inline_mode(self, name.clone(), super::csimp::InlineMode::Inline);
         self.inline_hints.insert(name);
     }
 
     /// Check if a declaration has @[inline] attribute.
     pub fn is_inline(&self, name: &Name) -> bool {
-        self.inline_hints.contains(name)
+        super::csimp::inline_attribute_status(self, name, super::csimp::InlineMode::Inline)
+            .unwrap_or_else(|| self.inline_hints.contains(name))
     }
 
     /// Register a noinline hint.
     pub fn register_noinline(&mut self, name: Name) {
+        super::csimp::register_inline_mode(self, name.clone(), super::csimp::InlineMode::NoInline);
         self.noinline_hints.insert(name);
     }
 
     /// Check if a declaration has @[noinline] attribute.
     pub fn is_noinline(&self, name: &Name) -> bool {
-        self.noinline_hints.contains(name)
+        super::csimp::inline_attribute_status(self, name, super::csimp::InlineMode::NoInline)
+            .unwrap_or_else(|| self.noinline_hints.contains(name))
     }
 
     /// Register an always_inline hint.
     pub fn register_always_inline(&mut self, name: Name) {
+        super::csimp::register_inline_mode(
+            self,
+            name.clone(),
+            super::csimp::InlineMode::AlwaysInline,
+        );
         self.always_inline_hints.insert(name);
     }
 
     /// Check if a declaration has @[always_inline] attribute.
     pub fn is_always_inline(&self, name: &Name) -> bool {
-        self.always_inline_hints.contains(name)
+        super::csimp::inline_attribute_status(self, name, super::csimp::InlineMode::AlwaysInline)
+            .unwrap_or_else(|| self.always_inline_hints.contains(name))
     }
 
     /// Register a specialize hint.
@@ -947,22 +958,34 @@ impl Environment {
 
     /// Register a macro_inline hint.
     pub fn register_macro_inline(&mut self, name: Name) {
+        super::csimp::register_inline_mode(
+            self,
+            name.clone(),
+            super::csimp::InlineMode::MacroInline,
+        );
         self.macro_inline_hints.insert(name);
     }
 
     /// Check if a declaration has @[macro_inline] attribute.
     pub fn is_macro_inline(&self, name: &Name) -> bool {
-        self.macro_inline_hints.contains(name)
+        super::csimp::inline_attribute_status(self, name, super::csimp::InlineMode::MacroInline)
+            .unwrap_or_else(|| self.macro_inline_hints.contains(name))
     }
 
     /// Register an inline_if_reduce hint.
     pub fn register_inline_if_reduce(&mut self, name: Name) {
+        super::csimp::register_inline_mode(
+            self,
+            name.clone(),
+            super::csimp::InlineMode::InlineIfReduce,
+        );
         self.inline_if_reduce_hints.insert(name);
     }
 
     /// Check if a declaration has @[inline_if_reduce] attribute.
     pub fn is_inline_if_reduce(&self, name: &Name) -> bool {
-        self.inline_if_reduce_hints.contains(name)
+        super::csimp::inline_attribute_status(self, name, super::csimp::InlineMode::InlineIfReduce)
+            .unwrap_or_else(|| self.inline_if_reduce_hints.contains(name))
     }
 
     /// Register a nospecialize hint.

@@ -24,14 +24,16 @@ use super::inductive_fixed_indices::{fixed_indices_to_params, CtorInfo};
 use super::types::{ConstantInfo, EnvError};
 use super::Environment;
 
-/// Whether `add_inductive` generates the convenience DEFINITIONS that
-/// accompany a family (`noConfusionType` / `noConfusion` / `below` /
-/// `brecOn` / nested-aux `toContainer`) in addition to the kernel
-/// certificate (types, constructors, recursors + iota rules).
+/// Select the auxiliary declarations generated alongside the family's
+/// types, constructors, principal recursors and their iota rules.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum GeneratedAuxDefs {
+pub(super) enum GeneratedAuxDefs {
     /// Default: generate everything (Clean-native environments).
     Generate,
+    /// Ordinary source elaboration can produce the pinned constructor helpers.
+    Source,
+    /// Rebuild the auxiliary eliminators for reference comparison.
+    Eliminators,
     /// Kernel certificate only — replay/import lanes carry the SOURCE
     /// spellings of the aux definitions instead (see `add_inductive_core`).
     Skip,
@@ -51,11 +53,20 @@ impl Environment {
         self.add_inductive_impl(decl, GeneratedAuxDefs::Generate)
     }
 
+    /// Admit an ordinary source family and its constructor auxiliaries.
+    /// The checked source ordinal and supported specialized constructor
+    /// definitions are built in the same transaction as their family.
+    ///
+    /// # Errors
+    /// Same error surface as [`Self::add_inductive`].
+    pub fn add_source_inductive(&mut self, decl: InductiveDecl) -> Result<(), EnvError> {
+        self.add_inductive_impl(decl, GeneratedAuxDefs::Source)
+    }
+
     /// [`Self::add_inductive`] restricted to the family's KERNEL CERTIFICATE:
-    /// types, constructors, and recursors (`rec`/`casesOn`/`recOn` with their
-    /// iota rules). The generated convenience DEFINITIONS (`noConfusionType`,
-    /// `noConfusion`, `below`, `brecOn`, nested-aux `toContainer`) are
-    /// skipped.
+    /// types, constructors, `rec`, and any nested `rec_N` companions with
+    /// their iota rules. Imported auxiliary eliminators (`casesOn`, `recOn`)
+    /// and convenience definitions come from the source.
     ///
     /// Why this exists (kernel-parity sweep, 2026-06-12): when a family is
     /// replayed from an imported Lean environment, Clean's generated
@@ -75,11 +86,10 @@ impl Environment {
         self.add_inductive_impl(decl, GeneratedAuxDefs::Skip)
     }
 
-    /// [`Self::add_inductive_core`] on an environment that is discarded on
+    /// Checked inductive admission on an environment that is discarded on
     /// failure, so without the transaction snapshot: `self` is consumed, and
     /// on `Err` whatever prefix of the admission ran is dropped with it,
-    /// unread. On `Ok` the environment is exactly the one
-    /// `add_inductive_core` leaves; the error is the one it returns.
+    /// unread. The auxiliary policy selects the entries the kernel regenerates.
     ///
     /// For a scratch copy that exists only to be admitted into
     /// ([`Self::lean_replay_admit_block`]): there the snapshot was a second
@@ -87,11 +97,12 @@ impl Environment {
     /// success, and nothing ever read it. Measured 2026-09-30 on Mathlib
     /// `Order/Basic`'s import header, the import re-admits every nested
     /// family that way, and the copies and drops were ~9% of the import.
-    pub(super) fn into_scratch_with_inductive_core(
+    pub(super) fn into_scratch_with_inductive(
         mut self,
         decl: InductiveDecl,
+        aux_defs: GeneratedAuxDefs,
     ) -> Result<Self, EnvError> {
-        self.add_inductive_impl_inner(decl, GeneratedAuxDefs::Skip)?;
+        self.add_inductive_impl_inner(decl, aux_defs)?;
         Ok(self)
     }
 
@@ -335,7 +346,7 @@ impl Environment {
                 None, // Inductive types have no value
                 false,
             );
-            self.constants.insert(ind_type.name.clone(), ind_const);
+            self.install_resident_constant(ind_type.name.clone(), ind_const);
             self.declaration_verification.insert(
                 ind_type.name.clone(),
                 super::DeclarationVerification::FullKernelCheck,
@@ -364,7 +375,7 @@ impl Environment {
                     None, // Constructors have no value
                     false,
                 );
-                self.constants.insert(ctor.name.clone(), ctor_const);
+                self.install_resident_constant(ctor.name.clone(), ctor_const);
                 self.declaration_verification.insert(
                     ctor.name.clone(),
                     super::DeclarationVerification::FullKernelCheck,
@@ -474,7 +485,7 @@ impl Environment {
                 None, // Recursors don't have a value (they compute via rules)
                 false,
             );
-            self.constants.insert(rec_name.clone(), rec_const);
+            self.install_resident_constant(rec_name.clone(), rec_const);
             self.declaration_verification.insert(
                 rec_name.clone(),
                 super::DeclarationVerification::StructuralOnly,
@@ -576,16 +587,16 @@ impl Environment {
                 cases_val.num_minors as usize,
                 Some(&cases_minor_arities),
             )?;
-            // Add casesOn as constant (value-bearing; iota rules remain the
-            // constructor-head fast path).
+            // Lean stores casesOn as an abbreviation. Its iota rules remain
+            // the constructor-head fast path.
             let cases_const = ConstantInfo::new(
                 cases_name.clone(),
                 cases_val.level_params.clone(),
                 cases_val.type_.clone(),
                 Some(cases_value),
-                false,
+                true,
             );
-            self.constants.insert(cases_name.clone(), cases_const);
+            self.install_resident_constant(cases_name.clone(), cases_const);
             self.declaration_verification.insert(
                 cases_name.clone(),
                 super::DeclarationVerification::StructuralOnly,
@@ -629,15 +640,15 @@ impl Environment {
                 rec_on_val.num_minors as usize,
                 None,
             )?;
-            // Add recOn as constant (value-bearing, like Lean's definition).
+            // Lean stores recOn as a value-bearing abbreviation too.
             let rec_on_const = ConstantInfo::new(
                 rec_on_name.clone(),
                 rec_on_val.level_params.clone(),
                 rec_on_val.type_.clone(),
                 Some(rec_on_value),
-                false,
+                true,
             );
-            self.constants.insert(rec_on_name.clone(), rec_on_const);
+            self.install_resident_constant(rec_on_name.clone(), rec_on_const);
             self.declaration_verification.insert(
                 rec_on_name.clone(),
                 super::DeclarationVerification::StructuralOnly,
@@ -670,7 +681,7 @@ impl Environment {
                 &decl,
                 &nested_aux_entries,
                 &pre_elim_ctor_types,
-                aux_defs == GeneratedAuxDefs::Generate,
+                aux_defs != GeneratedAuxDefs::Skip,
             )?)
         };
         let effective_types: &[crate::inductive::InductiveType] = match &restored_types {
@@ -688,15 +699,37 @@ impl Environment {
             None => decl.clone(),
         };
 
-        // Pass 2: Build NoConfusion for all types.
+        let ordinary_auxiliaries = matches!(
+            aux_defs,
+            GeneratedAuxDefs::Generate | GeneratedAuxDefs::Source
+        );
+        let source_auxiliaries = if aux_defs == GeneratedAuxDefs::Source {
+            effective_types
+                .first()
+                .and_then(|family| self.checked_source_constructor_auxiliaries(&family.name))
+        } else {
+            None
+        };
+        let generate_no_confusion = source_auxiliaries.is_none() && ordinary_auxiliaries;
+        if let Some(staged) = source_auxiliaries {
+            *self = staged;
+        } else if aux_defs == GeneratedAuxDefs::Source {
+            for family in effective_types {
+                if let Some(staged) = self.checked_source_constructor_index(&family.name) {
+                    *self = staged;
+                }
+            }
+        }
+
+        // Pass 2: Build NoConfusion for families outside the source profile.
         // This is a separate pass to handle mutual inductives correctly — when
         // building Even.noConfusionType, Odd must already be in the environment.
         // The first pass above registers all types, constructors, and recursors
         // before any NoConfusion is built (#2044).
         //
         // Convention: `build_no_confusion_type`/`build_no_confusion` dispatch
-        // on `num_params` — 0-param types keep the classic scheme (identical
-        // to the v4.30 output there), parameterized types get Lean v4.30's
+        // on `num_params`. The classic scheme is retained for 0-param families
+        // outside the source profile. Parameterized types use Lean v4.30's
         // heterogeneous scheme (P-first, primed second-major params, per-param
         // Eq/HEq premises + HEq major). See
         // designs/2026-07-03-noconfusion-ctoridx-convention.md.
@@ -705,8 +738,8 @@ impl Environment {
         // current generator supports parameters only), or contains a path
         // constructor. The same predicate gates late regeneration, preventing
         // the repair path from reinterpreting a rejected block as a singleton.
-        let generate_no_confusion = aux_defs == GeneratedAuxDefs::Generate
-            && self.no_confusion_block_eligibility(&effective_decl).is_ok();
+        let generate_no_confusion =
+            generate_no_confusion && self.no_confusion_block_eligibility(&effective_decl).is_ok();
         if generate_no_confusion {
             let prerequisites_ready = self
                 .no_confusion_prerequisite_issue(&effective_decl)
@@ -779,7 +812,7 @@ impl Environment {
         for ind_type in effective_types.iter().filter(|t| {
             // Skip Higher Inductive Types: `.below`/`.brecOn` encode structural
             // recursion, which is not valid through a path constructor.
-            aux_defs == GeneratedAuxDefs::Generate && !Self::has_path_constructor(t)
+            ordinary_auxiliaries && !Self::has_path_constructor(t)
         }) {
             let ctor_infos = self.compute_ctor_infos(ind_type, &effective_decl);
             self.generate_below_brec_on(ind_type, &effective_decl, &ctor_infos);
@@ -788,7 +821,7 @@ impl Environment {
         // Validate metadata consistency for all recursors ACTUALLY created (#1394).
         //
         // `rec` is generated under every policy; `casesOn`/`recOn` are generated
-        // only under `GeneratedAuxDefs::Generate` (the `Skip` lane leaves them to
+        // under both auxiliary-generation policies (the `Skip` lane leaves them to
         // be carried from the source through `add_decl`). Validating `casesOn`/
         // `recOn` unconditionally panicked under `Skip` (`add_inductive_core`),
         // because `validate_recursor_metadata` reports the deliberately-absent
@@ -799,7 +832,9 @@ impl Environment {
         #[cfg(debug_assertions)]
         {
             let generated_suffixes: &[&str] = match aux_defs {
-                GeneratedAuxDefs::Generate => &["rec", "casesOn", "recOn"],
+                GeneratedAuxDefs::Generate
+                | GeneratedAuxDefs::Source
+                | GeneratedAuxDefs::Eliminators => &["rec", "casesOn", "recOn"],
                 GeneratedAuxDefs::Skip => &["rec"],
             };
             // This suffix walk covers original family members. Renamed
@@ -1025,6 +1060,25 @@ impl Environment {
         // Step 1: Temporarily register all inductive types as constants.
         // The TypeChecker needs these to resolve Const references to the types
         // being defined (e.g., recursive references in constructor types).
+        //
+        // These inserts and the removals of step 3 move the count but not the
+        // generation. That is sound for the caches keyed on
+        // `(generation, num_constants)` only while no earlier state with a
+        // warm cache held the key this window reaches, so nothing cached
+        // before it is served inside it. `forget_decl` bumps when it lowers
+        // the count. Two writers lower it without a bump, each safe for its
+        // own reason: `forget_family_member` runs on a clone, whose native-fold
+        // cache starts empty and is not queried before the removals, and it
+        // removes more names (recursors, `casesOn`, `recOn`) than this window
+        // re-adds; `restore_nested_block` erases aux names inside an admission
+        // that only adds names, so the count never falls below its value
+        // before that admission, which ends in a bump or in a restored
+        // snapshot whose cache is empty. A native-fold verdict computed
+        // inside this window that reads a provisional name refuses (each is
+        // a value-less definition), so serving it later at the same key,
+        // before the admission's own bump, can only withhold a fold. On
+        // failure the admission restores a snapshot, whose caches start
+        // empty, or drops its scratch copy.
         let mut temp_names: Vec<Name> = Vec::new();
         for ind_type in &decl.types {
             let ind_const = ConstantInfo::new(

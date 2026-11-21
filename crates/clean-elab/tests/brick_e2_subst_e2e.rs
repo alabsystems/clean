@@ -149,6 +149,22 @@ theorem w5_val : w5 = W.mk 43 two := rfl
 }
 
 #[test]
+fn inferred_helper_endpoints_in_expected_and_inferred_casts() {
+    let env = elaborate_module(
+        "def keepTrue : Bool := Bool.true
+def usesReduced (F : Bool → Type) (n : Bool) (h : keepTrue = n) (x : F n) : F Bool.true := h.symm ▸ x
+def a : Nat := 2
+theorem flipThm {s t : Nat} (q : s = t) : t = s := q.symm
+def viaHelper (F : Nat → Type) (h : a = 2) (x : F 2) : F a := flipThm h ▸ x
+def carry (F : Nat → Type) (h : a = 2) (x : F a) := flipThm h ▸ x
+def usingCarry (F : Nat → Type) (h : a = 2) (x : F a) : F 2 := carry F h x
+",
+    )
+    .expect("the cast must recover the implicit endpoints of the helper");
+    assert_bedrock(&env, &["usesReduced", "viaHelper", "carry", "usingCarry"]);
+}
+
+#[test]
 fn test_subst_expected_type_contains_both_sides_rhs_abstracted_first() {
     let src = format!(
         "{W_PRELUDE}

@@ -82,6 +82,7 @@ fn base_lands_in_prop(base: &Expr, env: &Environment) -> bool {
 /// A field is irrelevant if its type is:
 /// - A type-former (Sort, Type, Prop, or Pi returning a sort)
 /// - SProp (strict propositions)
+/// - A physical world slot erased by the checked SDK Void layout
 /// - A Prop, recognized through the head constant's DECLARED type
 ///   (`isLt : n < bound` — head `Nat.lt : Nat → Nat → Prop`). The old
 ///   purely syntactic check missed exactly these, so `Fin`/`Char` (one
@@ -92,6 +93,9 @@ fn base_lands_in_prop(base: &Expr, env: &Environment) -> bool {
 ///   the open field domain, so it is exact, fail-closed on `BVar` heads.
 fn is_field_type_irrelevant(ty: &Expr, env: &Environment) -> bool {
     if is_type_former_type(ty) || matches!(ty.kind(), ExprKind::SProp) {
+        return true;
+    }
+    if crate::world_token::is_void_type(ty) && crate::world_token::has_checked_void_layout(env) {
         return true;
     }
     // Proof fields: `h : n < bound`, `valid : Nat.isValidChar n`, and
@@ -151,7 +155,7 @@ fn count_relevant_fields(
 /// - Has exactly one constructor
 /// - Is not recursive
 /// - The constructor has exactly one computationally relevant field
-///   (other fields are types or proofs)
+///   (other fields are types, proofs, or erased world slots)
 ///
 /// Trivial structures have the same runtime representation as their single
 /// relevant field, so pattern matching can be eliminated by direct assignment.

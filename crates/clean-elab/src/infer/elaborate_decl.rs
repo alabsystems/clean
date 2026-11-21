@@ -518,7 +518,7 @@ impl<'a> ElabCtx<'a> {
         // runtime, ...) keep the honest-error simple handler registered above.
         //
         // Phase 6: when the pattern has a trailing repetition variable
-        // (`xs:ident*` / `xs:term,*`), register the VARIADIC handler instead. It
+        // (`xs:ident*` / `xs:term*`), register the VARIADIC handler instead. It
         // binds the fixed prefix args 1:1, collects the remaining call-site args
         // into a list for the repetition var, and expands each body tactic that
         // mentions the repetition var once per list element. Soundness is
@@ -1279,9 +1279,33 @@ impl<'a> ElabCtx<'a> {
     /// its own declarations and which is restored on the way out.
     pub(super) fn elab_decl_inner(&mut self, decl: &SurfaceDecl) -> Result<ElabResult, ElabError> {
         let opened = self.lean_decl_namespace(decl);
+        let entered = opened.as_ref().map_or_else(Vec::new, |ns| {
+            crate::newly_entered_namespaces(&self.namespace_state, ns)
+        });
+        // Lean expands a qualified declaration to a namespace block. Each
+        // component activates its scoped instances for the signature and body.
+        let instance_scope = (!entered.is_empty()).then(|| {
+            self.namespace_state.push_scope();
+            for ns in &entered {
+                self.namespace_state.activate_scoped(ns.clone());
+            }
+            self.clear_instance_cache();
+            self.activate_scoped_instances_here(&entered)
+        });
         let enclosing = std::mem::replace(&mut self.decl_site_namespace, opened);
-        let result = self.elab_decl_inner_at_site(decl);
+        let section_family = matches!(decl, SurfaceDecl::Structure { binders, .. } | SurfaceDecl::Inductive { binders, .. }
+            if super::family_section_parameters::section_prefix(binders) > 0);
+        let result = if section_family {
+            self.with_local_scope_rollback(|ctx| ctx.elab_decl_inner_at_site(decl))
+        } else {
+            self.elab_decl_inner_at_site(decl)
+        };
         self.decl_site_namespace = enclosing;
+        if let Some(saved) = instance_scope {
+            self.restore_instance_state(saved);
+            self.namespace_state.pop_scope();
+            self.clear_instance_cache();
+        }
         result
     }
 
@@ -1491,7 +1515,7 @@ impl<'a> ElabCtx<'a> {
                     deriving,
                     modifiers,
                     super::elab_structure::StructureKind::Structure,
-                );
+                ).map(|(result, _)| result);
                 // A failed `deriving` class is an error beside the structure,
                 // never instead of it (`deriving_log`).
                 self.attach_logged_deriving_failures(decl, result)
@@ -1564,13 +1588,14 @@ impl<'a> ElabCtx<'a> {
             // Macro-related declarations: register with macro context
             SurfaceDecl::Syntax {
                 name,
-                precedence,
+                priority,
                 pattern,
                 category,
                 ..
             } => {
+                let name = name.as_ref().map(|n| self.qualify_name(n));
                 self.macro_ctx
-                    .register_syntax(name.as_ref(), *precedence, pattern, category)
+                    .register_syntax(name.as_ref(), priority.as_ref(), pattern, category)
                     .map_err(|e| ElabError::MacroError(e.to_string()))?;
                 Ok(ElabResult::Skipped)
             }
@@ -1754,6 +1779,11 @@ impl<'a> ElabCtx<'a> {
                 {
                     return Err(ElabError::CommandFailed { message });
                 }
+                if let Some(runtime) = &self.imported_runtime {
+                    if let Some(result) = runtime.eval(self.env, &kernel_expr)? {
+                        return Ok(ElabResult::Command(super::CommandOutput::Eval(result)));
+                    }
+                }
                 let result = crate::commands::elab_eval(self.env, &kernel_expr)?;
                 Ok(ElabResult::Command(super::CommandOutput::Eval(result)))
             }
@@ -1822,6 +1852,12 @@ impl<'a> ElabCtx<'a> {
                 Ok(ElabResult::Command(super::CommandOutput::Print(result)))
             }
             SurfaceDecl::PrintAxioms { name, .. } => self.elab_print_axioms_cmd(name),
+            SurfaceDecl::PrintEquations { name, .. } => crate::print_equations::read_existing(
+                self.env,
+                &self.namespace_state,
+                &self.foreign_private_decls,
+                name,
+            ),
             SurfaceDecl::Guard { expr, .. } => self.elab_guard_cmd(expr),
             SurfaceDecl::GuardMsgs { doc, spec, cmd, .. } => {
                 self.elab_guard_msgs_cmd(doc.as_deref(), spec, cmd)
@@ -2091,9 +2127,11 @@ impl<'a> ElabCtx<'a> {
             SurfaceDecl::IncludeVars { .. } | SurfaceDecl::OmitVars { .. } => {
                 Ok(ElabResult::Skipped)
             }
+            SurfaceDecl::DerivingInstance { classes, types, .. } => {
+                self.elab_standalone_deriving(classes, types)
+            }
             SurfaceDecl::Import { .. }
             | SurfaceDecl::UniverseDecl { .. }
-            | SurfaceDecl::DerivingInstance { .. }
             | SurfaceDecl::DeclareAesopRuleSets { .. }
             // `library_note «title»` carries no checkable content — a no-op.
             | SurfaceDecl::LibraryNote { .. } => Ok(ElabResult::Skipped),
@@ -2267,7 +2305,7 @@ struct TacticElabBoundVar {
     category: Option<String>,
 }
 
-/// A trailing repetition variable (`xs:ident*` / `xs:term,*`) in a tactic or
+/// A trailing repetition variable (`xs:ident*` / `xs:term*`) in a tactic or
 /// term `elab` pattern. Phase 6 supports a SINGLE trailing repetition; the var
 /// binds the entire variadic tail of the call-site arguments as a LIST.
 struct TacticElabRepetition {
@@ -2281,7 +2319,7 @@ struct TacticElabPattern {
     name: String,
     bound_vars: Vec<TacticElabBoundVar>,
     /// `Some` when the pattern ends in a single repetition var (`xs:ident*` or
-    /// `xs:term,*`). `None` for the flat (Phases 1-5) shape.
+    /// `xs:term*`). `None` for the flat (Phases 1-5) shape.
     repetition: Option<TacticElabRepetition>,
 }
 
@@ -2289,14 +2327,9 @@ struct TacticElabPattern {
 /// bound term/ident antiquotations that follow it, and (Phase 6) an optional
 /// single TRAILING repetition variable.
 ///
-/// The surface parser does not emit `SyntaxPatternItem::Repetition` for the
-/// categorized antiquotation forms `xs:ident*` and `xs:term,*` — the
-/// `:category` suffix is consumed eagerly, so the trailing `*` (or `,*`) lands
-/// as one (or two) bare `Literal("_")` marker items right after the categorized
-/// `Variable`. Phase 6 recognizes exactly that shape: a final categorized
-/// `Variable` immediately followed by one or two trailing `Literal("_")` markers
-/// and nothing else. The marker(s) are stripped and the final variable is
-/// promoted to a repetition var (1 marker = `cat*`, 2 markers = `cat,*`).
+/// Categorized repetition is carried by `SyntaxPatternItem::Repetition`, not
+/// inferred from opaque tokens or literal underscores. The executable bridge
+/// supports one trailing zero-or-more ident/term repetition without separators.
 ///
 /// Returns `None` (deferred) for patterns that are not a single leading literal
 /// followed by plain `Variable` items and at most one trailing repetition — i.e.
@@ -2309,10 +2342,7 @@ fn parse_tactic_elab_pattern(pattern: &[SyntaxPatternItem]) -> Option<TacticElab
         return None;
     };
 
-    // Phase 6: detect a single trailing repetition variable from its parser
-    // residue (a categorized `Variable` followed by trailing `Literal("_")`
-    // markers). Split the markers off the tail before the flat-var loop so the
-    // flat path stays byte-for-byte identical when there is no repetition.
+    // Consume only the parser's explicit repetition structure.
     let (rest, repetition) = split_trailing_repetition(rest);
 
     let mut bound_vars = Vec::with_capacity(rest.len());
@@ -2335,45 +2365,27 @@ fn parse_tactic_elab_pattern(pattern: &[SyntaxPatternItem]) -> Option<TacticElab
     })
 }
 
-/// Split a trailing repetition var off the end of a pattern's item list.
-///
-/// Recognizes the parser residue for `xs:ident*` / `xs:term,*`: a categorized
-/// `Variable` immediately followed by one or two `Literal("_")` marker items at
-/// the very end of the slice. On a match, returns the prefix (everything before
-/// the repetition var) and the promoted [`TacticElabRepetition`]. Otherwise
-/// returns the slice unchanged with `None`, so non-repetition patterns are
-/// untouched.
-///
-/// A bare (uncategorized) trailing `Variable` followed by markers is NOT treated
-/// as a repetition here: the supported variadic forms always carry an explicit
-/// category (`ident`/`term`), and keeping the guard tight avoids
-/// mis-classifying an ordinary pattern that happens to end in a literal `_`.
+/// Split the supported structural repetition off a tactic pattern's tail.
+/// Unsupported quantifiers, separators and groups remain deferred.
 fn split_trailing_repetition(
     rest: &[SyntaxPatternItem],
 ) -> (&[SyntaxPatternItem], Option<TacticElabRepetition>) {
-    // Count the trailing `Literal("_")` markers (the residue of `*` / `,*`).
-    let marker_count = rest
-        .iter()
-        .rev()
-        .take_while(|item| matches!(item, SyntaxPatternItem::Literal(s) if s == "_"))
-        .count();
-    // `cat*` leaves 1 marker, `cat,*` leaves 2. More than that is not a shape
-    // Phase 6 recognizes (defer); zero means no repetition.
-    if marker_count == 0 || marker_count > 2 {
-        return (rest, None);
-    }
-    let before_markers = &rest[..rest.len() - marker_count];
-    let Some((last, prefix)) = before_markers.split_last() else {
+    let Some((
+        SyntaxPatternItem::Repetition {
+            pattern,
+            separator: None,
+            at_least_one: false,
+        },
+        prefix,
+    )) = rest.split_last()
+    else {
         return (rest, None);
     };
-    // The item immediately preceding the markers must be the repetition var: a
-    // categorized antiquotation. (A literal there would mean the trailing `_`
-    // markers are ordinary pattern literals, not a repetition suffix.)
-    match last {
-        SyntaxPatternItem::Variable {
+    match pattern.as_slice() {
+        [SyntaxPatternItem::Variable {
             name,
             category: Some(category),
-        } => (
+        }] if matches!(category.as_str(), "ident" | "term") => (
             prefix,
             Some(TacticElabRepetition {
                 name: name.clone(),
@@ -2389,7 +2401,7 @@ fn split_trailing_repetition(
 /// vars map to term/expr argument parsing; `ident`-category vars map to
 /// identifier-list parsing.
 ///
-/// Phase 6: a trailing repetition variable (`xs:ident*` / `xs:term,*`) makes the
+/// Phase 6: a trailing repetition variable (`xs:ident*` / `xs:term*`) makes the
 /// tactic VARIADIC, so the parser must consume a list. An `ident` repetition (or
 /// an all-ident pattern) parses as an identifier list; anything else falls back
 /// to the generic expression list. Both list patterns already accept "zero or
@@ -2645,50 +2657,52 @@ mod elab_pattern_tests {
         }
     }
 
-    /// `elab "intros2" xs:ident*` parses (via the surface parser residue) to
-    /// `[Literal("intros2"), Variable{xs, ident}, Literal("_")]`. The elab
-    /// pattern parser must promote `xs` to a repetition var with no fixed vars.
+    fn source_pattern(source: &str) -> Vec<SyntaxPatternItem> {
+        match clean_parser::parse_decl(source).expect("actual elab source should parse") {
+            SurfaceDecl::Elab { pattern, .. } => pattern,
+            other => panic!("expected an elab declaration, got {other:?}"),
+        }
+    }
+
+    /// The actual parser carries `xs:ident*` as structural repetition.
     #[test]
     fn test_parse_pattern_recognizes_star_repetition() {
-        let pattern = vec![
-            lit("intros2"),
-            var(SurfaceName::generated_path("xs"), Some("ident")),
-            lit("_"),
-        ];
+        let pattern = source_pattern(r#"elab "intros2" xs:ident* : tactic => intro xs"#);
         let parsed = parse_tactic_elab_pattern(&pattern).expect("should parse");
         assert_eq!(parsed.name, "intros2");
         assert!(parsed.bound_vars.is_empty(), "no fixed vars before the rep");
         let rep = parsed.repetition.expect("should have a repetition var");
         assert_eq!(rep.name, SurfaceName::generated_path("xs"));
         assert_eq!(rep.category.as_deref(), Some("ident"));
-    }
-
-    /// `elab "mk" xs:term,*` leaves TWO `_` markers (the `,` and the `*`). Both
-    /// are stripped and `xs` is promoted to the single repetition var.
-    #[test]
-    fn test_parse_pattern_recognizes_comma_star_repetition() {
-        let pattern = vec![
-            lit("mk"),
-            var(SurfaceName::generated_path("xs"), Some("term")),
-            lit("_"),
+        let old_markers = vec![
+            lit("intros2"),
+            var(SurfaceName::generated_path("xs"), Some("ident")),
             lit("_"),
         ];
-        let parsed = parse_tactic_elab_pattern(&pattern).expect("should parse");
-        let rep = parsed.repetition.expect("comma-star is a repetition");
-        assert_eq!(rep.name, SurfaceName::generated_path("xs"));
-        assert_eq!(rep.category.as_deref(), Some("term"));
+        assert!(parse_tactic_elab_pattern(&old_markers).is_none());
+    }
+
+    /// A separated repetition is preserved by the parser and deferred by this
+    /// bounded executable bridge, which supports an unseparated trailing star.
+    #[test]
+    fn test_parse_pattern_defers_comma_star_repetition() {
+        let pattern = source_pattern(r#"elab "mk" xs:term,* : tactic => exact Nat.zero"#);
+        assert!(matches!(
+            pattern.last(),
+            Some(SyntaxPatternItem::Repetition {
+                separator: Some(separator),
+                at_least_one: false,
+                ..
+            }) if separator == ","
+        ));
+        assert!(parse_tactic_elab_pattern(&pattern).is_none());
     }
 
     /// A fixed prefix var followed by a trailing repetition:
     /// `elab "kw" x:term xs:ident*` -> one fixed var `x`, repetition `xs`.
     #[test]
     fn test_parse_pattern_fixed_prefix_plus_repetition() {
-        let pattern = vec![
-            lit("kw"),
-            var(SurfaceName::generated_path("x"), Some("term")),
-            var(SurfaceName::generated_path("xs"), Some("ident")),
-            lit("_"),
-        ];
+        let pattern = source_pattern(r#"elab "kw" x:term xs:ident* : tactic => intro xs"#);
         let parsed = parse_tactic_elab_pattern(&pattern).expect("should parse");
         assert_eq!(parsed.bound_vars.len(), 1);
         assert_eq!(parsed.bound_vars[0].name, SurfaceName::generated_path("x"));

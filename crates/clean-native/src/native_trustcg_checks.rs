@@ -35,8 +35,11 @@ use clean_kernel::{Environment, Expr, Name};
 
 use super::LaneError;
 use crate::native_build::{
-    entry_contract_from_parts, prelude_shim_definitions, EntryContract, EntryKind, IO_ENTRY_MARKERS,
+    entry_contract_from_parts, genuine_init_console_definition, prelude_shim_definitions,
+    render_shim_translation_unit, EntryContract, EntryKind, IO_ENTRY_MARKERS,
 };
+
+type ShimDefinition = (&'static str, &'static str);
 
 /// Witness that the object checks and program entry check accepted one module.
 /// The shared object witness binds licensing to its checked stable digest.
@@ -45,6 +48,7 @@ pub(crate) struct ModuleSelfChecks {
     object: ObjectSelfChecks,
     entry_symbol: String,
     contract: EntryContract,
+    shims: Vec<ShimDefinition>,
 }
 
 impl ModuleSelfChecks {
@@ -56,6 +60,11 @@ impl ModuleSelfChecks {
     /// The entry contract the driver honours.
     pub(crate) fn contract(&self) -> EntryContract {
         self.contract
+    }
+
+    /// The exact C definitions checked against this program's extern declarations.
+    pub(super) fn shim_translation_unit(&self) -> String {
+        render_shim_translation_unit(self.shims.iter().map(|(_, definition)| *definition))
     }
 
     /// Mint the `clean-compiler-unvalidated` license on `module`, which must
@@ -122,14 +131,16 @@ fn module_self_checks_with_policy(
     decl_type: Option<&Expr>,
     policy: StringLayoutPolicy,
 ) -> Result<ModuleSelfChecks, LaneError> {
-    let object = object_self_checks_with_policy(module, policy)?;
     let bodyless = bodyless_declarations(module);
+    let shims = program_shim_definitions(&bodyless);
+    let object = check_module(module, policy, &bodyless, &shims, None)?;
     let entry_symbol = root.to_string();
     let contract = entry_contract(module, decl, &entry_symbol, &bodyless, decl_type)?;
     Ok(ModuleSelfChecks {
         object,
         entry_symbol,
         contract,
+        shims,
     })
 }
 
@@ -138,14 +149,7 @@ pub(crate) fn object_self_checks_for_env(
     env: &Environment,
     module: &Module,
 ) -> Result<ObjectSelfChecks, LaneError> {
-    object_self_checks_with_policy(module, StringLayoutPolicy::from_env(env))
-}
-
-fn object_self_checks_with_policy(
-    module: &Module,
-    policy: StringLayoutPolicy,
-) -> Result<ObjectSelfChecks, LaneError> {
-    object_self_checks_with_policy_recording(module, policy, None)
+    object_self_checks_for_env_recording(env, module, None)
 }
 
 pub(crate) fn object_self_checks_for_env_recording(
@@ -153,12 +157,22 @@ pub(crate) fn object_self_checks_for_env_recording(
     module: &Module,
     observation: Option<&crate::primitive_uses::NativeRecorder>,
 ) -> Result<ObjectSelfChecks, LaneError> {
-    object_self_checks_with_policy_recording(module, StringLayoutPolicy::from_env(env), observation)
+    // Standalone objects link against the public archive's fixed definitions.
+    let shims = prelude_shim_definitions();
+    check_module(
+        module,
+        StringLayoutPolicy::from_env(env),
+        &bodyless_declarations(module),
+        &shims,
+        observation,
+    )
 }
 
-fn object_self_checks_with_policy_recording(
+fn check_module(
     module: &Module,
     policy: StringLayoutPolicy,
+    bodyless: &[LinkSignature],
+    shims: &[ShimDefinition],
     observation: Option<&crate::primitive_uses::NativeRecorder>,
 ) -> Result<ObjectSelfChecks, LaneError> {
     let bytes =
@@ -179,8 +193,7 @@ fn object_self_checks_with_policy_recording(
     if !policy.permits_byte_backed_bodies() {
         refuse_source_lowered_string_body(module)?;
     }
-    let bodyless = bodyless_declarations(module);
-    check_link_demand_recording(&bodyless, observation, module_context.as_ref())?;
+    check_link_demand_recording(bodyless, shims, observation, module_context.as_ref())?;
     let digest =
         module_stable_digest_string(module).map_err(|e| LaneError::core("digest")(e.into()))?;
     Ok(ObjectSelfChecks { digest })
@@ -206,13 +219,32 @@ fn refuse_source_lowered_string_body(module: &Module) -> Result<(), LaneError> {
     }
 }
 
-fn check_link_demand_recording(
+/// Executable links can compile a genuine Init console shim privately. The IR
+/// arity selects the candidate. The link-demand check validates every argument,
+/// return and variadic flag against the selected definition before licensing.
+pub(super) fn program_shim_definitions(bodyless: &[LinkSignature]) -> Vec<ShimDefinition> {
+    let mut shims = prelude_shim_definitions();
+    for (symbol, definition) in &mut shims {
+        let Some((arity, genuine)) = genuine_init_console_definition(symbol) else {
+            continue;
+        };
+        if bodyless
+            .iter()
+            .any(|decl| decl.symbol == *symbol && decl.params.len() == arity)
+        {
+            *definition = genuine;
+        }
+    }
+    shims
+}
+
+pub(super) fn check_link_demand_recording(
     bodyless: &[LinkSignature],
+    shims: &[ShimDefinition],
     observation: Option<&crate::primitive_uses::NativeRecorder>,
     module_context: Option<&crate::primitive_uses::NativeArtifactId>,
 ) -> Result<(), LaneError> {
-    let shims: BTreeMap<&'static str, &'static str> =
-        prelude_shim_definitions().into_iter().collect();
+    let shims: BTreeMap<_, _> = shims.iter().copied().collect();
     for decl in bodyless.iter().filter(|d| d.symbol.starts_with("l_")) {
         let Some(definition) = shims.get(decl.symbol.as_str()) else {
             if let Some(observer) = observation {
@@ -326,13 +358,14 @@ fn entry_contract(
         .iter()
         .any(|d| IO_ENTRY_MARKERS.contains(&d.symbol.as_str()));
     let kind = if io { EntryKind::Io } else { EntryKind::Nat };
-    if kind == EntryKind::Nat && !entry.params.is_empty() {
+    let contract = entry_contract_from_parts(decl, kind, Some(entry.params.len()), decl_type)
+        .map_err(|e| refuse(format!("{e:#}")))?;
+    if contract.kind == EntryKind::Nat && !entry.params.is_empty() {
         return Err(refuse(format!(
             "native build entry must be a nullary declaration: the emitted module defines \
              `{entry_symbol}` with {} parameter(s)",
             entry.params.len()
         )));
     }
-    entry_contract_from_parts(decl, kind, Some(entry.params.len()), decl_type)
-        .map_err(|e| refuse(format!("{e:#}")))
+    Ok(contract)
 }

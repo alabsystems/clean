@@ -37,6 +37,7 @@ pub mod bootstrap_verify;
 #[cfg(feature = "cli")]
 pub mod cli;
 pub mod coq_import;
+pub mod coq_vo;
 pub mod dep_graph;
 pub mod error;
 pub mod export;
@@ -48,6 +49,7 @@ pub mod import_reverification_metric;
 pub mod semr_bool_body;
 mod semr_model;
 pub use semr_model::SemrModelRefusal;
+pub mod k3_export_syntax;
 pub mod semr_native_execution;
 pub mod semr_scalar;
 // The compiled-IR decoder: `clean olean ir-census` (`cli`) and `.olean`
@@ -93,7 +95,8 @@ pub use import::{
     clean_payload_imports_required, convert_parsed_constant_to_const_info,
     convert_parsed_constant_to_declaration, convert_parsed_constant_to_type_stub,
     default_fn_binder_idx, default_search_paths, default_toolchain_versions, discover_olean_parts,
-    find_module_olean, has_global_instance_entry, import_world_for_file, lean_accepts_restatement,
+    find_module_olean, find_module_olean_in_world, has_global_instance_entry,
+    import_world_for_file, lean_accepts_restatement, lean_package_module_path,
     load_module_with_deps, load_module_with_deps_and_completed_imports,
     load_module_with_deps_bounded, load_module_with_deps_bounded_shared,
     load_module_with_deps_bounded_shared_with_policy, load_module_with_deps_cached,
@@ -109,24 +112,46 @@ pub use import::{
     parse_imports_and_const_names_only, parse_imports_only, parse_module, parse_module_file,
     parse_module_incremental, parse_module_incremental_types_only, parse_module_parts,
     parse_module_types_only, parse_typed_imports, read_artifact, require_clean_payload_imports,
-    resolve_typed_module_path, scoped_instance_idx, search_paths_in_world, source_world_for_file,
-    source_world_for_snapshot, source_world_of, stored_family_members,
-    toolchain_versions_from_search_paths, type_binder_name_idx, type_binder_names,
-    typed_module_rel_path, ActiveStdlibToolchain, ArtifactDeclaration, ArtifactDeclarationOrigin,
-    ArtifactDepth, ArtifactInventory, ArtifactInventoryError, ArtifactInventoryLimits,
-    ArtifactRead, CapturedModuleBytes, CompletedModuleImports, ConstantConvertSession,
-    DefaultFnBinderState, DeferredRecursor, DeferredRecursorStatus, ExprSharingStats, ImportError,
-    ImportKinds, ImportWorld, ImportWorldRefusal, LeanWorldScope, LoadSummary, ModuleCache,
-    OleanImportPolicy, ScopedInstanceState, SearchPathBuilder, SkippedConstant,
-    SourceWorldDecision, SourceWorldRefusal, StoredFamilyMembers, TypeBinderNameState, TypedImport,
-    TypedImportFlags, UnpinnedOleanImportPolicy,
+    resolve_typed_module_path, resolve_typed_module_path_in_world, scoped_instance_idx,
+    search_paths_in_world, source_world_for_file, source_world_for_snapshot, source_world_of,
+    stored_family_members, toolchain_versions_from_search_paths, type_binder_name_idx,
+    type_binder_names, typed_module_rel_path, ActiveStdlibToolchain, ArtifactDeclaration,
+    ArtifactDeclarationOrigin, ArtifactDepth, ArtifactInventory, ArtifactInventoryError,
+    ArtifactInventoryLimits, ArtifactRead, CapturedModuleBytes, CompletedModuleImports,
+    ConstantConvertSession, DefaultFnBinderState, DeferredRecursor, DeferredRecursorStatus,
+    ExprSharingStats, ImportError, ImportKinds, ImportWorld, ImportWorldRefusal, LeanWorldScope,
+    LoadSummary, ModuleCache, OleanImportPolicy, ScopedInstanceState, SearchPathBuilder,
+    SkippedConstant, SourceWorldDecision, SourceWorldRefusal, StoredFamilyMembers,
+    TypeBinderNameState, TypedImport, TypedImportFlags, UnpinnedOleanImportPolicy,
 };
-pub use import::{load_modules_with_deps_checked_with_limits, ModuleCaptureLimits};
+pub use import::{
+    load_modules_with_deps_checked_with_limits, load_modules_with_term_providers,
+    load_modules_with_visible_term_syntax, load_modules_with_visible_term_syntax_after_bootstrap,
+    load_typed_modules_with_deps_checked_with_limits, ModuleCaptureLimits,
+};
 pub use import_reverification_metric::{
     compute_import_reverification_metric, ImportReverificationMetric, MetricError,
     METRIC_SCHEMA_VERSION,
 };
-pub use recheck_closed::reference_base::{reference_base_closed, ReferenceBase};
+pub use lean_ir::exported_term_eval::{
+    evaluate_exported_term_elaborator, ExportedNumeralSyntax, ExportedTermProviders,
+};
+pub use lean_ir::format::nat_to_string as format_lean_nat;
+pub use lean_ir::nat_eval::{
+    evaluate_imported_nat_function, prepare_imported_nat_function, ImportedNatFunction,
+};
+pub use lean_ir::nat_program::{
+    CapturedNatDefinition, CapturedNatOperation, CapturedNatProgram, CapturedNatSlot,
+};
+pub use lean_ir::native_char::{StableCharProgram, StableCharProgramCheck};
+pub use lean_ir::native_io_error::{StableIoErrorImportCheck, StableIoErrorImports};
+pub use lean_ir::native_nat_dictionary::{StableNatDictionary, StableNatDictionaryCheck};
+pub use lean_ir::native_owners::CapturedPrivateNativeModule;
+pub use lean_ir::native_stdout::{StableStdoutImportCheck, StableStdoutImports};
+pub use recheck_closed::reference_base::{
+    reference_base_closed, reference_base_closed_with_source_wrappers,
+    reference_source_base_closed, ReferenceBase,
+};
 pub use recheck_closed::{
     promote_origins_after_closed_recheck, recheck_closed, ClosedRecheck, ClosedRecheckOptions,
     ClosedRecheckRefusal, ClosedRecheckReport, ImportedConeGate, ImportedConeVerdict, RecheckLevel,
@@ -140,7 +165,12 @@ pub use import::runtime::{
     RuntimeRecursorRule,
 };
 pub use import::ImportError as OleanImportError;
+pub use import::{read_exported_numeral_prefixes, ExportedNumeralPrefix};
 pub use level::{level_tags, ParsedLevel};
+pub use module::typed_extensions::{
+    read_exported_term_syntax, ExportedTermSyntax, LeadingIdentBehavior, ParserRegistration,
+    ScopedSyntaxEntry, TermElaboratorRegistration,
+};
 pub use module::{
     ConstantKind, ConstructorValData, DefinitionSafety, InductiveValData, OLeanLevel,
     ParsedAttrKind, ParsedClassEntry, ParsedConstant, ParsedExtension, ParsedExtensionEntry,
@@ -149,8 +179,8 @@ pub use module::{
     RootAnalysis,
 };
 pub use payload::{
-    decode_clean_payload, encode_clean_payload, CleanPayload, CLEAN_PAYLOAD_MAGIC,
-    CLEAN_PAYLOAD_VERSION,
+    decode_clean_payload, encode_clean_payload, CleanPayload, CompilerContextKind,
+    CLEAN_PAYLOAD_MAGIC, CLEAN_PAYLOAD_VERSION,
 };
 
 /// Parse an .olean file header from bytes
@@ -246,6 +276,23 @@ pub fn lean_world_of_olean_file(
     })?;
     let label = path.display().to_string();
     import::part_world(&label, &bytes)
+}
+
+/// Apply the import world gate to a part in a declared source world.
+///
+/// # Errors
+/// Refuses an unreadable or malformed part, or a world the selected
+/// environment could not read.
+pub fn check_olean_file_in_world(
+    path: impl AsRef<std::path::Path>,
+    world: clean_kernel::LeanWorld,
+) -> Result<(), ImportError> {
+    let path = path.as_ref();
+    let bytes = std::fs::read(path).map_err(|source| ImportError::FileUnreadable {
+        path: path.to_path_buf(),
+        source,
+    })?;
+    import::check_part_world(&path.display().to_string(), &bytes, world)
 }
 
 impl ImportError {

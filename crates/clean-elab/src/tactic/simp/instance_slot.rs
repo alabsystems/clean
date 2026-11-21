@@ -57,23 +57,7 @@ pub(super) fn synthesize_class_slot(
     let class_ty = crate::infer::class_goal(&state.env, state.instances.as_ref(), slot_ty)?;
     let scope: Vec<FVarId> = goal.local_ctx.iter().map(|decl| decl.fvar).collect();
     let found = budget.memo_instance(&scope, &class_ty, || {
-        let scope = crate::infer::TacticInstanceScope {
-            instances: state.instances.as_ref(),
-            namespace_state: state.namespace_state(),
-            visibility: state.instance_visibility.as_deref(),
-            rigid_levels: state.metas.rigid_level_params_snapshot(),
-            locals: state
-                .meta_scope_for_context(&goal.local_ctx)
-                .into_iter()
-                .map(|(name, fvar, ty)| {
-                    let ty = state.metas.instantiate(&ty);
-                    (name, fvar, ty)
-                })
-                .collect(),
-            next_fvar: state.next_fvar,
-            level_mint: state.level_mint.clone(),
-        };
-        crate::infer::ElabCtx::synthesize_in_tactic_scope(&state.env, &scope, &class_ty)
+        state.synthesize_class_in_goal(goal, &class_ty, None)
     })?;
     state
         .infer_type(goal, &found)

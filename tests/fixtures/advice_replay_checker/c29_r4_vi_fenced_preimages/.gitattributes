@@ -1,0 +1,4 @@
+# These fixture files are exact canonical bincode bytes.
+statement_pins/** binary
+meaning_pins/** binary
+transitive_closure_pins/** binary

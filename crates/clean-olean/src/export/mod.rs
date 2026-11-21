@@ -10,12 +10,22 @@
 mod api;
 mod constant_info;
 mod expr;
+mod lean_v2;
+mod lean_v2_decl;
+mod lean_v2_extensions;
+mod lean_v2_module;
 mod module_data;
 #[cfg(test)]
 mod payload_layout_tests;
 mod primitives;
 #[cfg(test)]
 mod tests;
+
+pub use lean_v2::{LeanV2RegionWriter, LeanV2Value};
+pub use lean_v2_module::{
+    write_lean_v2_module, LeanV2ModuleDeclaration, LeanV2ModuleOptions, LeanV2ModuleParts,
+    LeanV2Visibility,
+};
 
 /// Default base address for exported .olean files
 /// This matches the typical base address used by Lean 4

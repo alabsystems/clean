@@ -55,8 +55,8 @@ impl Specification {
                 // and without violating the policy that refused my first idea.
                 "divpow2_residue_folds_at_u64_max".to_string(),
                 "def divpow2_residue_folds_at_u64_max : \
-                 Eq Nat (ir_dm_rem (ir_nat_divpow2 18446744073709551615 32)) 4294967295 := \
-                 Eq.refl Nat 4294967295"
+                 @Eq Nat (ir_dm_rem (ir_nat_divpow2 18446744073709551615 32)) 4294967295 := \
+                 @Eq.refl Nat 4294967295"
                     .to_string(),
             ),
             (
@@ -74,8 +74,8 @@ impl Specification {
                 // correctness — which is why the fix is a change of computing side
                 // and not a change of meaning.
                 "ir_wrap_folds_at_a_small_value".to_string(),
-                "def ir_wrap_folds_at_a_small_value : Eq Nat (ir_wrap 8 300) 44 := \
-             Eq.refl Nat 44"
+                "def ir_wrap_folds_at_a_small_value : @Eq Nat (ir_wrap 8 300) 44 := \
+             @Eq.refl Nat 44"
                     .to_string(),
             ),
             (
@@ -96,9 +96,9 @@ impl Specification {
                 // AUDITABLE rather than trusted.
                 "ir_dm_step2_when_lt".to_string(),
                 "def ir_dm_step2_when_lt (inc : Nat) (w : Nat) (r : Nat) (q : Nat) \
-                 (h : Eq Bool (ir_nat_ltb r w) Bool.true) : \
-                 Eq IRDivMod (ir_dm_step2 inc w r q) (IRDivMod.mk r (ir_nat_dbl q)) := \
-                 Eq.cong Bool IRDivMod (fun (g : Bool) => Bool.rec (fun (_qb : Bool) => IRDivMod) (IRDivMod.mk (Nat.sub r w) (Nat.add (ir_nat_dbl q) inc)) (IRDivMod.mk r (ir_nat_dbl q)) g) (ir_nat_ltb r w) Bool.true h"
+                 (h : @Eq Bool (ir_nat_ltb r w) Bool.true) : \
+                 @Eq IRDivMod (ir_dm_step2 inc w r q) (IRDivMod.mk r (ir_nat_dbl q)) := \
+                 Eq.cong Bool IRDivMod (fun (g : Bool) => @Bool.rec (fun (_qb : Bool) => IRDivMod) (IRDivMod.mk (Nat.sub r w) (Nat.add (ir_nat_dbl q) inc)) (IRDivMod.mk r (ir_nat_dbl q)) g) (ir_nat_ltb r w) Bool.true h"
                     .to_string(),
             ),
             (
@@ -108,9 +108,9 @@ impl Specification {
                 // invariant is stated over.
                 "ir_dm_step2_when_ge".to_string(),
                 "def ir_dm_step2_when_ge (inc : Nat) (w : Nat) (r : Nat) (q : Nat) \
-                 (h : Eq Bool (ir_nat_ltb r w) Bool.false) : \
-                 Eq IRDivMod (ir_dm_step2 inc w r q) (IRDivMod.mk (Nat.sub r w) (Nat.add (ir_nat_dbl q) inc)) := \
-                 Eq.cong Bool IRDivMod (fun (g : Bool) => Bool.rec (fun (_qb : Bool) => IRDivMod) (IRDivMod.mk (Nat.sub r w) (Nat.add (ir_nat_dbl q) inc)) (IRDivMod.mk r (ir_nat_dbl q)) g) (ir_nat_ltb r w) Bool.false h"
+                 (h : @Eq Bool (ir_nat_ltb r w) Bool.false) : \
+                 @Eq IRDivMod (ir_dm_step2 inc w r q) (IRDivMod.mk (Nat.sub r w) (Nat.add (ir_nat_dbl q) inc)) := \
+                 Eq.cong Bool IRDivMod (fun (g : Bool) => @Bool.rec (fun (_qb : Bool) => IRDivMod) (IRDivMod.mk (Nat.sub r w) (Nat.add (ir_nat_dbl q) inc)) (IRDivMod.mk r (ir_nat_dbl q)) g) (ir_nat_ltb r w) Bool.false h"
                     .to_string(),
             ),
             (
@@ -127,8 +127,8 @@ impl Specification {
                 // backwards would misplan the whole invariant.
                 "ir_nat_mul_zero_right".to_string(),
                 "def ir_nat_mul_zero_right (a : Nat) : \
-                 Eq Nat (ir_nat_mul a Nat.zero) Nat.zero := \
-                 Eq.refl Nat Nat.zero"
+                 @Eq Nat (ir_nat_mul a Nat.zero) Nat.zero := \
+                 @Eq.refl Nat Nat.zero"
                     .to_string(),
             ),
             (
@@ -136,8 +136,8 @@ impl Specification {
                 // the same reason.
                 "ir_nat_mul_succ_right".to_string(),
                 "def ir_nat_mul_succ_right (a : Nat) (b : Nat) : \
-                 Eq Nat (ir_nat_mul a (Nat.succ b)) (Nat.add a (ir_nat_mul a b)) := \
-                 Eq.refl Nat (Nat.add a (ir_nat_mul a b))"
+                 @Eq Nat (ir_nat_mul a (Nat.succ b)) (Nat.add a (ir_nat_mul a b)) := \
+                 @Eq.refl Nat (Nat.add a (ir_nat_mul a b))"
                     .to_string(),
             ),
             (
@@ -174,7 +174,7 @@ impl Specification {
                 // COMPUTATION, not on lemmas about `Nat.add`.
                 "nat_add_algebra_is_reachable".to_string(),
                 "def nat_add_algebra_is_reachable (a : Nat) (b : Nat) (c : Nat) : \
-                 Eq Nat (Nat.add (Nat.add a b) c) (Nat.add a (Nat.add b c)) := \
+                 @Eq Nat (Nat.add (Nat.add a b) c) (Nat.add a (Nat.add b c)) := \
                  Nat.add_assoc a b c"
                     .to_string(),
             ),
@@ -186,24 +186,24 @@ impl Specification {
                 // Measured rather than read out of the kernel.
                 "nat_add_zero_right_is_refl".to_string(),
                 "def nat_add_zero_right_is_refl (a : Nat) : \
-                 Eq Nat (Nat.add a Nat.zero) a := \
-                 Eq.refl Nat a"
+                 @Eq Nat (Nat.add a Nat.zero) a := \
+                 @Eq.refl Nat a"
                     .to_string(),
             ),
             (
                 // The mirror. Exactly one of these two should be free.
                 "nat_add_zero_left_is_refl".to_string(),
                 "def nat_add_zero_left_is_refl (a : Nat) : \
-                 Eq Nat (Nat.add Nat.zero a) a := \
-                 Eq.refl Nat a"
+                 @Eq Nat (Nat.add Nat.zero a) a := \
+                 @Eq.refl Nat a"
                     .to_string(),
             ),
             (
                 // The successor equation on the SECOND argument.
                 "nat_add_succ_right_is_refl".to_string(),
                 "def nat_add_succ_right_is_refl (a : Nat) (b : Nat) : \
-                 Eq Nat (Nat.add a (Nat.succ b)) (Nat.succ (Nat.add a b)) := \
-                 Eq.refl Nat (Nat.succ (Nat.add a b))"
+                 @Eq Nat (Nat.add a (Nat.succ b)) (Nat.succ (Nat.add a b)) := \
+                 @Eq.refl Nat (Nat.succ (Nat.add a b))"
                     .to_string(),
             ),
             (
@@ -211,8 +211,8 @@ impl Specification {
                 // it is not free it is the first thing part (1) must prove.
                 "nat_add_succ_left_is_refl".to_string(),
                 "def nat_add_succ_left_is_refl (a : Nat) (b : Nat) : \
-                 Eq Nat (Nat.add (Nat.succ a) b) (Nat.succ (Nat.add a b)) := \
-                 Eq.refl Nat (Nat.succ (Nat.add a b))"
+                 @Eq Nat (Nat.add (Nat.succ a) b) (Nat.succ (Nat.add a b)) := \
+                 @Eq.refl Nat (Nat.succ (Nat.add a b))"
                     .to_string(),
             ),
             (
@@ -514,7 +514,7 @@ impl Specification {
                 // that is NOT the original body is the way this technique goes
                 // wrong silently.
                 "ir_dm_step2_is_gen".to_string(),
-                "def ir_dm_step2_is_gen (inc : Nat) (w : Nat) (r : Nat) (q : Nat) : Eq IRDivMod (ir_dm_step2 inc w r q) (ir_dm_step2_gen inc w r q (ir_nat_ltb r w)) := Eq.refl IRDivMod (ir_dm_step2 inc w r q)"
+                "def ir_dm_step2_is_gen (inc : Nat) (w : Nat) (r : Nat) (q : Nat) : @Eq IRDivMod (ir_dm_step2 inc w r q) (ir_dm_step2_gen inc w r q (ir_nat_ltb r w)) := @Eq.refl IRDivMod (ir_dm_step2 inc w r q)"
                     .to_string(),
             ),
             (

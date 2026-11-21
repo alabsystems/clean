@@ -180,7 +180,7 @@ pub fn preprocess_decl_with_context(decl: &SurfaceDecl, file_ctx: &mut FileConte
                     proof: proof.clone(),
                     attrs: attrs.clone(),
                     termination: termination.clone(),
-                    modifiers: *modifiers,
+                    modifiers: modifiers.clone(),
                     where_decls: where_decls.clone(),
                 }
             } else {
@@ -248,7 +248,7 @@ pub fn preprocess_decl_with_context(decl: &SurfaceDecl, file_ctx: &mut FileConte
                     val: val.clone(),
                     attrs: attrs.clone(),
                     termination: termination.clone(),
-                    modifiers: *modifiers,
+                    modifiers: modifiers.clone(),
                     where_decls: where_decls.clone(),
                 }
             } else {
@@ -310,7 +310,7 @@ pub fn preprocess_decl_with_context(decl: &SurfaceDecl, file_ctx: &mut FileConte
                     binders: new_binders,
                     ty: ty.clone(),
                     attrs: attrs.clone(),
-                    modifiers: *modifiers,
+                    modifiers: modifiers.clone(),
                 }
             } else {
                 decl.clone()
@@ -365,7 +365,7 @@ pub fn preprocess_decl_with_context(decl: &SurfaceDecl, file_ctx: &mut FileConte
                     ty: ty.clone(),
                     val: val.clone(),
                     attrs: attrs.clone(),
-                    modifiers: *modifiers,
+                    modifiers: modifiers.clone(),
                 }
             } else {
                 decl.clone()
@@ -383,20 +383,22 @@ pub fn preprocess_decl_with_context(decl: &SurfaceDecl, file_ctx: &mut FileConte
             deriving,
             modifiers,
         } => {
-            if file_ctx.has_universe_params() {
+            if file_ctx.has_universe_params() || file_ctx.has_variables() {
+                let mut parameters = file_ctx.current_variables().to_vec();
+                parameters.extend_from_slice(binders);
                 SurfaceDecl::Inductive {
                     span: *span,
                     name: name.clone(),
                     universe_params: merge_universe_params(
                         file_ctx.current_universe_params(),
                         universe_params,
-                        crate::universe_occurrence::used_universe_names(decl, binders).as_ref(),
+                        crate::universe_occurrence::used_universe_names(decl, &parameters).as_ref(),
                     ),
-                    binders: binders.clone(),
+                    binders: parameters,
                     ty: ty.clone(),
                     ctors: ctors.clone(),
                     deriving: deriving.clone(),
-                    modifiers: *modifiers,
+                    modifiers: modifiers.clone(),
                 }
             } else {
                 decl.clone()
@@ -427,7 +429,7 @@ pub fn preprocess_decl_with_context(decl: &SurfaceDecl, file_ctx: &mut FileConte
                     ty: ty.clone(),
                     ctors: ctors.clone(),
                     deriving: deriving.clone(),
-                    modifiers: *modifiers,
+                    modifiers: modifiers.clone(),
                 }
             } else {
                 decl.clone()
@@ -447,22 +449,24 @@ pub fn preprocess_decl_with_context(decl: &SurfaceDecl, file_ctx: &mut FileConte
             deriving,
             modifiers,
         } => {
-            if file_ctx.has_universe_params() {
+            if file_ctx.has_universe_params() || file_ctx.has_variables() {
+                let mut parameters = file_ctx.current_variables().to_vec();
+                parameters.extend_from_slice(binders);
                 SurfaceDecl::Structure {
                     span: *span,
                     name: name.clone(),
                     universe_params: merge_universe_params(
                         file_ctx.current_universe_params(),
                         universe_params,
-                        crate::universe_occurrence::used_universe_names(decl, binders).as_ref(),
+                        crate::universe_occurrence::used_universe_names(decl, &parameters).as_ref(),
                     ),
-                    binders: binders.clone(),
+                    binders: parameters,
                     extends: extends.clone(),
                     ty: ty.clone(),
                     ctor_name: ctor_name.clone(),
                     fields: fields.clone(),
                     deriving: deriving.clone(),
-                    modifiers: *modifiers,
+                    modifiers: modifiers.clone(),
                 }
             } else {
                 decl.clone()
@@ -480,20 +484,22 @@ pub fn preprocess_decl_with_context(decl: &SurfaceDecl, file_ctx: &mut FileConte
             fields,
             modifiers,
         } => {
-            if file_ctx.has_universe_params() {
+            if file_ctx.has_universe_params() || file_ctx.has_variables() {
+                let mut parameters = file_ctx.current_variables().to_vec();
+                parameters.extend_from_slice(binders);
                 SurfaceDecl::Class {
                     span: *span,
                     name: name.clone(),
                     universe_params: merge_universe_params(
                         file_ctx.current_universe_params(),
                         universe_params,
-                        crate::universe_occurrence::used_universe_names(decl, binders).as_ref(),
+                        crate::universe_occurrence::used_universe_names(decl, &parameters).as_ref(),
                     ),
-                    binders: binders.clone(),
+                    binders: parameters,
                     extends: extends.clone(),
                     ty: ty.clone(),
                     fields: fields.clone(),
-                    modifiers: *modifiers,
+                    modifiers: modifiers.clone(),
                 }
             } else {
                 decl.clone()
@@ -578,7 +584,7 @@ pub fn preprocess_decl_with_context(decl: &SurfaceDecl, file_ctx: &mut FileConte
                     class_type: class_type.clone(),
                     fields: fields.clone(),
                     priority: *priority,
-                    modifiers: *modifiers,
+                    modifiers: modifiers.clone(),
                     compiler_attrs: compiler_attrs.clone(),
                 }
             } else {

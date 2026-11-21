@@ -66,6 +66,7 @@ use crate::inductive::{
 };
 use crate::name::Name;
 
+use super::inductive_builder::GeneratedAuxDefs;
 use super::{Environment, KernelTheory};
 
 /// Why a stored inductive block is not the block Lean's kernel generates from
@@ -219,7 +220,8 @@ impl Environment {
             KernelTheory::Extended => Some(KernelTheory::Lean),
             KernelTheory::Lean | KernelTheory::LeanReference => None,
         };
-        let replayed = self.lean_replay_admit_block_in(types, scratch_theory)?;
+        let replayed =
+            self.lean_replay_admit_block_in(types, scratch_theory, GeneratedAuxDefs::Skip)?;
         self.compare_replayed_block(&replayed, false)
     }
 
@@ -280,10 +282,9 @@ impl Environment {
     /// (`<ty>.casesOn` / `<ty>.recOn`, R161 review): the block replay admits
     /// with `GeneratedAuxDefs::Skip`, so these recursor-table entries are not
     /// among the members it generates. Each is compared field by field with
-    /// the entry the kernel's own builders generate from the resident family
-    /// (`build_cases_on` / `build_rec_on`, as the import tier's
-    /// `regenerate_family` runs them), under the reference comparison of
-    /// `compare_recursor`. Returns the `<ty>` it belongs to, or
+    /// the entry the kernel regenerates from the resident family. For nested
+    /// families this includes the checked mutual-block transformation and
+    /// restoration. Returns the `<ty>` it belongs to, or
     /// `None` when `name` is not a resident recursor named like one.
     ///
     /// # Errors
@@ -303,8 +304,35 @@ impl Environment {
             return Ok(None);
         }
         let root = parent.as_ref().clone();
-        let generated = self.regenerate_family(&root)?;
-        let Some(built) = generated.iter().find(|g| g.name == *name) else {
+        // Nested mutual blocks generate their eliminators before the kernel
+        // restores the original family. Repeat that checked transformation
+        // from the resident types and constructor signatures.
+        let nested = self.get_inductive(&root).is_some_and(|ind| {
+            ind.all_names.iter().any(|member| {
+                self.get_inductive(member)
+                    .is_some_and(|value| value.is_nested)
+            })
+        });
+        let generated = if nested {
+            let replayed = self
+                .lean_replay_admit_block_in(
+                    std::slice::from_ref(&root),
+                    None,
+                    GeneratedAuxDefs::Eliminators,
+                )
+                .map_err(|error| error.to_string())?;
+            replayed
+                .generated_recursors
+                .iter()
+                .find(|generated| *generated == name)
+                .and_then(|generated| replayed.scratch.get_recursor(generated))
+                .cloned()
+        } else {
+            self.regenerate_family(&root)?
+                .into_iter()
+                .find(|g| g.name == *name)
+        };
+        let Some(built) = generated.as_ref() else {
             return Err(format!(
                 "the kernel generates no recursor of this name for family {root}"
             ));
@@ -400,7 +428,7 @@ impl Environment {
         &self,
         types: &[Name],
     ) -> Result<ReplayedBlock, InductiveReplayMismatch> {
-        self.lean_replay_admit_block_in(types, None)
+        self.lean_replay_admit_block_in(types, None, GeneratedAuxDefs::Skip)
     }
 
     /// [`Self::lean_replay_admit_block`], with the scratch copy's kernel theory
@@ -409,6 +437,7 @@ impl Environment {
         &self,
         types: &[Name],
         scratch_theory: Option<KernelTheory>,
+        aux_defs: GeneratedAuxDefs,
     ) -> Result<ReplayedBlock, InductiveReplayMismatch> {
         let first = types.first().cloned().unwrap_or_else(Name::anon);
         // A constructor names its inductive's block too.
@@ -471,6 +500,11 @@ impl Environment {
             .cloned()
             .collect();
         for ty in &decl.types {
+            if aux_defs == GeneratedAuxDefs::Eliminators {
+                for suffix in ["casesOn", "recOn"] {
+                    scratch.forget_family_member(&ty.name.clone().str(suffix));
+                }
+            }
             scratch.forget_family_member(&ty.name);
             for ctor in &ty.constructors {
                 scratch.forget_family_member(&ctor.name);
@@ -483,7 +517,7 @@ impl Environment {
         // `add_inductive_core` without its transaction snapshot: a refused
         // block drops the scratch, so nothing would ever read the restore.
         let scratch = scratch
-            .into_scratch_with_inductive_core(decl.clone())
+            .into_scratch_with_inductive(decl.clone(), aux_defs)
             .map_err(|error| InductiveReplayMismatch::Rejected {
                 block: head.clone(),
                 error: error.to_string(),
@@ -507,7 +541,7 @@ impl Environment {
     /// Remove a type, constructor or recursor from every table the inductive
     /// admission consults, so the scratch copy can admit the block afresh.
     fn forget_family_member(&mut self, name: &Name) {
-        self.constants.remove(name);
+        self.remove_resident_constant(name);
         self.declaration_verification.remove(name);
         self.inductives.remove(name);
         self.constructors.remove(name);

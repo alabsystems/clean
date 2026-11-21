@@ -145,8 +145,7 @@ pub enum DoElem {
         Vec<DoElem>,
     ),
 
-    /// Refutable expression destructuring: `let_expr pat := e | fallback`
-    /// or `let_expr pat <- e | fallback`
+    /// Refutable expression destructuring with an explicit fallback.
     ///
     /// The success path continues with the remaining do-elements; the fallback
     /// path evaluates the explicit fallback do-sequence.
@@ -219,13 +218,15 @@ pub enum DoElem {
     PatternReassign(Span, SurfacePattern, Box<SurfaceExpr>),
 }
 
-/// Source form for `let_expr` destructuring in do-notation.
+/// Source form for refutable expression destructuring in do-notation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DoLetExprKind {
     /// `let_expr pat := expr | fallback`
     Pure,
     /// `let_expr pat <- expr | fallback`
     Bind,
+    /// `let pat := expr | fallback`
+    PurePattern,
 }
 
 /// A match arm within a do block, where the body is a do-element sequence.

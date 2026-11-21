@@ -214,8 +214,38 @@ impl RustEmitter {
     }
 
     /// Emit JP argument assignments.
+    ///
+    /// Parallel, by the rule of `emit_c`'s `emit_jmp` (Lean's
+    /// `overwriteParam`): identity pairs are skipped, and when a later
+    /// argument names an earlier parameter every pair goes through a
+    /// `_tmp_<i>` binding first. Only a loop's back edge (`tail_loop`) can
+    /// name the join point's own parameters, so forward jumps keep their
+    /// bytes.
     fn emit_assignments(&mut self, assignments: &[(VarId, IRArg)]) {
-        for (var, arg) in assignments {
+        let overwrites = assignments.iter().enumerate().any(|(i, (var, _))| {
+            assignments
+                .iter()
+                .skip(i + 1)
+                .any(|(_, arg)| *arg == IRArg::Var(*var))
+        });
+        let pairs: Vec<&(VarId, IRArg)> = assignments
+            .iter()
+            .filter(|(var, arg)| *arg != IRArg::Var(*var))
+            .collect();
+        if overwrites {
+            self.writeln("{");
+            self.indent();
+            for (var, arg) in &pairs {
+                self.writeln(&format!("let _tmp_{} = {};", var.0, self.emit_arg(arg)));
+            }
+            for (var, _) in &pairs {
+                self.writeln(&format!("{} = _tmp_{};", self.emit_var(*var), var.0));
+            }
+            self.dedent();
+            self.writeln("}");
+            return;
+        }
+        for (var, arg) in pairs {
             self.writeln(&format!(
                 "{} = {};",
                 self.emit_var(*var),

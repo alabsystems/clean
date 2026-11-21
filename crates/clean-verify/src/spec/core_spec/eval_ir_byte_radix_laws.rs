@@ -261,6 +261,11 @@ mod tests {
     fn radix_laws_reject_wrong_remainders_and_denominators() {
         crate::test_utils::run_with_stack(|| {
             let mut spec = spec();
+            spec.add_recursive_def(
+                "def radix_valid_decomposition : @Eq Nat (Nat.div 9 3) 3 := ir_byte_div_unique_v1 9 3 3 0 (@Nat.zero_lt_succ 2) (@Nat.zero_lt_succ 2) (@Eq.refl Nat 9)",
+                "Valid decomposition companion before adversarial radix claims",
+            ).expect("valid decomposition setup must check");
+            assert_checked(&spec, "radix_valid_decomposition");
             for (name, source) in [
                 (
                     "radix_bad_positive",

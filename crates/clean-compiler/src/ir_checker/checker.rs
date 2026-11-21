@@ -372,6 +372,11 @@ impl<'a> IRChecker<'a> {
 
             IRExpr::Unbox { arg, .. } => self.check_arg(arg),
 
+            IRExpr::Lit(crate::ir::IRLiteral::NatLimbs(words))
+                if !crate::ir::canonical_nat_limbs(words) =>
+            {
+                Err(IRError::NonCanonicalNatLimbs)
+            }
             IRExpr::Lit(_) => Ok(()),
 
             IRExpr::Apply { fn_id, args } => self.check_full_app(fn_id, args),

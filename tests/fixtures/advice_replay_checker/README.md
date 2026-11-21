@@ -49,17 +49,23 @@ constructs reach bytes through Clean today and which are refused, by name.
   predicate, requires rejection, and cannot overwrite the positive artifact.
   The gap list's `r4_items` names these as the primary probes and
   `acyclic_controls` keeps the original three in the elaborator sweep.
-* `programs/c37_head_loop_10000.lean` and `c37_head_loop_100000.lean`,
-  beside c27's million-step probe — sampled head-loop depths, with both
-  lanes' measured outcomes in the gap list's `head_loop_samples`. The test
-  reads those measurements and holds each program to c27 with only its
-  step count substituted. These are sampled outcomes, not a claim about
-  every intermediate depth. Reproduce the production-caller measurements with
+* `programs/c37_head_loop_10000.lean`, `c37_head_loop_100000.lean` and
+  `c37_head_loop_10000000.lean` (added by X4), beside c27's million-step
+  probe — sampled head-loop depths, with both lanes' measured outcomes in the
+  gap list's `head_loop_samples`. The test reads those measurements and holds
+  each program to c27 with only its step count substituted. These are sampled
+  outcomes, not a claim about every intermediate depth. The script runs every
+  program on the default 8 MiB main-thread stack (`ulimit -s 8176`).
+  Reproduce the production-caller measurements with
 
   ```sh
   CLEAN_TRUST_CG_BIN=/path/to/trust-cg scripts/heavy_gate.sh run 4 x1-execution-evidence -- \
-    python3 scripts/x1_execution_evidence.py /path/to/clean
+    python3 scripts/x1_execution_evidence.py [--report <path>] /path/to/clean
   ```
+
+  `--report` names where the execution report goes (default
+  `reports/x1-fixup/execution.json`); X4's is
+  `reports/x4-head-loop-2026-11-15/x1-execution.json`.
 
   A full run mints `head_loop_samples` only over unchanged declared inputs
   and unchanged execution pins. `--mint-head-loop-samples` validates and

@@ -36,10 +36,11 @@
 //! B07 monad-instance materialization that makes Option do-values reduce).
 
 use clean_elab::{
-    elaborate_decl_and_register, preprocess_decl_with_context, ElabResult, FileContext,
+    elaborate_decl_and_register, preprocess_decl_with_context, surface_to_syntax,
+    syntax_to_surface, ElabResult, FileContext,
 };
 use clean_kernel::env::Environment;
-use clean_parser::parse_file;
+use clean_parser::{parse_expr, parse_file, DoElem, DoLetExprKind, SurfaceExpr};
 
 fn elaborate_file(source: &str) -> Result<Vec<ElabResult>, String> {
     let mut env = Environment::with_prelude();
@@ -58,6 +59,162 @@ fn elaborate_file(source: &str) -> Result<Vec<ElabResult>, String> {
 fn expect_pass(source: &str) {
     elaborate_file(source)
         .unwrap_or_else(|e| panic!("file must fully check (value-certified), got: {e}\n{source}"));
+}
+
+#[test]
+fn io_for_control_terminals_and_preceding_binds_return_steps() {
+    let source = r#"
+def stop (xs : List String) : IO Unit := do
+  for _x in xs do
+    break
+
+def visit (xs : List String) (read : IO String) (write : String → IO Unit) : IO UInt32 := do
+  for x in xs do
+    let msg ← read
+    write msg
+    if x == msg then
+      break
+    else
+      continue
+  return 3
+"#;
+    expect_pass(source);
+    assert!(elaborate_file(&source.replace("return 3", "return true")).is_err());
+    assert!(elaborate_file(&source.replace("write msg", "write true")).is_err());
+}
+
+#[test]
+fn nested_io_for_restores_the_enclosing_step_and_function_result() {
+    let source = r#"
+def nestedSteps (xs ys : List String) (write : String → IO Unit) : IO UInt32 := do
+  for x in xs do
+    for y in ys do
+      write y
+      if x == y then
+        break
+      else
+        continue
+    write x
+    break
+  return 3
+
+def nestedReturn (xs ys : List String) : IO UInt32 := do
+  for x in xs do
+    for y in ys do
+      if x == y then
+        return 7
+      else
+        break
+    continue
+  return 3
+
+def nestedTail (xs ys : List String) (write : String → IO Unit) : IO Unit := do
+  for x in xs do
+    if x == "" then
+      break
+    else
+      for y in ys do
+        write y
+
+def actionTail (xs : List String) (write : String → IO Unit) : IO Unit := do
+  for x in xs do
+    if x == "" then
+      break
+    else
+      write x
+"#;
+    expect_pass(source);
+    assert!(elaborate_file(&source.replace("return 7", "return true")).is_err());
+}
+
+#[test]
+fn ordinary_io_for_body_has_its_own_unit_result() {
+    let source = r#"
+def nested (xs : List String) (write : String → IO Unit) : IO UInt32 := do
+  for _x in xs do
+    for y in xs do
+      write y
+      break
+  return 3
+
+def plain (xs : List String) : IO UInt32 := do
+  for _x in xs do
+    pure ()
+  return 3
+
+def action (xs : List String) (perform : IO PUnit.{1}) : IO UInt32 := do
+  for _x in xs do
+    perform
+  return 3
+"#;
+    expect_pass(source);
+    assert!(elaborate_file(&source.replace("IO PUnit.{1}", "IO Nat")).is_err());
+    assert!(elaborate_file(&source.replace("pure ()", "pure (7 : Nat)")).is_err());
+}
+
+#[test]
+fn io_for_control_fallthrough_checks_the_unit_action_before_yielding() {
+    let source = r#"
+def probe (xs : List String) (perform : IO PUnit.{1}) : IO Unit := do
+  for x in xs do
+    if x == "" then
+      break
+    else
+      perform
+"#;
+    expect_pass(source);
+    expect_pass(&source.replace("      perform", "      pure ()"));
+    assert!(elaborate_file(&source.replace("IO PUnit.{1}", "IO Nat")).is_err());
+    assert!(elaborate_file(&source.replace("      perform", "      pure (7 : Nat)")).is_err());
+}
+
+#[test]
+fn refutable_do_let_matches_a_pure_value_and_preserves_a_monadic_bind() {
+    let source = r#"
+def pureCase (input : Option Nat) : Except Nat Nat := do
+  let some n := input | throw 7
+  return n
+
+def bindCase (input : Except Nat (Option Nat)) : Except Nat Nat := do
+  let .some n ← input | throw 7
+  return n
+
+theorem pureSome : pureCase (some 2) = .ok 2 := rfl
+theorem pureNone : pureCase none = .error 7 := rfl
+theorem bindSome : bindCase (.ok (some 2)) = .ok 2 := rfl
+theorem bindNone : bindCase (.ok none) = .error 7 := rfl
+theorem bindError : bindCase (.error 8) = .error 8 := rfl
+"#;
+    expect_pass(source);
+    assert!(elaborate_file(&format!(
+        "{source}\ntheorem wrongFallback : pureCase none = .ok 2 := rfl"
+    ))
+    .is_err());
+}
+
+#[test]
+fn refutable_do_let_preserves_pure_and_bind_kinds_through_macro_conversion() {
+    let pure = parse_expr("do\n  let some n := input | throw 7\n  return n").unwrap();
+    let bind = parse_expr("do\n  let .some n ← input | throw 7\n  return n").unwrap();
+    let Some(SurfaceExpr::Do(_, pure_elements)) = syntax_to_surface(&surface_to_syntax(&pure))
+    else {
+        panic!("macro conversion must retain the pure do block");
+    };
+    let Some(SurfaceExpr::Do(_, bind_elements)) = syntax_to_surface(&surface_to_syntax(&bind))
+    else {
+        panic!("macro conversion must retain the monadic do block");
+    };
+    assert!(matches!(
+        pure_elements.as_slice(),
+        [
+            DoElem::LetExpr(_, _, _, DoLetExprKind::PurePattern, _),
+            DoElem::Return(_, _)
+        ]
+    ));
+    assert!(matches!(
+        bind_elements.as_slice(),
+        [DoElem::LetElse(_, _, _, _), DoElem::Return(_, _)]
+    ));
 }
 
 /// A descoped shape must be rejected LOUD — with a typed, human error, NEVER

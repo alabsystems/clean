@@ -16,6 +16,9 @@ use clean_kernel::Name;
 #[derive(Debug, Clone, thiserror::Error)]
 #[non_exhaustive]
 pub enum ElabError {
+    /// The module's implicit environment could not be initialized.
+    #[error(transparent)]
+    ModuleSetup(#[from] crate::module_driver::ModuleSetupError),
     /// A do block requires a type constructor application into Type.
     #[error("invalid `do` notation, expected type is not a monad application\n  {type_}\nUse `Id.run do` for pure code")]
     InvalidDoExpectedType { type_: String },
@@ -46,6 +49,13 @@ pub enum ElabError {
         crate::private_names::user_facing_text(actual)
     )]
     TypeMismatch { expected: String, actual: String },
+    /// The final type check failed for the declaration body at this source range.
+    #[error("{source}")]
+    AtBodyTerm {
+        span: clean_parser::Span,
+        #[source]
+        source: Box<ElabError>,
+    },
     /// A finalized declaration still contains unresolved variables — either
     /// metavariable-tagged FVars (an implicit argument no unification could
     /// ever constrain: phantom section binders, an untyped alias desugar, a
@@ -760,6 +770,14 @@ pub enum ElabError {
     /// surrounding `#guard_msgs` compares exactly this text.
     #[error("{message}")]
     CommandFailed { message: String },
+    /// Invalid manual-link syntax in an actually attached Markdown docstring.
+    /// The accompanying source diagnostic carries the exact URL byte range;
+    /// registration succeeded and following commands retain the declaration.
+    #[error("{message}")]
+    DocumentationLink { message: String },
+    /// A documentation attachment error beside a genuinely registered member.
+    #[error("{message}")]
+    DocumentationAttachment { message: String },
     /// A `#reduce` outside the class in which Clean knows what pinned Lean's
     /// `Meta.reduce` does, or whose output a `#guard_msgs` would compare
     /// (`crate::reduce_command`). It is Clean's own refusal, not a message of
@@ -988,12 +1006,30 @@ impl ElabError {
     #[must_use]
     pub fn innermost(&self) -> &ElabError {
         match self {
-            Self::InTactic { source, .. } => source.innermost(),
+            Self::InTactic { source, .. } | Self::AtBodyTerm { source, .. } => source.innermost(),
             // A logged `deriving` failure names the class it came from; WHAT
             // failed is the handler's own error.
             Self::DerivingHandlerFailed { error, .. } => error.innermost(),
             other => other,
         }
+    }
+
+    /// Render a checked body mismatch using its spelling in the original file.
+    pub fn body_type_diagnostic(&self, text: &str) -> Option<(clean_parser::Span, String)> {
+        let Self::AtBodyTerm { span, source } = self else {
+            return None;
+        };
+        let Self::TypeMismatch { expected, actual } = source.as_ref() else {
+            return None;
+        };
+        let term = text.get(span.start..span.end)?;
+        if term.is_empty() {
+            return None;
+        }
+        let term = term.replace('\n', "\n  ");
+        let actual = crate::private_names::user_facing_text(actual).replace('\n', "\n  ");
+        let expected = crate::private_names::user_facing_text(expected).replace('\n', "\n  ");
+        Some((*span, format!("Type mismatch\n  {term}\nhas type\n  {actual}\nbut is expected to have type\n  {expected}")))
     }
 
     /// The identifier an unknown-identifier error names, whichever form it

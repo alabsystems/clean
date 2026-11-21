@@ -85,7 +85,7 @@ impl Parser {
             });
         }
 
-        // Handle case where structure has no fields (just extends)
+        // The field block is optional, including before an attached deriving clause.
         if !self.check(&TokenKind::Where) {
             return Ok(SurfaceDecl::Structure {
                 span: start_span,
@@ -96,7 +96,7 @@ impl Parser {
                 ty,
                 ctor_name: None,
                 fields: Vec::new(),
-                deriving: Vec::new(),
+                deriving: self.parse_deriving_clause()?,
                 modifiers,
             });
         }
@@ -117,59 +117,7 @@ impl Parser {
             None
         };
 
-        // Parse fields. Lean's `structFields` accepts PARENTHESIZED binder
-        // groups (`(x y : Nat)`, one field per name, optional group default)
-        // interleaved with simple `name : Ty` fields; before this arm the
-        // groups fell out of the `where` block entirely and the structure was
-        // SILENTLY accepted with zero fields (the junk resurfacing as a raw
-        // decl) — the audit's "wrong program silently accepted" shape.
-        let mut fields = Vec::new();
-        loop {
-            if self.check(&TokenKind::LParen) {
-                fields.extend(self.parse_paren_field_binders()?);
-                continue;
-            }
-            if !self.is_field_start() {
-                break;
-            }
-            let field_span = self.current_span();
-            let field_name = self.ident()?;
-
-            // Bare `name := value` — a field-default OVERRIDE of an inherited
-            // field (Lean `structSimpleBinder` with no type ascription):
-            // `structure C extends B where x := 10` re-defaults `B`'s `x`.
-            // The type is a placeholder hole; the elaborator resolves it from
-            // the parent field and rejects non-inherited names loudly. (B90)
-            if self.eat(&TokenKind::ColonEq) {
-                let default_val = self.field_type_expr()?;
-                fields.push(SurfaceField {
-                    span: field_span,
-                    name: field_name,
-                    ty: SurfaceExpr::Hole(field_span),
-                    default: Some(default_val),
-                    is_default_override: true,
-                });
-                continue;
-            }
-
-            self.expect(&TokenKind::Colon)?;
-            let field_ty = self.field_type_expr()?;
-
-            // Optional default value: `field : Type := value`
-            let default = if self.eat(&TokenKind::ColonEq) {
-                Some(self.field_type_expr()?)
-            } else {
-                None
-            };
-
-            fields.push(SurfaceField {
-                span: field_span,
-                name: field_name,
-                ty: field_ty,
-                default,
-                is_default_override: false,
-            });
-        }
+        let fields = self.struct_fields()?;
 
         // Parse optional deriving clause: `deriving Repr, BEq`
         let deriving = self.parse_deriving_clause()?;
@@ -192,9 +140,17 @@ impl Parser {
     pub(in crate::grammar) fn parse_deriving_clause(
         &mut self,
     ) -> Result<Vec<SurfaceName>, ParseError> {
-        if !self.eat(&TokenKind::Deriving) {
+        // A standalone deriving command starts a new declaration, even directly
+        // after a field block. Lean's optDeriving tests these two keywords first.
+        if !self.check(&TokenKind::Deriving)
+            || matches!(
+                self.peek_kind(1),
+                Some(TokenKind::Instance | TokenKind::Noncomputable)
+            )
+        {
             return Ok(Vec::new());
         }
+        self.advance();
 
         let mut classes = Vec::new();
 
@@ -209,6 +165,86 @@ impl Parser {
         Ok(classes)
     }
 
+    /// Parse a `structure` / `class` `where` field block — Lean's
+    /// `structFields` (`Lean/Parser/Command.lean`, v4.30.0-rc2):
+    ///
+    /// ```text
+    /// manyIndent (ppLine >> checkColGe >> ppGroup (structExplicitBinder <|> … <|> structSimpleBinder))
+    /// ```
+    ///
+    /// `manyIndent` is `withPosition`, so the whole block runs with the FIRST
+    /// field's column saved: `checkColGt` inside a field type (application
+    /// arguments, the optional level of `Type` / `Sort`) refuses a token at
+    /// or left of that column, which is how `Prov : Type` ⏎ `n : Nat` ends
+    /// the `Prov` field before `n` instead of reading `Type n`.
+    ///
+    /// PARENTHESIZED binder groups (`(x y : Nat)`, one field per name,
+    /// optional group default) interleave with simple `name : Ty` fields;
+    /// before that arm the groups fell out of the `where` block entirely and
+    /// the structure was SILENTLY accepted with zero fields (the junk
+    /// resurfacing as a raw decl) — the audit's "wrong program silently
+    /// accepted" shape. Shared by the structure and class parsers, which Lean
+    /// parses with the one `«structure»` command.
+    pub(in crate::grammar) fn struct_fields(&mut self) -> Result<Vec<SurfaceField>, ParseError> {
+        self.with_position("structure fields", Self::struct_fields_in_position)
+    }
+
+    fn struct_fields_in_position(&mut self) -> Result<Vec<SurfaceField>, ParseError> {
+        let mut fields = Vec::new();
+        loop {
+            if self.check(&TokenKind::LParen) {
+                fields.extend(self.parse_paren_field_binders()?);
+                continue;
+            }
+            if !self.is_field_start() {
+                break;
+            }
+            let documentation = self.documentation_before(self.pos);
+            let field_span = self.current_span();
+            let field_name = self.ident()?;
+
+            // Bare `name := value` — a field-default OVERRIDE of an inherited
+            // field (Lean `structSimpleBinder` with no type ascription):
+            // `structure C extends B where x := 10` re-defaults `B`'s `x`.
+            // The type is a placeholder hole; the elaborator resolves it from
+            // the parent field and rejects non-inherited names loudly; its
+            // class path rejects it too (parent methods are prepended as own
+            // fields there, so no inherited-field target exists). (B90)
+            if self.eat(&TokenKind::ColonEq) {
+                let default_val = self.field_type_expr()?;
+                fields.push(SurfaceField {
+                    documentation: documentation.clone(),
+                    span: field_span,
+                    name: field_name,
+                    ty: SurfaceExpr::Hole(field_span),
+                    default: Some(default_val),
+                    is_default_override: true,
+                });
+                continue;
+            }
+
+            self.expect(&TokenKind::Colon)?;
+            let field_ty = self.field_type_expr()?;
+
+            // Optional default value: `field : Type := value`
+            let default = if self.eat(&TokenKind::ColonEq) {
+                Some(self.field_type_expr()?)
+            } else {
+                None
+            };
+
+            fields.push(SurfaceField {
+                documentation,
+                span: field_span,
+                name: field_name,
+                ty: field_ty,
+                default,
+                is_default_override: false,
+            });
+        }
+        Ok(fields)
+    }
+
     /// Parse a run of parenthesized field binders `(name… : type [:= default])*`
     /// — the field spec of the legacy `structure`/`class` `:=` form, and the
     /// parenthesized groups Lean's `structFields` accepts inside a `where`
@@ -216,29 +252,39 @@ impl Parser {
     /// names (`(a b : T)`) expands to one field per name; a group default
     /// applies to every name in its group. Shared by the structure and class
     /// parsers.
+    ///
+    /// The group's contents parse with NO saved position, as Lean's
+    /// `structExplicitBinder` wraps them in `withoutPosition`: inside the
+    /// parentheses a `Type` level or an application argument may sit at any
+    /// column, the closing `)` being the only boundary.
     pub(in crate::grammar) fn parse_paren_field_binders(
         &mut self,
     ) -> Result<Vec<SurfaceField>, ParseError> {
         let mut fields = Vec::new();
         while self.check(&TokenKind::LParen) {
+            let documentation = self.documentation_before(self.pos);
             let group_span = self.current_span();
             self.expect(&TokenKind::LParen)?;
-            let mut names = vec![self.ident()?];
-            while matches!(self.current_kind(), TokenKind::Ident(_)) {
-                names.push(self.ident()?);
-            }
-            self.expect(&TokenKind::Colon)?;
-            let field_ty = self.expr()?;
-            // Optional group default: `(x : Nat := 3)`. The closing paren
-            // delimits the value, so the full expression grammar applies.
-            let default = if self.eat(&TokenKind::ColonEq) {
-                Some(self.expr()?)
-            } else {
-                None
-            };
+            let (names, field_ty, default) = self.without_position(|p| {
+                let mut names = vec![p.ident()?];
+                while matches!(p.current_kind(), TokenKind::Ident(_)) {
+                    names.push(p.ident()?);
+                }
+                p.expect(&TokenKind::Colon)?;
+                let field_ty = p.expr()?;
+                // Optional group default: `(x : Nat := 3)`. The closing paren
+                // delimits the value, so the full expression grammar applies.
+                let default = if p.eat(&TokenKind::ColonEq) {
+                    Some(p.expr()?)
+                } else {
+                    None
+                };
+                Ok((names, field_ty, default))
+            })?;
             self.expect(&TokenKind::RParen)?;
             for name in names {
                 fields.push(SurfaceField {
+                    documentation: documentation.clone(),
                     span: group_span,
                     name,
                     ty: field_ty.clone(),
@@ -343,11 +389,20 @@ impl Parser {
     pub(in crate::grammar) fn optional_binders(
         &mut self,
     ) -> Result<Vec<SurfaceBinder>, ParseError> {
+        self.optional_binders_with_tuple_patterns(true)
+    }
+
+    pub(in crate::grammar) fn optional_binders_with_tuple_patterns(
+        &mut self,
+        allow_tuple_patterns: bool,
+    ) -> Result<Vec<SurfaceBinder>, ParseError> {
         let mut binders = Vec::new();
 
         loop {
             match self.current_kind() {
-                TokenKind::LParen => binders.extend(self.explicit_binders()?),
+                TokenKind::LParen => {
+                    binders.extend(self.explicit_binders_with_tuple_patterns(allow_tuple_patterns)?)
+                }
                 TokenKind::LBrace => binders.extend(self.implicit_binders()?),
                 TokenKind::LBracket => binders.extend(self.instance_binders()?),
                 // `⦃x : T⦄` — strict-implicit. The term-position binder loop
@@ -416,15 +471,20 @@ impl Parser {
         let ty = Box::new(self.expr()?);
         self.expect(&TokenKind::Where)?;
 
-        let mut clauses = Vec::new();
-        while matches!(self.current_kind(), TokenKind::Ident(_))
-            && matches!(self.peek_kind(1), Some(TokenKind::ColonEq))
-        {
-            let clause_name = self.ident()?;
-            self.expect(&TokenKind::ColonEq)?;
-            let value = self.field_type_expr()?;
-            clauses.push((clause_name, value));
-        }
+        // The clause block is a `where` field block (Lean's `whereStructInst`,
+        // `sepByIndent`), so it saves the first clause's column.
+        let clauses = self.with_position("codef clauses", |p| {
+            let mut clauses = Vec::new();
+            while matches!(p.current_kind(), TokenKind::Ident(_))
+                && matches!(p.peek_kind(1), Some(TokenKind::ColonEq))
+            {
+                let clause_name = p.ident()?;
+                p.expect(&TokenKind::ColonEq)?;
+                let value = p.field_type_expr()?;
+                clauses.push((clause_name, value));
+            }
+            Ok(clauses)
+        })?;
 
         Ok(SurfaceDecl::Codef {
             span: start_span,
@@ -479,7 +539,9 @@ impl Parser {
         let body = if self.check(&TokenKind::Pipe) {
             CodataBody::Variant(self.codata_variant_clauses(&name, &binders)?)
         } else if had_where {
-            CodataBody::Record(self.codata_record_fields()?)
+            // The record body is the structure field grammar, so it saves
+            // the first field's column the way `structFields` does.
+            CodataBody::Record(self.with_position("codata fields", Self::codata_record_fields)?)
         } else {
             return Err(ParseError::UnexpectedToken {
                 line: self.current_line(),
@@ -508,6 +570,7 @@ impl Parser {
     fn codata_record_fields(&mut self) -> Result<Vec<SurfaceField>, ParseError> {
         let mut fields = Vec::new();
         while self.is_field_start() {
+            let documentation = self.documentation_before(self.pos);
             let field_span = self.current_span();
             let field_name = self.ident()?;
             self.expect(&TokenKind::Colon)?;
@@ -521,6 +584,7 @@ impl Parser {
                 });
             }
             fields.push(SurfaceField {
+                documentation,
                 span: field_span,
                 name: field_name,
                 ty: field_ty,
@@ -550,10 +614,13 @@ impl Parser {
     ) -> Result<Vec<SurfaceCtor>, ParseError> {
         let mut ctors = Vec::new();
         while self.eat(&TokenKind::Pipe) {
+            let (documentation, duplicate_documentation) = self.constructor_documentation();
             let ctor_span = self.current_span();
             let ctor_name = self.raw_ident()?;
             let ctor_ty = self.parse_ctor_type(ctor_span, name, binders)?;
             ctors.push(SurfaceCtor {
+                documentation,
+                duplicate_documentation,
                 span: ctor_span,
                 name: ctor_name,
                 ty: ctor_ty,

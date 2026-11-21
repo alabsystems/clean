@@ -84,7 +84,7 @@ impl Specification {
                 format!(
                     "def probe_blind_cr2 (T : KExpr) (e : KExpr) (e2 : KExpr) (h : {he}) \
                      (s : whnf_step e e2) : {he2} := \
-                     whnf_acc.rec \
+                     @whnf_acc.rec \
                      (fun (x : KExpr) (_hx : whnf_acc x) => \
                      forall (y : KExpr), whnf_step x y -> whnf_acc y) \
                      (fun (x : KExpr) \
@@ -124,7 +124,7 @@ impl Specification {
                 format!(
                     "def probe_blind_red_type_step (T : KExpr) (T2 : KExpr) (e : KExpr) \
                      (_s : whnf_step T T2) : AndType ({h} -> {h}) ({h} -> {h}) := \
-                     AndType.intro ({h} -> {h}) ({h} -> {h}) \
+                     @AndType.intro ({h} -> {h}) ({h} -> {h}) \
                      (fun (x : {h}) => x) (fun (x : {h}) => x)",
                     h = acc("e")
                 ),
@@ -145,7 +145,7 @@ impl Specification {
                      whnf_acc.intro e4 (fun (e5 : KExpr) (_s5 : whnf_step e4 e5) => \
                      whnf_acc.intro e5 (fun (e6 : KExpr) (_s6 : whnf_step e5 e6) => \
                      whnf_acc.intro e6 (fun (e7 : KExpr) (_s7 : whnf_step e6 e7) => \
-                     _hf)))))))",
+                     _hf))))))",
                     hf = acc("f"),
                     ha = acc("a"),
                     hfa = acc("(KExpr.app f a)")

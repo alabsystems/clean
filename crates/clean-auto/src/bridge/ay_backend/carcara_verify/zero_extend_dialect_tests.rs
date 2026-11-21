@@ -446,7 +446,7 @@ fn a_certificate_without_zero_extend_is_not_refused_for_its_size() {
 /// fails here.
 #[test]
 fn the_dialect_section_lists_exactly_the_clean_dialect_options() {
-    fn fields(config: Config) -> Vec<(String, bool)> {
+    fn fields(config: Config) -> Vec<(String, String)> {
         let debug = format!("{config:?}");
         let inner = debug
             .strip_prefix("Config { ")
@@ -458,23 +458,29 @@ fn the_dialect_section_lists_exactly_the_clean_dialect_options() {
                 let (name, value) = field
                     .split_once(": ")
                     .unwrap_or_else(|| panic!("not a field: {field}"));
-                let value = match value {
-                    "true" => true,
-                    "false" => false,
-                    other => panic!("{name} is not a flag: {other}"),
-                };
-                (name.to_owned(), value)
+                (name.to_owned(), value.to_owned())
             })
             .collect()
     }
     let default = fields(Config::new());
     let dialect = fields(Config::clean_dialect());
+    assert_eq!(default.len(), dialect.len());
     let names: HashSet<String> = default.iter().map(|(name, _)| name.clone()).collect();
-    let selected: HashSet<String> = dialect
+    let selected: HashSet<String> = default
         .iter()
-        .zip(&default)
-        .filter(|((_, on), (_, off))| *on && !*off)
-        .map(|((name, _), _)| name.clone())
+        .zip(&dialect)
+        .filter_map(|((name, from), (dialect_name, to))| {
+            assert_eq!(name, dialect_name);
+            match (name.as_str(), from.as_str(), to.as_str()) {
+                ("array_lambda_dialect", from, to) => {
+                    assert_eq!((from, to), ("FunctionsOnly", "TypedArrayContexts"));
+                    Some(name.clone())
+                }
+                (_, "false", "true") | (_, "true", "false") => Some(name.clone()),
+                (_, "false", "false") | (_, "true", "true") => None,
+                _ => panic!("unrecognized dialect option {name}: {from} -> {to}"),
+            }
+        })
         .collect();
     let downstream = include_str!("../../../../../../third-party/carcara/DOWNSTREAM.md");
     let mut stated = HashSet::new();

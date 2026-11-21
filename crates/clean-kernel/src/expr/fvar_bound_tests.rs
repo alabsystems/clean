@@ -176,7 +176,7 @@ fn clone_precomputed_meta_and_serde_recompute_or_preserve_the_actual_hint() {
     assert!(!String::from_utf8_lossy(&bytes).contains("upper_bound"));
     let restored: Expr = serde_json::from_slice(&bytes).unwrap();
     for actual in [clone, with_meta, restored] {
-        assert_eq!(actual.fvar_upper_bound, 900);
+        assert_eq!(actual.fvar_upper_bound(), 900);
         assert_eq!(serde_json::to_vec(&actual).unwrap(), bytes);
         assert_eq!(
             actual.abstract_fvar(FVarId::new(900)),
@@ -224,10 +224,49 @@ fn expression_layout_and_contextual_fallback_are_explicit() {
     let unknown = Expr::from_kind(ExprKind::ZFCSet(crate::expr::ZFCSetExpr::Singleton(
         Arc::new(f(1)),
     )));
-    assert_eq!(unknown.fvar_upper_bound, u64::MAX);
+    assert_eq!(unknown.fvar_upper_bound(), u64::MAX);
     assert!(unknown.may_contain_fvar(FVarId::new(u64::MAX)));
     assert_eq!(
         unknown.abstract_fvar(FVarId::new(2)),
         without_hint(|| unknown.abstract_fvar(FVarId::new(2)))
     );
+}
+
+#[test]
+fn shared_auxiliary_word_preserves_exact_closed_open_and_zfc_bounds() {
+    let closed_unknown = Expr::from_kind(ExprKind::ZFCSet(crate::expr::ZFCSetExpr::Empty));
+    let mixed = Expr::app(closed_unknown.clone(), f(42));
+    for (child, bound) in [
+        (Expr::prop(), 0),
+        (closed_unknown, u64::MAX),
+        (mixed, u64::MAX),
+        (f(0), 0),
+        (f(900), 900),
+        (f(u64::MAX), u64::MAX),
+    ] {
+        assert_eq!(child.fvar_upper_bound(), bound);
+        for term in all_children(Arc::new(child)) {
+            let expected = if matches!(term.kind(), ExprKind::ZFCSet(_)) {
+                u64::MAX
+            } else {
+                bound
+            };
+            let bytes = serde_json::to_vec(&term).expect("expression kind JSON");
+            let restored: Expr = serde_json::from_slice(&bytes).expect("expression from kind JSON");
+            for actual in [
+                term.clone(),
+                Expr::with_meta(term.kind.clone(), term.meta()),
+                restored,
+            ] {
+                assert_eq!(actual.fvar_upper_bound(), expected);
+                for id in [0, 42, 900, u64::MAX] {
+                    let target = FVarId::new(id);
+                    assert_eq!(
+                        actual.abstract_fvar(target),
+                        without_hint(|| actual.abstract_fvar(target))
+                    );
+                }
+            }
+        }
+    }
 }

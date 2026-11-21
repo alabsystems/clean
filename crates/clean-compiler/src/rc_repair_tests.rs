@@ -806,5 +806,10 @@ mod end_to_end;
 #[path = "rc_repair_tests_review.rs"]
 mod review;
 
+// ── The object→erased cast (X4) ─────────────────────────────────────────
+
+#[path = "rc_repair_tests_erased.rs"]
+mod erased;
+
 #[path = "rc_repair_tests_nested.rs"]
 mod nested_patterns;

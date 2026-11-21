@@ -1,0 +1,35 @@
+Clean Q4 patch 0002 to digama0/lean4lean arena bce3448115f7819fc12d647fadd3bb090666637e
+(docs/DECISIONS.md, 2026-11-17, "Q4's external member may be pinned upstream
+Lean4Lean plus a minimal in-repo patch set").
+
+Path: Lean.Kernel.Exception.mapEnvM (Lean4Lean/Replay.lean:53), the
+`declTypeMismatch` arm, used only by Lean4Lean.Replay.throwKernelException
+after the kernel has raised its exception. Every other arm maps the
+exception's environment to the fresh one throwKernelException builds; this
+arm kept the replay environment, whose extension states are absent, so the
+renderer panics (`invalid environment extension has been accessed` at
+Lean.EnvExtension.getStateImpl) and the kernel's rejection is lost.
+
+Mirrors the exception path of pinned Lean v4.30.0-rc2
+(3dc1a088b6d2d8eafe25a7cd7ec7b58d731bd7cc): the kernel throws
+`definition_type_mismatch_exception(env, d, val_type)`
+(src/kernel/environment.cpp:176-253), `catch_kernel_exceptions`
+(src/kernel/kernel_exception.h:171-173) returns it as
+`Kernel.Exception.declTypeMismatch env decl givenType`, and
+`Kernel.Exception.toMessageData` (src/Lean/Message.lean:791-798) renders
+"(kernel) declaration type mismatch, '<n>' has type ..." in a context built
+from that exception's environment. The patch changes only which environment
+the renderer reads; the kernel has already decided.
+diff --git a/Lean4Lean/Replay.lean b/Lean4Lean/Replay.lean
+index b54da43..8791834 100644
+--- a/Lean4Lean/Replay.lean
++++ b/Lean4Lean/Replay.lean
+@@ -50,7 +50,7 @@ def Lean.Kernel.Exception.mapEnvM [Monad m]
+   match ex with
+   | unknownConstant env c => return .unknownConstant (← f env) c
+   | alreadyDeclared env c => return .alreadyDeclared (← f env) c
+-  | declTypeMismatch env d t => return .declTypeMismatch env d t
++  | declTypeMismatch env d t => return .declTypeMismatch (← f env) d t
+   | declHasMVars env c e => return declHasMVars (← f env) c e
+   | declHasFVars env c e => return declHasFVars (← f env) c e
+   | funExpected env lctx e => return funExpected (← f env) lctx e

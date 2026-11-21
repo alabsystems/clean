@@ -71,7 +71,7 @@ impl Specification {
                 "lamBody".to_string(),
                 format!(
                     "def lamBody (t : KExpr) : KExpr := \
-                     KExpr.rec (fun (_t : KExpr) => KExpr) \
+                     @KExpr.rec (fun (_t : KExpr) => KExpr) \
                      {sort} {bvar} {app} \
                      (fun (lty : KExpr) (lb : KExpr) (i1 : KExpr) (i2 : KExpr) => lb) \
                      {pi} {konst} {let_} {proj} {mvar} t",
@@ -94,7 +94,7 @@ impl Specification {
                 format!(
                     "def piintro_acc_to_sort : forall (k : Nat) (y : KExpr), \
                      whnf_acc y -> RedW k {s0} y := \
-                     Nat.rec (fun (kk : Nat) => forall (y : KExpr), \
+                     @Nat.rec (fun (kk : Nat) => forall (y : KExpr), \
                      whnf_acc y -> RedW kk {s0} y) \
                      (fun (y : KExpr) (h0 : whnf_acc y) => h0) \
                      (fun (n : Nat) (_ih : forall (y : KExpr), \
@@ -119,16 +119,16 @@ impl Specification {
                 // (`Nat.add` recurses on its second argument too).
                 "lift_bvar_zero".to_string(),
                 "def lift_bvar_zero (i : Nat) (c : Nat) : \
-                 Eq KExpr (lift_bvar_at i c Nat.zero) (KExpr.bvar i) := \
-                 Nat.rec (fun (k : Nat) => \
-                 Eq KExpr (Nat.rec (fun (_j : Nat) => KExpr) \
+                 @Eq KExpr (lift_bvar_at i c Nat.zero) (KExpr.bvar i) := \
+                 @Nat.rec (fun (k : Nat) => \
+                 @Eq KExpr (@Nat.rec (fun (_j : Nat) => KExpr) \
                  (KExpr.bvar (Nat.add i Nat.zero)) \
                  (fun (_j : Nat) (_r : KExpr) => KExpr.bvar i) k) (KExpr.bvar i)) \
-                 (Eq.refl KExpr (KExpr.bvar i)) \
-                 (fun (k : Nat) (_ih : Eq KExpr (Nat.rec (fun (_j : Nat) => KExpr) \
+                 (@Eq.refl KExpr (KExpr.bvar i)) \
+                 (fun (k : Nat) (_ih : @Eq KExpr (@Nat.rec (fun (_j : Nat) => KExpr) \
                  (KExpr.bvar (Nat.add i Nat.zero)) \
                  (fun (_j : Nat) (_r : KExpr) => KExpr.bvar i) k) (KExpr.bvar i)) => \
-                 Eq.refl KExpr (KExpr.bvar i)) \
+                 @Eq.refl KExpr (KExpr.bvar i)) \
                  (Nat.sub c i)"
                     .to_string(),
             ),
@@ -152,89 +152,89 @@ impl Specification {
                     // LIFTED spelling and rewrite each lifted subterm to its unlifted
                     // self with one `Eq.substType` per subterm.
                     "def lift_zero_id : forall (e : KExpr) (c : Nat), \
-                     Eq KExpr (lift_at e c Nat.zero) e := \
-                     KExpr.rec (fun (e : KExpr) => forall (c : Nat), \
-                     Eq KExpr (lift_at e c Nat.zero) e) \
-                     (fun (l : Level) (c : Nat) => Eq.refl KExpr (KExpr.sort l)) \
+                     @Eq KExpr (lift_at e c Nat.zero) e := \
+                     @KExpr.rec (fun (e : KExpr) => forall (c : Nat), \
+                     @Eq KExpr (lift_at e c Nat.zero) e) \
+                     (fun (l : Level) (c : Nat) => @Eq.refl KExpr (KExpr.sort l)) \
                      (fun (i : Nat) (c : Nat) => lift_bvar_zero i c) \
                      (fun (f : KExpr) (a : KExpr) \
-                     (ihf : forall (c : Nat), Eq KExpr (lift_at f c Nat.zero) f) \
-                     (iha : forall (c : Nat), Eq KExpr (lift_at a c Nat.zero) a) \
+                     (ihf : forall (c : Nat), @Eq KExpr (lift_at f c Nat.zero) f) \
+                     (iha : forall (c : Nat), @Eq KExpr (lift_at a c Nat.zero) a) \
                      (c : Nat) => \
                      Eq.substType KExpr (fun (q : KExpr) => \
-                     Eq KExpr (KExpr.app (lift_at f c Nat.zero) (lift_at a c Nat.zero)) \
+                     @Eq KExpr (KExpr.app (lift_at f c Nat.zero) (lift_at a c Nat.zero)) \
                      (KExpr.app f q)) (lift_at a c Nat.zero) a (iha c) \
                      (Eq.substType KExpr (fun (q : KExpr) => \
-                     Eq KExpr (KExpr.app (lift_at f c Nat.zero) (lift_at a c Nat.zero)) \
+                     @Eq KExpr (KExpr.app (lift_at f c Nat.zero) (lift_at a c Nat.zero)) \
                      (KExpr.app q (lift_at a c Nat.zero))) \
                      (lift_at f c Nat.zero) f (ihf c) \
-                     (Eq.refl KExpr (KExpr.app (lift_at f c Nat.zero) \
+                     (@Eq.refl KExpr (KExpr.app (lift_at f c Nat.zero) \
                      (lift_at a c Nat.zero))))) \
                      (fun (ty : KExpr) (b : KExpr) \
-                     (ihty : forall (c : Nat), Eq KExpr (lift_at ty c Nat.zero) ty) \
-                     (ihb : forall (c : Nat), Eq KExpr (lift_at b c Nat.zero) b) \
+                     (ihty : forall (c : Nat), @Eq KExpr (lift_at ty c Nat.zero) ty) \
+                     (ihb : forall (c : Nat), @Eq KExpr (lift_at b c Nat.zero) b) \
                      (c : Nat) => \
                      Eq.substType KExpr (fun (q : KExpr) => \
-                     Eq KExpr (KExpr.lam (lift_at ty c Nat.zero) \
+                     @Eq KExpr (KExpr.lam (lift_at ty c Nat.zero) \
                      (lift_at b (Nat.succ c) Nat.zero)) (KExpr.lam ty q)) \
                      (lift_at b (Nat.succ c) Nat.zero) b (ihb (Nat.succ c)) \
                      (Eq.substType KExpr (fun (q : KExpr) => \
-                     Eq KExpr (KExpr.lam (lift_at ty c Nat.zero) \
+                     @Eq KExpr (KExpr.lam (lift_at ty c Nat.zero) \
                      (lift_at b (Nat.succ c) Nat.zero)) \
                      (KExpr.lam q (lift_at b (Nat.succ c) Nat.zero))) \
                      (lift_at ty c Nat.zero) ty (ihty c) \
-                     (Eq.refl KExpr (KExpr.lam (lift_at ty c Nat.zero) \
+                     (@Eq.refl KExpr (KExpr.lam (lift_at ty c Nat.zero) \
                      (lift_at b (Nat.succ c) Nat.zero))))) \
                      (fun (ty : KExpr) (b : KExpr) \
-                     (ihty : forall (c : Nat), Eq KExpr (lift_at ty c Nat.zero) ty) \
-                     (ihb : forall (c : Nat), Eq KExpr (lift_at b c Nat.zero) b) \
+                     (ihty : forall (c : Nat), @Eq KExpr (lift_at ty c Nat.zero) ty) \
+                     (ihb : forall (c : Nat), @Eq KExpr (lift_at b c Nat.zero) b) \
                      (c : Nat) => \
                      Eq.substType KExpr (fun (q : KExpr) => \
-                     Eq KExpr (KExpr.pi (lift_at ty c Nat.zero) \
+                     @Eq KExpr (KExpr.pi (lift_at ty c Nat.zero) \
                      (lift_at b (Nat.succ c) Nat.zero)) (KExpr.pi ty q)) \
                      (lift_at b (Nat.succ c) Nat.zero) b (ihb (Nat.succ c)) \
                      (Eq.substType KExpr (fun (q : KExpr) => \
-                     Eq KExpr (KExpr.pi (lift_at ty c Nat.zero) \
+                     @Eq KExpr (KExpr.pi (lift_at ty c Nat.zero) \
                      (lift_at b (Nat.succ c) Nat.zero)) \
                      (KExpr.pi q (lift_at b (Nat.succ c) Nat.zero))) \
                      (lift_at ty c Nat.zero) ty (ihty c) \
-                     (Eq.refl KExpr (KExpr.pi (lift_at ty c Nat.zero) \
+                     (@Eq.refl KExpr (KExpr.pi (lift_at ty c Nat.zero) \
                      (lift_at b (Nat.succ c) Nat.zero))))) \
                      (fun (nm : Name) (us : ListType Level) (c : Nat) => \
-                     Eq.refl KExpr (KExpr.const nm us)) \
+                     @Eq.refl KExpr (KExpr.const nm us)) \
                      (fun (ty : KExpr) (v : KExpr) (b : KExpr) \
-                     (ihty : forall (c : Nat), Eq KExpr (lift_at ty c Nat.zero) ty) \
-                     (ihv : forall (c : Nat), Eq KExpr (lift_at v c Nat.zero) v) \
-                     (ihb : forall (c : Nat), Eq KExpr (lift_at b c Nat.zero) b) \
+                     (ihty : forall (c : Nat), @Eq KExpr (lift_at ty c Nat.zero) ty) \
+                     (ihv : forall (c : Nat), @Eq KExpr (lift_at v c Nat.zero) v) \
+                     (ihb : forall (c : Nat), @Eq KExpr (lift_at b c Nat.zero) b) \
                      (c : Nat) => \
                      Eq.substType KExpr (fun (q : KExpr) => \
-                     Eq KExpr (KExpr.let_ (lift_at ty c Nat.zero) \
+                     @Eq KExpr (KExpr.let_ (lift_at ty c Nat.zero) \
                      (lift_at v c Nat.zero) (lift_at b (Nat.succ c) Nat.zero)) \
                      (KExpr.let_ ty v q)) \
                      (lift_at b (Nat.succ c) Nat.zero) b (ihb (Nat.succ c)) \
                      (Eq.substType KExpr (fun (q : KExpr) => \
-                     Eq KExpr (KExpr.let_ (lift_at ty c Nat.zero) \
+                     @Eq KExpr (KExpr.let_ (lift_at ty c Nat.zero) \
                      (lift_at v c Nat.zero) (lift_at b (Nat.succ c) Nat.zero)) \
                      (KExpr.let_ ty q (lift_at b (Nat.succ c) Nat.zero))) \
                      (lift_at v c Nat.zero) v (ihv c) \
                      (Eq.substType KExpr (fun (q : KExpr) => \
-                     Eq KExpr (KExpr.let_ (lift_at ty c Nat.zero) \
+                     @Eq KExpr (KExpr.let_ (lift_at ty c Nat.zero) \
                      (lift_at v c Nat.zero) (lift_at b (Nat.succ c) Nat.zero)) \
                      (KExpr.let_ q (lift_at v c Nat.zero) \
                      (lift_at b (Nat.succ c) Nat.zero))) \
                      (lift_at ty c Nat.zero) ty (ihty c) \
-                     (Eq.refl KExpr (KExpr.let_ (lift_at ty c Nat.zero) \
+                     (@Eq.refl KExpr (KExpr.let_ (lift_at ty c Nat.zero) \
                      (lift_at v c Nat.zero) \
                      (lift_at b (Nat.succ c) Nat.zero)))))) \
                      (fun (sn : Name) (si : Nat) (sub : KExpr) \
-                     (ihs : forall (c : Nat), Eq KExpr (lift_at sub c Nat.zero) sub) \
+                     (ihs : forall (c : Nat), @Eq KExpr (lift_at sub c Nat.zero) sub) \
                      (c : Nat) => \
                      Eq.substType KExpr (fun (q : KExpr) => \
-                     Eq KExpr (KExpr.proj sn si (lift_at sub c Nat.zero)) \
+                     @Eq KExpr (KExpr.proj sn si (lift_at sub c Nat.zero)) \
                      (KExpr.proj sn si q)) \
                      (lift_at sub c Nat.zero) sub (ihs c) \
-                     (Eq.refl KExpr (KExpr.proj sn si (lift_at sub c Nat.zero)))) \
-                     (fun (ln : Nat) (c : Nat) => Eq.refl KExpr (KExpr.lit ln))"
+                     (@Eq.refl KExpr (KExpr.proj sn si (lift_at sub c Nat.zero)))) \
+                     (fun (ln : Nat) (c : Nat) => @Eq.refl KExpr (KExpr.lit ln))"
                         .to_string()
                 },
             ),
@@ -245,17 +245,17 @@ impl Specification {
                 "omega_instantiate_body".to_string(),
                 format!(
                     "def omega_instantiate_body (y : KExpr) : \
-                     Eq KExpr (instantiate {OM_BODY} y) (KExpr.app y y) := \
+                     @Eq KExpr (instantiate {OM_BODY} y) (KExpr.app y y) := \
                      Eq.substType KExpr (fun (q : KExpr) => \
-                     Eq KExpr (KExpr.app (lift_at y Nat.zero Nat.zero) \
+                     @Eq KExpr (KExpr.app (lift_at y Nat.zero Nat.zero) \
                      (lift_at y Nat.zero Nat.zero)) (KExpr.app y q)) \
                      (lift_at y Nat.zero Nat.zero) y (lift_zero_id y Nat.zero) \
                      (Eq.substType KExpr (fun (q : KExpr) => \
-                     Eq KExpr (KExpr.app (lift_at y Nat.zero Nat.zero) \
+                     @Eq KExpr (KExpr.app (lift_at y Nat.zero Nat.zero) \
                      (lift_at y Nat.zero Nat.zero)) \
                      (KExpr.app q (lift_at y Nat.zero Nat.zero))) \
                      (lift_at y Nat.zero Nat.zero) y (lift_zero_id y Nat.zero) \
-                     (Eq.refl KExpr (KExpr.app (lift_at y Nat.zero Nat.zero) \
+                     (@Eq.refl KExpr (KExpr.app (lift_at y Nat.zero Nat.zero) \
                      (lift_at y Nat.zero Nat.zero))))"
                 ),
             ),
@@ -264,11 +264,11 @@ impl Specification {
                 format!(
                     "def omega_app_acc_of_candidate {carriers} \
                      (hinst : forall (y : KExpr), \
-                     Eq KExpr (instantiate {OM_BODY} y) (KExpr.app y y)) \
+                     @Eq KExpr (instantiate {OM_BODY} y) (KExpr.app y y)) \
                      (a : KExpr) (ha : whnf_acc a) : \
                      (forall (y : KExpr), whnf_acc y -> whnf_acc (KExpr.app a y)) -> \
                      whnf_acc (KExpr.app {OM} a) := \
-                     whnf_acc.rec \
+                     @whnf_acc.rec \
                      (fun (w : KExpr) (_hw : whnf_acc w) => \
                      (forall (y : KExpr), whnf_acc y -> whnf_acc (KExpr.app w y)) -> \
                      whnf_acc (KExpr.app {OM} w)) \
@@ -282,31 +282,31 @@ impl Specification {
                      (fun (z : KExpr) (sz : whnf_step (KExpr.app {OM} w) z) => \
                      whnf_step_app_inv {OM} w z (whnf_acc z) sz \
                      (fun (A0 : KExpr) (body : KExpr) \
-                     (heq : Eq KExpr {OM} (KExpr.lam A0 body)) \
-                     (hz : Eq KExpr z (instantiate body w)) => \
+                     (heq : @Eq KExpr {OM} (KExpr.lam A0 body)) \
+                     (hz : @Eq KExpr z (instantiate body w)) => \
                      Eq.substType KExpr (fun (q : KExpr) => whnf_acc q) \
                      (instantiate body w) z \
-                     (Eq.symm KExpr z (instantiate body w) hz) \
+                     (@Eq.symm KExpr z (instantiate body w) hz) \
                      (Eq.substType KExpr \
                      (fun (q : KExpr) => whnf_acc (instantiate q w)) \
                      {OM_BODY} body \
                      (Eq.substType KExpr \
-                     (fun (q : KExpr) => Eq KExpr (lamBody {OM}) (lamBody q)) \
+                     (fun (q : KExpr) => @Eq KExpr (lamBody {OM}) (lamBody q)) \
                      {OM} (KExpr.lam A0 body) heq \
-                     (Eq.refl KExpr (lamBody {OM}))) \
+                     (@Eq.refl KExpr (lamBody {OM}))) \
                      (Eq.substType KExpr (fun (q : KExpr) => whnf_acc q) \
                      (KExpr.app w w) (instantiate {OM_BODY} w) \
-                     (Eq.symm KExpr (instantiate {OM_BODY} w) (KExpr.app w w) \
+                     (@Eq.symm KExpr (instantiate {OM_BODY} w) (KExpr.app w w) \
                      (hinst w)) \
                      (hc w (whnf_acc.intro w fw))))) \
                      (fun (f2 : KExpr) (hf : beta_reduces {OM} f2) \
-                     (_hz : Eq KExpr z (KExpr.app f2 w)) => \
+                     (_hz : @Eq KExpr z (KExpr.app f2 w)) => \
                      knored f2 (whnf_acc z) hf) \
                      (fun (a2 : KExpr) (hsa : beta_reduces w a2) \
-                     (hz : Eq KExpr z (KExpr.app {OM} a2)) => \
+                     (hz : @Eq KExpr z (KExpr.app {OM} a2)) => \
                      Eq.substType KExpr (fun (q : KExpr) => whnf_acc q) \
                      (KExpr.app {OM} a2) z \
-                     (Eq.symm KExpr z (KExpr.app {OM} a2) hz) \
+                     (@Eq.symm KExpr z (KExpr.app {OM} a2) hz) \
                      (ih a2 (whnf_step.beta w a2 hsa) \
                      (fun (u : KExpr) (hu : whnf_acc u) => \
                      whnf_acc_step (KExpr.app w u) (KExpr.app a2 u) (hc u hu) \
@@ -365,24 +365,24 @@ impl Specification {
                      (hb : beta_reduces {OM} f2) : R := \
                      beta_reduces_lam_inv (KExpr.bvar Nat.zero) {OM_BODY} f2 R hb \
                      (fun (A2 : KExpr) (hsA : beta_reduces (KExpr.bvar Nat.zero) A2) \
-                     (_he : Eq KExpr f2 (KExpr.lam A2 {OM_BODY})) => \
+                     (_he : @Eq KExpr f2 (KExpr.lam A2 {OM_BODY})) => \
                      no_whnf_step_bvar Nat.zero A2 R \
                      (whnf_step.beta (KExpr.bvar Nat.zero) A2 hsA)) \
                      (fun (b2 : KExpr) (hsb : beta_reduces {OM_BODY} b2) \
-                     (_he : Eq KExpr f2 (KExpr.lam (KExpr.bvar Nat.zero) b2)) => \
+                     (_he : @Eq KExpr f2 (KExpr.lam (KExpr.bvar Nat.zero) b2)) => \
                      whnf_step_app_inv (KExpr.bvar Nat.zero) (KExpr.bvar Nat.zero) b2 R \
                      (whnf_step.beta {OM_BODY} b2 hsb) \
                      (fun (A0 : KExpr) (body0 : KExpr) \
-                     (hl : Eq KExpr (KExpr.bvar Nat.zero) (KExpr.lam A0 body0)) \
-                     (_hb2 : Eq KExpr b2 (instantiate body0 (KExpr.bvar Nat.zero))) => \
+                     (hl : @Eq KExpr (KExpr.bvar Nat.zero) (KExpr.lam A0 body0)) \
+                     (_hb2 : @Eq KExpr b2 (instantiate body0 (KExpr.bvar Nat.zero))) => \
                      lam_ne_bvar A0 body0 Nat.zero R \
-                     (Eq.symm KExpr (KExpr.bvar Nat.zero) (KExpr.lam A0 body0) hl)) \
+                     (@Eq.symm KExpr (KExpr.bvar Nat.zero) (KExpr.lam A0 body0) hl)) \
                      (fun (g2 : KExpr) (hsf : beta_reduces (KExpr.bvar Nat.zero) g2) \
-                     (_hb2 : Eq KExpr b2 (KExpr.app g2 (KExpr.bvar Nat.zero))) => \
+                     (_hb2 : @Eq KExpr b2 (KExpr.app g2 (KExpr.bvar Nat.zero))) => \
                      no_whnf_step_bvar Nat.zero g2 R \
                      (whnf_step.beta (KExpr.bvar Nat.zero) g2 hsf)) \
                      (fun (a2 : KExpr) (hsa : beta_reduces (KExpr.bvar Nat.zero) a2) \
-                     (_hb2 : Eq KExpr b2 (KExpr.app (KExpr.bvar Nat.zero) a2)) => \
+                     (_hb2 : @Eq KExpr b2 (KExpr.app (KExpr.bvar Nat.zero) a2)) => \
                      no_whnf_step_bvar Nat.zero a2 R \
                      (whnf_step.beta (KExpr.bvar Nat.zero) a2 hsa)) \
                      (fun (hir : iota_reduces {OM_BODY} b2) => \

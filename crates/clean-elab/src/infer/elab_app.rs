@@ -11,6 +11,13 @@
 //! `elab_app_support.rs` (#307).
 
 use super::*;
+
+struct RecursorApplication<'a> {
+    name: Name,
+    recursor: clean_kernel::RecursorVal,
+    major_first: bool,
+    args: &'a [SurfaceArg],
+}
 /// Type arguments of a desugared heterogeneous operator application.
 struct HeteroBinopSlots {
     alpha: Expr,
@@ -123,7 +130,7 @@ impl<'a> ElabCtx<'a> {
         func: &SurfaceExpr,
         args: &[SurfaceArg],
     ) -> Result<Option<Expr>, ElabError> {
-        if args.len() != 2 || args.iter().any(|a| a.name.is_some()) {
+        if self.explicit_mode || args.len() != 2 || args.iter().any(|a| a.name.is_some()) {
             return Ok(None);
         }
         let SurfaceExpr::Ident(_, head) = Self::unwrap_surface_parens(func) else {
@@ -2441,6 +2448,23 @@ impl<'a> ElabCtx<'a> {
         }
     }
 
+    /// The parser's exact `heq ▸ value` desugaring, without an authored
+    /// ascription. Lean's `elabSubst` starts with `tryPostponeIfHasMVars?`:
+    /// resume against the solved slot instead of choosing an inferred motive
+    /// while a later argument can still determine a cast endpoint.
+    fn deferrable_subst(&self, e: &SurfaceExpr) -> bool {
+        match e {
+            SurfaceExpr::Paren(_, inner) => self.deferrable_subst(inner),
+            SurfaceExpr::App(_, head, args)
+                if args.len() == 2 && args.iter().all(|arg| arg.name.is_none()) =>
+            {
+                matches!(head.as_ref(), SurfaceExpr::Ident(_, name)
+                    if self.head_denotes_global(name, "Eq.rec"))
+            }
+            _ => false,
+        }
+    }
+
     /// Is `e` a leading-dot identifier (`.intro`, possibly applied:
     /// `.intro _`) — an argument whose meaning comes entirely from its slot
     /// type? Lean postpones its elaboration until the expected type is known
@@ -2464,6 +2488,20 @@ impl<'a> ElabCtx<'a> {
         let ty = self.metas.instantiate(ty);
         matches!(ty.get_app_fn().kind(),
             ExprKind::FVar(fvar) if MetaState::from_fvar(*fvar).is_some())
+    }
+
+    /// An open predicate applied to callback parameters can be determined
+    /// by a later proof argument. Inspect the domain before the eager
+    /// callback has an opportunity to solve that predicate from its body.
+    fn has_open_callback_premise(&self, slot: &Expr) -> bool {
+        let mut telescope = slot;
+        while let ExprKind::Pi(_, domain, body) = telescope.kind() {
+            if domain.is_app() && self.expected_type_head_is_meta(domain) {
+                return true;
+            }
+            telescope = body;
+        }
+        false
     }
 
     /// Is `e` an anonymous constructor `⟨…⟩` (possibly parenthesized)?
@@ -3067,155 +3105,202 @@ impl<'a> ElabCtx<'a> {
         Ok(term)
     }
 
-    /// Eliminator-style elaboration (`elabAsElim`) for a recursor applied with
-    /// its `{motive}` left IMPLICIT: `Nat.rec 0 (fun _ ih => ih + 1) n`, or the
-    /// `.recOn` form `Nat.recOn n 0 (fun _ ih => ih + 1)` (which applies the
-    /// major FIRST). The generic path inserts a metavariable for the motive, then
-    /// checks the first minor (`0`) against `?motive Nat.zero` — a higher-order
-    /// constraint the unifier cannot solve, so it fails. Lean's `elabAsElim`
-    /// instead synthesizes the motive from the expected type.
-    ///
-    /// This is the tractable slice: a NON-DEPENDENT motive for a recursor with
-    /// **no indices and one motive** — `Nat.rec`, `Bool.rec`, a user enum's
-    /// `.rec`, and PARAMETRIC types (`List.rec`, `Option.rec`, a user `Pair α`;
-    /// the inductive parameters precede the motive and are recovered from the
-    /// major's type). With expected result type `C` and major premise of type
-    /// `T`, the motive is `fun (_ : T) => C`; the recursor is then applied to the
-    /// parameters, the motive, and the user's minors + major exactly as a written
-    /// `@T.rec params… (fun _ => C) …`.
-    ///
-    /// Returns `None` (falls through to the generic path) whenever the shape is
-    /// outside this slice: explicit mode, a non-recursor head, an indexed or
-    /// mutual recursor, a supplied motive (arg count ≠ minors+major),
-    /// named args, or no expected type. SOUNDNESS: the emitted term is an
-    /// ordinary `@T.rec …` application, kernel-re-checked on registration — a
-    /// wrong motive makes the minors mismatch and fails LOUD; it can never
-    /// fabricate an ill-typed term.
+    /// Return the registered eliminator's ordering, preserving genuine imported
+    /// recOn/casesOn definitions whose primitive metadata lives under rec.
+    fn elaboration_recursor(
+        &self,
+        applied_name: &Name,
+    ) -> Option<(clean_kernel::RecursorVal, bool)> {
+        if let Some(rec) = self.env.get_recursor(applied_name) {
+            let major_first = rec.arg_order == clean_kernel::RecursorArgOrder::MajorAfterMotive;
+            return Some((rec.clone(), major_first));
+        }
+        let clean_kernel::name::NameInner::Str(parent, suffix) = applied_name.inner() else {
+            return None;
+        };
+        if suffix.as_ref() != "recOn" && suffix.as_ref() != "casesOn" {
+            return None;
+        }
+        self.env.get_const(applied_name)?;
+        let primitive = parent.as_ref().clone().str("rec");
+        let rec = self.env.get_recursor(&primitive)?.clone();
+        // For empty auxiliaries casesOn and recOn have the same canonical
+        // wrapper. Other imported definitions keep their ordinary application
+        // path until their distinct minor telescopes are authenticated.
+        if rec.num_indices != 0 || rec.num_motives != 1 || rec.num_minors != 0 {
+            return None;
+        }
+        self.authenticate_imported_cases_on_cached(applied_name, &primitive, &[])
+            .ok()?;
+        Some((rec, true))
+    }
+
+    /// Read the motive slot from the actual applied declaration, including an
+    /// imported auxiliary's own annotations. Parameter bodies need not be
+    /// instantiated just to inspect this binder's metadata.
+    fn elaboration_motive_info(&self, name: &Name, num_params: u32) -> Option<BinderInfo> {
+        let mut ty = &self.env.get_const(name)?.type_;
+        for _ in 0..num_params {
+            let ExprKind::Pi(_, _, body) = ty.kind() else {
+                return None;
+            };
+            ty = body;
+        }
+        let ExprKind::Pi(binder, _, _) = ty.kind() else {
+            return None;
+        };
+        Some(binder.info)
+    }
+
+    /// Construct the same expected-type motive for ordinary eliminator calls
+    /// and a completed empty-eliminator field access. Every resulting term
+    /// still follows the existing full declaration/kernel registration path.
+    fn recursor_head_from_expected_type(
+        &mut self,
+        name: &Name,
+        inductive_name: &Name,
+        major: &Expr,
+        major_type: &Expr,
+        expected: &Expr,
+    ) -> Result<Expr, ElabError> {
+        let expected = self
+            .metas
+            .instantiate_levels(&self.metas.instantiate(expected));
+        let major_type = self.whnf(major_type);
+        // Lean's mkMotive abstracts the discriminant even when it is an
+        // application, rather than silently making that motive constant.
+        let body = self.abstract_eliminator_motive(&expected, major);
+        let motive = Expr::lam(BinderInfo::Default, major_type.clone(), body);
+        let levels = self.eliminator_levels(name, &major_type, &expected)?;
+        let head = Expr::const_(name.clone(), levels);
+        let head = self.apply_eliminator_params(
+            head,
+            &major_type,
+            &SurfaceName::from_name(inductive_name.clone()),
+        )?;
+        Ok(Expr::app(head, motive))
+    }
+
+    /// Classify the same declared application for speculative definition
+    /// dispatch and for actual expected-type eliminator elaboration.
+    fn recursor_application<'b>(
+        &self,
+        func: &SurfaceExpr,
+        args: &'b [SurfaceArg],
+    ) -> Option<RecursorApplication<'b>> {
+        if self.explicit_mode || args.iter().any(|arg| arg.name.is_some()) {
+            return None;
+        }
+        let full_name = Self::func_qualified_name(func)?;
+        let applied_name = full_name.name().clone();
+        let (rec, major_first) = self.elaboration_recursor(&applied_name)?;
+        if !self.func_denotes_global_name(func, &applied_name)
+            || rec.num_indices != 0
+            || rec.num_motives != 1
+        {
+            return None;
+        }
+        let args = match self.elaboration_motive_info(&applied_name, rec.num_params) {
+            Some(BinderInfo::Default) => {
+                let (motive, rest) = args.split_first()?;
+                if !matches!(
+                    Self::unwrap_surface_parens(&motive.expr),
+                    SurfaceExpr::Hole(_)
+                ) {
+                    return None;
+                }
+                rest
+            }
+            Some(BinderInfo::Implicit | BinderInfo::StrictImplicit) => args,
+            _ => return None,
+        };
+        (args.len() == rec.num_minors as usize + 1).then_some(RecursorApplication {
+            name: applied_name,
+            recursor: rec,
+            major_first,
+            args,
+        })
+    }
+
+    /// Expected-type eliminator elaboration for one-motive, non-indexed calls.
+    /// An explicit motive receives ordinary positional arguments as declared;
+    /// only a syntactic hole invokes inference (Lean App.lean elabAsElim?).
     fn try_elab_recursor_as_elim(
         &mut self,
         func: &SurfaceExpr,
         args: &[SurfaceArg],
     ) -> Result<Option<Expr>, ElabError> {
-        if self.explicit_mode {
-            return Ok(None);
-        }
-        let Some(full_name) = Self::func_qualified_name(func) else {
+        let Some(application) = self.recursor_application(func, args) else {
             return Ok(None);
         };
-        // Accept both `<T>.rec` (motive · minors · major) and `<T>.recOn`
-        // (motive · MAJOR · minors — the major is applied FIRST). The
-        // `RecursorVal` lives under `.rec`; `recOn` reuses the same
-        // universe/parameter/minor structure, only reordering the major.
-        let (recursor_name, is_recon) =
-            if full_name.last_component() == SurfaceName::generated_path("recOn") {
-                (
-                    full_name
-                        .parent()
-                        .append(&SurfaceName::generated_path("rec"))
-                        .into_name(),
-                    true,
-                )
-            } else if full_name.last_component() == SurfaceName::generated_path("rec") {
-                (full_name.name().clone(), false)
-            } else {
-                return Ok(None);
-            };
-        let Some(rec_val) = self.env.get_recursor(&recursor_name).cloned() else {
-            return Ok(None);
-        };
-        // The constant actually applied (`.rec` or `.recOn`).
-        let applied_name = full_name.name().clone();
-        // Only when the head RESOLVES to that recursor: `T.rec` with a local
-        // `T` in scope is a field of that local, not the recursor.
-        if !self.func_denotes_global_name(func, &applied_name) {
-            return Ok(None);
-        }
-        // Slice: no indices, exactly one motive (parameters ARE allowed —
-        // `List.rec`, `Option.rec`, a user `Pair α` — they precede the motive
-        // and are recovered from the major's type by `apply_eliminator_params`).
-        if rec_val.num_indices != 0 || rec_val.num_motives != 1 {
-            return Ok(None);
-        }
-        // An EXPLICIT motive (a type with no constructors: `Empty.rec`,
-        // `False.rec`) is the first positional argument, so `Empty.rec x`
-        // passes `x` as the motive (Lean: an application type mismatch). The
-        // count below would take `x` for the major premise.
-        let applied_type = self.env.get_const(&applied_name).map(|c| c.type_.clone());
-        if applied_type.is_none_or(|ty| self.motive_binder_is_explicit(&ty, rec_val.num_params)) {
-            return Ok(None);
-        }
-        // The motive is UNSUPPLIED iff the args are exactly the minors + major.
-        let expected_arg_count = rec_val.num_minors as usize + 1;
-        if args.len() != expected_arg_count || args.iter().any(|a| a.name.is_some()) {
-            return Ok(None);
-        }
+        let RecursorApplication {
+            name: applied_name,
+            recursor: rec,
+            major_first,
+            args,
+        } = application;
         let Some(expected) = self.current_expected_type.clone() else {
             return Ok(None);
         };
-        let expected = self
-            .metas
-            .instantiate_levels(&self.metas.instantiate(&expected));
-
-        // The major premise gives the motive's domain `T`. It is the LAST arg
-        // for `.rec`, the FIRST arg for `.recOn`.
-        let major_idx = if is_recon { 0 } else { args.len() - 1 };
-        let major_expr = self.elaborate(&args[major_idx].expr)?;
-        let t = self
-            .metas
-            .instantiate_levels(&self.metas.instantiate(&self.infer_type(&major_expr)?));
-        // Guard: `T`'s head must be this recursor's inductive (a mis-typed major
-        // should defer to the generic path's loud error, not this reroute).
-        let t_whnf = self.whnf(&t);
-        match t_whnf.get_app_fn().kind() {
-            ExprKind::Const(n, _) if *n == rec_val.inductive_name => {}
-            _ => return Ok(None),
-        }
-
-        // Motive := `fun (x : T) => C[major := x]`. When the major premise is a
-        // local variable (fvar) that the expected type `C` mentions, abstract it
-        // so the motive is DEPENDENT — `0 + n = n` inducts with motive
-        // `fun k => 0 + k = k`, which the constant `fun _ => C` cannot express
-        // (`0 + n` is not def-eq `n` for a variable `n`, so the base minor fails).
-        // When `C` does not mention the major, `abstract_fvar` leaves it
-        // unchanged, giving the non-dependent `fun _ => C`. A non-fvar major
-        // (`Nat.rec … (f x)`) cannot be cleanly abstracted here, so it stays
-        // non-dependent (and defers loudly if `C` actually depends on it). `T` is
-        // the FULLY-APPLIED major type, so the motive domain is correct for a
-        // parametric recursor.
-        let motive_body = match major_expr.kind() {
-            ExprKind::FVar(id) => expected.abstract_fvar(*id),
-            _ => expected.clone(),
-        };
-        let motive = Expr::lam(BinderInfo::Default, t_whnf.clone(), motive_body);
-        let levels = self.eliminator_levels(&recursor_name, &t_whnf, &expected)?;
-        let type_name = SurfaceName::from_name(rec_val.inductive_name.clone());
-        // `@Rec.{levels} params… motive` — the inductive parameters (recovered
-        // from the major's type `T`) precede the motive.
-        let mut head = Expr::const_(applied_name, levels);
-        head = self.apply_eliminator_params(head, &t_whnf, &type_name)?;
-        head = Expr::app(head, motive);
-
-        // Apply the user's minors + major against the recursor's Pi telescope,
-        // elaborating each against its expected (motive-instantiated) domain.
-        let mut result = head;
-        let mut result_ty = self.whnf(&self.infer_type(&result)?);
-        for (i, arg) in args.iter().enumerate() {
-            let ExprKind::Pi(_, dom, cod) = result_ty.kind() else {
-                // Telescope shorter than the arg list — not our shape.
+        let major_index = if major_first { 0 } else { args.len() - 1 };
+        // The major is checked against its own declared domain, never the
+        // result type of the whole eliminator application.
+        let declaration = self.env.get_const(&applied_name).cloned().ok_or_else(|| {
+            ElabError::InternalInvariant(format!("missing eliminator `{applied_name}`"))
+        })?;
+        let level_subst: Vec<_> = declaration
+            .level_params
+            .iter()
+            .map(|name| (name.clone(), self.fresh_universe_param()))
+            .collect();
+        let mut telescope = declaration.type_.instantiate_level_params(&level_subst);
+        let preceding =
+            rec.num_params + rec.num_motives + if major_first { 0 } else { rec.num_minors };
+        for _ in 0..preceding {
+            let ExprKind::Pi(_, domain, body) = telescope.kind() else {
                 return Ok(None);
             };
-            let dom = self.metas.instantiate(dom);
-            let cod = cod.clone();
-            let is_major = i == major_idx;
-            let arg_expr = if is_major {
-                major_expr.clone()
-            } else {
-                self.elaborate_arg_with_expected_type(&arg.expr, Some(dom.clone()))?
+            telescope = body.instantiate(&self.fresh_meta(domain.as_ref().clone()));
+        }
+        let ExprKind::Pi(_, major_domain, _) = telescope.kind() else {
+            return Ok(None);
+        };
+        let major = self.elaborate_arg_with_expected_type(
+            &args[major_index].expr,
+            Some(major_domain.as_ref().clone()),
+        )?;
+        let major_type = self.whnf(
+            &self
+                .metas
+                .instantiate_levels(&self.metas.instantiate(&self.infer_type(&major)?)),
+        );
+        if !matches!(major_type.get_app_fn().kind(), ExprKind::Const(n, _) if *n == rec.inductive_name)
+        {
+            return Ok(None);
+        }
+        let mut result = self.recursor_head_from_expected_type(
+            &applied_name,
+            &rec.inductive_name,
+            &major,
+            &major_type,
+            &expected,
+        )?;
+        let mut result_type = self.whnf(&self.infer_type(&result)?);
+        for (index, arg) in args.iter().enumerate() {
+            let ExprKind::Pi(_, domain, body) = result_type.kind() else {
+                return Ok(None);
             };
-            self.enforce_expr_type(&arg_expr, &dom)?;
-            let arg_expr = self.metas.instantiate(&arg_expr);
-            result_ty = self.whnf(&self.metas.instantiate(&cod.instantiate(&arg_expr)));
-            result = Expr::app(result, arg_expr);
+            let domain = self.metas.instantiate(domain);
+            let body = body.clone();
+            let value = if index == major_index {
+                major.clone()
+            } else {
+                self.elaborate_arg_with_expected_type(&arg.expr, Some(domain.clone()))?
+            };
+            self.enforce_expr_type(&value, &domain)?;
+            let value = self.metas.instantiate(&value);
+            result_type = self.whnf(&self.metas.instantiate(&body.instantiate(&value)));
+            result = Expr::app(result, value);
         }
         Ok(Some(result))
     }
@@ -3336,9 +3421,29 @@ impl<'a> ElabCtx<'a> {
             return Ok(result);
         }
 
-        // Elaborate the function
-        let func_expr = match func {
-            SurfaceExpr::Ident(_, name) if name.is_relative_constructor() => {
+        let mut dot_head = if args.iter().any(|a| a.name.is_some() && !a.is_ellipsis()) {
+            DotHeadCapture::Named(None)
+        } else {
+            DotHeadCapture::Positional {
+                generated_binders: 0,
+            }
+        };
+        let mut receiver_source = None;
+        let func_expr = match Self::unwrap_surface_parens(func) {
+            SurfaceExpr::Proj(_, base, field @ Projection::Named(_))
+                if matches!(dot_head, DotHeadCapture::Named(_)) =>
+            {
+                receiver_source = Some(base.as_ref());
+                let saved_route = self.dot_elim.arm_app_head(func, args);
+                let saved_expected = self.current_expected_type.take();
+                let head = self.elab_proj(base, field, Some(&mut dot_head));
+                self.current_expected_type = saved_expected;
+                self.dot_elim.restore_app_head(saved_route);
+                head?
+            }
+            SurfaceExpr::Ident(_, name)
+                if matches!(func, SurfaceExpr::Ident(..)) && name.is_relative_constructor() =>
+            {
                 // A leading-dot constructor in application *head* position
                 // (`.ctor arg …`). Prefer the expected type when one is in
                 // scope; otherwise hand `elab_leading_dot_ctor_with_expected_type`
@@ -3354,7 +3459,34 @@ impl<'a> ElabCtx<'a> {
                     .unwrap_or_else(|| self.fresh_meta(Expr::type_()));
                 self.elab_leading_dot_ctor_with_expected_type(name, &expected_ty)?
             }
-            _ => self.elaborate_app_head(func, args)?,
+            // The whole application's result is not the function head's
+            // expected type. In particular a dot recursor with supplied
+            // motive arguments must retain those slots for this argument loop.
+            // Parenthesizing the field itself elaborates it as a standalone
+            // function. Its lambda is then the authored application's head.
+            SurfaceExpr::Proj(_, _, Projection::Named(_))
+                if matches!(func, SurfaceExpr::Proj(..)) =>
+            {
+                self.elaborate_app_head_without_expected(func, args, Some(&mut dot_head))?
+            }
+            _ => self.elaborate_app_head_without_expected(func, args, None)?,
+        };
+
+        let (dot_receiver, mut generated_binders) = match dot_head {
+            DotHeadCapture::Named(receiver) => (receiver, 0),
+            DotHeadCapture::Positional { generated_binders } => (None, generated_binders),
+        };
+        // Consume only lambdas introduced to put the receiver after earlier
+        // explicit arguments. Lean emits the ordinary method call for supplied
+        // arguments, and a partial application keeps its remaining binders.
+        let mut apply_arg = |function: Expr, argument: Expr| {
+            if generated_binders > 0 {
+                if let ExprKind::Lam(_, _, body) = function.kind() {
+                    generated_binders -= 1;
+                    return body.instantiate(&argument);
+                }
+            }
+            Expr::app(function, argument)
         };
 
         // Expand a trailing `..` (Lean `Term.ellipsis`) into the explicit
@@ -3363,7 +3495,7 @@ impl<'a> ElabCtx<'a> {
         // report it as an unknown parameter. `..` needs the elaborated head's
         // arity, which is why it happens here and not in the parser.
         let ellipsis_args;
-        let args = if args.iter().any(SurfaceArg::is_ellipsis) {
+        let args = if dot_receiver.is_none() && args.iter().any(SurfaceArg::is_ellipsis) {
             ellipsis_args = self.expand_app_ellipsis(&func_expr, args)?;
             &ellipsis_args[..]
         } else {
@@ -3374,11 +3506,15 @@ impl<'a> ElabCtx<'a> {
         // args to match parameter positions before the main elaboration loop.
         let has_named_args = args.iter().any(|a| a.name.is_some());
         let resolved_args;
-        let (args, positioned_prefix) = if has_named_args {
-            resolved_args = self.resolve_named_args(&func_expr, args)?;
-            (&resolved_args.0[..], resolved_args.1)
+        let (args, positioned_prefix, receiver_slot) = if has_named_args {
+            resolved_args = self.resolve_named_args(
+                &func_expr,
+                args,
+                dot_receiver.as_ref().zip(receiver_source),
+            )?;
+            (&resolved_args.0[..], resolved_args.1, resolved_args.2)
         } else {
-            (args, 0)
+            (args, 0, None)
         };
 
         // Try to infer the function's type to know about implicit arguments
@@ -3615,6 +3751,10 @@ impl<'a> ElabCtx<'a> {
             if needs_pre_arg_unify
                 && !self.expected_is_unassigned_meta()
                 && !self.expected_is_literal_prop()
+                // This earlier heuristic must honor the same instance-owned
+                // result boundary as ordinary expected-type propagation.
+                && (self.explicit_mode
+                    || !self.result_is_out_param_of_local_instance(&func_type))
             {
                 if let Some(expected) = self.current_expected_type.clone() {
                     let mut ret_ty = self.whnf(&self.metas.instantiate(&current_type));
@@ -3747,76 +3887,13 @@ impl<'a> ElabCtx<'a> {
                     leading_pending.clear();
                 }
 
-                // Skip leading IMPLICIT binders that this explicit argument is not
-                // meant to fill. The "more args than explicit binders" branch above
-                // deliberately did NOT pre-insert leading implicits, so an explicit
-                // argument can arrive while `current_type` still leads with an
-                // implicit binder. That is correct when the user really does supply
-                // a value for an implicit slot (`@`-style or `Ring R`), but WRONG
-                // when a declaration carries an implicit binder Lean treats as
-                // explicit — most importantly `Eq.refl`, whose value parameter
-                // `(a : α)` is stored here as `{a : α}` (Implicit). Without this
-                // skip, `Eq.refl n` matches `n` against the FIRST implicit
-                // `{α : Sort u}`, yielding `Nat` vs `Sort u` and leaving the
-                // universe `u` unsolved.
-                //
-                // We only skip an implicit binder when the explicit argument does
-                // NOT fit its domain: speculatively elaborate the arg against the
-                // implicit domain in a throwaway scope; if it fails to type-check
-                // there, insert the implicit as a metavariable and advance to the
-                // next binder. A binder the argument *does* fit is left for the
-                // ordinary path (preserving `@`/`Ring R`-style explicit-fills-
-                // implicit behaviour). SOUNDNESS: this only inserts metavariables
-                // for skipped implicit binders (later solved by unification) and
-                // the assembled term is kernel-rechecked; a wrong skip cannot
-                // accept an ill-typed term.
-                // Never skip in explicit mode (`@f`): the user has asked to
-                // supply every argument positionally, including implicit ones,
-                // so an explicit argument is meant for the leading implicit slot
-                // (`@id zero` deliberately fills `{A : Type}` and must mismatch).
-                while !self.explicit_mode {
-                    let ExprKind::Pi(bi, dom, body) = current_type.kind() else {
-                        break;
-                    };
-                    if !Self::is_implicit_binder(*bi) {
-                        break;
-                    }
-                    let dom = dom.as_ref().clone();
-                    let body = body.as_ref().clone();
-                    let dom_inst = self.metas.instantiate(&dom);
-                    // Does the explicit argument fit this implicit domain? Try in a
-                    // speculative scope so a failed attempt leaves no assignments.
-                    self.metas.push_scope();
-                    let fits = self
-                        .elaborate_arg_with_expected_type(&arg.expr, Some(dom_inst.clone()))
-                        .map(|e| {
-                            self.infer_type(&e)
-                                .map(|t| {
-                                    let t = self.whnf(&self.metas.instantiate(&t));
-                                    let d = self.whnf(&self.metas.instantiate(&dom_inst));
-                                    self.try_unify(&t, &d)
-                                })
-                                .unwrap_or(false)
-                        })
-                        .unwrap_or(false);
-                    self.metas.pop_scope();
-                    if fits {
-                        break;
-                    }
-                    // The argument is not for this implicit binder — insert a
-                    // metavariable for it and look at the next binder.
-                    let meta = self.fresh_meta(dom_inst);
-                    result = Expr::app(result, meta.clone());
-                    current_type = self.whnf(&self.metas.instantiate(&body.instantiate(&meta)));
-                }
-
                 // Lean's `processExplicitArg` propagates the expected type
                 // before elaborating each explicit argument until it succeeds.
                 if propagate_expected {
-                    propagate_expected = self.propagate_expected_type_with_positioned_args(
+                    propagate_expected = self.propagate_expected_type_with_named_prefix(
                         &current_type,
                         &remaining_args[idx..],
-                        has_named_args,
+                        positioned_prefix.saturating_sub(idx),
                     );
                 }
 
@@ -3888,7 +3965,8 @@ impl<'a> ElabCtx<'a> {
                     let defer_by_block = getelem_hole_goal.is_none()
                         && !inst_hole
                         && ((Self::deferrable_by_block(&arg.expr)
-                            || Self::deferrable_leading_dot(&arg.expr))
+                            || Self::deferrable_leading_dot(&arg.expr)
+                            || self.deferrable_subst(&arg.expr))
                             && self.has_metavars(&expected_arg_ty)
                             || Self::deferrable_anonymous_ctor(&arg.expr)
                                 && self.expected_type_head_is_meta(&expected_arg_ty));
@@ -3903,14 +3981,23 @@ impl<'a> ElabCtx<'a> {
                         && Self::is_unascribed_lambda_arg(&arg.expr)
                         && self.has_metavars(&expected_arg_ty);
                     let defer_lambda = lambda_in_open_slot && deferred_lambda_args.contains(&idx);
+                    let open_callback_premise = lambda_in_open_slot
+                        && !defer_lambda
+                        && idx + 1 < args.len()
+                        && self.has_open_callback_premise(&expected_arg_ty);
                     let mut lambda_stuck_on_meta = false;
-                    let arg_expr = match (getelem_hole_goal, synthesized_inst) {
-                        (Some(goal), _) => self.discharge_getelem_valid_hole(&goal),
-                        (None, Some(inst)) => Ok(inst),
-                        (None, None) if inst_hole => {
+                    let arg_expr = match (
+                        dot_receiver.as_ref().filter(|_| receiver_slot == Some(idx)),
+                        getelem_hole_goal,
+                        synthesized_inst,
+                    ) {
+                        (Some(receiver), _, _) => Ok(receiver.term.clone()),
+                        (None, Some(goal), _) => self.discharge_getelem_valid_hole(&goal),
+                        (None, None, Some(inst)) => Ok(inst),
+                        (None, None, None) if inst_hole => {
                             self.explicit_inst_hole_unsynthesized(&expected_arg_ty)
                         }
-                        (None, None) if defer_by_block || defer_lambda => {
+                        (None, None, None) if defer_by_block || defer_lambda => {
                             let placeholder = self.fresh_meta(expected_arg_ty.clone());
                             deferred_by_blocks.push((
                                 placeholder.clone(),
@@ -3919,7 +4006,7 @@ impl<'a> ElabCtx<'a> {
                             ));
                             Ok(placeholder)
                         }
-                        (None, None) if lambda_in_open_slot => {
+                        (None, None, None) if lambda_in_open_slot => {
                             let watch = self.begin_field_notation_watch();
                             let r = self.elaborate_arg_with_expected_type(
                                 &arg.expr,
@@ -3932,7 +4019,7 @@ impl<'a> ElabCtx<'a> {
                         // expected type and coerces it into the tree's type
                         // (`elab_binop_leaf.rs`); the slot's type would reach
                         // inside it otherwise.
-                        (None, None)
+                        (None, None, None)
                             if (hetero_binop_slots.as_ref().is_some_and(|s| s.homogeneous)
                                 || Self::is_neg_head(func))
                                 && (self.binop_leaf_forced_alone(&arg.expr)
@@ -3941,7 +4028,7 @@ impl<'a> ElabCtx<'a> {
                         {
                             self.elaborate_arg_with_expected_type(&arg.expr, None)
                         }
-                        (None, None) => self.elaborate_arg_with_expected_type(
+                        (None, None, None) => self.elaborate_arg_with_expected_type(
                             &arg.expr,
                             Some(expected_arg_ty.clone()),
                         ),
@@ -3950,7 +4037,14 @@ impl<'a> ElabCtx<'a> {
                         Ok(e) => e,
                         Err(e) => {
                             self.metas.pop_scope();
-                            if lambda_stuck_on_meta && self.lambda_retry_allowed() {
+                            // A nested application can have committed a more specific
+                            // predicate than the callback's later evidence allows.
+                            // Retry only a failed eager attempt, after rollback.
+                            let conflicting_premise = open_callback_premise
+                                && matches!(e, ElabError::TypeMismatch { .. });
+                            if (lambda_stuck_on_meta || conflicting_premise)
+                                && self.lambda_retry_allowed()
+                            {
                                 let mut defer = deferred_lambda_args.clone();
                                 defer.push(idx);
                                 return self.elab_app_retry_deferring_lambdas(func, args, defer, e);
@@ -4108,6 +4202,11 @@ impl<'a> ElabCtx<'a> {
                             }
                         }
                         UnifyResult::Stuck => {
+                            // An eager lambda's hypothesis can have a type headed by
+                            // an unsolved predicate. A later argument of its enclosing
+                            // application may still determine that predicate.
+                            self.note_unassigned_expected_type(&arg_type);
+                            self.note_unassigned_expected_type(&expected_arg_ty);
                             // Pop scope before returning error
                             self.metas.pop_scope();
                             return Err(ElabError::CannotInfer);
@@ -4198,7 +4297,7 @@ impl<'a> ElabCtx<'a> {
                     };
 
                     // Build the application (consuming final_arg)
-                    result = Expr::app(result, final_arg);
+                    result = apply_arg(result, final_arg);
 
                     // Lean's default-instance pass, in argument order: a
                     // heterogeneous-operator goal postponed inside an EARLIER
@@ -4431,7 +4530,7 @@ impl<'a> ElabCtx<'a> {
                 // the eager path does, so an ill-typed argument is refused
                 // HERE ("type mismatch", as Lean says) rather than reaching
                 // the kernel.
-                if Self::is_unascribed_lambda_arg(&block) {
+                if Self::is_unascribed_lambda_arg(&block) || self.deferrable_subst(&block) {
                     let lam_ty = match self.infer_type(&proof) {
                         Ok(t) => self.metas.instantiate(&t),
                         Err(e) => {
@@ -4484,7 +4583,7 @@ impl<'a> ElabCtx<'a> {
             let mut result = func_expr;
             for arg in args {
                 let arg_expr = self.elaborate(&arg.expr)?;
-                result = Expr::app(result, arg_expr);
+                result = apply_arg(result, arg_expr);
             }
             let result = self.metas.instantiate(&result);
             Ok(self.metas.instantiate_levels(&result))

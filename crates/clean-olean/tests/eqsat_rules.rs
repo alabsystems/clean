@@ -2,27 +2,37 @@
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 // SPDX-License-Identifier: Apache-2.0
 
-//! PKG-U2: the statements of trust-cg's e-graph rewrite rules over SemR,
-//! kernel-checked by Clean THROUGH the reference entry, every closure ⊆ Ax0.
+//! PKG-U2, PKG-U4c: the statements of trust-cg's e-graph rewrite rules over
+//! SemR, kernel-checked by Clean THROUGH the reference entry, every closure ⊆
+//! Ax0.
 //!
 //! The fixture family `tests/fixtures/lean/v4.30.0-rc2/eqsat_rules/` (its
 //! README) holds the rule vocabulary (`EqsatRule`), the statements that pin it
 //! (`EqsatAnchors`), the rule literals generated from trust-cg's rule files,
-//! the lemmas of the integer rule set and the refutations of trust-cg's wrong
-//! rules. SemR is the `semr` family's one copy (`from semr SemR`). Here:
+//! the lemmas of the integer rule set and of the saturation tier's rule set,
+//! and the refutations of trust-cg's wrong rules. SemR is the `semr` family's
+//! one copy (`from semr SemR`). Here:
 //!
 //! * the family is compiled by the pinned `lean -o`, and every kernel
-//!   declaration its eleven modules make is admitted from EMPTY through
+//!   declaration its fourteen modules make is admitted from EMPTY through
 //!   `ReferenceKernel` (`reference_base_closed`), is neither an axiom nor
 //!   opaque, and has a closure ⊆ Ax0 that reaches no native-evaluation or sorry
 //!   constant;
-//! * every lemma the family's `LEMMAS` table names (one per rule and scope
-//!   of the rule's domain; the `fold_*` rules get none) is a theorem whose
-//!   type is the row's statement term for term, and the entry accepts its
-//!   record term for `Sound Defs.<rule> <type>` at every type of the scope; a
-//!   `Sound` theorem of the lemma modules that no row names is refused, and a
-//!   lemma that is not proved is listed in [`lemmas::TIMED_OUT`], never
-//!   dropped (`eqsat_rules/lemmas.rs`);
+//! * every lemma the family's `LEMMAS` table names (one per rule of the two
+//!   rule files and scope of the rule's domain; the `fold_*` rules get none)
+//!   is a theorem whose type is the row's statement term for term, on the
+//!   literal generated from the rule's file (`Defs` for the integer rule
+//!   set, `TierSDefs` for a rule only the saturation tier has), and the entry
+//!   accepts its record term for `Sound <literal> <type>` at every type of
+//!   the scope; a `Sound` theorem of the lemma modules that no row names is
+//!   refused, and a lemma that is not proved is listed in
+//!   [`lemmas::TIMED_OUT`], never dropped (`eqsat_rules/lemmas.rs`);
+//! * the files `gen_rule_defs.py` generates (the three modules of literals
+//!   and `LEMMAS`) equal their pinned bytes ([`lemmas::GENERATED_FILES`]), so
+//!   a literal edited by hand needs a visible re-pin;
+//! * the two rule names both rule files have (`add_zero`, `mul_one`) are one
+//!   row each: the two generated literals are one term, and the entry accepts
+//!   the row's lemma for the saturation tier's statement at every type too;
 //! * a rule statement built here as a raw kernel term, the way trust-cg's
 //!   generator will build it (constructors and `Nat` literals only), is
 //!   accepted with the family's lemma as its proof term;
@@ -45,7 +55,8 @@
 //!   of the grammar stated as `equiv`, and a lemma offered for a different
 //!   literal with the same proposition (`const` flags, `var` against `cvar`,
 //!   one residue);
-//! * every theorem of `EqsatAnchors` and `EqsatIntControls` and every
+//! * every theorem of `EqsatAnchors`, `EqsatIntControls` and
+//!   `EqsatTierSControls` and every
 //!   satisfiability lemma is required by name in the replayed environment and
 //!   its statement is the pinned one (the family's `STATEMENTS` file,
 //!   [`statement_digest`]);
@@ -81,15 +92,16 @@ use terms::n;
 
 #[path = "eqsat_rules/statements.rs"]
 mod statements;
-use statements::{
-    check_statement_pins, conditioned_rules, required_statements, statement_digest, statement_pins,
-};
+use statements::{check_statement_pins, required_statements, statement_digest, statement_pins};
 
 #[path = "eqsat_rules/lemmas.rs"]
 mod lemmas;
 use lemmas::{
-    check_rows_against_declared, check_rows_against_kernel, check_rows_against_sources,
-    declared_lemmas, lemma_rows, lemma_table_controls, LEMMAS,
+    check_generated_bytes, check_generated_files, check_rows_against_declared,
+    check_rows_against_kernel, check_rows_against_sources, check_shared_rules, conditioned_rules,
+    declared_lemmas, generated_rules, lemma_rows, lemma_table_controls, rule_file_digest,
+    shared_rule_controls, tier_s_kernel_controls, GENERATED_FILES, INTEGER_SET, LEMMAS, RULE_SETS,
+    SHARED_RULES, TIER_S_SET,
 };
 
 #[path = "eqsat_rules/controls.rs"]
@@ -99,7 +111,7 @@ const PINNED: &str = "v4.30.0-rc2";
 const FAMILY: &str = "eqsat_rules";
 
 /// The family's own modules, in `ORDER` (SemR comes `from semr`).
-const MODULES: [&str; 11] = [
+const MODULES: [&str; 14] = [
     "EqsatRule",
     "EqsatBasics",
     "EqsatAnchors",
@@ -111,6 +123,9 @@ const MODULES: [&str; 11] = [
     "EqsatIntBitwise",
     "EqsatIntNegRot",
     "EqsatIntControls",
+    "EqsatTierSRuleDefs",
+    "EqsatTierSInt",
+    "EqsatTierSControls",
 ];
 
 /// The closure digest of `EqsatRule.Sound` on the replayed kernel environment
@@ -125,14 +140,29 @@ const MODULES: [&str; 11] = [
 /// `SemR.lean` at both `0ea0e29f…` (this family's `from semr`) and `91eba057…`
 /// (trust-ir e1976aa7d, the revision trust-cg locks). Not measured on a
 /// second host.
+///
+/// Re-pinned once, with PKG-U4c, from
+/// `85e64655ac2b2ef551c3fb170dd78d3e77b99dca8b409e373d4b98a201e6d4e1`: the
+/// vocabulary did not change, the kernel's records did. Since e3b7ac3d1b the
+/// replay keeps the reducibility hint Lean wrote for a definition, where it
+/// had kept only `is_reducible` and let `add_decl` compute a height of its
+/// own. Of the 860 members, 31 definitions have another `Regular` height in
+/// their record and no member differs in anything else: with the 31 earlier
+/// heights put back, the digest computed over this environment is the earlier
+/// pin again, and each of the 31 new heights is the one pinned Lean reports
+/// for the definition (`docs/DECISIONS.md`, PKG-U4c). A kernel built from a
+/// Clean revision before e3b7ac3d1b computes the earlier digest for the same
+/// sources.
 const SOUND_CLOSURE_DIGEST: &str =
-    "85e64655ac2b2ef551c3fb170dd78d3e77b99dca8b409e373d4b98a201e6d4e1";
+    "10e1b56561cdee4eb35e7a1950d37e855b52b9426fd258c1187c35e1d90a4c20";
 
 /// The closure digest of `EqsatRule.Satisfiable`: what the second statement
 /// of a rule with a `where` clause means. Its closure is `Admits`, `CondsHold`
 /// and `PbOk` with what they reach; it does not contain `Pat.eval`.
+/// Re-pinned with [`SOUND_CLOSURE_DIGEST`], for the same reason, from
+/// `670e47201a75ad03603661deb1001a6ef5eff51a5e1b320c53a974114a3c5c91`.
 const SATISFIABLE_CLOSURE_DIGEST: &str =
-    "670e47201a75ad03603661deb1001a6ef5eff51a5e1b320c53a974114a3c5c91";
+    "cfc8b07a4901cb40c3b7ddbd739fbf3d8bfd7e057239e9d53be18eb7d48206c2";
 
 /// The pinned statements: one `name digest` row per theorem of
 /// [`PINNED_MODULES`] and per lemma of [`SAT_LEMMAS`] (the family's README,
@@ -141,14 +171,16 @@ const STATEMENTS: &str = include_str!("fixtures/lean/v4.30.0-rc2/eqsat_rules/STA
 
 /// The modules whose every theorem is pinned by name and statement, each with
 /// the namespace its theorems are declared in.
-const PINNED_MODULES: [(&str, &str); 2] = [
+const PINNED_MODULES: [(&str, &str); 3] = [
     ("EqsatAnchors", "EqsatRule"),
     ("EqsatIntControls", "EqsatIntControls"),
+    ("EqsatTierSControls", "EqsatTierSControls"),
 ];
 
 /// The satisfiability lemmas: one per rule of the integer rule set that has a
 /// `where` clause and is not a `fold_*` rule. The source test derives the
-/// same list from `EqsatIntRuleDefs.lean`.
+/// same list from `EqsatIntRuleDefs.lean`, and requires that no rule of the
+/// saturation tier's rule file has a `where` clause.
 const SAT_LEMMAS: [&str; 3] = ["rotl_full", "rotr_full", "sub_const_to_add"];
 
 const INT_TYPES: [&str; 12] = [
@@ -516,7 +548,7 @@ fn eqsat_rules_replay_from_empty_with_closures_in_ax0_and_kernel_controls() {
         "eqsat_rules: {} of {} rules have lemmas: {} Sound lemmas required by name, each stating \
          its rule at its scope ({} at every integer type, {} at one type, {} bool instances, {} \
          bool-only; {} with the premise checker-ground-eval), {} timed-out; {} fold rules with no \
-         lemma; {} statements accepted by the entry, one per rule and instance type",
+         lemma; {} statements accepted by the entry, one per rule file, rule and instance type",
         census.rules - census.fold_rules,
         census.rules,
         census.proved,
@@ -527,9 +559,35 @@ fn eqsat_rules_replay_from_empty_with_closures_in_ax0_and_kernel_controls() {
         census.with_ground_eval,
         census.timed_out,
         census.fold_rules,
-        acceptances
+        acceptances.values().sum::<usize>()
+    );
+    for set in RULE_SETS {
+        eprintln!(
+            "eqsat_rules: {}: {} rules, {} statements accepted by the entry on its literals \
+             (EqsatRule.{})",
+            set.rule_file,
+            set.rules,
+            acceptances.get(set.defs_namespace).copied().unwrap_or(0),
+            set.defs_namespace
+        );
+    }
+    // Every rule of the saturation tier's file is proved at each of the
+    // twelve integer types: 120 statements on its own literals, 24 of them
+    // (the two rule names both files have) by the integer rule set's lemmas.
+    assert_eq!(
+        acceptances.get(TIER_S_SET.defs_namespace).copied(),
+        Some(TIER_S_SET.rules * INT_TYPES.len()),
+        "every rule of {} is accepted at every integer type",
+        TIER_S_SET.rule_file
     );
     lemma_table_controls(k, &first.family_dir, &rows);
+    shared_rule_controls(k);
+    tier_s_kernel_controls(k);
+    eprintln!(
+        "eqsat_rules: {} rule names in both rule files ({}): one literal and one row each",
+        SHARED_RULES.len(),
+        SHARED_RULES.join(", ")
+    );
 
     controls::kernel_controls(k);
 
@@ -609,9 +667,9 @@ fn eqsat_rules_sources_carry_no_escape() {
 }
 
 /// The pinned statements are the theorems the sources declare: every theorem
-/// of `EqsatAnchors` and `EqsatIntControls` has a row in `STATEMENTS`, every
-/// row names one, and every rule with a `where` clause has its satisfiability
-/// lemma in the pinned set. This runs without Lean, so an anchor added,
+/// of `EqsatAnchors`, `EqsatIntControls` and `EqsatTierSControls` has a row in
+/// `STATEMENTS`, every row names one, and every rule with a `where` clause has
+/// its satisfiability lemma in the pinned set. This runs without Lean, so an anchor added,
 /// renamed or deleted fails here first; the replay test compares each row's
 /// digest with the statement the kernel holds.
 #[test]
@@ -663,13 +721,37 @@ fn eqsat_rules_statement_pins_name_the_sources_theorems() {
     ] {
         assert!(pinned.contains(anchor), "{anchor} is a pinned statement");
     }
+    // Each rule name both rule files have has its pinned identity of
+    // literals, and `EqsatTierSControls` pins nothing else.
+    let identities: BTreeSet<String> = SHARED_RULES
+        .iter()
+        .map(|rule| format!("EqsatTierSControls.{rule}_is_the_integer_rule"))
+        .collect();
+    let tier_s_controls: BTreeSet<String> = pinned
+        .iter()
+        .filter(|name| name.starts_with("EqsatTierSControls."))
+        .cloned()
+        .collect();
+    assert_eq!(
+        tier_s_controls, identities,
+        "EqsatTierSControls states one identity of literals per shared rule name"
+    );
     // Every rule with a `where` clause has a satisfiability lemma, and no
     // lemma is listed for a rule without one.
-    let conditioned = conditioned_rules();
+    let conditioned = conditioned_rules(&INTEGER_SET);
     let listed: BTreeSet<String> = SAT_LEMMAS.iter().map(|rule| (*rule).to_owned()).collect();
     assert_eq!(
         conditioned, listed,
         "the rules with a `where` clause are the rules with a satisfiability lemma"
+    );
+    // No rule of the saturation tier's file has a `where` clause, so none
+    // needs a satisfiability lemma; one that gains a clause fails here until
+    // its lemma is written and pinned.
+    assert_eq!(
+        conditioned_rules(&TIER_S_SET),
+        BTreeSet::new(),
+        "a rule of {} has a `where` clause and no satisfiability lemma",
+        TIER_S_SET.rule_file
     );
     for rule_name in SAT_LEMMAS {
         let lemma = format!("theorem {rule_name}_sat ");
@@ -688,12 +770,15 @@ fn eqsat_rules_statement_pins_name_the_sources_theorems() {
 }
 
 /// The lemma table is the sources' lemmas, without Lean: `LEMMAS` names the
-/// rules `EqsatIntRuleDefs.lean` defines, a `fold_*` rule has no lemma, and
-/// every other row's lemma is declared by exactly one lemma module (or the
-/// row is listed as timed out and no module declares it). So a lemma deleted
+/// rules the two generated modules define (`EqsatIntRuleDefs.lean`, then the
+/// rules only `EqsatTierSRuleDefs.lean` has), a `fold_*` rule has no lemma,
+/// and every other row's lemma is declared by exactly one lemma module (or
+/// the row is listed as timed out and no module declares it). So a lemma deleted
 /// or renamed in the sources fails here first; the replay test compares each
 /// one's statement with its row and looks for `Sound` theorems outside the
-/// table.
+/// table. The generated files (the table and the three modules of literals)
+/// equal their pinned bytes, so a literal edited by hand fails here even where
+/// the kernel accepts the same proofs for it.
 #[test]
 fn eqsat_rules_lemma_rows_name_the_sources_theorems() {
     let rows = lemma_rows(LEMMAS);
@@ -737,4 +822,129 @@ fn eqsat_rules_lemma_rows_name_the_sources_theorems() {
     for module in lemmas::LEMMA_MODULES {
         assert!(MODULES.contains(&module), "{module} is a module of ORDER");
     }
+
+    // ── The saturation tier's rule file (PKG-U4c). ──
+    // The table and each generated module were read from one rule text.
+    for set in RULE_SETS {
+        assert!(
+            MODULES.contains(&set.defs_module),
+            "{} is a module of ORDER",
+            set.defs_module
+        );
+        let digest = rule_file_digest(set).unwrap_or_else(|why| panic!("{why}"));
+        eprintln!(
+            "eqsat_rules: LEMMAS and {}.lean were generated from {} {digest}",
+            set.defs_module, set.rule_file
+        );
+    }
+    // The generated files are the reviewed ones, byte for byte: a literal
+    // or a row edited by hand is refused here, whether or not the kernel
+    // would see it.
+    check_generated_files().unwrap_or_else(|why| panic!("{why}"));
+    eprintln!(
+        "eqsat_rules: {} generated files equal their pinned bytes ({})",
+        GENERATED_FILES.len(),
+        GENERATED_FILES.map(|(file, _)| file).join(", ")
+    );
+    // Controls on the pins, on the saturation tier's literals: two edits the
+    // kernel does not see (they keep every proposition, so the family
+    // compiles and the same proofs are accepted), one it does, and a comment.
+    let tier_s_module = format!("{}.lean", TIER_S_SET.defs_module);
+    let tier_s_text = std::fs::read_to_string(family_source_dir().join(&tier_s_module))
+        .unwrap_or_else(|e| panic!("read {tier_s_module}: {e}"));
+    assert!(check_generated_bytes(&tier_s_module, tier_s_text.as_bytes()).is_ok());
+    for (what, from, to) in [
+        ("a `const` flag", "Srt.t false", "Srt.t true"),
+        (
+            "`cvar` for `var`",
+            "(Pat.var (nat_lit 1))",
+            "(Pat.cvar (nat_lit 1))",
+        ),
+        (
+            "another operator",
+            "(Pat.bin BinOp.mul (Pat.var (nat_lit 1)) (Pat.var (nat_lit 0)))",
+            "(Pat.bin BinOp.add (Pat.var (nat_lit 1)) (Pat.var (nat_lit 0)))",
+        ),
+        (
+            "a comment",
+            "Variables: x = 0 (t), y = 1 (t).",
+            "Variables: none.",
+        ),
+    ] {
+        let edited = tier_s_text.replacen(from, to, 1);
+        assert_ne!(edited, tier_s_text, "{tier_s_module} has `{from}`");
+        assert!(
+            check_generated_bytes(&tier_s_module, edited.as_bytes())
+                .is_err_and(|why| why.contains("the gate pins")),
+            "{tier_s_module} with {what} edited must be refused"
+        );
+    }
+    // A table row edited by hand, the table's bytes under a module's name,
+    // and a file that is not generated.
+    assert!(check_generated_bytes("LEMMAS", LEMMAS.as_bytes()).is_ok());
+    let edited = LEMMAS.replacen("add_comm int plain", "add_comm u8 plain", 1);
+    assert_ne!(edited, LEMMAS);
+    assert!(check_generated_bytes("LEMMAS", edited.as_bytes())
+        .is_err_and(|why| why.contains("the gate pins")));
+    assert!(check_generated_bytes(&tier_s_module, LEMMAS.as_bytes())
+        .is_err_and(|why| why.contains("the gate pins")));
+    assert!(
+        check_generated_bytes("EqsatTierSInt.lean", tier_s_text.as_bytes())
+            .is_err_and(|why| why.contains("not a file of GENERATED_FILES"))
+    );
+    // The rule names both files have are the listed ones, on one literal.
+    check_shared_rules().unwrap_or_else(|why| panic!("{why}"));
+    // Every rule of the file has a lemma row at every integer type: its own
+    // (stated on its own literal) or, for a shared name, the integer rule
+    // set's. No rule of the file is without a lemma, and none is timed out.
+    let tier_s_rules = generated_rules(&TIER_S_SET);
+    assert_eq!(tier_s_rules.len(), TIER_S_SET.rules);
+    for rule in &tier_s_rules {
+        let row = &rows[position(rule)];
+        let shared = SHARED_RULES.contains(&rule.as_str());
+        assert_eq!(
+            (row.scope.as_str(), row.kind.as_str(), row.lemma.as_deref()),
+            ("int", "plain", Some(format!("EqsatInt.{rule}").as_str())),
+            "{rule}: one lemma at every integer type"
+        );
+        let both = vec![INTEGER_SET.defs_namespace, TIER_S_SET.defs_namespace];
+        let own = vec![TIER_S_SET.defs_namespace];
+        assert_eq!(
+            row.defs,
+            if shared { both } else { own },
+            "{rule}: the rule files that have it"
+        );
+        assert!(
+            !lemmas::TIMED_OUT.contains(&(rule.as_str(), "int")),
+            "{rule}: proved, not timed out"
+        );
+        // Its lemma dropped from the sources is refused; so is its row
+        // dropped from the table.
+        let mut dropped = declared.clone();
+        assert!(dropped.remove(&format!("EqsatInt.{rule}")).is_some());
+        assert!(
+            check_rows_against_declared(&rows, &dropped)
+                .is_err_and(|why| why.contains("no lemma module declares it")),
+            "{rule}: its lemma dropped from the sources must be refused"
+        );
+        let mut short = rows.clone();
+        short.remove(position(rule));
+        assert!(
+            check_rows_against_sources(&short).is_err_and(|why| why.contains("different rules")),
+            "{rule}: its row dropped from the table must be refused"
+        );
+    }
+    // The eight rules only this file has are declared by its lemma module.
+    let own: BTreeSet<String> = tier_s_rules
+        .iter()
+        .filter(|rule| !SHARED_RULES.contains(&rule.as_str()))
+        .map(|rule| format!("EqsatInt.{rule}"))
+        .collect();
+    let in_module: BTreeSet<String> = declared
+        .iter()
+        .filter(|(name, module)| **module == "EqsatTierSInt" && own.contains(*name))
+        .map(|(name, _)| name.clone())
+        .collect();
+    assert_eq!(own.len(), 8);
+    assert_eq!(in_module, own, "EqsatTierSInt declares the eight lemmas");
 }

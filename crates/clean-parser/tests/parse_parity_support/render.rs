@@ -214,6 +214,7 @@ fn render_skeleton(e: &SurfaceExpr) -> String {
         SurfaceExpr::Ascription(_, inner, ty) => {
             format!("(: {} {})", render_skeleton(inner), render_skeleton(ty))
         }
+        SurfaceExpr::Borrowed(_, inner) => format!("(@& {})", render_skeleton(inner)),
         SurfaceExpr::OutParam(_, inner) => format!("(outParam {})", render_skeleton(inner)),
         SurfaceExpr::SemiOutParam(_, inner) => {
             format!("(semiOutParam {})", render_skeleton(inner))

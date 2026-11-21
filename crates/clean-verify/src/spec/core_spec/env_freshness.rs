@@ -501,3 +501,7 @@ mod tests {
         });
     }
 }
+
+#[cfg(test)]
+#[path = "env_freshness_strict_tests.rs"]
+mod strict_tests;

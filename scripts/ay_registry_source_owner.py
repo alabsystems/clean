@@ -15,6 +15,7 @@ import io
 from pathlib import Path, PurePosixPath
 import re
 import tarfile
+from ay_package_version import is_ay_028_patch
 try:
     import tomllib
 except ModuleNotFoundError:
@@ -58,12 +59,13 @@ def from_ay(authority, selected, cargo_home):
             and (REUSED_SELECTION not in selected or SELECTION in selected),
             "requires named system dependency admissions; cfg_aliases requires nix")
     workspace = authority.read("Cargo.toml").get("workspace", {})
-    require(workspace.get("package", {}).get("version") == "0.28.0"
+    version = workspace.get("package", {}).get("version")
+    require(is_ay_028_patch(version)
             and "crates/ay-sys" in workspace.get("members", []),
             "requires the actual AY 0.28 workspace member")
     system = authority.read("crates/ay-sys/Cargo.toml")
     require(system.get("package", {}).get("name") == "ay-sys"
-            and system["package"].get("version") in ("0.28.0", {"workspace": True}),
+            and system["package"].get("version") in (version, {"workspace": True}),
             "requires the actual ay-sys member")
     if SELECTION in selected:
         dep = workspace.get("dependencies", {}).get(NAME)
@@ -194,7 +196,7 @@ def validate_gain(old_rows, new_rows, owners, resolve, matches_version):
             actual_owner = [p for p in new_rows if p["name"] == "ay-sys"
                             and any(resolve(edge) is row for edge in p.get("dependencies", []))]
             source = f"git+https://github.com/alabsystems/ay.git?rev={owner.ay_revision}#{owner.ay_revision}"
-            require(len(actual_owner) == 1 and actual_owner[0].get("version") == "0.28.0"
+            require(len(actual_owner) == 1 and is_ay_028_patch(actual_owner[0].get("version"))
                     and actual_owner[0].get("source") == source,
                     "new registry node needs the actual selected ay-sys edge")
         else:

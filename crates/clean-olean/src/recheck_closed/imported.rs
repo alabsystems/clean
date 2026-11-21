@@ -217,8 +217,8 @@ fn refusal_reason(r: &ClosedRecheckRefusal) -> String {
         ClosedRecheckRefusal::DependencyRefused { blocked_by, .. } => {
             format!("depends on refused {blocked_by}")
         }
-        ClosedRecheckRefusal::ExtensionBindingMismatch { hook, .. } => {
-            format!("by-name kernel reduction ({hook}) not bound to this declaration")
+        ClosedRecheckRefusal::ExtensionBindingMismatch { hook, found, .. } => {
+            format!("by-name kernel reduction ({hook}) not bound to this declaration (observed dependency-closure fingerprint {found})")
         }
         ClosedRecheckRefusal::OutsideTrustedFragment { marker, .. } => (*marker).to_string(),
     }
@@ -325,7 +325,7 @@ impl ImportedConeGate {
         let started = Instant::now();
         let index = FamilyIndex::build(env);
         let mut refusals = Vec::new();
-        let mut planner = ConePlanner::new(env, &index);
+        let mut planner = ConePlanner::new(env, &index, super::ConeInputs::Replay);
         for root in roots {
             planner.enqueue(root);
         }
@@ -363,7 +363,7 @@ impl ImportedConeGate {
         let mut stats = ReplayStats::default();
         let mut given_units = 0usize;
         if !untrusted.is_empty() || !refusals.is_empty() {
-            let key_fingerprints = extension_key_fingerprints(env, &cone);
+            let key_fingerprints = extension_key_fingerprints(env, &cone, &index);
             let mut unavailable: BTreeMap<Name, String> = absent
                 .into_iter()
                 .map(|name| {

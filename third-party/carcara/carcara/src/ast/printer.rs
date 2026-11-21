@@ -1,3 +1,4 @@
+// Modified in Clean: typed array-lambda dialect and explicit lambda export refusal.
 //! A pretty printer for Alethe proofs.
 
 use crate::{
@@ -839,7 +840,7 @@ impl fmt::Display for Binder {
             Binder::Forall => "forall",
             Binder::Exists => "exists",
             Binder::Choice => "choice",
-            Binder::Lambda => "lambda",
+            Binder::Lambda | Binder::ArrayLambda => "lambda",
         };
         write!(f, "{}", s)
     }

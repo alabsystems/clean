@@ -47,6 +47,8 @@ pub(crate) enum ExportDeclaration {
         hints: ReducibilityHintsData,
         /// `safe`, `unsafe` or `partial`.
         safety: DefinitionSafety,
+        /// The stored mutual declaration names, in their original order.
+        all: Vec<Name>,
     },
     /// `thm`.
     Theorem {
@@ -54,6 +56,8 @@ pub(crate) enum ExportDeclaration {
         header: ExportHeader,
         /// Its proof.
         value: Expr,
+        /// The stored mutual declaration names, in their original order.
+        all: Vec<Name>,
     },
     /// `opaque`.
     Opaque {
@@ -63,6 +67,8 @@ pub(crate) enum ExportDeclaration {
         value: Expr,
         /// `isUnsafe` (`false` when absent, as Lean's reader reads it).
         is_unsafe: bool,
+        /// The stored mutual declaration names, in their original order.
+        all: Vec<Name>,
     },
     /// `quot`: one of the four declarations Lean's `quotDecl` adds. Its stored
     /// type is data only: the quotient enters Clean's environment through

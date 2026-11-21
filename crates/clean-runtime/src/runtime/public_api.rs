@@ -17,6 +17,35 @@ use super::types::*;
 
 // -- Tagged pointer operations --
 
+/// Copy borrowed little-endian words into an owned canonical Nat.
+pub fn clean_nat_from_limbs(words: &[u64]) -> LeanObjPtr {
+    super::nat::from_limbs(words)
+}
+
+/// Construct an exact Nat from its low and high words.
+pub fn clean_nat_big(lo: u64, hi: u64) -> LeanObjPtr {
+    clean_nat_from_limbs(&[lo, hi])
+}
+
+/// Consume one reference and append a least-significant word.
+///
+/// # Safety
+/// `hi` must be a live runtime Nat and the caller transfers one reference.
+pub unsafe fn clean_nat_limb_step(hi: LeanObjPtr, lo: u64) -> LeanObjPtr {
+    // SAFETY: the caller transfers exactly the reference the primitive consumes.
+    unsafe { super::nat::limb_step(hi, lo) }
+}
+
+/// Borrow a runtime Nat and copy its exact canonical little-endian words.
+///
+/// # Safety
+/// `value` must be a live runtime object or tagged scalar. Invalid Nat carriers
+/// are rejected; this function borrows and never releases the input reference.
+pub unsafe fn clean_nat_to_limbs(value: LeanObjPtr) -> Vec<u64> {
+    // SAFETY: the caller keeps the live object valid during this borrowed read.
+    unsafe { super::nat::to_limbs(value) }
+}
+
 /// Box a small integer into a tagged pointer. No heap allocation.
 #[inline]
 pub fn clean_box(n: usize) -> LeanObjPtr {
@@ -61,7 +90,7 @@ pub fn clean_unbox_uint32(o: LeanObjPtr) -> u32 {
     unbox_uint32(o)
 }
 
-/// Unbox a heap-allocated `u64`.
+/// Read the low word of a tagged, boxed, or arbitrary-width numeric Nat carrier.
 #[inline]
 pub fn clean_unbox_uint64(o: LeanObjPtr) -> u64 {
     unbox_uint64(o)

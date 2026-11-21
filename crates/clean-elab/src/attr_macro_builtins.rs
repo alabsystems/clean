@@ -144,6 +144,9 @@ impl AttrMacro for ExternAttrMacro {
             Attribute::Extern(name) => Ok(AttrMacroResult::RegisterExtern {
                 extern_name: name.clone(),
             }),
+            Attribute::ExternMetadata(metadata) => Ok(AttrMacroResult::RegisterExternMetadata {
+                metadata: metadata.clone(),
+            }),
             _ => Err(ElabError::Unsupported {
                 feature: "extern attribute requires a string argument".to_owned(),
             }),

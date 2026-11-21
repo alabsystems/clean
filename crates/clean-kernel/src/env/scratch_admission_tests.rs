@@ -2,12 +2,13 @@
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 // SPDX-License-Identifier: Apache-2.0
 
-//! `Environment::into_scratch_with_inductive_core` is `add_inductive_core`
+//! With `GeneratedAuxDefs::Skip`, `into_scratch_with_inductive` is `add_inductive_core`
 //! without the transaction snapshot: an admitted block leaves the same
 //! environment (content digest and mutation counter), a refused one returns
 //! the same error. The nested fixture is the shape the `.olean` import
 //! re-admits through `lean_replay_admit_block`.
 
+use super::inductive_builder::GeneratedAuxDefs;
 use super::tests_nested_elim::{make_env_with_list, tree_decl};
 use super::*;
 use crate::inductive::{Constructor, InductiveDecl, InductiveType};
@@ -21,7 +22,9 @@ fn both(
     let transactional = transactional
         .add_inductive_core(decl.clone())
         .map(|()| transactional);
-    let scratch = env.clone().into_scratch_with_inductive_core(decl.clone());
+    let scratch = env
+        .clone()
+        .into_scratch_with_inductive(decl.clone(), GeneratedAuxDefs::Skip);
     (transactional, scratch)
 }
 
@@ -64,7 +67,7 @@ fn test_scratch_admission_nested_family_leaves_the_transactional_environment() {
     let decl = tree_decl();
     assert_same_admission(&env, &decl);
     let admitted = env
-        .into_scratch_with_inductive_core(decl)
+        .into_scratch_with_inductive(decl, GeneratedAuxDefs::Skip)
         .expect("Tree is admitted");
     assert!(
         admitted

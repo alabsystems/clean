@@ -60,13 +60,15 @@
 //! the initial target (the old formula counted it with `usize::MAX` as the cap,
 //! which is itself unbounded on a share-heavy term).
 
-use std::cell::{Cell, RefCell};
+use std::cell::{Cell, OnceCell, RefCell};
 use std::collections::HashMap;
+use std::fmt::Display;
 use std::sync::OnceLock;
 
 use clean_kernel::{Expr, FVarId};
 
 use super::expr_node_count_capped;
+use super::zeta_size::{beta_zeta_limit, BetaZetaLimit};
 
 /// Multiplier applied to the initial target's node count to get the largest
 /// intermediate term a traversal may produce. Matches the historical
@@ -101,12 +103,17 @@ const FUEL_FLOOR: u64 = 1 << 16;
 const FUEL_CEILING: u64 = 1 << 26;
 
 /// Why a budget tripped.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum BudgetTrip {
+#[derive(Debug)]
+enum BudgetTrip {
     /// The traversal visited more `simp_expr` frames than it was given.
     Fuel,
-    /// A frame produced a term larger than `max_nodes`.
-    Size,
+    /// The capped tree count reached `max_nodes`.
+    ExpressionSize { operation: String },
+    /// The separate pre-reduction guard reached its size or work limit.
+    BetaZeta {
+        operation: String,
+        limit: BetaZetaLimit,
+    },
     /// The DECLARATION's automation work budget is spent
     /// (`clean_auto::charge_automation_work`, the shape of Lean's
     /// `maxHeartbeats`). Unlike the other two this is not about this
@@ -133,7 +140,7 @@ pub(crate) struct SimpBudget {
     /// Largest node count any single produced term may have.
     max_nodes: usize,
     /// Sticky trip reason. Once `Some`, the traversal is over.
-    trip: Cell<Option<BudgetTrip>>,
+    trip: OnceCell<BudgetTrip>,
     /// Typeclass answers this traversal has already paid for (`None` = no
     /// instance), keyed by the LOCAL CONTEXT the question was asked in and
     /// then by the class goal. Lean's `synthInstance` keeps a cache for the
@@ -176,7 +183,7 @@ impl SimpBudget {
             fuel: Cell::new(fuel),
             initial_fuel: fuel,
             max_nodes,
-            trip: Cell::new(None),
+            trip: OnceCell::new(),
             instance_memo: RefCell::new(HashMap::new()),
         }
     }
@@ -206,7 +213,7 @@ impl SimpBudget {
                 true
             }
             None => {
-                self.trip.set(Some(BudgetTrip::Fuel));
+                let _ = self.trip.set(BudgetTrip::Fuel);
                 false
             }
         }
@@ -232,7 +239,7 @@ impl SimpBudget {
         if clean_auto::charge_automation_work("simp", 1) {
             return true;
         }
-        self.trip.set(Some(BudgetTrip::Declaration));
+        let _ = self.trip.set(BudgetTrip::Declaration);
         false
     }
 
@@ -241,7 +248,7 @@ impl SimpBudget {
     /// ENSURES: returns `false` iff `produced` has at least `max_nodes` nodes
     ///   (or the budget had already tripped), and in that case the budget is
     ///   tripped, so the whole traversal unwinds.
-    pub(crate) fn admit(&self, produced: &Expr) -> bool {
+    pub(crate) fn admit(&self, produced: &Expr, operation: impl Display) -> bool {
         if self.trip.get().is_some() {
             return false;
         }
@@ -249,14 +256,16 @@ impl SimpBudget {
             return true;
         }
         if expr_node_count_capped(produced, self.max_nodes) >= self.max_nodes {
-            self.trip.set(Some(BudgetTrip::Size));
+            let _ = self.trip.set(BudgetTrip::ExpressionSize {
+                operation: operation.to_string(),
+            });
             return false;
         }
         true
     }
 
-    /// Check a term BEFORE β/ζ-reducing it: refuse (and trip) when its
-    /// βζ-normal form would exceed the size limit by [`ZETA_GUARD_FACTOR`]. A
+    /// Check a term before β/ζ reduction. Refuse when the estimated normal form
+    /// reaches `max_nodes * ZETA_GUARD_FACTOR` or the estimator spends its work allowance. A
     /// `let` the match compiler binds once (G76) is copied to every use by
     /// [`super::reduce::beta_reduce`], so the reduct of a small term can be
     /// exponentially large; [`Self::admit`] on the reduct would refuse it, but
@@ -264,7 +273,7 @@ impl SimpBudget {
     /// above only roughly (a pass leaves the redexes it creates), so the
     /// factor keeps the pre-check to terms far past anything [`Self::admit`]
     /// accepts; a refusal is a `simp` that fails, never one that proves more.
-    pub(crate) fn admit_before_zeta(&self, input: &Expr) -> bool {
+    pub(crate) fn admit_before_zeta(&self, input: &Expr, operation: impl Display) -> bool {
         if self.trip.get().is_some() {
             return false;
         }
@@ -274,8 +283,11 @@ impl SimpBudget {
         let limit = u64::try_from(self.max_nodes)
             .unwrap_or(u64::MAX)
             .saturating_mul(ZETA_GUARD_FACTOR);
-        if super::zeta_size::beta_zeta_size_reaches(input, limit) {
-            self.trip.set(Some(BudgetTrip::Size));
+        if let Some(limit) = beta_zeta_limit(input, limit) {
+            let _ = self.trip.set(BudgetTrip::BetaZeta {
+                operation: operation.to_string(),
+                limit,
+            });
             return false;
         }
         true
@@ -326,13 +338,6 @@ impl SimpBudget {
         self.trip.get().is_some()
     }
 
-    /// The trip reason, if any. Test-only: production reads [`Self::detail`],
-    /// which is the reportable form.
-    #[cfg(test)]
-    pub(crate) fn trip_reason(&self) -> Option<BudgetTrip> {
-        self.trip.get()
-    }
-
     /// Human-readable trip detail for [`crate::tactic::TacticError::BudgetExceeded`].
     /// Returns `None` when the budget has not tripped.
     pub(crate) fn detail(&self) -> Option<String> {
@@ -342,10 +347,15 @@ impl SimpBudget {
                  the goal is left unchanged",
                 self.initial_fuel
             )),
-            BudgetTrip::Size => Some(format!(
-                "a rewrite grew the term past {} nodes in a single traversal; \
-                 the goal is left unchanged",
+            BudgetTrip::ExpressionSize { operation } => Some(format!(
+                "while {operation}, an expression reached the {}-node limit, so the goal is left unchanged",
                 self.max_nodes
+            )),
+            BudgetTrip::BetaZeta { operation, limit: BetaZetaLimit::Nodes(nodes) } => Some(format!(
+                "while {operation}, the estimated βζ-normal form reached the {nodes}-node guard before reduction, so the goal is left unchanged"
+            )),
+            BudgetTrip::BetaZeta { operation, limit: BetaZetaLimit::Steps(steps) } => Some(format!(
+                "while {operation}, the βζ size estimate reached its {steps}-step work limit before reduction, so the goal is left unchanged"
             )),
             BudgetTrip::Declaration => Some(crate::decl_work_budget::exhausted_detail()),
         }
@@ -389,7 +399,7 @@ mod tests {
         assert!(budget.tick(), "first frame is within budget");
         assert!(budget.tick(), "second frame is within budget");
         assert!(!budget.tick(), "third frame must be refused");
-        assert_eq!(budget.trip_reason(), Some(BudgetTrip::Fuel));
+        assert!(matches!(budget.trip.get(), Some(BudgetTrip::Fuel)));
         assert!(budget.detail().is_some(), "a trip must carry a report");
     }
 
@@ -403,7 +413,7 @@ mod tests {
             !budget.tick(),
             "refuel must not resurrect a tripped traversal"
         );
-        assert_eq!(budget.trip_reason(), Some(BudgetTrip::Fuel));
+        assert!(matches!(budget.trip.get(), Some(BudgetTrip::Fuel)));
     }
 
     #[test]
@@ -419,10 +429,16 @@ mod tests {
     #[test]
     fn test_budget_size_trips_on_an_oversized_term() {
         let budget = SimpBudget::with_limits(u64::MAX, 3);
-        assert!(budget.admit(&atom()), "a single node fits under 3");
-        let big = Expr::app(Expr::app(atom(), atom()), atom());
-        assert!(!budget.admit(&big), "5 nodes must be refused at limit 3");
-        assert_eq!(budget.trip_reason(), Some(BudgetTrip::Size));
+        assert!(
+            budget.admit(&atom(), "checking a test term"),
+            "a single node fits under 3"
+        );
+        let at_limit = Expr::app(atom(), atom());
+        assert!(!budget.admit(&at_limit, "checking a candidate lemma"));
+        assert!(!budget.admit_before_zeta(&let_tower(20), "checking a later term"));
+        assert_eq!(budget.detail().as_deref(), Some(
+            "while checking a candidate lemma, an expression reached the 3-node limit, so the goal is left unchanged"
+        ));
         assert!(!budget.tick(), "a size trip stops the traversal too");
     }
 
@@ -433,7 +449,7 @@ mod tests {
             assert!(budget.tick());
         }
         let big = Expr::app(Expr::app(atom(), atom()), atom());
-        assert!(budget.admit(&big));
+        assert!(budget.admit(&big, "checking a test term"));
         assert!(!budget.is_tripped());
         assert_eq!(budget.detail(), None);
     }
@@ -472,8 +488,29 @@ mod tests {
     #[test]
     fn test_budget_admit_before_zeta_refuses_an_exponential_reduct() {
         let budget = SimpBudget::with_limits(u64::MAX, 4096);
-        assert!(budget.admit_before_zeta(&let_tower(3)));
-        assert!(!budget.admit_before_zeta(&let_tower(20)));
-        assert_eq!(budget.trip_reason(), Some(BudgetTrip::Size));
+        assert!(budget.admit_before_zeta(&let_tower(3), "reducing a test term"));
+        assert!(!budget.admit_before_zeta(&let_tower(20), "reducing a test term"));
+        assert_eq!(budget.detail().as_deref(), Some(
+            "while reducing a test term, the estimated βζ-normal form reached the 262144-node guard before reduction, so the goal is left unchanged"
+        ));
+    }
+    #[test]
+    fn budget_reports_estimator_work_when_reduction_discards_the_large_argument() {
+        let budget = SimpBudget::with_limits(u64::MAX, 1);
+        let mut discarded = atom();
+        for _ in 0..128 {
+            discarded = Expr::app(discarded, atom());
+        }
+        let input = Expr::let_named(
+            Name::from_string("unused"),
+            atom(),
+            discarded,
+            atom(),
+            false,
+        );
+        assert!(!budget.admit_before_zeta(&input, "checking a candidate lemma"));
+        assert_eq!(budget.detail().as_deref(), Some(
+            "while checking a candidate lemma, the βζ size estimate reached its 256-step work limit before reduction, so the goal is left unchanged"
+        ));
     }
 }

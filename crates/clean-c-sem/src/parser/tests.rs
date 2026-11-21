@@ -1872,3 +1872,87 @@ mod acsl_spec_nonascii_no_panic {
         );
     }
 }
+
+#[test]
+fn compact_function_contract_and_multiline_contract_generate_the_same_obligations() {
+    let compact = r"/*@ requires x <= 100; requires y <= 100; ensures \result == x + y; */";
+    let multiline = r"/*@
+        @ requires x <= 100;
+        @ requires y <= 100;
+        @ ensures \result ==
+        @ x + y;
+        */";
+    let line_comments = r"//@ requires x <= 100; requires y <= 100;
+        //@ ensures \result == x + y;";
+    let body = "unsigned int difference(unsigned int x, unsigned int y) { return x - y; }";
+    let mut parser = CParser::new();
+    let spec = parse_acsl_spec(compact).unwrap();
+    assert_eq!(spec.requires.len(), 2);
+    assert_eq!(spec.ensures.len(), 1);
+    for annotation in [compact, multiline, line_comments] {
+        let source = format!("{annotation}\n{body}");
+        let unit = parser.parse_translation_unit_with_specs(&source).unwrap();
+        let [function] = unit.as_slice() else {
+            panic!("expected one function")
+        };
+        assert_eq!(function.spec, spec);
+        let report = function.verify();
+        assert!(report.total > 0);
+        assert!(
+            report.failed + report.unknown + report.unverified > 0,
+            "an implementation of subtraction passed the addition contract: {report:?}"
+        );
+    }
+}
+
+#[test]
+fn clause_boundaries_preserve_nested_binders_and_location_arguments() {
+    let compact = r"/*@ requires \forall(int i; i >= 0); ensures \result == \sum(0, n, k; k); reads select(x,y), p; */";
+    let multi = r"/*@
+        requires \forall(int i; i >= 0);
+        ensures \result == \sum(0, n, k; k);
+        reads select(x,y), p;
+    */";
+    let spec = parse_acsl_spec(compact).unwrap();
+    assert_eq!(Some(spec.clone()), parse_acsl_spec(multi));
+    assert_eq!(
+        (spec.requires.len(), spec.ensures.len(), spec.reads.len()),
+        (1, 1, 2)
+    );
+}
+
+#[test]
+fn bitwise_contract_preserves_operator_precedence() {
+    let parse = |clause| super::parse_acsl_contract(clause).unwrap().ensures;
+    assert_eq!(
+        parse("//@ ensures a | b ^ c & d == e;"),
+        parse("//@ ensures a | (b ^ (c & (d == e)));")
+    );
+    assert_ne!(
+        parse("//@ ensures (a & b) == (a | b);"),
+        parse("//@ ensures (a | b) == (a | b);")
+    );
+}
+
+#[test]
+fn malformed_attached_annotation_does_not_become_an_empty_contract() {
+    let mut p = CParser::new();
+    for text in [
+        "requires x > 0; ensures;",
+        "requiresX x;",
+        "ensures (x > 0;",
+        "requires x; unsupported x;",
+        "reads p,;",
+        "requires x > 0 ensures x > 2;",
+        "requires x trailing_text; ensures 1 == 1;",
+        "ensures x == ;",
+        "requires broken predicate && 0; ensures 1 == 1;",
+    ] {
+        let src = format!("/*@ {text} */\nint f(int x) {{ return x; }}");
+        assert!(p.parse_function_with_spec(&src).is_err(), "{text}");
+        assert!(p.parse_translation_unit_with_specs(&src).is_err(), "{text}");
+    }
+    assert!(p
+        .parse_function_with_spec("int f(int x) {return x;}")
+        .is_ok());
+}

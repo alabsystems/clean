@@ -87,15 +87,19 @@ fn canonical_arithmetic_owned_clones_match_original_installers_and_isolate_legac
         independent
             .install_eval_ir_unsigned_compare_laws_v1()
             .unwrap();
-        same_definitions(&independent, retained());
+        // The original independent installers remain an exact subset of the
+        // larger XOR/AND/division/shift package. Audit the added roots below.
+        for (name, before) in independent.definitions() {
+            same_definition(before, retained().get_definition(name).unwrap());
+        }
         same_definitions(retained(), &owned);
         assert_eq!(
             retained().definitions().len(),
-            byte.definitions().len() + 85
+            byte.definitions().len() + 128
         );
         assert_eq!(
             retained().definitions().len(),
-            bounded.definitions().len() + 17
+            bounded.definitions().len() + 60
         );
         for previous in [byte, &positive, &shifted, &bounded] {
             for (name, before) in previous.definitions() {
@@ -117,6 +121,11 @@ fn canonical_arithmetic_owned_clones_match_original_installers_and_isolate_legac
                 );
             }
             for root in &ROOTS[9..] {
+                // Product agreement belongs to the ordinary ByteV1 owner.
+                if *root == "ir_nat_mul_canonical_agrees_v1" {
+                    strict_root(previous, root);
+                    continue;
+                }
                 assert!(
                     previous.get_definition(root).is_none(),
                     "legacy profile: {root}"

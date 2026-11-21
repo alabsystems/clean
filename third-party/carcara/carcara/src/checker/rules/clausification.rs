@@ -1,3 +1,4 @@
+// Modified in Clean: typed array-lambda dialect and explicit lambda export refusal.
 use super::{
     assert_clause_len, assert_eq, assert_is_expected, assert_num_args, assert_num_premises,
     assert_operation_len, assert_polyeq_expected, get_premise_term, CheckerError, EqualityError,
@@ -904,7 +905,7 @@ fn apply_bfun_elim_with(
             let op = match b {
                 Binder::Forall => Operator::And,
                 Binder::Exists => Operator::Or,
-                Binder::Choice | Binder::Lambda => {
+                Binder::Choice | Binder::Lambda | Binder::ArrayLambda => {
                     let inner = apply_bfun_elim_with(pool, inner, cache, budget, names_below)?;
                     let result = pool.add(Term::Binder(*b, bindings.clone(), inner));
                     cache.insert(term.clone(), result.clone());

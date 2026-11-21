@@ -6,6 +6,23 @@ use super::*;
 use clean_parser::{parse_decl, parse_expr, DoElem, SurfaceDecl, SurfaceExpr};
 
 #[test]
+fn ordinary_and_synthetic_holes_survive_macro_expansion_with_their_spans() {
+    for source in ["_", "?_", "?goal"] {
+        let original = parse_expr(source).expect("hole source");
+        let expanded = expand_surface_macros(&mut MacroCtx::new(), &original).expect("expansion");
+        assert_eq!(expanded.span(), original.span());
+        match (&original, &expanded) {
+            (SurfaceExpr::Hole(_), SurfaceExpr::Hole(_)) => assert_eq!(source, "_"),
+            (SurfaceExpr::NamedHole(_, before), SurfaceExpr::NamedHole(_, after)) => {
+                assert!(before.same_syntax(after));
+                assert_eq!(after.name().is_anon(), source == "?_");
+            }
+            _ => panic!("{source} changed from {original:?} to {expanded:?}"),
+        }
+    }
+}
+
+#[test]
 fn application_ellipsis_and_quoted_named_argument_survive_actual_macro_roundtrip() {
     for (source, expected) in [("f ..", true), ("f («..» := x)", false)] {
         let expression = parse_expr(source).unwrap();
@@ -437,7 +454,7 @@ fn test_register_syntax_declaration() {
 
     ctx.register_syntax(
         Some(&SurfaceName::generated_path("mykey_syntax")),
-        Some(50),
+        Some(&50u64.into()),
         &pattern,
         "term",
     )

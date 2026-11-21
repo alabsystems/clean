@@ -146,25 +146,34 @@ struct CloseFvarsFolder {
     /// When set, enables gap detection for FVars in [base, limit) that
     /// fall outside the convertible range.
     limit: u64,
-    /// Set to `true` when a tactic-scope FVar (id in `[base, limit)`) is
-    /// encountered at a depth where it cannot be converted to a BVar — i.e.
-    /// the FVar was allocated but has no matching binder above it in the
-    /// assembled proof term (an ID-to-binder gap, #2204). When this is set the
-    /// closed term is NOT sound: the caller MUST reject the proof (fail closed)
-    /// rather than hand a term with residual free variables to the kernel.
-    ///
-    /// Historically this condition tripped a `debug_assert!` that aborted the
-    /// worker thread. A checker that panics on a genuinely-malformed proof term
-    /// is a robustness failure; the diagnostic is preserved via
-    /// [`CloseFvarsFolder::gap_diagnostic`] and surfaced as a normal
-    /// elaboration `Err` instead. The proof is still refused — never accepted.
-    gap_detected: bool,
-    /// Diagnostic for the first gap encountered (the `{n}`, depth, base, limit
-    /// that previously appeared in the `debug_assert!` message), for logging.
-    gap_diagnostic: Option<String>,
+    /// While closing the type or value of an inlined let, even an unused hole
+    /// must have a solution before substitution can erase it.
+    require_solved: bool,
+    /// Retain the first malformed FVar and a diagnostic until the caller refuses the proof.
+    error: Option<String>,
 }
 
 impl ExprFolder for CloseFvarsFolder {
+    fn fold_mdata(&mut self, metadata: &clean_kernel::MDataMap, inner: &Expr) -> Expr {
+        if metadata == &*super::super::have_let::INLINE_LET_MARKER {
+            if let ExprKind::Let(name, ty, value, body, non_dep) = inner.kind() {
+                // Check every child at its original depth. Substitution may erase the
+                // type and value entirely, so both must be free of unsolved metas.
+                let outer = self.require_solved;
+                self.require_solved = true;
+                let ty = self.fold_expr(ty);
+                let value = self.fold_expr(value);
+                self.require_solved = outer;
+                let body = self.fold_binder_body(body);
+                if self.error.is_none() {
+                    return body.instantiate(&value);
+                }
+                return Expr::let_named(name.clone(), ty, value, body, *non_dep);
+            }
+        }
+        Expr::mdata(metadata.clone(), self.fold_expr(inner))
+    }
+
     fn fold_binder_body(&mut self, expr: &Expr) -> Expr {
         self.depth += 1;
         let result = self.fold_expr(expr);
@@ -173,6 +182,11 @@ impl ExprFolder for CloseFvarsFolder {
     }
 
     fn fold_fvar(&mut self, id: FVarId) -> Expr {
+        if self.require_solved && MetaState::from_fvar(id).is_some() {
+            self.error
+                .get_or_insert_with(|| format!("unresolved metavariable {id:?} in tactic letI"));
+            return Expr::fvar(id);
+        }
         let n = id.as_u64();
         if n >= self.base && (n - self.base) < self.depth {
             #[allow(clippy::cast_possible_truncation)]
@@ -186,9 +200,8 @@ impl ExprFolder for CloseFvarsFolder {
             // instead of panicking or accepting a term with a residual FVar.
             let is_tactic_gap = n >= self.base && n < self.limit && self.limit != 0;
             if is_tactic_gap {
-                self.gap_detected = true;
-                if self.gap_diagnostic.is_none() {
-                    self.gap_diagnostic = Some(format!(
+                if self.error.is_none() {
+                    self.error = Some(format!(
                         "close_fvars: tactic FVar({n}) not converted at depth {} \
                          (base={}, limit={}). This FVar has no matching binder — \
                          possible ID-to-binder gap.",
@@ -201,14 +214,12 @@ impl ExprFolder for CloseFvarsFolder {
     }
 }
 
-/// Outcome of a validated close: the closed term plus whether any tactic-scope
-/// FVar was left unconverted (an ID-to-binder gap). When `gap` is `Some`, the
-/// term is unsound (contains a residual free variable) and the caller MUST
-/// reject the proof.
+/// Outcome of closing a term. A scope gap or an unresolved inlined obligation
+/// leaves its FVar in the returned expression and requires rejection.
 pub(crate) struct CloseOutcome {
     pub(crate) closed: Expr,
-    /// `Some(diagnostic)` if a tactic-scope FVar had no matching binder.
-    pub(crate) gap: Option<String>,
+    /// The first reason closing failed.
+    pub(crate) error: Option<String>,
 }
 
 /// Close a proof term by converting FVars to BVars.
@@ -233,8 +244,8 @@ pub(crate) fn close_fvars(expr: &Expr, depth: u64) -> Expr {
         depth,
         base: 0,
         limit: 0,
-        gap_detected: false,
-        gap_diagnostic: None,
+        require_solved: false,
+        error: None,
     }
     .fold_expr(expr)
 }
@@ -244,7 +255,7 @@ pub(crate) fn close_fvars(expr: &Expr, depth: u64) -> Expr {
 /// Like `close_fvars` but additionally records the upper bound of
 /// tactic-created FVar IDs. If any tactic-scope FVar in `[base, limit)` is left
 /// unconverted (no matching binder — an ID-to-binder gap), the returned
-/// [`CloseOutcome::gap`] is `Some(diagnostic)` and the caller MUST reject the
+/// [`CloseOutcome::error`] is `Some(diagnostic)` and the caller MUST reject the
 /// proof (fail closed). Never panics on such a term — a malformed proof is
 /// refused via `Err`/`None`, not by aborting the worker thread.
 ///
@@ -253,8 +264,8 @@ pub(crate) fn close_fvars(expr: &Expr, depth: u64) -> Expr {
 /// REQUIRES: `base` <= `limit`
 /// REQUIRES: `depth` matches the number of enclosing binders above `expr`
 /// ENSURES: FVars in `[base, base+depth)` are converted to BVar indices
-/// ENSURES: `gap` is `Some` iff a tactic-scope FVar in `[base, limit)` had no
-///          matching binder (in which case `closed` still contains that FVar)
+/// ENSURES: `error` records a missing binder or an unresolved inlined obligation;
+///          `closed` still contains the offending FVar
 pub(crate) fn close_fvars_validated(
     expr: &Expr,
     depth: u64,
@@ -265,17 +276,13 @@ pub(crate) fn close_fvars_validated(
         depth,
         base,
         limit,
-        gap_detected: false,
-        gap_diagnostic: None,
+        require_solved: false,
+        error: None,
     };
     let closed = folder.fold_expr(expr);
     CloseOutcome {
         closed,
-        gap: if folder.gap_detected {
-            folder.gap_diagnostic
-        } else {
-            None
-        },
+        error: folder.error,
     }
 }
 

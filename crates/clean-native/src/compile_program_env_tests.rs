@@ -50,6 +50,99 @@ fn assert_accepted(source: &str, name: &str) {
 }
 
 #[test]
+fn test_program_source_dependency_uses_the_selected_lean_world() {
+    const CHILD: &str = "CLEAN_NATIVE_SOURCE_WORLD_CHILD";
+    if std::env::var_os(CHILD).is_some() {
+        return check_selected_source_world();
+    }
+
+    // The tracked artifact supplies the exact build identity for selection.
+    // The source modules use a bare prelude and never load it as Init.
+    let dir = tempfile::tempdir().expect("tempdir");
+    for (tag, bytes) in [
+        (
+            "v4.36.0-rc2",
+            include_bytes!(
+                "../../../tests/fixtures/olean/v4.36.0-rc2/matcher-metadata/MatcherParity.olean"
+            )
+            .as_slice(),
+        ),
+        (
+            "v4.36.0",
+            include_bytes!("../../../tests/fixtures/olean/v4.36.0/plain/StablePlain.olean")
+                .as_slice(),
+        ),
+    ] {
+        let lib = dir.path().join(format!(
+            "toolchains/leanprover--lean4---{tag}/lib/lean/Init"
+        ));
+        std::fs::create_dir_all(&lib).expect("create toolchain identity directory");
+        std::fs::write(lib.join("Prelude.olean"), bytes).expect("write tracked toolchain identity");
+    }
+
+    let result = std::process::Command::new(std::env::current_exe().expect("test executable"))
+        .args([
+            "--exact",
+            "compile::program_env_tests::test_program_source_dependency_uses_the_selected_lean_world",
+        ])
+        .env_clear()
+        .env(CHILD, "1")
+        .env("ELAN_HOME", dir.path())
+        .current_dir(dir.path())
+        .output()
+        .expect("run the source-world regression");
+    let stdout = String::from_utf8_lossy(&result.stdout);
+    let stderr = String::from_utf8_lossy(&result.stderr);
+    assert!(result.status.success(), "{stdout}\n{stderr}");
+    assert!(stdout.contains("1 passed; 0 failed"), "{stdout}");
+}
+
+fn check_selected_source_world() {
+    for world in [
+        clean_kernel::LeanWorld::Lean436Rc2,
+        clean_kernel::LeanWorld::Lean436,
+    ] {
+        check_dependency_in_world(world);
+    }
+}
+
+fn check_dependency_in_world(world: clean_kernel::LeanWorld) {
+    let entry = Path::new("Main.lean");
+    std::fs::write(
+        entry,
+        "prelude\nimport Payload\ndef nativeResult (a : Type) (x : a) : a := nativeIdentity a x\n",
+    )
+    .expect("write entry");
+    std::fs::write(
+        "Payload.lean",
+        "prelude\nprivate variable (α : Type)\ndef nativeIdentity (x : α) : α := x\n",
+    )
+    .expect("write dependency");
+
+    let error = elaborate_file_to_env(entry).expect_err("Oracle grammar refuses the modifier");
+    let message = format!("{error:#}");
+    assert!(
+        message.contains("Payload.lean") && message.contains("unexpected token 'variable'"),
+        "{message}"
+    );
+
+    let decision = clean_olean::source_world_for_file(entry, Some(world))
+        .expect("tracked release identity is recognized");
+    let (env, _, source_decls) = elaborate_file_with_inventory_in_world(entry, &decision)
+        .expect("the dependency and its isolated replay elaborate in the selected world");
+    assert_eq!(clean_olean::environment_world(&env), Some(world.tag()));
+    assert!(source_decls.contains(&Name::from_string("nativeIdentity")));
+    assert!(source_decls.contains(&Name::from_string("nativeResult")));
+
+    std::fs::write(entry, "def nativeResult (a : Type) (x : a) : a := x\n")
+        .expect("write ordinary module");
+    let error = elaborate_file_with_inventory_in_world(entry, &decision)
+        .expect_err("selected ordinary modules require genuine Init");
+    let message = format!("{error:#}");
+    assert!(message.contains("cannot load implicit Init"), "{message}");
+}
+
+#[test]
 fn test_program_env_io_main_accepted_as_lean_does() {
     assert_accepted(
         "def main : IO Unit := do\n  IO.println \"hi\"\n  IO.println (toString (2 + 3))\n",

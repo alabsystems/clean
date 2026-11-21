@@ -86,6 +86,7 @@ pub(crate) enum AttributeSite {
 pub(crate) struct DeclaredInEntry {
     name: Name,
     unit: ElabUnit,
+    simple_equation_source: bool,
 }
 
 impl PersistentExtEntry for DeclaredInEntry {
@@ -105,14 +106,17 @@ impl PersistentExtEntry for DeclaredInEntry {
 /// cloned far more often than a declaration is added.
 #[derive(Debug, Clone, Default)]
 pub(crate) struct DeclaredInState {
-    units: Arc<HashMap<Name, ElabUnit>>,
+    units: Arc<HashMap<Name, (ElabUnit, bool)>>,
 }
 
 impl PersistentExtState for DeclaredInState {
     type Entry = DeclaredInEntry;
 
     fn add_entry(&mut self, entry: &DeclaredInEntry) {
-        Arc::make_mut(&mut self.units).insert(entry.name.clone(), entry.unit);
+        Arc::make_mut(&mut self.units).insert(
+            entry.name.clone(),
+            (entry.unit, entry.simple_equation_source),
+        );
     }
 
     fn export_entries(&self) -> Vec<EnvExtensionEntry> {
@@ -134,8 +138,25 @@ pub(crate) fn record_declared(
     unit: ElabUnit,
     names: impl IntoIterator<Item = Name>,
 ) {
+    record_declared_with_equation_sources(env, unit, names, &[]);
+}
+
+pub(crate) fn record_declared_with_equation_sources(
+    env: &mut Environment,
+    unit: ElabUnit,
+    names: impl IntoIterator<Item = Name>,
+    simple_equation_sources: &[Name],
+) {
     for name in names {
-        env.add_ext_entry::<DeclaredInState>(declared_in_idx(), &DeclaredInEntry { name, unit });
+        let simple_equation_source = simple_equation_sources.contains(&name);
+        env.add_ext_entry::<DeclaredInState>(
+            declared_in_idx(),
+            &DeclaredInEntry {
+                name,
+                unit,
+                simple_equation_source,
+            },
+        );
     }
 }
 
@@ -144,7 +165,15 @@ pub(crate) fn record_declared(
 pub(crate) fn declared_by(env: &Environment, unit: ElabUnit, decl: &Name) -> bool {
     env.get_ext_state::<DeclaredInState>(declared_in_idx())
         .and_then(|state| state.units.get(decl))
-        == Some(&unit)
+        .is_some_and(|(owner, _)| *owner == unit)
+}
+
+/// Whether this declaration used the ordinary source definition path on
+/// which a single defining equation can be realized.
+pub(crate) fn simple_equation_source(env: &Environment, decl: &Name) -> bool {
+    env.get_ext_state::<DeclaredInState>(declared_in_idx())
+        .and_then(|state| state.units.get(decl))
+        .is_some_and(|(_, simple)| *simple)
 }
 
 /// Whether any source run added `decl` (this file, or an earlier source

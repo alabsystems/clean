@@ -30,8 +30,9 @@
 //! Lean finishes by substituting `h` itself by `Eq.refl` (the `HEq h h'`
 //! index equation). Here `h` is consumed by its own first step instead: it is
 //! substituted, cleared, or handed to `noConfusion` as `Eq.symm h`. When the
-//! goal or another local MENTIONS `h` and the first step is not a
-//! substitution, that is refused by name rather than approximated.
+//! goal or another local mentions `h`, distinct constructors still close the
+//! original dependent goal by `noConfusion`. A surviving branch that would
+//! need to replace `h` itself with reflexivity is refused.
 
 use clean_kernel::name::Name;
 use clean_kernel::{BinderInfo, Expr, ExprKind, FVarId, Level};
@@ -415,7 +416,12 @@ fn unify_eq(
             e => e,
         });
     }
-    if eq.flipped && local_is_used(state, goal, eq.local) {
+    let dependent = eq.flipped && local_is_used(state, goal, eq.local);
+    if dependent
+        && !ctor_app(state, goal, &eq.a)
+            .zip(ctor_app(state, goal, &eq.b))
+            .is_some_and(|(a, b)| a.ctor != b.ctor)
+    {
         return Err(refused(
             "the hypothesis is mentioned by the goal or another hypothesis and neither side is a \
              local; Lean replaces it by `Eq.refl` after unifying, which is not implemented here"
@@ -425,7 +431,10 @@ fn unify_eq(
     if meta_is_def_eq(state, goal, &eq.a, &eq.b) {
         return clear_equation(state, goal, eq);
     }
-    if ctor_app_syntactic(state, &eq.a).is_some() && ctor_app_syntactic(state, &eq.b).is_some() {
+    if dependent
+        || (ctor_app_syntactic(state, &eq.a).is_some()
+            && ctor_app_syntactic(state, &eq.b).is_some())
+    {
         let outcome = injection_core(
             state,
             goal,

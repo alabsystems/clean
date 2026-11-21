@@ -91,6 +91,7 @@ impl ReferenceBase {
 /// The admissions of [`super::drive::replay_in_order`], routed through the
 /// entry.
 struct EntryTarget {
+    source_eliminators: bool,
     kernel: ReferenceKernel,
     refused: Vec<(String, ReferenceRefusal)>,
 }
@@ -104,6 +105,10 @@ impl EntryTarget {
 }
 
 impl ReplayTarget for EntryTarget {
+    fn check_source_eliminator_definitions(&self) -> bool {
+        self.source_eliminators
+    }
+
     fn env(&self) -> &Environment {
         self.kernel.environment()
     }
@@ -166,16 +171,62 @@ pub fn reference_base_closed(
     targets: &BTreeSet<Name>,
     options: &ClosedRecheckOptions,
 ) -> Result<ReferenceBase, ReferenceRefusal> {
+    reference_base_closed_inner(env, targets, &BTreeSet::new(), options, false)
+}
+
+/// Replay an elaborated source environment at the same Lean reference entry.
+/// A value-bearing native casesOn/recOn receives an additional check against
+/// the full regenerated source record before its defining term is admitted.
+/// Imported-only consumers keep their original representation checks.
+pub fn reference_source_base_closed(
+    env: &Environment,
+    targets: &BTreeSet<Name>,
+    options: &ClosedRecheckOptions,
+) -> Result<ReferenceBase, ReferenceRefusal> {
+    reference_base_closed_inner(env, targets, &BTreeSet::new(), options, true)
+}
+
+/// Build the same fenced base from a captured source environment.
+///
+/// Supply the declarations introduced by the captured source modules in
+/// `source_owned`. When that inventory includes a family and its generated
+/// `casesOn` or `recOn` with matching definition and recursor headers, replay
+/// the original value through ordinary fenced admission. Lean's theory
+/// computes that value through the primitive recursor. The mirrored rule
+/// table is neither replayed nor installed.
+///
+/// # Errors
+///
+/// As in [`reference_base_closed`], a failure to construct the empty entry
+/// returns a reference refusal. Declaration refusals stay in the report and
+/// prevent [`ReferenceBase::into_kernel`] from returning the kernel.
+pub fn reference_base_closed_with_source_wrappers(
+    env: &Environment,
+    targets: &BTreeSet<Name>,
+    source_owned: &BTreeSet<Name>,
+    options: &ClosedRecheckOptions,
+) -> Result<ReferenceBase, ReferenceRefusal> {
+    reference_base_closed_inner(env, targets, source_owned, options, false)
+}
+
+fn reference_base_closed_inner(
+    env: &Environment,
+    targets: &BTreeSet<Name>,
+    source_owned: &BTreeSet<Name>,
+    options: &ClosedRecheckOptions,
+    source_eliminators: bool,
+) -> Result<ReferenceBase, ReferenceRefusal> {
     let mut start = Environment::default();
     start.set_option(
         "maxHeartbeats".to_string(),
         Some(options.max_heartbeats.to_string()),
     );
     let mut target = EntryTarget {
+        source_eliminators,
         kernel: ReferenceKernel::new(start)?,
         refused: Vec::new(),
     };
-    let (report, admitted) = run_closed(env, targets, options, &mut target);
+    let (report, admitted) = run_closed(env, targets, source_owned, options, &mut target);
     let completion_failure =
         if report.passed() && report.extension_bindings_pinned && target.refused.is_empty() {
             None
@@ -552,6 +603,7 @@ pub fn reference_base_core_tracing(
     );
     let mut target = TracingTarget {
         entry: EntryTarget {
+            source_eliminators: false,
             kernel: ReferenceKernel::new(start)?,
             refused: vec![],
         },
@@ -565,7 +617,7 @@ pub fn reference_base_core_tracing(
             .map(std::io::BufWriter::new),
         checkpoint_error: None,
     };
-    let (report, _) = run_closed(env, targets, options, &mut target);
+    let (report, _) = run_closed(env, targets, &BTreeSet::new(), options, &mut target);
     if let Some(error) = target.checkpoint_error {
         return Err(format!("tracing checkpoint: {error}").into());
     }
@@ -629,11 +681,12 @@ pub fn reference_base_progress(
     );
     let mut target = Progress {
         entry: EntryTarget {
+            source_eliminators: false,
             kernel: ReferenceKernel::new(start)?,
             refused: vec![],
         },
         count: 0,
     };
-    let (report, _) = run_closed(env, targets, options, &mut target);
+    let (report, _) = run_closed(env, targets, &BTreeSet::new(), options, &mut target);
     Ok(report)
 }

@@ -119,6 +119,9 @@ ay-translate = { workspace = true, optional = true }
 
 [dev-dependencies]
 clean-kernel = { workspace = true, features = ["math-overlays"] }
+# The one Rust source scanner (`blank_noncode`); `src/test_support/source_scan.rs`
+# re-exports it instead of keeping a copy (design unit EV0).
+clean-evidence.workspace = true
 proptest.workspace = true
 criterion.workspace = true
 serial_test = { workspace = true, features = ["file_locks"] }
@@ -144,14 +147,14 @@ ay-lean-bridge.workspace = true
 # gate. So the two move together, in one transaction, through
 # scripts/bump-trust-ir-pin.sh. The `rev` fields below are the pin; a comment
 # that restates one is refused by that gate (`trust_ir_pin_legs.restated_pins`).
-trust-cg-lower = { git = "https://github.com/alabsystems/trust-cg.git", rev = "bea55c6c3b6d586c129ab9ac3a4e1be016ad4bd9" }
-trust-cg-ir = { git = "https://github.com/alabsystems/trust-cg.git", rev = "bea55c6c3b6d586c129ab9ac3a4e1be016ad4bd9" }
+trust-cg-lower = { git = "https://github.com/alabsystems/trust-cg.git", rev = "221f353fb0db8bab006db8034b968056bd2b6db9" }
+trust-cg-ir = { git = "https://github.com/alabsystems/trust-cg.git", rev = "221f353fb0db8bab006db8034b968056bd2b6db9" }
 # `tests_criterion2_gvn_lowering` RUNS the real trust-cg GlobalValueNumbering pass
 # (commutative-operand canonicalization) and extracts the structurally-distinct
 # machine-form-vs-ir-op identity it relies on, then routes it through the clean
 # NON-REFLEXIVE lowering bridge. Dev-dep only; clean-auto/src never depends on it.
-trust-cg-opt = { git = "https://github.com/alabsystems/trust-cg.git", rev = "bea55c6c3b6d586c129ab9ac3a4e1be016ad4bd9" }
-trust-ir = { git = "https://github.com/alabsystems/trust-ir.git", rev = "8bae728257b123d6394b2dc049b3573ad885049f", features = ["serde"] }
+trust-cg-opt = { git = "https://github.com/alabsystems/trust-cg.git", rev = "221f353fb0db8bab006db8034b968056bd2b6db9" }
+trust-ir = { git = "https://github.com/alabsystems/trust-ir.git", rev = "899d46e7a303fad2b706a88a7a8eda41ec47dcfe", features = ["serde"] }
 
 [[bench]]
 name = "smt_fast_path"

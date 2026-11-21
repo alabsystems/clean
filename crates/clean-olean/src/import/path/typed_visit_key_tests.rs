@@ -55,3 +55,39 @@ fn framing_is_injective_for_empty_unicode_marker_and_delimiter_parts() {
         }
     }
 }
+
+#[test]
+fn first_package_root_owns_the_module_even_when_a_later_file_exists() {
+    let first = tempfile::tempdir().unwrap();
+    let second = tempfile::tempdir().unwrap();
+    let paths = [first.path().to_path_buf(), second.path().to_path_buf()];
+    let module = Name::anon().str("Pkg").str("Quoted.part");
+    let relative = std::path::Path::new("Pkg/Quoted.part.olean");
+    std::fs::create_dir(second.path().join("Pkg")).unwrap();
+    std::fs::write(second.path().join(relative), b"fixture").unwrap();
+    assert_eq!(
+        resolve_typed_module_path(&module, &paths).unwrap(),
+        second.path().join(relative)
+    );
+
+    let first_dir = first.path().join("Pkg");
+    std::fs::create_dir(&first_dir).unwrap();
+    for extension in ["olean", "lean"] {
+        let expected = first.path().join(format!("Pkg/Quoted.part.{extension}"));
+        assert_eq!(
+            lean_package_module_path(&module, &paths, extension).unwrap(),
+            Some(expected)
+        );
+    }
+    assert_eq!(
+        resolve_typed_module_path(&module, &paths).unwrap(),
+        first.path().join(relative)
+    );
+
+    std::fs::remove_dir(first_dir).unwrap();
+    std::fs::write(first.path().join("Pkg.olean"), b"fixture").unwrap();
+    assert_eq!(
+        lean_package_module_path(&module, &paths, "olean").unwrap(),
+        Some(first.path().join(relative))
+    );
+}

@@ -5,6 +5,8 @@
 //! ALWAYS-ON tests for the v3 closure-binding fail-closed hardening — the
 //! LOAD-TIME content/arena binding + serving half (split from
 //! `closure_load_v3_tests.rs` to keep each file under the 500-line paragon).
+//! The source-olean binding's own tests (TEST 7, 7b) live in
+//! `closure_load_v3_tests_source.rs`.
 //! Seeded by the committed `tests/fixtures/olean/v4.13.0/custom/Minimal.olean`
 //! so they run with no Mathlib checkout. See the no-weaker certificate in
 //! `docs/SOUNDNESS_CERTIFICATE.md`.
@@ -28,8 +30,9 @@ fn minimal_olean() -> PathBuf {
 
 /// Copy `Minimal.olean` into `<root>/Minimal.olean` so the closure resolver
 /// finds it for module name "Minimal", and build the v3 fail-closed shard
-/// into `<shards>/Minimal.mathverse`. Returns the shard bytes.
-fn build_minimal_v3_shard(root: &Path, shards: &Path) -> Vec<u8> {
+/// into `<shards>/Minimal.mathverse`. Returns the shard bytes. Shared with the
+/// source-binding tests (`closure_load_v3_tests_source.rs`).
+pub(super) fn build_minimal_v3_shard(root: &Path, shards: &Path) -> Vec<u8> {
     std::fs::create_dir_all(shards).unwrap();
     let olean = root.join("Minimal.olean");
     std::fs::copy(minimal_olean(), &olean).expect("copy fixture olean");
@@ -130,35 +133,6 @@ fn test_independent_eager_vs_lazy_parity_minimal() {
             let lazy_ok = lazy_env.add_decl(decl).is_ok();
             assert_eq!(eager_ok, lazy_ok, "add_decl(id_id) Ok-parity eager==lazy");
         }
-    }
-}
-
-/// TEST 7: load-time source-olean MISMATCH -> not verified -> not served.
-/// Flip one byte of the on-disk source `.olean` after building the shard.
-#[test]
-fn test_load_time_hash_mismatch_refuses() {
-    let root = tempfile::tempdir().unwrap();
-    let shards = tempfile::tempdir().unwrap();
-    build_minimal_v3_shard(root.path(), shards.path());
-
-    // Corrupt the on-disk olean (one byte) so its recomputed digest mismatches.
-    let olean = root.path().join("Minimal.olean");
-    let mut data = std::fs::read(&olean).unwrap();
-    let mid = data.len() / 2;
-    data[mid] ^= 0xFF;
-    std::fs::write(&olean, &data).unwrap();
-
-    let mut source = ShardConstantSource::from_dir(shards.path()).expect("source");
-    let (any_v3, verified) =
-        verify_closure_shards_against_oleans(&mut source, root.path(), &mut LeanWorldScope::new());
-    assert!(any_v3, "still a v3 fail-closed shard");
-    assert_eq!(verified, 0, "mismatched olean must NOT verify");
-    // No served name resolves (all => eager).
-    for name in source.servable_names_for_test() {
-        assert!(
-            KernelConstantSource::get(&source, &name).is_none(),
-            "unverified shard must refuse to serve {name}"
-        );
     }
 }
 

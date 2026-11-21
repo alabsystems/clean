@@ -190,20 +190,85 @@ fn run_and_compile_dispatch_get_a_large_stack_by_default() {
 /// the refusing dependency as root controls the original reason in each case.
 #[test]
 fn source_dependency_refusal_keeps_the_lowering_cause() {
-    for (name, decl, cause) in [
-        (
-            "c28_r4_v_one_function_over_requests",
-            "run",
-            "unsupported expression: Expression form: Lam(",
-        ),
-        (
-            "c23_nat_literal_of_129_bits",
+    // Stage 1: constant-to-LCNF lowering refusal on a source dependency (`Application head: Let(`).
+    let stage1_dir = tempfile::tempdir().expect("stage1 fixture dir");
+    let stage1_src = stage1_dir.path().join("stage1_bad_app_head.lean");
+    std::fs::write(
+        &stage1_src,
+        "def badHead (x : Nat) : Nat :=\n  (let f : Nat → Nat := Nat.succ; f) x\n\ndef main : IO Unit :=\n  IO.println (toString (badHead 1))\n",
+    )
+    .expect("write stage1 source");
+    assert_source_refusal_at_path(
+        &stage1_src,
+        "badHead",
+        "unsupported expression: Application head: Let(",
+    );
+
+    // Stage 2: isolated IR pipeline probe refusal on a source dependency (underapplied kernel recursor value).
+    let stage2_dir = tempfile::tempdir().expect("stage2 fixture dir");
+    let stage2_src = stage2_dir.path().join("stage2_valueless_recursor.lean");
+    std::fs::write(
+        &stage2_src,
+        "def badRec : Nat → (Nat → Nat → Nat) → Nat → Nat :=\n  @Nat.rec (fun _ => Nat)\n\ndef main : IO Unit :=\n  IO.println (toString (badRec 0 (fun _ ih => ih) 0))\n",
+    )
+    .expect("write stage2 source");
+    assert_source_refusal_at_path(
+        &stage2_src,
+        "badRec",
+        "references kernel recursor `Nat.rec`",
+    );
+}
+
+#[test]
+fn closed_wide_nat_literal_dependency_runs_with_lean_pinned_bytes() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let fixture = root.join("tests/fixtures/advice_replay_checker");
+    let source = fixture.join("programs/c23_nat_literal_of_129_bits.lean");
+    let source = source.to_str().expect("source");
+    let pin = |ext: &str| {
+        std::fs::read(fixture.join(format!("expected/c23_nat_literal_of_129_bits.{ext}")))
+            .expect("Lean pin")
+    };
+    let dir = tempfile::tempdir().expect("output dir");
+    let output = dir.path().join("root.c");
+    let compile = Command::new(env!("CARGO_BIN_EXE_clean"))
+        .args([
+            "compile",
+            source,
+            "--decl",
             "two128",
-            "unsupported literal lowering for Nat",
-        ),
-    ] {
-        assert_source_refusal(name, decl, cause);
-    }
+            "--emit",
+            "c",
+            "-o",
+            output.to_str().expect("output"),
+        ])
+        .output()
+        .expect("compile the formerly refused wide Nat dependency");
+    assert_eq!(
+        compile.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&compile.stderr)
+    );
+    let emitted = std::fs::read_to_string(&output).expect("compile wrote C");
+    assert!(emitted.contains("l_two128"), "the root was emitted");
+    let run = Command::new(env!("CARGO_BIN_EXE_clean"))
+        .args(["run", source, "--decl", "main"])
+        .output()
+        .expect("run through closure walk");
+    let lean_rc: i32 = String::from_utf8(pin("rc"))
+        .expect("rc pin")
+        .trim()
+        .parse()
+        .expect("rc pin");
+    assert_eq!(
+        run.status.code(),
+        Some(lean_rc),
+        "{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
+    assert_eq!(run.stdout, pin("stdout"), "stdout differs from pinned Lean");
+    assert_eq!(run.stderr, pin("stderr"), "stderr differs from pinned Lean");
 }
 
 /// The IR-probe refusal this file used to pin, c03's `Tm.isNormal` ("reference(s)
@@ -263,11 +328,20 @@ fn closed_nested_pattern_dependency_runs_with_lean_pinned_bytes() {
     assert_eq!(run.stderr, pin("stderr"), "stderr differs from pinned Lean");
 }
 
+#[allow(dead_code)]
 fn assert_source_refusal(name: &str, decl: &str, cause: &str) {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let source = root.join(format!(
         "tests/fixtures/advice_replay_checker/programs/{name}.lean"
     ));
+    assert_source_refusal_at_path(&source, decl, cause);
+}
+
+fn assert_source_refusal_at_path(source: &Path, decl: &str, cause: &str) {
+    let name = source
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("<inline>");
     let dir = tempfile::tempdir().expect("output dir");
     let root_output = dir.path().join("root.c");
     let direct = Command::new(env!("CARGO_BIN_EXE_clean"))

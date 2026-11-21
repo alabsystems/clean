@@ -17,18 +17,21 @@
 //!   `FnBody.unreachable`, `ExternEntry.opaque`, `Option.none`, `List.nil`);
 //! * a structure with exactly one relevant field is represented by that field
 //!   (LCNF's trivial-structure rule, `hasTrivialStructure?`): `VarId` and
-//!   `JoinPointId` are their `Nat`, `DeclInfo` is its `Option Name`,
-//!   `ExternAttrData` is its `List ExternEntry`.
+//!   `JoinPointId` are their `Nat`, `ExternAttrData` is its
+//!   `List ExternEntry`. The oracle's `DeclInfo` is its `Option Name`;
+//!   Lean 4.36 stores all three fields in a constructor object.
 //!
 //! These are MEASURED, not assumed: every rule above is checked on every object
 //! (tag, object-field count, object size, scalar values), and the census over
 //! the Mathlib closure decodes every declaration through them. An object that
 //! does not match is an error, never a skip.
 
+use std::cell::Cell;
+
 use super::error::{LeanIrError, LeanIrResult};
 use super::types::{
     Alt, Arg, CtorInfo, Decl, DeclInfo, Expr, ExternAttrData, ExternEntry, FnBody, Instr, IrType,
-    JoinPointId, LitVal, Param, Terminal, VarId,
+    JoinPointId, LitVal, LocalIndexBounds, Param, Terminal, VarId,
 };
 use crate::expr::BigNat;
 use crate::region::{is_ptr, is_scalar, tags, unbox_scalar, CompactedRegion};
@@ -55,20 +58,66 @@ struct Ctor {
     offset: usize,
 }
 
+/// IR layout selected from the module artifact header.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum IrLayout {
+    Lean430Rc2,
+    Lean436,
+}
+
+impl IrLayout {
+    #[cfg(any(test, feature = "cli"))]
+    pub(crate) const fn version(self) -> &'static str {
+        match self {
+            Self::Lean430Rc2 => clean_kernel::LeanWorld::Lean430Rc2.version(),
+            Self::Lean436 => clean_kernel::LeanWorld::Lean436.version(),
+        }
+    }
+}
+
 /// Decoder over one compacted region (a module part, or a module-system part
 /// assembled over its base).
 pub(crate) struct IrDecoder<'r, 'a> {
     region: &'r CompactedRegion<'a>,
+    layout: IrLayout,
+    execution_work: Option<Cell<usize>>,
     /// Deepest nesting seen so far (reported by the census).
     pub(crate) max_depth_seen: usize,
 }
 
 impl<'r, 'a> IrDecoder<'r, 'a> {
     pub(crate) fn new(region: &'r CompactedRegion<'a>) -> Self {
+        Self::with_layout(region, IrLayout::Lean430Rc2)
+    }
+
+    pub(crate) fn with_layout(region: &'r CompactedRegion<'a>, layout: IrLayout) -> Self {
         Self {
             region,
+            layout,
+            execution_work: None,
             max_depth_seen: 0,
         }
+    }
+
+    pub(crate) fn for_stable_execution(region: &'r CompactedRegion<'a>) -> Self {
+        Self {
+            execution_work: Some(Cell::new(1 << 18)),
+            ..Self::with_layout(region, IrLayout::Lean436)
+        }
+    }
+
+    fn charge_execution_decode(
+        &self,
+        work: usize,
+        pointer: u64,
+        what: &'static str,
+    ) -> LeanIrResult<()> {
+        if let Some(remaining) = &self.execution_work {
+            remaining.set(remaining.get().checked_sub(work).ok_or_else(|| {
+                LeanIrError::layout(what, pointer, "execution decode budget exhausted")
+            })?);
+        }
+        Ok(())
     }
 
     /// The object at `pointer`: a compacted (rc 0) heap object.
@@ -77,6 +126,7 @@ impl<'r, 'a> IrDecoder<'r, 'a> {
         pointer: u64,
         what: &'static str,
     ) -> LeanIrResult<(usize, crate::region::ObjectHeader)> {
+        self.charge_execution_decode(1, pointer, what)?;
         if !is_ptr(pointer) || !pointer.is_multiple_of(8) {
             return Err(LeanIrError::layout(
                 what,
@@ -197,6 +247,7 @@ impl<'r, 'a> IrDecoder<'r, 'a> {
         let limbs = usize::try_from(size).map_err(|_| {
             LeanIrError::layout("Nat", pointer, format!("nonpositive MPZ size {size}"))
         })?;
+        self.charge_execution_decode(limbs, pointer, "Nat")?;
         if limbs == 0 || alloc != size {
             return Err(LeanIrError::layout(
                 "Nat",
@@ -254,13 +305,19 @@ impl<'r, 'a> IrDecoder<'r, 'a> {
         let size = usize::try_from(self.region.read_u64_at(offset + 8)?)
             .map_err(|_| LeanIrError::layout("String", pointer, "size overflow"))?;
         let capacity = self.region.read_u64_at(offset + 16)?;
-        if size == 0 || size > MAX_STRING_BYTES || size as u64 > capacity {
+        let max = if self.execution_work.is_some() {
+            4096
+        } else {
+            MAX_STRING_BYTES
+        };
+        if size == 0 || size > max || size as u64 > capacity {
             return Err(LeanIrError::layout(
                 "String",
                 pointer,
                 format!("size {size} / capacity {capacity} out of bounds"),
             ));
         }
+        self.charge_execution_decode(size, pointer, "String")?;
         let bytes = self.region.bytes_at(offset + 32, size)?;
         let content = bytes
             .strip_suffix(&[0])
@@ -301,6 +358,7 @@ impl<'r, 'a> IrDecoder<'r, 'a> {
                 format!("array size {size} (capacity {capacity}, bound {max})"),
             ));
         }
+        self.charge_execution_decode(size, pointer, what)?;
         self.region.validate_array_bounds(offset, size)?;
         (0..size)
             .map(|i| {
@@ -362,7 +420,15 @@ impl<'r, 'a> IrDecoder<'r, 'a> {
 
     pub(crate) fn ir_type(&self, pointer: u64) -> LeanIrResult<IrType> {
         const WHAT: &str = "IRType";
-        match self.tag_of(pointer, WHAT)? {
+        let tag = self.tag_of(pointer, WHAT)?;
+        if self.execution_work.is_some() && matches!(tag, Ok(10 | 11)) {
+            return Err(LeanIrError::layout(
+                WHAT,
+                pointer,
+                "unsupported struct or union in IR execution",
+            ));
+        }
+        match tag {
             Err(0) => Ok(IrType::Float),
             Err(1) => Ok(IrType::UInt8),
             Err(2) => Ok(IrType::UInt16),
@@ -606,9 +672,14 @@ impl<'r, 'a> IrDecoder<'r, 'a> {
     /// Decode a `FnBody` chain, flattening its non-terminal spine iteratively.
     pub(crate) fn fn_body(&mut self, pointer: u64, depth: usize) -> LeanIrResult<FnBody> {
         const WHAT: &str = "FnBody";
-        if depth > MAX_NESTING {
+        let max_nesting = if self.execution_work.is_some() {
+            32
+        } else {
+            MAX_NESTING
+        };
+        if depth > max_nesting {
             return Err(LeanIrError::DepthLimit {
-                limit: MAX_NESTING,
+                limit: max_nesting,
                 pointer,
             });
         }
@@ -816,9 +887,20 @@ impl<'r, 'a> IrDecoder<'r, 'a> {
         Ok(ExternAttrData { entries })
     }
 
-    /// The name of a `Decl` without decoding the rest (for error context).
+    /// The name of a `Decl` without decoding its body.
     pub(crate) fn decl_name(&self, pointer: u64) -> Option<Name> {
-        let (offset, _) = self.object(pointer, "Decl").ok()?;
+        let (offset, header) = self.object(pointer, "Decl").ok()?;
+        if self.layout == IrLayout::Lean436 {
+            if !matches!(
+                (header.tag, header.other, header.cs_sz),
+                (0, 5, 48) | (1, 4, 40)
+            ) {
+                return None;
+            }
+            self.region
+                .bytes_at(offset, usize::from(header.cs_sz))
+                .ok()?;
+        }
         let name = self.region.read_u64_at(offset + 8).ok()?;
         self.name(name).ok()
     }
@@ -833,17 +915,13 @@ impl<'r, 'a> IrDecoder<'r, 'a> {
                 let params = self.params(self.field(&c, 1)?)?;
                 let ty = self.ir_type(self.field(&c, 2)?)?;
                 let body = self.fn_body(self.field(&c, 3)?, 0)?;
-                // `DeclInfo` is represented by its single field `sorryDep? : Option Name`.
-                let sorry_dep = self
-                    .option(self.field(&c, 4)?, "DeclInfo.sorryDep?")?
-                    .map(|n| self.name(n))
-                    .transpose()?;
+                let info = self.decl_info(self.field(&c, 4)?)?;
                 Ok(Decl::FDecl {
                     f,
                     params,
                     ty,
                     body,
-                    info: DeclInfo { sorry_dep },
+                    info,
                 })
             }
             Ok(1) => {
@@ -857,6 +935,28 @@ impl<'r, 'a> IrDecoder<'r, 'a> {
             }
             _ => Err(LeanIrError::layout(WHAT, pointer, "not Decl.fdecl/extern")),
         }
+    }
+
+    fn decl_info(&self, pointer: u64) -> LeanIrResult<DeclInfo> {
+        let (sorry, index_bounds) = match self.layout {
+            IrLayout::Lean430Rc2 => (pointer, None),
+            IrLayout::Lean436 => {
+                let ctor = self.ctor(pointer, "DeclInfo", 0, 3, 0)?;
+                let bounds = LocalIndexBounds {
+                    max_jp: self.nat(self.field(&ctor, 1)?)?,
+                    max_var: self.nat(self.field(&ctor, 2)?)?,
+                };
+                (self.field(&ctor, 0)?, Some(bounds))
+            }
+        };
+        let sorry_dep = self
+            .option(sorry, "DeclInfo.sorryDep?")?
+            .map(|n| self.name(n))
+            .transpose()?;
+        Ok(DeclInfo {
+            sorry_dep,
+            index_bounds,
+        })
     }
 
     /// A `Name × Name` pair (the entry type of the `implemented_by` and

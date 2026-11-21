@@ -1,0 +1,27 @@
+{
+  "measured_commit": "synthetic",
+  "mutation": {
+    "id": "check-type-nat-zero-false"
+  },
+  "schema": "clean.patched_kernel_control.v1",
+  "sites": [
+    {
+      "mutant": {
+        "verdict": "minted"
+      },
+      "package": "fixture",
+      "site": "mint"
+    },
+    {
+      "mutant": {
+        "verdict": "refused"
+      },
+      "package": "fixture",
+      "site": "refusal"
+    }
+  ],
+  "summary": {
+    "minted_under_mutant": 1,
+    "sites": 2
+  }
+}

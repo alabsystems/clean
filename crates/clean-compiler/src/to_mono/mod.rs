@@ -55,6 +55,7 @@ pub struct MonoDeclInfo {
 /// State for monomorphization transformation.
 #[derive(Default)]
 pub struct ToMonoState {
+    checked_void_layout: bool,
     /// FVarIds bound to type-former parameters.
     /// These produce erased arguments when used.
     type_params: HashSet<FVarId>,
@@ -379,6 +380,7 @@ pub(crate) fn to_mono_recording(
     observation: Option<&crate::primitive_uses::ObservationFrame>,
 ) -> Decl {
     let mut state = ToMonoState {
+        checked_void_layout: crate::world_token::has_checked_void_layout(env),
         observation: observation.cloned(),
         ..ToMonoState::new()
     };
@@ -495,7 +497,10 @@ fn compute_max_fvar_alt(alt: &crate::lcnf::Alt, depth: usize) -> u64 {
 /// * `decls` - The declarations to transform
 /// * `env` - Environment for type lookups
 pub fn to_mono_decls(decls: Vec<Decl>, env: &Environment) -> Vec<Decl> {
-    let mut state = ToMonoState::new();
+    let mut state = ToMonoState {
+        checked_void_layout: crate::world_token::has_checked_void_layout(env),
+        ..ToMonoState::new()
+    };
     decls
         .iter()
         .map(|decl| to_mono_with_state(decl, env, &mut state))

@@ -366,8 +366,9 @@ pub(crate) fn allowed_decl_kinds(attr: &str) -> Option<&'static [DeclarationKind
             DeclarationKind::Opaque,
             DeclarationKind::Inductive,
         ]),
-        "inline" | "always_inline" | "macro_inline" | "inline_if_reduce" | "noinline"
-        | "reducible" | "semireducible" | "irreducible" | "extern" | "export" | "implementedBy"
+        "macro_inline" => Some(&[DeclarationKind::Definition, DeclarationKind::Instance]),
+        "inline" | "always_inline" | "inline_if_reduce" | "noinline" | "reducible"
+        | "semireducible" | "irreducible" | "extern" | "export" | "implementedBy"
         | "specialize" | "nospecialize" | "unbox" | "init" => {
             Some(&[DeclarationKind::Definition, DeclarationKind::Opaque])
         }

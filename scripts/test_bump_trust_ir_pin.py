@@ -73,9 +73,31 @@ The arms are the increment's Tests field:
                       an incomplete rollback leaves is one the same bump moves
                       on from; a transaction directory a killed bump left is
                       named. Each arm fails on the lane's pre-review driver.
+  * LOCK LEGS         (2026-11-19) the release train's re-pin of 07:00Z moved
+                      every leg, refreshed the two pin locks, and was refused by
+                      the dep-boundary gate over four runner locks a version
+                      commit had left stale, which the driver never refreshed.
+                      The fixture gains runner workspaces that reach clean-kernel
+                      by path, the fake Targo's `--locked` refuses a lock it
+                      would rewrite, and the gate double runs the REAL lock
+                      selection and the REAL `--locked` leg. The driver
+                      refreshes every lock the gate judges (and no other);
+                      whatever fails after those locks were written rolls each
+                      one back, a lock a refresh deleted included; a stale
+                      runner lock at the target is refused, then refreshed by
+                      --repair. On the live tree the gate's selection covers
+                      both pin locks and every AY-bearing runner lock.
+  * LOCK LEGS, review (2026-11-19) a lock the refresh left byte-identical is
+                      reported as unchanged, never as current, which the
+                      `--locked` refusal that follows would contradict; a lock
+                      the gate selects under another tracked name, whose
+                      workspace `Cargo.lock` no commit carries, is refused in
+                      phase A instead of being created, accepted and reported
+                      as a success.
 """
 from __future__ import annotations
 
+import ast
 import hashlib
 import io
 import json
@@ -95,6 +117,36 @@ ROOT = SCRIPTS.parent
 sys.path.insert(0, str(SCRIPTS))
 
 import trust_ir_pin_legs as legs  # noqa: E402
+import check_workspace_dependency_boundary as boundary  # noqa: E402
+
+
+def scripts_closure(start: Path) -> list[Path]:
+    """`start` and every scripts/ module it imports, transitively."""
+    found: set[Path] = set()
+    pending = [start]
+    while pending:
+        source = pending.pop()
+        if source in found:
+            continue
+        found.add(source)
+        for node in ast.walk(ast.parse(source.read_text())):
+            if isinstance(node, ast.Import):
+                names = [alias.name for alias in node.names]
+            elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
+                names = [node.module]
+            else:
+                continue
+            modules = (SCRIPTS / f"{name.partition('.')[0]}.py" for name in names)
+            pending += [module for module in modules if module.is_file()]
+    return sorted(found)
+
+
+# The gate and every scripts/ module it imports (the leg module among them). The
+# driver reads the gate's lock selection by importing it, so a fixture
+# repository carries them all, and a module the gate starts importing is
+# carried the day it does.
+GATE = SCRIPTS / "check_workspace_dependency_boundary.py"
+GATE_SOURCES = scripts_closure(GATE)
 
 OLD = "6a7fe3525a" + "0" * 30
 NEW = "b094459bbe" + "1" * 30
@@ -102,6 +154,10 @@ CG_OLD = "919d4131" + "2" * 32
 CG_NEW = "bbdf39be" + "3" * 32
 TIR = legs.TRUST_IR_URL
 TCG = legs.TRUST_CG_URL
+AY = boundary.AY_REPOSITORY
+AY_REV = "a7e1d0c5" + "4" * 32
+# The plain fixture's lock legs as the driver reports them: its two pin locks.
+PIN_LOCK_LEGS = " ".join(sorted(set(legs.TRUST_IR_LOCKS) | set(legs.TRUST_CG_LOCKS)))
 
 
 def ir_source(rev: str) -> str:
@@ -184,6 +240,23 @@ def fixture(ir: str = NEW, cg: str = CG_NEW, *, crystal_lock: str | None = None,
     return files
 
 
+def satellite(files: dict[str, str], name: str, *, kernel: str = "0.9.0",
+              pinned: bool = True) -> None:
+    """Add a standalone runner workspace to `files`, shaped as bench-runner is.
+
+    It reaches clean-kernel by path, so its lock records that crate's version
+    and is stale when `kernel` is not the 0.9.0 the fixture's clean-kernel
+    declares -- what a release's version commit leaves behind. `pinned` gives
+    it an AY Git source, which is all that makes the gate judge its lock."""
+    files[f"{name}/Cargo.toml"] = (
+        f'[workspace]\n\n[package]\nname = "{name}"\nversion = "0.1.0"\npublish = false\n\n'
+        '[dependencies]\nclean-kernel = { path = "../crates/clean-kernel" }\n'
+        + (declaration("ay-core", AY, AY_REV) if pinned else ""))
+    files[f"{name}/Cargo.lock"] = (
+        "version = 4\n\n" + package(name, "0.1.0") + package("clean-kernel", kernel)
+        + (package("ay-core", "0.3.0", f"git+{AY}?rev={AY_REV}#{AY_REV}") if pinned else ""))
+
+
 def manifests(files: dict[str, str]) -> dict[str, str]:
     return {k: v for k, v in files.items() if k.endswith("Cargo.toml")}
 
@@ -224,6 +297,18 @@ class LegTable(unittest.TestCase):
     def test_live_tree_restates_no_pin(self) -> None:
         """No tracked manifest comment quotes a trust-ir/trust-cg commit id."""
         self.assertEqual(legs.restated_pins(legs.read_tracked(ROOT, "*Cargo.toml")), [])
+
+    def test_live_tree_gate_judges_every_pin_lock_and_every_runner_lock(self) -> None:
+        """LOCK LEGS on the real tree: the driver refreshes what the gate judges
+        under `--locked`, and here that selection covers both pin locks and the
+        AY-bearing runner locks the 2026-11-19 re-pin was refused over."""
+        judged = set(boundary.git_pinned_lock_paths({
+            str(path.relative_to(ROOT)): path.read_text()
+            for path in boundary.tracked_lock_paths()}))
+        self.assertLessEqual(set(legs.TRUST_IR_LOCKS) | set(legs.TRUST_CG_LOCKS), judged)
+        runners = {str(path.relative_to(ROOT)) for path in boundary.REQUIRED_AY_LOCK_INVENTORIES}
+        self.assertGreater(len(runners - set(legs.TRUST_IR_LOCKS)), 0, runners)
+        self.assertLessEqual(runners, judged)
 
     def test_declared_dev_alias_does_not_hide_an_extra_git_declaration(self) -> None:
         files = manifests(fixture())
@@ -539,12 +624,9 @@ class Driver(unittest.TestCase):
         (root / "scripts/rederive_chain.py").write_text(FAKE_REDERIVE)
         (root / "data").mkdir(exist_ok=True)
         (root / "data/derived.json").write_text(derived_json(files))
-        shutil.copy(SCRIPTS / "bump-trust-ir-pin.sh", root / "scripts")
-        shutil.copy(SCRIPTS / "trust_ir_pin_legs.py", root / "scripts")
-        shutil.copy(SCRIPTS / "dev_ir_aliases.py", root / "scripts")
-        shutil.copy(SCRIPTS / "check_workspace_dependency_boundary.py", root / "scripts")
-        # Both copied helpers import it (fe3d50943).
-        shutil.copy(SCRIPTS / "resource_transport.py", root / "scripts")
+        # The driver, the gate it asks for its lock legs, and what that imports.
+        for source in (SCRIPTS / "bump-trust-ir-pin.sh", *GATE_SOURCES):
+            shutil.copy(source, root / "scripts")
         self.git(root, "init", "-q", "-b", "main")
         self.git(root, "config", "user.email", "t@example.invalid")
         self.git(root, "config", "user.name", "t")
@@ -554,6 +636,9 @@ class Driver(unittest.TestCase):
 
     def run_driver(self, root: Path, *args: str) -> subprocess.CompletedProcess:
         env = dict(os.environ, CLEAN_TRUST_CG_REPO=str(self.trust_cg), FAKE_REDERIVE_MODE="ok")
+        # These arms select no frontend: one inherited from the caller would be
+        # asked about the fixture's locks.
+        env.pop("CLEAN_TARGO", None)
         return subprocess.run(["bash", str(root / "scripts/bump-trust-ir-pin.sh"), *args],
                               cwd=root, env=env, capture_output=True, text=True, check=False)
 
@@ -820,9 +905,15 @@ def derived_json(files: dict[str, str]) -> str:
 
 FAKE_TARGO = r'''#!/usr/bin/env bash
 # A stand-in for `targo metadata [--locked] --format-version 1 --manifest-path P`.
-# FAKE_TARGO_MODE: ok (rewrite the lock beside P from every Cargo.toml under P's
-# directory), fail (exit 101, write nothing), leave-crystal (refresh the root
-# lock only -- the 3e87b95ba omission, replayed by the resolver).
+# The lock beside P is CURRENT when it records the one trust-ir and the one
+# trust-cg revision the Cargo.toml files under P's directory declare, and the
+# version of every crate P's manifest reaches by `path`. `--locked` writes
+# nothing and refuses a lock that is not current, in Cargo's words; a refresh
+# makes it current, creating it where there is none.
+# FAKE_TARGO_MODE shapes a refresh only: ok; fail (exit 101, write nothing);
+# leave-crystal (leave the crystal lock as found -- the 3e87b95ba omission,
+# replayed by the resolver); and, for the manifests whose path contains NEEDLE,
+# leave:NEEDLE, fail:NEEDLE and delete:NEEDLE (remove the lock, then exit 101).
 set -u
 mode="${FAKE_TARGO_MODE:-ok}"
 manifest=""; locked=0
@@ -835,16 +926,26 @@ while [ $# -gt 0 ]; do
 done
 [ -n "$manifest" ] || { echo "fake targo: no --manifest-path" >&2; exit 2; }
 printf '%s\n' "metadata locked=$locked mode=$mode $manifest" >>"${FAKE_TARGO_LOG:-/dev/null}"
-if [ "$locked" -eq 1 ]; then echo '{}'; exit 0; fi
+action="${mode%%:*}"; needle=""
 case "$mode" in
-    fail) echo "fake targo: resolver refused" >&2; exit 101 ;;
-    leave-crystal) case "$manifest" in */crystal_a2_project/*) echo '{}'; exit 0 ;; esac ;;
+    leave-crystal) action=leave; needle=/crystal_a2_project/ ;;
+    *:*) needle="${mode#*:}" ;;
 esac
-python3 - "$manifest" <<'PY'
+if [ "$locked" -eq 0 ]; then
+    case "$manifest" in *"$needle"*)
+        case "$action" in
+            fail) echo "fake targo: resolver refused" >&2; exit 101 ;;
+            delete) rm -f "${manifest%Cargo.toml}Cargo.lock"; echo "fake targo: resolver refused" >&2; exit 101 ;;
+            leave) echo '{}'; exit 0 ;;
+        esac ;;
+    esac
+fi
+python3 - "$manifest" "$locked" <<'PY' || exit
 import re, sys
 from pathlib import Path
 manifest = Path(sys.argv[1]); root = manifest.parent; lock = root / "Cargo.lock"
-text = lock.read_text()
+found = lock.read_text() if lock.exists() else None
+text = "version = 4\n\n" if found is None else found
 for url in ("https://github.com/alabsystems/trust-ir.git", "https://github.com/alabsystems/trust-cg.git"):
     revs = set()
     for m in root.rglob("Cargo.toml"):
@@ -854,9 +955,45 @@ for url in ("https://github.com/alabsystems/trust-ir.git", "https://github.com/a
     if len(revs) == 1:
         rev = next(iter(revs))
         text = re.sub(r"git\+" + re.escape(url) + r"\?rev=[0-9a-f]{40}#[0-9a-f]{40}", f"git+{url}?rev={rev}#{rev}", text)
-lock.write_text(text)
+for path in re.findall(r'\{ path = "([^"]+)"', manifest.read_text()):
+    crate = (root / path / "Cargo.toml").read_text()
+    name, version = (re.search(r'(?m)^%s = "([^"]+)"$' % key, crate).group(1) for key in ("name", "version"))
+    row = '[[package]]\nname = "%s"\nversion = "' % name  # the workspace's own row has no source
+    if row in text:
+        text = re.sub("(" + re.escape(row) + r')[^"]*("\n(?!source))', r"\g<1>" + version + r"\g<2>", text)
+    else:
+        text += row + version + '"\n\n'
+if text != found and sys.argv[2] == "1":
+    verb = "create" if found is None else "update"
+    print(f"error: cannot {verb} the lock file {lock.resolve()} because --locked was passed to prevent this",
+          file=sys.stderr)
+    sys.exit(101)
+if text != found:
+    lock.write_text(text)
 PY
 echo '{}'
+'''
+
+# The gate, for the transaction arms. Its lock selection is the REAL gate's (the
+# driver reads it), and so is its `--locked` leg over that selection, asked of
+# the driver's own frontend. Every other check of the real gate is about the
+# real tree, and stands in here as the scripted verdict $FAKE_BOUNDARY_EXIT.
+BOUNDARY_DOUBLE = '''\
+import os
+import sys
+
+import real_dependency_boundary as gate
+from real_dependency_boundary import ROOT, git_pinned_lock_paths, tracked_lock_paths
+
+if __name__ == "__main__":
+    print("BOUNDARY_FIXTURE_CHECKED", flush=True)
+    try:
+        gate.check_git_pinned_locks_resolve(
+            {str(path.relative_to(ROOT)): path.read_text() for path in tracked_lock_paths()},
+            os.environ["TARGO"])
+    except gate.BoundaryViolation as error:
+        gate.fail(str(error))
+    sys.exit(int(os.environ.get("FAKE_BOUNDARY_EXIT", "0")))
 '''
 
 
@@ -866,9 +1003,9 @@ class Transaction(unittest.TestCase):
     Every driver arm above stops at phase B. These run phases C-F against a
     fake Targo whose `metadata` is the only thing it models: a refresh that
     fails, one that leaves the crystal lock behind (the resolver replaying the
-    3e87b95ba omission), and one that refreshes both. The tree must come back
-    byte-identical -- uncommitted work included -- on either failure, and
-    the success path must end where `check` and the hook leg would pass.
+    3e87b95ba omission), and one that refreshes every lock leg. The tree must
+    come back byte-identical -- uncommitted work included -- on either failure,
+    and the success path must end where `check` and the hook leg would pass.
     """
 
     @classmethod
@@ -895,11 +1032,18 @@ class Transaction(unittest.TestCase):
 
     def repo(self, files: dict[str, str]) -> Path:
         root = Driver.repo(self, files)  # type: ignore[arg-type]
-        boundary = root / "scripts/check_workspace_dependency_boundary.py"
-        boundary.write_text("import os, sys\nprint('BOUNDARY_FIXTURE_CHECKED')\nsys.exit(int(os.environ.get('FAKE_BOUNDARY_EXIT', '0')))\n")
-        self.git(root, "add", str(boundary.relative_to(root)))
+        gate = root / "scripts" / GATE.name
+        gate.rename(gate.with_name("real_dependency_boundary.py"))
+        gate.write_text(BOUNDARY_DOUBLE)
+        self.git(root, "add", "-A", "scripts")
         self.git(root, "commit", "-q", "-m", "explicit boundary test double")
         return root
+
+    def targo_log(self, root: Path) -> list[str]:
+        """The fake Targo's calls, as `locked=<0|1> <manifest>`. The driver asks by
+        absolute path, spelled here from the root; the gate's leg by relative path."""
+        return [f"{call.split()[1]} {call.split()[3].replace(str(root), '<root>')}"
+                for call in root.with_suffix(".targo.log").read_text().splitlines()]
 
     def snapshot(self, root: Path) -> dict[str, bytes]:
         out = subprocess.run(["git", "-C", str(root), "ls-files", "-z"], capture_output=True, check=True).stdout
@@ -925,7 +1069,7 @@ class Transaction(unittest.TestCase):
         result = self.run_txn(root, "fail")
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertIn("PHASE D", result.stdout)
-        self.assertIn("root lock refresh failed", result.stderr)
+        self.assertIn("FAIL: Cargo.lock refresh failed (Targo metadata)", result.stderr)
         self.assertIn("ROLLED BACK -- working tree unchanged.", result.stderr)
         self.assertEqual(self.snapshot(root), before)
         self.assertEqual(Driver.git(root, "status", "--porcelain"), " M crates/clean-verify/Cargo.toml\n")
@@ -947,13 +1091,15 @@ class Transaction(unittest.TestCase):
         root = self.repo(fixture(OLD, CG_OLD))
         result = self.run_txn(root, "ok")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("both lockfiles accepted under --locked", result.stdout)
+        self.assertIn(f"lock legs: {PIN_LOCK_LEGS}\n", result.stdout)
+        self.assertIn(f"every lock leg accepted under --locked: {PIN_LOCK_LEGS}\n", result.stdout)
         self.assertIn(f"DONE -- trust-ir pinned at {NEW} and trust-cg at {self.cg_new}", result.stdout)
         self.assertNotIn("ROLLED BACK", result.stderr)
-        log = root.with_suffix(".targo.log").read_text()
-        self.assertEqual(log.count("locked=0"), 2, log)
-        self.assertEqual(log.count("locked=1"), 2, log)
-        self.assertIn("crystal_a2_project/Cargo.toml", log)
+        # One refresh and one `--locked` acceptance per lock leg.
+        asked = ["<root>/Cargo.toml", "<root>/scripts/crystal_a2_project/Cargo.toml"]
+        accepted = [f"locked=1 {manifest}" for manifest in asked]
+        self.assertEqual(self.targo_log(root),
+                         [f"locked=0 {manifest}" for manifest in asked] + accepted)
         after = self.snapshot(root)
         expected = fixture(NEW, self.cg_new)
         for relative in sorted(set(legs.TRUST_IR_LEGS) | set(legs.TRUST_CG_LEGS) | set(legs.TRUST_IR_LOCKS)):
@@ -966,13 +1112,14 @@ class Transaction(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("nothing to do", result.stdout)
         self.assertEqual(after, self.snapshot(root))
+        self.assertEqual(self.targo_log(root)[4:], accepted)
 
     def test_source_transaction_updates_both_locks_without_minting_diagnostic_evidence(self) -> None:
         root = self.repo(fixture(OLD, CG_OLD))
         before = self.snapshot(root)
         result = self.run_txn(root, "ok", "--source-only", rederive="red-before")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("both lockfiles accepted under --locked", result.stdout)
+        self.assertIn(f"every lock leg accepted under --locked: {PIN_LOCK_LEGS}\n", result.stdout)
         self.assertIn("SOURCE TRANSACTION COMPLETE", result.stdout)
         self.assertIn("Full diagnostic and its derived artifacts: NOT JUDGED", result.stdout)
         self.assertNotIn("PHASE G", result.stdout)
@@ -985,9 +1132,13 @@ class Transaction(unittest.TestCase):
             self.assertEqual(after[relative].decode(), expected[relative], relative)
         for relative in before.keys() - controlled:
             self.assertEqual(after[relative], before[relative], relative)
-        log = root.with_suffix(".targo.log").read_text()
-        self.assertEqual(log.count("locked=0"), 2, log)
-        self.assertEqual(log.count("locked=1"), 2, log)
+        # A refresh and a `--locked` acceptance per lock leg, then the gate's own
+        # `--locked` leg over the locks it judges.
+        log = self.targo_log(root)
+        self.assertEqual(sum(call.startswith("locked=0 ") for call in log), 2, log)
+        self.assertEqual(sum(call.startswith("locked=1 <root>/") for call in log), 2, log)
+        self.assertEqual(sorted(log[4:]),
+                         ["locked=1 Cargo.toml", "locked=1 scripts/crystal_a2_project/Cargo.toml"])
 
     def test_source_transaction_refuses_boundary_override_before_mutation(self) -> None:
         root = self.repo(fixture(OLD, CG_OLD))
@@ -1011,7 +1162,7 @@ class Transaction(unittest.TestCase):
         after = self.snapshot(root)
         result = self.run_txn(root, "ok", "--source-only", boundary_exit=1)
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
-        self.assertIn("both lockfiles accepted under --locked", result.stdout)
+        self.assertIn(f"every lock leg accepted under --locked: {PIN_LOCK_LEGS}\n", result.stdout)
         self.assertIn("BOUNDARY_FIXTURE_CHECKED", result.stdout)
         self.assertEqual(self.snapshot(root), after)
 
@@ -1034,6 +1185,189 @@ class Transaction(unittest.TestCase):
         result = self.run_txn(root, "ok", "--source-only")
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertNotIn("PHASE D", result.stdout)
+        self.assertEqual(self.snapshot(root), before)
+
+    def test_source_transaction_refreshes_every_lock_the_boundary_gate_judges(self) -> None:
+        """The release train's re-pin of 2026-11-19T07:00Z. A version commit had
+        left the runner locks recording the workspace's crates at the previous
+        version; the re-pin moved every leg, refreshed the two pin locks, and
+        the gate refused the runner locks under `--locked`. The driver refreshes
+        what the gate judges: the stale runner lock, and not the stale lock
+        with no Git source, which is no leg of this transaction."""
+        files = fixture(OLD, CG_OLD)
+        satellite(files, "bench-runner", kernel="0.8.0")
+        satellite(files, "cli-runner")
+        satellite(files, "notes", kernel="0.8.0", pinned=False)
+        root = self.repo(files)
+        before = self.snapshot(root)
+        result = self.run_txn(root, "ok", "--source-only")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        lock_legs = ("Cargo.lock bench-runner/Cargo.lock cli-runner/Cargo.lock "
+                     "scripts/crystal_a2_project/Cargo.lock")
+        self.assertIn(f"lock legs: {lock_legs}\n", result.stdout)
+        self.assertIn("refreshed bench-runner/Cargo.lock\n", result.stdout)
+        self.assertIn("refreshed cli-runner/Cargo.lock (unchanged)\n", result.stdout)
+        self.assertIn(f"every lock leg accepted under --locked: {lock_legs}\n", result.stdout)
+        self.assertIn("BOUNDARY_FIXTURE_CHECKED", result.stdout)
+        self.assertIn("SOURCE TRANSACTION COMPLETE", result.stdout)
+        after = self.snapshot(root)
+        current = dict(files)
+        satellite(current, "bench-runner")
+        self.assertEqual(after["bench-runner/Cargo.lock"].decode(), current["bench-runner/Cargo.lock"])
+        # What a release commits: the legs, the two pin locks and the runner lock
+        # that was stale -- every one tracked, nothing created.
+        moved = sorted(set(legs.TRUST_IR_LEGS) | set(legs.TRUST_CG_LEGS) | set(legs.TRUST_IR_LOCKS)
+                       | {"bench-runner/Cargo.lock"})
+        self.assertEqual(sorted(name for name in before if after[name] != before[name]), moved)
+        self.assertEqual(Driver.git(root, "status", "--porcelain"),
+                         "".join(f" M {name}\n" for name in moved))
+        self.assertNotIn("notes/", "\n".join(self.targo_log(root)))
+
+    def test_a_runner_lock_the_refresh_leaves_stale_is_refused_and_rolled_back(self) -> None:
+        """Phase F accepts every lock leg under `--locked` itself, whatever the
+        gate would say: `--no-boundary-check` skips the gate's verdict here.
+        Phase E's line for that lock says what `cmp` established -- unchanged --
+        and never that it is current, which the refusal below would contradict."""
+        files = fixture(OLD, CG_OLD)
+        satellite(files, "bench-runner", kernel="0.8.0")
+        root = self.repo(files)
+        before = self.snapshot(root)
+        result = self.run_txn(root, "leave:bench-runner")
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("refreshed bench-runner/Cargo.lock (unchanged)\n", result.stdout)
+        self.assertNotIn("current)", result.stdout)
+        self.assertIn("PHASE F", result.stdout)
+        self.assertIn("not current under --locked after the refresh:\n        bench-runner/Cargo.lock\n",
+                      result.stderr)
+        self.assertNotIn("BOUNDARY_FIXTURE_CHECKED", result.stdout)
+        self.assertIn("ROLLED BACK -- working tree unchanged.", result.stderr)
+        self.assertEqual(self.snapshot(root), before)
+        self.assertEqual(Driver.git(root, "status", "--porcelain"), "")
+
+    def test_a_failure_after_the_runner_locks_were_refreshed_rolls_every_lock_back(self) -> None:
+        """Whatever refuses after phase E wrote the runner locks -- the gate's
+        verdict, or the refresh of a later lock leg -- restores each of them,
+        an uncommitted edit included."""
+        for mode, boundary_exit, refusal in (
+                ("ok", 1, "scripts/check_workspace_dependency_boundary.py FAILED after the bump"),
+                ("fail:crystal_a2_project", 0,
+                 "scripts/crystal_a2_project/Cargo.lock refresh failed (Targo metadata)")):
+            with self.subTest(mode=mode):
+                files = fixture(OLD, CG_OLD)
+                satellite(files, "bench-runner", kernel="0.8.0")
+                satellite(files, "cli-runner", kernel="0.8.0")
+                root = self.repo(files)
+                edited = root / "cli-runner/Cargo.lock"
+                edited.write_text(edited.read_text() + "# an uncommitted note\n")
+                before = self.snapshot(root)
+                result = self.run_txn(root, mode, "--source-only", boundary_exit=boundary_exit)
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                for name in ("bench-runner", "cli-runner"):
+                    self.assertIn(f"refreshed {name}/Cargo.lock\n", result.stdout)
+                self.assertIn(refusal, result.stderr)
+                self.assertIn("ROLLED BACK -- working tree unchanged.", result.stderr)
+                self.assertEqual(self.snapshot(root), before)
+                self.assertEqual(Driver.git(root, "status", "--porcelain"),
+                                 " M cli-runner/Cargo.lock\n")
+
+    def test_rollback_restores_a_lock_a_refresh_deleted(self) -> None:
+        """The backup holds each lock leg as the FILE a refresh writes: the
+        refresh of the last lock leg deletes that lock and fails, after the
+        runner lock before it was rewritten."""
+        files = fixture(OLD, CG_OLD)
+        satellite(files, "bench-runner", kernel="0.8.0")
+        root = self.repo(files)
+        before = self.snapshot(root)
+        result = self.run_txn(root, "delete:crystal_a2_project", "--source-only")
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("refreshed bench-runner/Cargo.lock\n", result.stdout)
+        self.assertIn("scripts/crystal_a2_project/Cargo.lock refresh failed (Targo metadata)",
+                      result.stderr)
+        self.assertIn("ROLLED BACK -- working tree unchanged.", result.stderr)
+        self.assertEqual(self.snapshot(root), before)
+        self.assertEqual(Driver.git(root, "status", "--porcelain"), "")
+
+    def test_a_lock_leg_no_commit_would_carry_is_refused_before_staging(self) -> None:
+        """The gate selects a lock by content under any tracked `*Cargo.lock`
+        name and asks about the manifest beside it. `odd` tracks its pinned lock
+        under another name, so the lock leg is odd/Cargo.lock: a refresh would
+        create it untracked and `--locked` and the gate would accept it, while
+        the tracked lock stayed as it was -- a success the next checkout does
+        not have, and one the release train refuses for the untracked file.
+        Refused in phase A, before anything is written, whether that file is
+        absent or present and untracked."""
+        files = fixture(OLD, CG_OLD)
+        satellite(files, "odd")
+        workspace_lock = files.pop("odd/Cargo.lock")
+        files["odd/pinned.Cargo.lock"] = workspace_lock
+        root = self.repo(files)
+        before = self.snapshot(root)
+        for present in (False, True):
+            with self.subTest(untracked_lock_present=present):
+                if present:
+                    (root / "odd/Cargo.lock").write_text(workspace_lock)
+                result = self.run_txn(root, "ok", "--source-only")
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                self.assertIn("a lock leg is not a tracked file:\n"
+                              "        odd/Cargo.lock (the lock Cargo keeps for tracked odd/pinned.Cargo.lock)\n",
+                              result.stderr)
+                self.assertNotIn("PHASE B", result.stdout)
+                self.assertNotIn("ROLLED BACK", result.stderr)
+                self.assertFalse(root.with_suffix(".targo.log").exists(), "no frontend was asked")
+                self.assertEqual(self.snapshot(root), before)
+                self.assertEqual(Driver.git(root, "status", "--porcelain"),
+                                 "?? odd/Cargo.lock\n" if present else "")
+        # Control: the same workspace with its lock tracked under Cargo's name moves.
+        (root / "odd/Cargo.lock").unlink()
+        self.git(root, "mv", "odd/pinned.Cargo.lock", "odd/Cargo.lock")
+        self.git(root, "commit", "-q", "-m", "track the workspace lock under Cargo's name")
+        result = self.run_txn(root, "ok", "--source-only")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("refreshed odd/Cargo.lock (unchanged)\n", result.stdout)
+        self.assertNotIn("??", Driver.git(root, "status", "--porcelain"))
+
+    def test_a_stale_runner_lock_at_the_target_is_refused_then_refreshed_by_repair(self) -> None:
+        """Already at the target with a lock leg `--locked` refuses is a lock left
+        behind: refused naming it and --repair, never reported as coherent and
+        never rewritten unasked. --repair refreshes it, and the next run is the no-op."""
+        files = fixture(NEW, self.cg_new)
+        satellite(files, "bench-runner", kernel="0.8.0")
+        root = self.repo(files)
+        before = self.snapshot(root)
+        result = self.run_txn(root, "ok", "--source-only")
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("not current under --locked:\n        bench-runner/Cargo.lock\n", result.stderr)
+        self.assertIn("a lockfile does not", result.stderr)
+        self.assertIn("re-run with --repair", result.stderr)
+        self.assertNotIn("PHASE B", result.stdout)
+        self.assertNotIn("BOUNDARY_FIXTURE_CHECKED", result.stdout)
+        self.assertEqual(self.snapshot(root), before)
+        result = self.run_txn(root, "ok", "--source-only", "--repair")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("REPAIR MODE (--repair): the manifests read the target and a lockfile does not",
+                      result.stdout)
+        self.assertIn("refreshed bench-runner/Cargo.lock\n", result.stdout)
+        self.assertIn("SOURCE TRANSACTION COMPLETE", result.stdout)
+        self.assertEqual(Driver.git(root, "status", "--porcelain"), " M bench-runner/Cargo.lock\n")
+        after = self.snapshot(root)
+        result = self.run_txn(root, "ok", "--source-only")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("canonical dependency graph is coherent", result.stdout)
+        self.assertEqual(self.snapshot(root), after)
+
+    def test_a_lock_selection_the_gate_cannot_make_is_refused_before_staging(self) -> None:
+        """The lock legs come from the gate or from nowhere: a tracked lock it
+        cannot read stops the transaction in phase A."""
+        files = fixture(OLD, CG_OLD)
+        satellite(files, "bench-runner")
+        files["bench-runner/Cargo.lock"] += "[[package\n"
+        root = self.repo(files)
+        before = self.snapshot(root)
+        result = self.run_txn(root, "ok", "--source-only")
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("REFUSED: bench-runner/Cargo.lock is not valid TOML", result.stderr)
+        self.assertIn("cannot enumerate the locks", result.stderr)
+        self.assertNotIn("PHASE B", result.stdout)
         self.assertEqual(self.snapshot(root), before)
 
     def test_repair_rewrites_the_hand_edited_leg_to_the_target(self) -> None:

@@ -7,7 +7,66 @@
 #![allow(clippy::unwrap_used)]
 
 use super::*;
-use crate::ParseError;
+use crate::{ParseError, SurfaceName};
+
+#[test]
+fn refutable_do_let_accepts_the_original_kernel_source() {
+    let source = include_str!("../../../../theories/kcheck_labelled/KCheck/Kernel.lean");
+    let report = crate::parse_file_with_diagnostics(source).unwrap();
+    assert!(report.diagnostics.is_empty(), "{:?}", report.diagnostics);
+    assert!(!report
+        .decls
+        .iter()
+        .any(|decl| matches!(decl, SurfaceDecl::RawDecl { .. })));
+    fn mutual_members(decl: &SurfaceDecl) -> Option<&[SurfaceDecl]> {
+        match decl {
+            SurfaceDecl::Namespace { decls, .. } => decls.iter().find_map(mutual_members),
+            SurfaceDecl::SetOption {
+                body: Some(body), ..
+            } => mutual_members(body),
+            SurfaceDecl::Mutual { decls, .. } => Some(decls),
+            _ => None,
+        }
+    }
+    let mutual = report.decls.iter().find_map(mutual_members);
+    let names: Vec<_> = mutual
+        .expect("original checker mutual block")
+        .iter()
+        .map(|decl| match decl {
+            SurfaceDecl::Def { name, .. } => name.name().to_string(),
+            other => panic!("unexpected checker block member: {other:?}"),
+        })
+        .collect();
+    assert_eq!(names, ["whnf", "conv", "inferAnn", "check", "walk"]);
+}
+
+#[test]
+fn refutable_do_let_keeps_a_local_function_before_an_outer_match_pipe() {
+    let source = "do\n  match item with\n  | some n => do\n    let f x := x\n  | none => pure ()";
+    Parser::parse_expr(source).unwrap();
+}
+
+#[test]
+fn refutable_do_let_parses_a_bare_constructor_with_its_fallback() {
+    let expr = Parser::parse_expr("do\n  let some n := xs[i]? | throw 7\n  pure n").unwrap();
+    let SurfaceExpr::Do(_, elements) = expr else {
+        panic!("expected a do expression")
+    };
+    assert!(matches!(
+        elements.as_slice(),
+        [DoElem::LetExpr(
+            _,
+            SurfacePattern::Ctor(name, fields),
+            _,
+            DoLetExprKind::PurePattern,
+            fallback,
+        ), DoElem::Expr(_, _)]
+            if name.name() == SurfaceName::generated_path("some").name()
+                && matches!(fields.as_slice(), [SurfacePattern::Var(field)]
+                    if field.name() == SurfaceName::generated_path("n").name())
+                && fallback.len() == 1
+    ));
+}
 
 #[test]
 fn test_parse_do_try_catch_finally_braced() {

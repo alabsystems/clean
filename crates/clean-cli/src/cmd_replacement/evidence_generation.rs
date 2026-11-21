@@ -319,11 +319,7 @@ pub(crate) fn generate_kernel_soundness_launch_evidence_with(
     validate_kernel_differential_artifacts(&baseline, expressions.len(), &expressions_sha256)?;
 
     let mut source_sha256 = BTreeMap::new();
-    for path in [
-        TRUST_CORE_RUST_SOURCE_PATH,
-        LEAN4_BASELINE_PATH,
-        LEAN4_EXPRESSIONS_PATH,
-    ] {
+    for &path in KERNEL_SOUNDNESS_LAUNCH_SOURCE_FILES {
         source_sha256.insert(path.to_string(), sha256_repo_artifact(path)?);
     }
     source_sha256.insert(
@@ -449,7 +445,7 @@ pub(crate) fn generate_deny_sorry_launch_evidence_with(
         .map_err(|message| ReplacementError::StaleTrustCoreArtifact { message })?;
 
     let mut source_sha256 = BTreeMap::new();
-    for path in [TRUST_CORE_RUST_SOURCE_PATH, UNCHECKED_DECL_RATCHET_PATH] {
+    for &path in DENY_SORRY_LAUNCH_SOURCE_FILES {
         source_sha256.insert(path.to_string(), sha256_repo_artifact(path)?);
     }
     source_sha256.insert(

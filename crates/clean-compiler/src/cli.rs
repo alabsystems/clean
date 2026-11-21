@@ -102,8 +102,13 @@ pub struct CompileArgs {
 /// allowed values in `--help` and rejects typos at parse time. The `Rust`
 /// variant follows clap's `ValueEnum` lowercase rename, so users type
 /// `--emit rust`.
+///
+/// Dependency feature unification can expose backend formats to a consumer
+/// whose own emitter has no matching backend. Consumers must handle an
+/// unsupported format explicitly.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 #[clap(rename_all = "lower")]
+#[non_exhaustive]
 pub enum EmitFormat {
     /// Emit L5IR (the IR after monomorphization and optimization).
     L5ir,

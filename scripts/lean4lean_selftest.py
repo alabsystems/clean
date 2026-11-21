@@ -123,6 +123,37 @@ def selftest(checks=None):
                 check('binary changed mid-run', 'changed during' in str(e))
             else:
                 raise AssertionError('binary changed mid-run')
+    with tempfile.TemporaryDirectory(prefix='lean4lean-patch-selftest-') as td:
+        root = Path(td)
+        directory = root / l.PATCH_DIRECTORY
+        directory.mkdir(parents=True)
+        source = directory / 'one.patch'
+        source.write_bytes(b'original patch')
+        entry = dict(file=source.relative_to(root).as_posix(), sha256=nano.digest(source))
+        declared = dict(patches=[entry])
+        check('source patch inventory and digest', l.patch_files(declared, root) == [entry['file']])
+        def refuses(label, candidate):
+            try:
+                l.patch_files(candidate, root)
+            except ValueError:
+                check(label, True)
+            else:
+                raise AssertionError(label)
+        refuses('changed source patch digest', dict(patches=[dict(entry, sha256='0' * 64)]))
+        refuses('duplicate source patch', dict(patches=[entry, entry]))
+        refuses('source patch path escape', dict(patches=[dict(entry, file='../outside.patch')]))
+        refuses('source patch is missing', dict(patches=[dict(entry, file=str(l.PATCH_DIRECTORY / 'missing.patch'))]))
+        extra = directory / 'extra.patch'
+        extra.write_bytes(b'unlisted')
+        refuses('unlisted source patch', declared)
+        extra.unlink()
+        original = source.read_bytes()
+        source.unlink()
+        target = root / 'target'
+        target.write_bytes(original)
+        source.symlink_to(target)
+        refuses('source patch symlink', declared)
+        source.unlink()
     statements = l.model((l.ROOT / nano.CONTROLS['wrong-statement-propext']['path']).read_bytes())['ax0_statements']
     check('pinned propext statement differs from the forged one', statements['propext'] != pin['ax0_statement_sha256']['propext'])
     if own:

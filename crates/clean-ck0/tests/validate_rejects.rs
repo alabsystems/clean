@@ -85,8 +85,9 @@ fn test_recursor_name_as_const_rejected() {
     let env = MinimalEnv::new()
         .with_const(Name::from_dotted("Nat.rec"), 1)
         .with_const(Name::from_dotted("List.casesOn"), 1)
+        .with_const(Name::from_dotted("T.below"), 1)
         .with_const(Name::from_dotted("Nat.brecOn"), 1);
-    for n in ["Nat.rec", "List.casesOn", "Nat.brecOn"] {
+    for n in ["Nat.rec", "List.casesOn", "T.below", "Nat.brecOn"] {
         let raw = RawExpr::Const(Name::from_dotted(n), vec![RawLevel::Zero]);
         assert!(
             matches!(

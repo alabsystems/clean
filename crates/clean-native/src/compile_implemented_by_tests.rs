@@ -132,6 +132,96 @@ fn test_compile_refuses_reachable_extern_with_body() {
     );
 }
 
+/// A shim candidate still has to pass the production FFI audit. The injected
+/// predicate models the same early skip as a registered primitive, without
+/// rebinding a prelude declaration (which source elaboration refuses).
+fn select_with_shim_candidate(
+    source: &str,
+    meaning: CodeMeaning,
+) -> anyhow::Result<(Vec<Decl>, Environment, PipelineConfig)> {
+    let (_dir, file) = write_temp_lean(source);
+    select_lcnf_decl_with_meaning(
+        &CompileArgs {
+            file: Some(file),
+            decl: Some("caller".to_owned()),
+            emit: EmitFormat::C,
+            opt_level: 0,
+            output: None,
+            link_artifact: Vec::new(),
+        },
+        &|symbol| symbol == "l_candidate" || is_primitive_denylisted(symbol),
+        meaning,
+    )
+}
+
+#[test]
+fn test_compile_shim_candidate_cannot_hide_extern_with_body() {
+    let source = "@[extern \"clean_no_such_implementation\"]\n\
+        def candidate (n : Nat) : Nat := n\n\
+        def caller (n : Nat) : Nat := candidate n\n";
+    for meaning in [CodeMeaning::LeanCompiled, CodeMeaning::KernelValue] {
+        let err = select_with_shim_candidate(source, meaning)
+            .expect_err("shim selection must not hide an extern body");
+        let message = format!("{err:#}");
+        assert!(message.contains("(native-extern-body)"), "{message}");
+        assert!(message.contains("candidate"), "{message}");
+        assert!(
+            message.contains("clean_no_such_implementation"),
+            "{message}"
+        );
+    }
+}
+
+#[test]
+fn test_compile_shim_candidate_cannot_hide_bodiless_extern() {
+    let source = "@[extern \"clean_no_such_implementation\"]\n\
+        opaque candidate (n : Nat) : Nat\n\
+        def caller (n : Nat) : Nat := candidate n\n";
+    for meaning in [CodeMeaning::LeanCompiled, CodeMeaning::KernelValue] {
+        let err = select_with_shim_candidate(source, meaning)
+            .expect_err("shim selection must not hide a bodiless extern");
+        let message = format!("{err:#}");
+        assert!(message.contains("(native-extern)"), "{message}");
+        assert!(message.contains("candidate"), "{message}");
+        assert!(
+            message.contains("clean_no_such_implementation"),
+            "{message}"
+        );
+    }
+}
+
+#[test]
+fn test_compile_shim_candidate_implemented_by_still_selects_target() {
+    let source = "def actual (n : Nat) : Nat := n\n\
+        @[implemented_by actual]\n\
+        def candidate (n : Nat) : Nat := n + 7\n\
+        def caller (n : Nat) : Nat := candidate n\n";
+    let (decls, _, _) = select_with_shim_candidate(source, CodeMeaning::LeanCompiled)
+        .expect("an implemented_by edge must be followed before shim selection");
+    assert!(decls
+        .iter()
+        .any(|decl| decl.name == Name::from_string("actual")));
+    assert!(!decls
+        .iter()
+        .any(|decl| decl.name == Name::from_string("candidate")));
+}
+
+#[test]
+fn test_compile_ordinary_shim_candidate_retains_existing_boundary() {
+    let source = "def candidate (n : Nat) : Nat := n\n\
+        def caller (n : Nat) : Nat := candidate n\n";
+    for meaning in [CodeMeaning::LeanCompiled, CodeMeaning::KernelValue] {
+        let (decls, _, _) = select_with_shim_candidate(source, meaning)
+            .expect("ordinary shim candidates retain the existing boundary");
+        assert!(decls
+            .iter()
+            .any(|decl| decl.name == Name::from_string("caller")));
+        assert!(!decls
+            .iter()
+            .any(|decl| decl.name == Name::from_string("candidate")));
+    }
+}
+
 /// The same declaration as the ROOT is refused too.
 #[test]
 fn test_compile_refuses_extern_with_body_as_root() {
@@ -240,6 +330,62 @@ fn test_compile_implemented_by_unsafe_end_behind_a_dependency_refused_by_name() 
     assert!(err.contains("implemented_by"), "{err}");
     assert!(err.contains("fastU"), "{err}");
     assert!(err.contains("`caller`"), "{err}");
+}
+
+#[test]
+fn checked_native_worklist_distinguishes_erased_proofs_from_live_unsafe_calls() {
+    let source = "unsafe def unsafeFast (n : Nat) : Nat := n + 1\n\
+        @[implemented_by unsafeFast] def logical (n : Nat) : Nat := n + 2\n\
+        def witness (n : Nat) : True := \
+          (fun (_ : logical n = logical n) => True.intro) (Eq.refl (logical n))\n\
+        @[noinline] def keep (n : Nat) (_ : True) : Nat := n\n\
+        def erasedEntry (n : Nat) : Nat := keep n (witness n)\n\
+        @[noinline] def liveDependency (n : Nat) : Nat := logical n\n\
+        def liveEntry (n : Nat) : Nat := liveDependency n\n";
+    let (_dir, file) = write_temp_lean(source);
+    let (env, opaques, source_decls) = elaborate_file_with_inventory(&file).expect("check source");
+    let declarations = source_decls
+        .into_iter()
+        .map(|name| {
+            let info = env.get_const(&name).expect("checked declaration").clone();
+            let origin = env.get_constant_origin(&name).cloned();
+            (name, (info, origin))
+        })
+        .collect();
+    let checked = CheckedNativeSource {
+        declarations,
+        opaques,
+    };
+
+    let select = |entry: &str| {
+        let root = Name::from_string(entry);
+        let closure = clean_compiler::RuntimeBindingClosure::check_executable(
+            &env,
+            std::slice::from_ref(&root),
+        )?;
+        checked.select(
+            &env,
+            None,
+            &root,
+            0,
+            Some(&closure),
+            crate::native_nat_display::NatDisplay::Bootstrap,
+        )
+    };
+    let selected = select("erasedEntry")
+        .expect("the unsafe implementation occurs only within the erased proof");
+    let witness = Name::from_string("witness");
+    assert!(checked.declarations.contains_key(&witness));
+    assert!(selected.decls.iter().all(|decl| decl.name != witness));
+
+    let Err(error) = select("liveEntry") else {
+        panic!("a live call cannot run the unsafe implementation");
+    };
+    let err = format!("{error:#}");
+    assert!(err.contains("unsafeFast"), "{err}");
+
+    let err = refusal(source, "erasedEntry");
+    assert!(err.contains("unsafeFast"), "{err}");
 }
 
 /// A `Box` monad-like structure with `fastBind` (adds 1 to the tag) declared

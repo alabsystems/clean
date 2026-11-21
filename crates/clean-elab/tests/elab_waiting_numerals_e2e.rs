@@ -642,3 +642,19 @@ fn values_lean_refuses_after_a_postponed_check_are_refused() {
         }
     });
 }
+
+#[test]
+fn nested_operators_in_a_do_let_determine_the_intermediate_carrier() {
+    within_a_minute("parameter attribute mask", || {
+        let source = include_str!("elab_waiting_numerals/parameter_attribute_mask.lean");
+        assert_accepted(source, &["before20", "at20", "at45", "conflicting"]);
+        let changed = source.replace(
+            "(some 45) (some 64) = some 127",
+            "(some 45) (some 64) = some 31",
+        );
+        let (_, results) = elaborate(&changed);
+        let errors = failures(&results);
+        assert_eq!(errors.len(), 1, "{errors:?}");
+        assert_eq!(errors[0].0, "at45");
+    });
+}

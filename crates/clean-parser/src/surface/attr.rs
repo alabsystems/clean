@@ -72,6 +72,8 @@ pub enum Attribute {
     // === FFI/extern attributes ===
     /// `@[extern "name"]` - external C function binding
     Extern(String),
+    /// Losslessly parsed standard extern entries; no native admission follows.
+    ExternMetadata(clean_kernel::env::CompilerExternMetadata),
     /// `@[export name]` - export function to C with given name
     Export(String),
     /// `@[implemented_by name]` - replace with external implementation
@@ -102,15 +104,14 @@ pub enum Attribute {
     /// in front of an attribute (`Lean/Parser/Term.lean`): the attribute is in
     /// force until the enclosing section or namespace ends. Lifted out of
     /// [`Self::Unknown`] only for the attributes whose scoping Clean models —
-    /// today `simp`, `csimp` and `instance`, plus `class` so its global-only
-    /// handler can refuse this scope; every other `local …` keeps its legacy
-    /// `Unknown("local")` spelling.
+    /// `simp`, `csimp`, `instance` and `class` — or whose invalid scope the elaborator
+    /// refuses, including compiler inline modes and custom eliminators. Other
+    /// `local …` spellings retain the legacy `Unknown("local")` representation.
     Local(Box<Attribute>),
     /// `scoped <attr>`: the attribute is in force wherever the CURRENT
     /// namespace is active (`namespace`, `open`). Lifted out of
-    /// the parser's error arm for `instance` and `csimp`, and for the
-    /// global-only `class` handler's refusal; every other `scoped …`
-    /// attribute is still a parse error.
+    /// the parser's error arm for modeled scoped attributes and for compiler
+    /// inline modes/custom eliminators whose invalid scope is refused later.
     Scoped(Box<Attribute>),
 
     // === Fallback ===

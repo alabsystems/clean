@@ -458,6 +458,7 @@ fn module_with_origin_test_axiom(name: &str) -> ParsedModule {
             recursor_val: None,
             hints: None,
             definition_safety: None,
+            mutual_declarations: None,
             quot_kind: None,
         }],
         extra_const_names: Vec::new(),
@@ -1014,6 +1015,7 @@ fn nonempty_like_module() -> ParsedModule {
                 recursor_val: None,
                 hints: None,
                 definition_safety: None,
+                mutual_declarations: None,
                 quot_kind: None,
             },
             ParsedConstant {
@@ -1033,6 +1035,7 @@ fn nonempty_like_module() -> ParsedModule {
                 recursor_val: None,
                 hints: None,
                 definition_safety: None,
+                mutual_declarations: None,
                 quot_kind: None,
             },
         ],
@@ -2275,6 +2278,7 @@ fn mybool_module() -> ParsedModule {
                 recursor_val: None,
                 hints: None,
                 definition_safety: None,
+                mutual_declarations: None,
                 quot_kind: None,
             },
             ParsedConstant {
@@ -2294,6 +2298,7 @@ fn mybool_module() -> ParsedModule {
                 recursor_val: None,
                 hints: None,
                 definition_safety: None,
+                mutual_declarations: None,
                 quot_kind: None,
             },
             ParsedConstant {
@@ -2313,6 +2318,7 @@ fn mybool_module() -> ParsedModule {
                 recursor_val: None,
                 hints: None,
                 definition_safety: None,
+                mutual_declarations: None,
                 quot_kind: None,
             },
             ParsedConstant {
@@ -2346,6 +2352,7 @@ fn mybool_module() -> ParsedModule {
                 }),
                 hints: None,
                 definition_safety: None,
+                mutual_declarations: None,
                 quot_kind: None,
             },
         ],
@@ -2675,6 +2682,7 @@ fn mynat_module() -> ParsedModule {
                 recursor_val: None,
                 hints: None,
                 definition_safety: None,
+                mutual_declarations: None,
                 quot_kind: None,
             },
             ParsedConstant {
@@ -2694,6 +2702,7 @@ fn mynat_module() -> ParsedModule {
                 recursor_val: None,
                 hints: None,
                 definition_safety: None,
+                mutual_declarations: None,
                 quot_kind: None,
             },
             ParsedConstant {
@@ -2713,6 +2722,7 @@ fn mynat_module() -> ParsedModule {
                 recursor_val: None,
                 hints: None,
                 definition_safety: None,
+                mutual_declarations: None,
                 quot_kind: None,
             },
             ParsedConstant {
@@ -2746,6 +2756,7 @@ fn mynat_module() -> ParsedModule {
                 }),
                 hints: None,
                 definition_safety: None,
+                mutual_declarations: None,
                 quot_kind: None,
             },
         ],
@@ -2918,6 +2929,7 @@ fn module_with_definitions(names: &[&str]) -> ParsedModule {
             recursor_val: None,
             hints: None,
             definition_safety: None,
+            mutual_declarations: None,
             quot_kind: None,
         })
         .collect();

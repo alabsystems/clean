@@ -275,6 +275,24 @@ pub trait TacticEval {
         })
     }
 
+    /// Elaborate a local value, exposing only explicitly written synthetic holes.
+    /// The continuation of a lifted declaration is focused before these goals.
+    fn elaborate_lifted(
+        &mut self,
+        _ps: &ProofState,
+        expr: &SurfaceExpr,
+        expected: Option<&Expr>,
+    ) -> Result<ElaboratedRefine, TacticError> {
+        let term = match expected {
+            Some(ty) => self.elaborate_expected(expr, ty)?,
+            None => self.elaborate_no_expected(expr)?,
+        };
+        Ok(ElaboratedRefine {
+            term,
+            pending_goals: Vec::new(),
+        })
+    }
+
     /// Get the elaborator metavariable state backing refined proof terms.
     /// ENSURES: Returned metas contain the pending metavariables referenced by
     /// results from `elaborate_refine` and `elaborate_open`.

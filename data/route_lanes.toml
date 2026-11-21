@@ -1,0 +1,489 @@
+# Machine-readable route-of-record lane table
+# Design unit EV6: designs/2026-11-16-full-rust-lean-models-combined-trust.md §3 Ph0 EV6 & §5.1 item 2
+# Seeded verbatim from docs/plans/SELF_PROOF_EXECUTION_PLAN_2026-11-12.md §0 ("What continues, pauses and stops").
+# Enforced by `clean evidence check tooling.route_lanes`.
+
+schema = "clean.route-lanes/v1"
+probe_capped_max_in_flight = 1
+probe_capped_in_flight = []
+w5_held_artifact = ""
+
+# First priority (Plan §0)
+[[unit]]
+id = "W0"
+lane = "continue"
+group = "first-priority"
+
+[[unit]]
+id = "W1"
+lane = "continue"
+group = "first-priority"
+
+[[unit]]
+id = "W2"
+lane = "continue"
+group = "first-priority"
+
+[[unit]]
+id = "W3"
+lane = "continue"
+group = "first-priority"
+
+[[unit]]
+id = "W4"
+lane = "continue"
+group = "first-priority"
+
+[[unit]]
+id = "W5"
+lane = "continue"
+group = "first-priority"
+
+[[unit]]
+id = "K3"
+lane = "continue"
+group = "first-priority"
+
+[[unit]]
+id = "C3"
+lane = "continue"
+group = "first-priority"
+
+[[unit]]
+id = "C4"
+lane = "continue"
+group = "first-priority"
+
+[[unit]]
+id = "C5"
+lane = "continue"
+group = "first-priority"
+
+[[unit]]
+id = "E4"
+lane = "continue"
+group = "first-priority"
+
+[[unit]]
+id = "X2"
+lane = "continue"
+group = "first-priority"
+
+[[unit]]
+id = "X4"
+lane = "continue"
+group = "first-priority"
+
+[[unit]]
+id = "X5"
+lane = "continue"
+group = "first-priority"
+
+[[unit]]
+id = "F5"
+lane = "continue"
+group = "first-priority"
+
+[[unit]]
+id = "F6"
+lane = "continue"
+group = "first-priority"
+
+[[unit]]
+id = "P6"
+lane = "continue"
+group = "first-priority"
+
+# As the slice needs them + 2026-11-16 Amendment Ph0-Ph7 active units
+[[unit]]
+id = "P1"
+lane = "continue"
+group = "as-slice-needs"
+
+[[unit]]
+id = "P3"
+lane = "continue"
+group = "as-slice-needs"
+
+[[unit]]
+id = "Q4"
+lane = "continue"
+group = "as-slice-needs"
+
+[[unit]]
+id = "S7"
+lane = "continue"
+group = "as-slice-needs"
+
+[[unit]]
+id = "E1"
+lane = "continue"
+group = "as-slice-needs"
+
+[[unit]]
+id = "E2"
+lane = "continue"
+group = "as-slice-needs"
+
+[[unit]]
+id = "E3"
+lane = "continue"
+group = "as-slice-needs"
+
+[[unit]]
+id = "E6"
+lane = "continue"
+group = "as-slice-needs"
+
+[[unit]]
+id = "E7"
+lane = "continue"
+group = "as-slice-needs"
+
+[[unit]]
+id = "E8"
+lane = "continue"
+group = "ph0-evidence"
+
+[[unit]]
+id = "E9"
+lane = "continue"
+group = "ph0-evidence"
+
+[[unit]]
+id = "E10"
+lane = "continue"
+group = "ph0-evidence"
+
+[[unit]]
+id = "EV0"
+lane = "continue"
+group = "ph0-evidence"
+
+[[unit]]
+id = "EV1"
+lane = "continue"
+group = "ph0-evidence"
+
+[[unit]]
+id = "EV2"
+lane = "continue"
+group = "ph0-evidence"
+
+[[unit]]
+id = "EV3"
+lane = "continue"
+group = "ph0-evidence"
+
+[[unit]]
+id = "EV4"
+lane = "continue"
+group = "ph0-evidence"
+
+[[unit]]
+id = "EV5"
+lane = "continue"
+group = "ph0-evidence"
+
+[[unit]]
+id = "EV6"
+lane = "continue"
+group = "ph0-evidence"
+
+[[unit]]
+id = "T0"
+lane = "continue"
+group = "ph0-evidence"
+
+[[unit]]
+id = "T1"
+lane = "continue"
+group = "ph0-evidence"
+
+[[unit]]
+id = "T2"
+lane = "continue"
+group = "ph0-evidence"
+
+[[unit]]
+id = "T3"
+lane = "continue"
+group = "ph0-evidence"
+
+[[unit]]
+id = "T4"
+lane = "continue"
+group = "ph0-evidence"
+
+[[unit]]
+id = "T5"
+lane = "continue"
+group = "ph0-evidence"
+
+[[unit]]
+id = "T6"
+lane = "continue"
+group = "ph0-evidence"
+
+[[unit]]
+id = "T7"
+lane = "continue"
+group = "ph0-evidence"
+
+[[unit]]
+id = "D0"
+lane = "continue"
+group = "ph1-decisions"
+
+[[unit]]
+id = "D1"
+lane = "continue"
+group = "ph1-decisions"
+
+[[unit]]
+id = "D2"
+lane = "continue"
+group = "ph1-decisions"
+
+[[unit]]
+id = "D3"
+lane = "continue"
+group = "ph1-decisions"
+
+[[unit]]
+id = "D4"
+lane = "continue"
+group = "ph1-decisions"
+
+[[unit]]
+id = "I.0"
+lane = "continue"
+group = "ph3-islands"
+
+[[unit]]
+id = "I.1"
+lane = "continue"
+group = "ph3-islands"
+
+[[unit]]
+id = "I.2"
+lane = "continue"
+group = "ph3-islands"
+
+[[unit]]
+id = "I.3"
+lane = "continue"
+group = "ph3-islands"
+
+[[unit]]
+id = "I.4"
+lane = "continue"
+group = "ph3-islands"
+
+[[unit]]
+id = "XK.3"
+lane = "continue"
+group = "ph3-islands"
+
+[[unit]]
+id = "RB0"
+lane = "continue"
+group = "ph4-bytes-binding"
+
+[[unit]]
+id = "RB1"
+lane = "continue"
+group = "ph4-bytes-binding"
+
+[[unit]]
+id = "RB2"
+lane = "continue"
+group = "ph4-bytes-binding"
+
+[[unit]]
+id = "Ph5"
+lane = "continue"
+group = "ph5-alignment-a1"
+
+[[unit]]
+id = "A1.1"
+lane = "continue"
+group = "ph5-alignment-a1"
+
+[[unit]]
+id = "A1.2"
+lane = "continue"
+group = "ph5-alignment-a1"
+
+[[unit]]
+id = "A1.3"
+lane = "continue"
+group = "ph5-alignment-a1"
+
+[[unit]]
+id = "A1.4"
+lane = "continue"
+group = "ph5-alignment-a1"
+
+[[unit]]
+id = "A1.5"
+lane = "continue"
+group = "ph5-alignment-a1"
+
+[[unit]]
+id = "A1.6"
+lane = "continue"
+group = "ph5-alignment-a1"
+
+[[unit]]
+id = "A1.7"
+lane = "continue"
+group = "ph5-alignment-a1"
+
+[[unit]]
+id = "AI"
+lane = "continue"
+group = "ph5-alignment-a1"
+
+[[unit]]
+id = "R1.0"
+lane = "continue"
+group = "ph6-rust-sem"
+
+[[unit]]
+id = "Ph7"
+lane = "continue"
+group = "ph7-alignment-premises"
+
+# Paused until W5 holds (Plan §0 verbatim: S1 to S6, M5, M6, C6, C7, C8, Q5, Q6, P4, P5, P7, E5)
+[[unit]]
+id = "S1"
+lane = "pause"
+group = "paused-until-w5"
+
+[[unit]]
+id = "S2"
+lane = "pause"
+group = "paused-until-w5"
+
+[[unit]]
+id = "S3"
+lane = "pause"
+group = "paused-until-w5"
+
+[[unit]]
+id = "S4"
+lane = "pause"
+group = "paused-until-w5"
+
+[[unit]]
+id = "S5"
+lane = "pause"
+group = "paused-until-w5"
+
+[[unit]]
+id = "S6"
+lane = "pause"
+group = "paused-until-w5"
+
+[[unit]]
+id = "M5"
+lane = "pause"
+group = "paused-until-w5"
+
+[[unit]]
+id = "M6"
+lane = "pause"
+group = "paused-until-w5"
+
+[[unit]]
+id = "C6"
+lane = "pause"
+group = "paused-until-w5"
+
+[[unit]]
+id = "C7"
+lane = "pause"
+group = "paused-until-w5"
+
+[[unit]]
+id = "C8"
+lane = "pause"
+group = "paused-until-w5"
+
+[[unit]]
+id = "Q5"
+lane = "pause"
+group = "paused-until-w5"
+
+[[unit]]
+id = "Q6"
+lane = "pause"
+group = "paused-until-w5"
+
+[[unit]]
+id = "P4"
+lane = "pause"
+group = "paused-until-w5"
+
+[[unit]]
+id = "P5"
+lane = "pause"
+group = "paused-until-w5"
+
+[[unit]]
+id = "P7"
+lane = "pause"
+group = "paused-until-w5"
+
+[[unit]]
+id = "E5"
+lane = "pause"
+group = "paused-until-w5"
+
+# Probe-capped (2026-11-16 Amendment: at most 1 in flight, limited to G.1/G.2 + family-free generator/differential tooling)
+[[unit]]
+id = "G.1"
+lane = "probe-capped"
+group = "ph9-probe-capped"
+
+[[unit]]
+id = "G.2"
+lane = "probe-capped"
+group = "ph9-probe-capped"
+
+[[unit]]
+id = "S+"
+lane = "probe-capped"
+group = "generator-differential-no-family"
+
+[[unit]]
+id = "clean-specr"
+lane = "probe-capped"
+group = "generator-differential-no-family"
+
+[[unit]]
+id = "diff.kernel"
+lane = "probe-capped"
+group = "generator-differential-no-family"
+
+[[unit]]
+id = "semr-schema"
+lane = "probe-capped"
+group = "generator-differential-no-family"
+
+# Stopped (Plan §0 & 2026-11-12 Crystal stop)
+[[unit]]
+id = "event-only-bookkeeping"
+lane = "stop"
+group = "stopped"
+
+[[unit]]
+id = "crystal-new-chains"
+lane = "stop"
+group = "stopped"
+
+[[unit]]
+id = "reflected-model-stack"
+lane = "stop"
+group = "stopped"

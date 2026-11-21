@@ -151,7 +151,7 @@ impl LeanMessage {
                     self.pos.line, self.pos.column
                 )
             }
-            LeanDialect::V4_30_0Rc2 => {
+            LeanDialect::V4_30_0Rc2 | LeanDialect::V4_36_0 => {
                 let end = self
                     .end_pos
                     .map(|end| {

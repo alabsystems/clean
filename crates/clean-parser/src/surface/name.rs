@@ -111,6 +111,8 @@ pub(crate) struct NameMarks {
     /// A reference spelled as a Lean 4.8.0 keyword
     /// ([`SurfaceName::into_lean_keyword`]).
     lean_keyword: bool,
+    /// The typed head of an invocation parsed by an imported descriptor.
+    imported_term_kind: bool,
     /// The binding scope of a template PATTERN variable and of every
     /// reference the template makes to it ([`SurfaceName::with_template_scope`]).
     template_scope: Option<TemplateScope>,
@@ -139,12 +141,26 @@ impl NameMarks {
             section_variable: self.section_variable || other.section_variable,
             header_binder: self.header_binder || other.header_binder,
             lean_keyword: self.lean_keyword || other.lean_keyword,
+            imported_term_kind: self.imported_term_kind || other.imported_term_kind,
             template_scope: self.template_scope.or(other.template_scope),
         }
     }
 }
 
 impl SurfaceName {
+    pub(crate) fn for_imported_term_kind(kind: Name) -> Self {
+        let mut name = Self::from_name(kind);
+        name.marks.imported_term_kind = true;
+        name
+    }
+
+    /// The structural syntax kind of a parser-recognized imported term.
+    /// An ordinary identifier with the same Name carries no such marker.
+    #[must_use]
+    pub fn imported_term_kind(&self) -> Option<&Name> {
+        self.marks.imported_term_kind.then_some(&self.name)
+    }
+
     /// One actual identifier token; dots and decimal digits remain text.
     #[must_use]
     pub fn component(text: impl AsRef<str>, escaped: bool) -> Self {
@@ -671,6 +687,7 @@ impl SurfaceName {
         self.component_text() == Some(text)
             && self.syntax.first() != Some(&NameComponentSyntax::Escaped)
             && !self.relative_constructor
+            && !self.marks.imported_term_kind
     }
 }
 

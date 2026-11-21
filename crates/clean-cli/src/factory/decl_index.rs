@@ -673,7 +673,7 @@ fn push_surface_records(
                 push_surface_record(
                     name,
                     DeclarationKind::Unknown,
-                    *modifiers,
+                    modifiers.clone(),
                     *span,
                     text,
                     source_path,
@@ -690,7 +690,7 @@ fn push_surface_records(
         } => push_surface_record(
             name,
             DeclarationKind::Definition,
-            *modifiers,
+            modifiers.clone(),
             *span,
             text,
             source_path,
@@ -705,7 +705,7 @@ fn push_surface_records(
         } => push_surface_record(
             name,
             DeclarationKind::Theorem,
-            *modifiers,
+            modifiers.clone(),
             *span,
             text,
             source_path,
@@ -720,7 +720,7 @@ fn push_surface_records(
         } => push_surface_record(
             name,
             DeclarationKind::Axiom,
-            *modifiers,
+            modifiers.clone(),
             *span,
             text,
             source_path,
@@ -735,7 +735,7 @@ fn push_surface_records(
         } => push_surface_record(
             name,
             DeclarationKind::Opaque,
-            *modifiers,
+            modifiers.clone(),
             *span,
             text,
             source_path,
@@ -756,7 +756,7 @@ fn push_surface_records(
         } => push_surface_record(
             name,
             DeclarationKind::Inductive,
-            *modifiers,
+            modifiers.clone(),
             *span,
             text,
             source_path,
@@ -771,7 +771,7 @@ fn push_surface_records(
         } => push_surface_record(
             name,
             DeclarationKind::Structure,
-            *modifiers,
+            modifiers.clone(),
             *span,
             text,
             source_path,
@@ -786,7 +786,7 @@ fn push_surface_records(
         } => push_surface_record(
             name,
             DeclarationKind::Class,
-            *modifiers,
+            modifiers.clone(),
             *span,
             text,
             source_path,
@@ -801,7 +801,7 @@ fn push_surface_records(
         } => push_surface_record(
             name,
             DeclarationKind::Instance,
-            *modifiers,
+            modifiers.clone(),
             *span,
             text,
             source_path,
@@ -1166,6 +1166,7 @@ fn surface_decl_span(decl: &SurfaceDecl) -> Option<Span> {
         | SurfaceDecl::Reduce { span, .. }
         | SurfaceDecl::Print { span, .. }
         | SurfaceDecl::PrintAxioms { span, .. }
+        | SurfaceDecl::PrintEquations { span, .. }
         | SurfaceDecl::Guard { span, .. }
         | SurfaceDecl::GuardMsgs { span, .. }
         | SurfaceDecl::Mutual { span, .. }

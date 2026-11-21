@@ -45,6 +45,27 @@ fn assert_passed(report: &ModuleReport, name: &str) {
     assert_eq!(v.kind, VerdictKind::Passed, "`{name}` must pass: {v:#?}");
 }
 
+#[test]
+fn a_late_argument_types_a_relative_constructor_in_an_earlier_lambda() {
+    let source = r"
+inductive Const where | uninit | value (n : Nat)
+def combine (f : α → β → γ) (a : α) (b : β) : γ := f a b
+def read (c : Const) : Nat :=
+  combine (fun ty v => match v with | .uninit => ty | _ => 17) 5 c
+theorem read_uninit : read .uninit = 5 := rfl
+theorem read_value : read (.value 2) = 17 := rfl
+theorem wrong_read : read (.value 2) = 5 := rfl
+def wrong_ctor (c : Const) : Nat :=
+  combine (fun ty v => match v with | .missing => ty | _ => 17) 5 c
+";
+    let report = check_module(source);
+    for name in ["read", "read_uninit", "read_value"] {
+        assert_passed(&report, name);
+    }
+    assert!(!refused_detail(&report, "wrong_read").is_empty());
+    assert!(refused_detail(&report, "wrong_ctor").contains("missing"));
+}
+
 /// Refused; returns the detail for the target assertion.
 fn refused_detail(report: &ModuleReport, name: &str) -> String {
     let v = verdict(report, name);

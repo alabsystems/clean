@@ -238,15 +238,20 @@ pub(super) fn syntax_to_do_elem(syntax: &Syntax) -> Option<DoElem> {
             }
             Some(DoElem::LetRec(Span::dummy(), decls))
         }
-        "doLetExpr" if node.children.len() == 3 => {
+        "doLetExpr" | "doLetElsePure" if node.children.len() == 3 => {
             let pat = syntax_to_pattern(&node.children[0])?;
             let discr = syntax_to_surface(&node.children[1])?;
             let fallback = syntax_to_do_seq(&node.children[2])?;
+            let kind = if kind_name == "doLetElsePure" {
+                DoLetExprKind::PurePattern
+            } else {
+                DoLetExprKind::Pure
+            };
             Some(DoElem::LetExpr(
                 Span::dummy(),
                 pat,
                 Box::new(discr),
-                DoLetExprKind::Pure,
+                kind,
                 fallback,
             ))
         }

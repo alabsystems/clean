@@ -46,7 +46,7 @@ fn backend() -> TrustCg {
     TrustCg::from_path(path).unwrap()
 }
 
-fn same_input_handoff(observed: &crate::scalar_call::ObservedScalarCall, dir: &Path) {
+fn same_input_handoff(observed: &crate::scalar_call::ObservedScalarCall, dir: &Path) -> Vec<u8> {
     let trace = observed.observations();
     assert!(trace
         .decisions()
@@ -128,78 +128,147 @@ fn same_input_handoff(observed: &crate::scalar_call::ObservedScalarCall, dir: &P
         .artifacts()
         .iter()
         .any(|artifact| artifact.owner() == "actual native module before license"));
+    delegate.input.into_inner().unwrap()
 }
 
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 #[test]
-fn helper_tv_refusal_preserves_same_input_legacy_module_and_typed_failure() {
-    use clean_compiler::primitive_uses::OwnedPipelineError;
+fn helper_scalar_acceptance_preserves_same_input_legacy_calls_and_consumer_refusal() {
+    use clean_compiler::primitive_uses::{
+        compile_lcnf_to_trust_ir_owned_observed, OwnedPipelineError,
+    };
     let dir = tempfile::tempdir().unwrap();
     let file = dir.path().join("Observed.lean");
     std::fs::write(&file, SOURCE).unwrap();
-    let observed = match ScalarCall::from_source_observed(
-        &file,
-        "scalar",
-        2,
-        NativeObservationLimits::default(),
-    ) {
-        Err(error) => error,
-        Ok(_) => panic!("known helper TV refusal changed: requalify actual scalar acceptance"),
-    };
-    capture::failure("helper-tv-refusal", &file, &observed);
-    let failed = observed
-        .compiler_failure()
-        .expect("actual typed consumer refusal");
-    let OwnedPipelineError::Consumer(error) = failed.error() else {
-        panic!("expected actual downstream native consumer refusal")
-    };
-    let Some(LaneError::TrustCg(message)) = error.downcast_ref::<LaneError>() else {
-        panic!("actual TrustCG refusal retained: {error:#}")
-    };
-    assert!(
-        message.contains("clean-kernel-tv") && message.contains("was not kernel-replayed"),
-        "{message}"
-    );
-    let input = failed.input().expect("actual failed owned input frame");
-    let delegate = DelegatingBackend {
-        real: backend(),
-        input: RefCell::new(None),
-    };
-    let error = crate::compile::write_selected_object(
-        input.declarations(),
-        input.environment(),
-        input.config(),
-        input.emit_config(),
-        (&delegate, crate::compile::host_trust_cg_target().unwrap()),
-        &dir.path().join("legacy-helper.o"),
-        input.runtime_closure(),
+    let mut observed =
+        ScalarCall::from_source_observed(&file, "scalar", 2, NativeObservationLimits::default())
+            .unwrap_or_else(|error| {
+                capture::failure("helper-acceptance-refusal", &file, &error);
+                panic!("actual helper scalar compilation must succeed: {error:#}")
+            });
+    capture::success("helper-acceptance", &file, &observed);
+    let mut legacy = ScalarCall::from_source(&file, "scalar", 2).unwrap();
+    for (a, b, c, d) in [
+        (0, 0, 0, 0),
+        (1, 2, 3, 4),
+        (u32::MAX, u32::MAX, u64::MAX, u64::MAX),
+        (0, u32::MAX, u64::MAX, 0),
+        (u32::MAX, 0, 1u64 << 63, 1u64 << 63),
+        (
+            0x1234_5678,
+            0x9abc_def0,
+            u64::MAX - 1,
+            0x1234_5678_9abc_def0,
+        ),
+    ] {
+        let expected = u64::from(a)
+            .wrapping_add(u64::from(b).wrapping_mul(65537))
+            .wrapping_add(c.wrapping_add(1).wrapping_mul(3))
+            .wrapping_add(d.wrapping_mul(5));
+        let actual = observed.call(a, b, c, d);
+        let baseline = legacy.call(a, b, c, d);
+        capture::calls(
+            "helper-acceptance",
+            &[
+                serde_json::json!({"args":[u64::from(a),u64::from(b),c,d],"observed":actual,"legacy":baseline,"expected":expected}),
+            ],
+        );
+        eprintln!(
+            "ACTUAL_HELPER_CALL {:?} observed={actual} legacy={baseline} expected={expected}",
+            (a, b, c, d)
+        );
+        assert_eq!(actual, expected);
+        assert_eq!(baseline, expected);
+    }
+    let legacy_input = same_input_handoff(&observed, dir.path());
+    capture::legacy_module("helper-acceptance", &legacy_input);
+    assert!(observed.observations().artifacts().iter().any(|artifact| {
+        matches!(artifact.payload(), NativeArtifactPayload::LicenseCensus(census) if census.unvalidated > 0)
+    }), "successful codegen remains explicitly compiler-unvalidated");
+
+    // A test-only consumer removes a real body's license from the same selected
+    // input. The unchanged actual backend must refuse; no mutated object is run.
+    let input = observed.observations().compiler().unwrap().input().unwrap();
+    let negative_dir = tempfile::tempdir().unwrap();
+    let actual_backend = backend();
+    let negative_input = RefCell::new(Vec::new());
+    let missing_name = RefCell::new(String::new());
+    let failed = compile_lcnf_to_trust_ir_owned_observed(
+        Arc::from(input.declarations().to_vec()),
+        Arc::new(input.environment().clone()),
+        Arc::new(input.config().clone()),
+        input.emit_config().clone(),
+        input.meaning(),
+        input
+            .runtime_closure()
+            .map(|closure| Arc::new(closure.clone())),
+        ObservationLimits::default(),
+        |module| {
+            clean_compiler::emit_trust_ir_lane::restamp_ungated_as_unvalidated(module)
+                .expect("the actual compiler module must have licensing claims");
+            let baseline = serialize_tmbc(module).unwrap();
+            assert_eq!(
+                baseline, legacy_input,
+                "the regenerated licensed baseline must equal the actual observed/legacy input"
+            );
+            let index = module
+                .functions
+                .iter()
+                .position(|function| !function.blocks.is_empty())
+                .expect("the actual helper source must emit a body");
+            *missing_name.borrow_mut() = module.functions[index].name.clone();
+            let claim = module.functions[index]
+                .body_gate
+                .take()
+                .expect("the actual baseline body has a licensing claim");
+            let mutant = serialize_tmbc(module).unwrap();
+            assert_ne!(
+                mutant, baseline,
+                "the negative must actually remove a claim"
+            );
+            let mut restored = module.clone();
+            restored.functions[index].body_gate = Some(claim);
+            assert_eq!(
+                serialize_tmbc(&restored).unwrap(),
+                baseline,
+                "restoring that one claim must reconstruct the exact actual baseline"
+            );
+            *negative_input.borrow_mut() = mutant;
+            actual_backend
+                .compile_object(
+                    module,
+                    crate::compile::host_trust_cg_target().unwrap(),
+                    negative_dir.path(),
+                )
+                .map(|_| ())
+        },
     )
-    .unwrap_err();
+    .expect_err("the genuine strict backend must reject an unlicensed body");
+    let object = negative_dir.path().join("module.o");
+    let object_state = std::fs::symlink_metadata(&object);
+    capture::consumer_failure(
+        "helper-unlicensed-refusal",
+        &negative_input.borrow(),
+        &failed,
+        &object,
+        &object_state,
+    );
     assert!(
-        error.to_string().contains("was not kernel-replayed"),
-        "{error:#}"
+        matches!(&object_state, Err(error) if error.kind() == std::io::ErrorKind::NotFound),
+        "a refused mutant must leave no object: {object_state:?}"
     );
-    let bytes = observed
-        .observations()
-        .artifacts()
-        .iter()
-        .find_map(|artifact| match artifact.payload() {
-            NativeArtifactPayload::Bytes {
-                label: "TMBC input written",
-                bytes,
-                ..
-            } => Some(bytes),
-            _ => None,
-        })
-        .unwrap();
-    assert_eq!(
-        bytes,
-        delegate.input.borrow().as_ref().unwrap(),
-        "same actual selected input and exact TV/license packet; equality is not acceptance"
-    );
-    capture::legacy_module(
-        "helper-tv-refusal",
-        delegate.input.borrow().as_ref().unwrap(),
+    let OwnedPipelineError::Consumer(LaneError::TrustCg(message)) = failed.error() else {
+        panic!("expected the actual typed backend consumer refusal: {failed:#}")
+    };
+    assert!(
+        message.contains(&format!(
+            "function `{}` has a body but no codegen license (`body_gate` absent) in a trust-ir v61 blob",
+            missing_name.borrow().as_str()
+        )) && message.contains("failed to read trust_ir module")
+            && message.contains("producer omission")
+            && message.contains("reader refuses it rather than grandfather it")
+            && message.ends_with("(exit 1)"),
+        "{message}"
     );
 }
 
@@ -245,7 +314,7 @@ fn actual_heap_shim_demand_is_recorded_separately_from_runtime_availability() {
         assert_eq!(actual, expected);
         assert_eq!(baseline, expected);
     }
-    same_input_handoff(&observed, dir.path());
+    let _ = same_input_handoff(&observed, dir.path());
     assert!(
         observed
             .observations()

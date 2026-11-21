@@ -111,9 +111,8 @@ const MATHVERSE_SHARD_DESC: FeatureDescriptor = FeatureDescriptor {
          Sub-verbs, all 11: `build`, \
          `build-coq`, `build-native`, `verify`, `verify-kernel`, \
          `verify-incremental`, `coq-import`, `lint-levels`, `stamp`, `audit`, \
-         `proof-search`. NOTE that `stamp` is DESTRUCTIVE: it applies a \
-         kernel-verified manifest to shards on disk in place and does not \
-         re-verify. Invoke via \
+         `proof-search`. Under P6, `stamp` refuses every manifest it reads \
+         and reports zero stamped headers in its JSON refusal. Invoke via \
          `cargo run --locked -p clean-mathverse --release --bin mathverse_shard -- <verb> …`.",
     category: Category::OperatorTools,
     stability: Stability::Usable,

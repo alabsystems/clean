@@ -135,19 +135,23 @@ impl RuntimeScopedEnvironmentCapture {
         // A row includes its runtime attributes for the same 16 MiB per-row
         // bound. The final digest also accounts for every attribute under the
         // same 64 MiB total bound, including roots/member identities and source.
-        for row in &capture.after {
-            if let Err(reason) = bounded_hash(
-                &(row, plan.attribute_rows().get(&row.name)),
-                limits.row_bytes,
-            ) {
+        // Fixed-width bincode adds no framing between tuple fields. The row was
+        // already streamed by snapshot_names. Only the following attribute field
+        // needs to be encoded against the remainder of the row budget.
+        for (name, binding) in &current {
+            let attribute_budget = limits.row_bytes - binding.encoded_bytes;
+            if let Err(reason) = bounded_hash(&plan.attribute_rows().get(name), attribute_budget) {
                 capture.errors.push(
                     "cannot bind scoped row with runtime attributes; typed row failure retained"
                         .into(),
                 );
                 capture.row_failures.push(RuntimeEnvironmentRowFailure {
                     phase: "scoped runtime attributes",
-                    name: row.name.clone(),
-                    reason,
+                    name: name.clone(),
+                    reason: format!(
+                        "{reason} (row_limit={}, encoded_row={})",
+                        limits.row_bytes, binding.encoded_bytes
+                    ),
                 });
             }
         }
@@ -323,6 +327,48 @@ mod tests {
             assert!(capture.snapshot_blake3().is_none());
             assert!(!capture.errors().is_empty());
         }
+    }
+    #[test]
+    fn scoped_attribute_budget_matches_the_complete_original_row_encoding() {
+        let (before, mut after, _) = fixture();
+        let query = n("query");
+        after.register_extern(query.clone(), "x".repeat(4096));
+        let plan = RuntimeBindingPlan::discover(&after, std::slice::from_ref(&query), 100).unwrap();
+        let full = RuntimeScopedEnvironmentCapture::capture(&before, &after, source(), &plan);
+        assert!(full.is_complete());
+        let row = full.after().iter().find(|row| row.name == query).unwrap();
+        let limits = RuntimeSourceCaptureLimits::default();
+        let (_, row_bytes) = bounded_hash(row, limits.row_bytes).unwrap();
+        let (_, required) =
+            bounded_hash(&(row, plan.attribute_rows().get(&query)), limits.row_bytes).unwrap();
+        let check = |row_bytes| {
+            RuntimeScopedEnvironmentCapture::capture_with_limits(
+                &before,
+                &after,
+                source(),
+                &plan,
+                RuntimeSourceCaptureLimits {
+                    row_bytes,
+                    ..limits
+                },
+            )
+        };
+        let exact = check(required);
+        assert!(exact.is_complete(), "{:?}", exact.errors());
+        assert_eq!(exact.snapshot_blake3(), full.snapshot_blake3());
+        let short = check(required - 1);
+        assert!(!short.is_complete());
+        assert!(short.snapshot_blake3().is_none());
+        let failure = short
+            .row_failures()
+            .iter()
+            .find(|failure| failure.name == query)
+            .unwrap();
+        assert_eq!(failure.phase, "scoped runtime attributes");
+        assert!(failure.reason.contains(&format!("encoded_row={row_bytes}")));
+        assert!(failure
+            .reason
+            .contains(&format!("limit={}", required - row_bytes - 1)));
     }
     #[test]
     fn scoped_capture_missing_member_and_changed_baseline_are_not_complete() {

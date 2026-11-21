@@ -22,6 +22,7 @@ members = [
     "crates/clean-compiler",
     "crates/clean-discovery",
     "crates/clean-elab",
+    "crates/clean-evidence",
     "crates/clean-features",
     "crates/clean-fold",
     "crates/clean-kernel",
@@ -62,7 +63,7 @@ default-members = [
 ]
 
 [workspace.package]
-version = "0.9.4"
+version = "0.9.5"
 edition = "2021"
 # Minimum Supported Rust Version. The codebase uses if-let chains (1.87),
 # the `[lints]` workspace inheritance (1.74), and various clippy lints
@@ -241,6 +242,7 @@ clean-cli = { path = "crates/clean-cli" }
 clean-compiler = { path = "crates/clean-compiler" }
 clean-discovery = { path = "crates/clean-discovery" }
 clean-elab = { path = "crates/clean-elab", features = ["ay-smt"] }
+clean-evidence = { path = "crates/clean-evidence" }
 clean-features = { path = "crates/clean-features" }
 clean-fold = { path = "crates/clean-fold" }
 clean-kernel = { path = "crates/clean-kernel" }
@@ -255,7 +257,7 @@ clean-cake = { path = "crates/clean-cake" }
 # advancing only this edge splits TrustIR's nominal Rust types when Clean's
 # all-features tests pass TrustCG values back into Clean. TrustIR's successor
 # advances to this Clean revision after it is published.
-trust-ir-contract = { git = "https://github.com/alabsystems/trust-ir.git", rev = "8bae728257b123d6394b2dc049b3573ad885049f" }
+trust-ir-contract = { git = "https://github.com/alabsystems/trust-ir.git", rev = "899d46e7a303fad2b706a88a7a8eda41ec47dcfe" }
 clean-lsp = { path = "crates/clean-lsp" }
 clean-macro = { path = "crates/clean-macro" }
 clean-math-project = { path = "crates/clean-math-project" }
@@ -323,13 +325,13 @@ tla-core = { git = "https://github.com/alabsystems/ty.git", rev = "aa96570ae5923
 # pure-Rust num_rational overflow fallback is functionally identical and adds no
 # native `-lgmp` link, so the Trust rustc_driver link (which pulls clean-auto
 # through trust-certify) has no undefined `___gmpq_*` symbols.
-ay = { package = "ay", version = "0.28.4", git = "https://github.com/alabsystems/ay.git", rev = "12d411d420e27eea05099f8cd277eb288e8622c9", default-features = false }
-ay-dpll = { package = "ay-dpll", version = "0.28.4", git = "https://github.com/alabsystems/ay.git", rev = "12d411d420e27eea05099f8cd277eb288e8622c9" }
-ay-core = { package = "ay-core", version = "0.28.4", git = "https://github.com/alabsystems/ay.git", rev = "12d411d420e27eea05099f8cd277eb288e8622c9" }
-ay-lean-bridge = { package = "ay-lean-bridge", version = "0.28.4", git = "https://github.com/alabsystems/ay.git", rev = "12d411d420e27eea05099f8cd277eb288e8622c9" }
-ay-proof = { package = "ay-proof", version = "0.28.4", git = "https://github.com/alabsystems/ay.git", rev = "12d411d420e27eea05099f8cd277eb288e8622c9" }
-ay-frontend = { package = "ay-frontend", version = "0.28.4", git = "https://github.com/alabsystems/ay.git", rev = "12d411d420e27eea05099f8cd277eb288e8622c9" }
-ay-translate = { package = "ay-translate", version = "0.28.4", git = "https://github.com/alabsystems/ay.git", rev = "12d411d420e27eea05099f8cd277eb288e8622c9" }
+ay = { package = "ay", version = "0.28.10", git = "https://github.com/alabsystems/ay.git", rev = "1fe97dd9166d1fd5eedef31d6497817275474b12", default-features = false }
+ay-dpll = { package = "ay-dpll", version = "0.28.10", git = "https://github.com/alabsystems/ay.git", rev = "1fe97dd9166d1fd5eedef31d6497817275474b12" }
+ay-core = { package = "ay-core", version = "0.28.10", git = "https://github.com/alabsystems/ay.git", rev = "1fe97dd9166d1fd5eedef31d6497817275474b12" }
+ay-lean-bridge = { package = "ay-lean-bridge", version = "0.28.10", git = "https://github.com/alabsystems/ay.git", rev = "1fe97dd9166d1fd5eedef31d6497817275474b12" }
+ay-proof = { package = "ay-proof", version = "0.28.10", git = "https://github.com/alabsystems/ay.git", rev = "1fe97dd9166d1fd5eedef31d6497817275474b12" }
+ay-frontend = { package = "ay-frontend", version = "0.28.10", git = "https://github.com/alabsystems/ay.git", rev = "1fe97dd9166d1fd5eedef31d6497817275474b12" }
+ay-translate = { package = "ay-translate", version = "0.28.10", git = "https://github.com/alabsystems/ay.git", rev = "1fe97dd9166d1fd5eedef31d6497817275474b12" }
 
 [profile.dev]
 # Reduce debug binary sizes to mitigate macOS _dyld_start stalls (#1388).

@@ -35,6 +35,31 @@ fn instantiate(template: &str, operand: &str) -> Result<SurfaceExpr, String> {
         .map_err(|refusal| refusal.reason().to_owned())
 }
 
+#[test]
+fn injection_templates_bind_the_field_name_after_an_anonymous_slot() {
+    let expanded = instantiate("by\n  injection x with _ field\n  exact field", "hyp")
+        .expect("the injection fields have defined binder roles");
+    let SurfaceExpr::ByTactic(_, steps) = expanded else {
+        panic!("expected a tactic block");
+    };
+    let [SurfaceTactic::Named { args: fields, .. }, SurfaceTactic::Named { args: used, .. }] =
+        steps.as_slice()
+    else {
+        panic!("expected injection and exact");
+    };
+    let [SurfaceExpr::Paren(_, operand), SurfaceExpr::Hole(_), SurfaceExpr::Ident(_, field)] =
+        fields.as_slice()
+    else {
+        panic!("expected a grouped operand, anonymous slot, and named field: {fields:?}");
+    };
+    assert!(matches!(operand.as_ref(), SurfaceExpr::Ident(_, hyp)
+        if hyp.is_unescaped_component("hyp") && hyp.template_scope().is_none()));
+    // Ordinary tactic binders get a fresh structural name. The following
+    // tactic must resolve its reference to that same binder.
+    assert!(!field.is_unescaped_component("field"));
+    assert!(matches!(used.as_slice(), [SurfaceExpr::Ident(_, name)] if name == field));
+}
+
 /// How many names spelled `spelling` the `Debug` rendering of `expr` holds.
 fn mentions(expr: &SurfaceExpr, spelling: &str) -> usize {
     format!("{expr:?}")

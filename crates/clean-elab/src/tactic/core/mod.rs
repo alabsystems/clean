@@ -733,16 +733,12 @@ impl ProofState {
         let base = self.fvar_base;
         let outcome = close_fvars::close_fvars_validated(&p, 0, base, self.next_fvar);
 
-        // #2204 FAIL CLOSED: a tactic-scope FVar with no matching binder means
-        // the assembled proof term is genuinely malformed (an ID-to-binder gap).
-        // Refuse it — return `None` so callers surface a normal elaboration
-        // error — rather than panicking or handing a term with a residual free
-        // variable to the kernel. The kernel would reject it anyway, but failing
-        // here keeps the diagnostic and never aborts the worker thread.
-        if let Some(diagnostic) = &outcome.gap {
+        // A missing binder or an unresolved inlined obligation keeps its FVar
+        // until this boundary, including when the continuation ignores it.
+        if let Some(diagnostic) = &outcome.error {
             debug_assert!(
                 outcome.closed.has_fvar_quick(),
-                "close_fvars reported a gap but the closed term has no FVar: {diagnostic}",
+                "close_fvars reported an error but the closed term has no FVar: {diagnostic}",
             );
             tracing::debug!("closed_proof rejected (fail-closed): {diagnostic}");
             return None;

@@ -9,234 +9,24 @@
     "UNKNOWN is a first-class value, never 0; it neither satisfies nor violates a direction.",
     "Quoting any row of this file from prose is a bug: read the artifact."
   ],
-  "generated_at_utc": "2026-11-17T18:38:20Z",
+  "generated_at_utc": "2026-11-20T03:47:52Z",
   "generator": "scripts/spine_scoreboard.py",
   "inputs": {
     "spine_set": "ABSENT",
     "a0_census": "sha256:f1acedfd852f29023474404a75d7dfc6c4aaad4af52052faa0f45e1de81f054f",
     "axiom_ratchet": "sha256:cca27c20be9d4a38ef4d6008beae43231ed359a68a55fb3ed9a403ee44dd1fc0",
     "unchecked_decl_ratchet": "sha256:0a0a26bef7832b0261015068743896e7c6edb02537647acde26c19a083ee1d76",
-    "env_bypass_census": "sha256:556ec4d360725263dd3bfec5a43e907540060034ca92275e06ddded20d20c2df",
-    "assumption_ledger": "sha256:e50b3832190d361ec56c8d4c61aed61c382d917135ad6fc8fdcbce4a4a9ee5f4",
+    "env_bypass_census": "sha256:3c6ab0d33b41754dad2b590f74a3773c053c0fd566ed5fd0056a577f415490b7",
+    "assumption_ledger": "sha256:a55d4e0a4a7f4d0b83c13889b4c9a0cb054a2e9cc42da1b4cb764e3e01f6a02c",
     "parity_tiers": "sha256:2d2d501572050b8c0589d7ec9864be9213231c3447a74d4be895905edf4eecfb",
     "evalir_coverage": "sha256:eaa072140d77bab3fb3f500f13cb4fb253289aef7d3bb25938925956331c38cc",
     "evalir_adequacy_grid": "sha256:63fe91f5b64a2165833ca4d67f3523d10df95926ca3ddfbe4f3cde64ea36bf87",
     "evalir_census_src": "sha256:2d785520100aacd746da40082cd733947ebe4890ef1f4feabbf21e5b647da602",
     "evalir_syntax_src": "sha256:0f8331a872afdcecd399178c4a3b0f4aff9964520b62e66f83ce2a5d1a235a26",
-    "verdict_io_contracts": "sha256:6c034c635d656062a6379badc70b0690cd70a6b22f7bb451a85dbf803a32a8be",
-    "verdict_set": "sha256:2fbf3a2fb5720cb43c4ad88cf629a28d08f980ecd2104eff2c4ccb33bc7e4811"
+    "verdict_io_contracts": "sha256:d3632e505b975fee7b401399f4865bc01e1ca88fcf8e4f3023158dbb04791d25",
+    "verdict_set": "sha256:7d160fbafdfaa67cce4080fd0b46bbb7d19dd8b8b15fa9b4be8df9bfcd7ff849"
   },
-  "rebases": [
-    {
-      "date": "2026-09-21",
-      "reason": "2026-09-21 main integration of local parent 2fcab7f2639338aa6af55aa6ba4958a38dec2e29 and remote parent bf55572f148048d5d0e6aacf5a2ca1b21f28956f. After canonical verdict_set -> verdict_io_contracts -> spine_assumption_ledger regeneration, read-only violation_records against the pinned remote parent found zero violations and all generated row values identical. The five recorded transitions are inherited upstream values, not merge-introduced debt: assumption_ledger.count 27 -> 32; assumption_ledger.verdict_io_lane_b 44 -> 65; evalir.constructor_census frozen 28 -> 30; evalir.semdiff_unmeasured 22 -> 24; evalir.adequacy.declared_delta 11 -> 15. A normal --refresh first refused these exact five transitions against the old local HEAD. This explicit integration account preserves the incoming obligations and current upstream baseline; it does not discharge them, weaken row directions, authorize future drift, or claim that the retained local proof work verified this merged tree.",
-      "baseline_source": "HEAD:data/spine_scoreboard.json",
-      "rows": [
-        {
-          "id": "assumption_ledger.count",
-          "kind": "down",
-          "from": 27,
-          "to": 32
-        },
-        {
-          "id": "assumption_ledger.verdict_io_lane_b",
-          "kind": "down",
-          "from": 44,
-          "to": 65
-        },
-        {
-          "id": "evalir.constructor_census",
-          "kind": "frozen",
-          "from": 28,
-          "to": 30
-        },
-        {
-          "id": "evalir.semdiff_unmeasured",
-          "kind": "down",
-          "from": 22,
-          "to": 24
-        },
-        {
-          "id": "evalir.adequacy.declared_delta",
-          "kind": "down",
-          "from": 11,
-          "to": 15
-        }
-      ]
-    },
-    {
-      "date": "2026-09-24",
-      "reason": "2026-09-24: append the sequential ByteV1 fetch-add constructor (30 to 31); historical three-executor coverage remains six, so unmeasured grows 24 to 25. Legacy execution explicitly refuses this instruction; its two kernel-checked operand irrelevance laws add two unminted audit rows (19 to 21), not successful byte coverage. See reports/2026-09-24-byte-atomic-fetched-step.md and the accepted 103-term EvalIr stack bundle. Preserve all ratchet directions and historical semdiff artifact.",
-      "baseline_source": "HEAD:data/spine_scoreboard.json",
-      "rows": [
-        {
-          "id": "evalir.constructor_census",
-          "kind": "frozen",
-          "from": 30,
-          "to": 31
-        },
-        {
-          "id": "evalir.semdiff_unmeasured",
-          "kind": "down",
-          "from": 24,
-          "to": 25
-        },
-        {
-          "id": "evalir.adequacy.irrelevance_proved_await_mint",
-          "kind": "down",
-          "from": 19,
-          "to": 21
-        }
-      ]
-    },
-    {
-      "date": "2026-09-24",
-      "reason": "2026-09-24: add the distinct target-indexed ByteV1 Usize relaxed-fetch-add constructor; census 31 to 32, reference semdiff remains 6 measured so unmeasured 25 to 26, and its bits/pointer/value operands add three explicitly unminted legacy-refusal irrelevance obligations (21 to 24). These operands remain semantically relevant in ByteV1. No measured reference coverage or completed mint is claimed.",
-      "baseline_source": "HEAD:data/spine_scoreboard.json",
-      "rows": [
-        {
-          "id": "evalir.constructor_census",
-          "kind": "frozen",
-          "from": 31,
-          "to": 32
-        },
-        {
-          "id": "evalir.semdiff_unmeasured",
-          "kind": "down",
-          "from": 25,
-          "to": 26
-        },
-        {
-          "id": "evalir.adequacy.irrelevance_proved_await_mint",
-          "kind": "down",
-          "from": 21,
-          "to": 24
-        }
-      ]
-    },
-    {
-      "date": "2026-09-30",
-      "reason": "2026-09-30 (third upstream merge): assumption_ledger.verdict_io_lane_b 65 -> 66 is the paragon split moving load.rs's graph-limit .olean read into import/load/graph_limit.rs; ledger rows are per module, so the same C-READ-BYTES assumption owns its own row (verdict_io_contracts --rebase-up the same day). No new IO site.",
-      "baseline_source": "HEAD:data/spine_scoreboard.json",
-      "rows": [
-        {
-          "id": "assumption_ledger.verdict_io_lane_b",
-          "kind": "down",
-          "from": 65,
-          "to": 66
-        }
-      ]
-    },
-    {
-      "date": "2026-10-15",
-      "reason": "2026-10-14 merge repair: 3610118c9 (Merge origin/crystal/lzd 23d8758c4, carried onto main by today's WS6.7 landing) took the crystal lane's grid and ledger but kept main's scoreboard, so main's scoreboard said 15/32 while its own sources derive 18/35. The growth is the crystal lane's recorded 2026-09-28 'crystal E5 (memo \u00a723)' rebase (three measured EvalIR-vs-reference differences now DECLARED in data/evalir_adequacy_grid.json); crystal/lzd 23d8758c4's own scoreboard carries 35 and 18 with that record. No new divergence: this re-states that decision on main.",
-      "baseline_source": "HEAD:data/spine_scoreboard.json",
-      "rows": [
-        {
-          "id": "assumption_ledger.count",
-          "kind": "down",
-          "from": 32,
-          "to": 35
-        },
-        {
-          "id": "evalir.adequacy.declared_delta",
-          "kind": "down",
-          "from": 15,
-          "to": 18
-        }
-      ]
-    },
-    {
-      "date": "2026-10-23",
-      "reason": "2026-10-23 R113 (fix/replay-part-coverage): assumption_ledger.verdict_io_lane_b 66 -> 67, the dated --rebase-up recorded in data/verdict_io_contracts.json: the one artifact reader is a new module (crates/clean-olean/src/import/artifact.rs) whose read_artifact reads an artifact's parts itself in place of the bridge's, the name index's and the closure walks' own .olean reads; ledger rows are per module, so its read owns a C-READ-BYTES row, checked by check_artifact_parts before any reading is returned.",
-      "baseline_source": "HEAD:data/spine_scoreboard.json",
-      "rows": [
-        {
-          "id": "assumption_ledger.verdict_io_lane_b",
-          "kind": "down",
-          "from": 66,
-          "to": 67
-        }
-      ]
-    },
-    {
-      "date": "2026-10-29",
-      "reason": "2026-10-28: assumption_ledger.verdict_io_lane_b 68 -> 72 is lane W's import world gate (R111, landed bc01ee4e4): four ledgered IO assumptions in crates/clean-olean/src/import/project_world.rs and lake_package.rs (lean-toolchain and Lake package reads, the package walk, LEAN_PATH), recorded with their probes by data/verdict_io_contracts.json's dated rebase",
-      "baseline_source": "HEAD:data/spine_scoreboard.json",
-      "rows": [
-        {
-          "id": "assumption_ledger.verdict_io_lane_b",
-          "kind": "down",
-          "from": 68,
-          "to": 72
-        }
-      ]
-    },
-    {
-      "date": "2026-11-11",
-      "reason": "80db89390 (2026-11-08, docs/DECISIONS.md 'retain Release syntax in an explicit new EvalIR epoch') appended IRInst.release as constructor index 32. constructor_census 32->33 is that re-measure (crates/clean-verify/tests/eval_ir/census.rs EMITTED_INSTS). semdiff_unmeasured 26->27 and adequacy irrelevance_proved_await_mint 23->24 are the one new constructor entering both denominators unmeasured/unminted: its dispatch halts as explicit 'unmodelled width_bounded' and its grid row (ir_exec_release_pointer_irrelevant) says syntax retention only, not Rust Release irrelevance. Nothing previously measured or minted regressed; the commit regenerated the adequacy grid but not data/evalir_coverage.json or this baseline, which left evalir-coverage-check and this ratchet red on main since 2026-11-08.",
-      "baseline_source": "HEAD:data/spine_scoreboard.json",
-      "rows": [
-        {
-          "id": "evalir.constructor_census",
-          "kind": "frozen",
-          "from": 32,
-          "to": 33
-        },
-        {
-          "id": "evalir.semdiff_unmeasured",
-          "kind": "down",
-          "from": 26,
-          "to": 27
-        },
-        {
-          "id": "evalir.adequacy.irrelevance_proved_await_mint",
-          "kind": "down",
-          "from": 23,
-          "to": 24
-        }
-      ]
-    },
-    {
-      "date": "2026-11-14",
-      "reason": "2026-11-14: bounded descriptor-capture intake adds one IO-bearing module, so open verdict_io_lane_b debt rises from 72 to 73; retain the obligation and the IO-contract rebase",
-      "baseline_source": "HEAD:data/spine_scoreboard.json",
-      "rows": [
-        {
-          "id": "assumption_ledger.verdict_io_lane_b",
-          "kind": "down",
-          "from": 72,
-          "to": 73
-        }
-      ]
-    },
-    {
-      "date": "2026-11-14",
-      "reason": "2026-11-14 preserve STAT residual after capture helper extraction: IO ledger72->73 adds the capture.rs contract/member row, no obligation discharged or excluded",
-      "baseline_source": "HEAD:data/spine_scoreboard.json",
-      "rows": [
-        {
-          "id": "assumption_ledger.verdict_io_lane_b",
-          "kind": "down",
-          "from": 72,
-          "to": 73
-        }
-      ]
-    },
-    {
-      "date": "2026-11-14",
-      "reason": "2026-11-14 UTC: mirror only the already measured and canonically rebased I/O assumption-ledger72->73 for incoming B43->44 descriptor-capture member on source61df. Actual lexical-model rows add L-STAT-FRESH/capture and L-WRITE-COMPLETE/capture, remove old L-READ-BYTES/module_cache_direct, net+1. This retains all8 contract statements/statuses, C-STAT-FRESH partial/two real holes, every old rebase and all metric directions; no independent budget, semantic-write coverage, waiver or proof claim.",
-      "baseline_source": "HEAD:data/spine_scoreboard.json",
-      "rows": [
-        {
-          "id": "assumption_ledger.verdict_io_lane_b",
-          "kind": "down",
-          "from": 72,
-          "to": 73
-        }
-      ]
-    }
-  ],
+  "rebases": [],
   "rows": [
     {
       "id": "spine_set.size",
@@ -497,19 +287,19 @@
     },
     {
       "id": "assumption_ledger.verdict_io_lane_b",
-      "value": 73,
+      "value": 75,
       "direction": "down",
       "producer": "data/verdict_io_contracts.json (ledger block)",
       "provenance": {
         "declared_direction": "down",
         "destination": "data/spine_assumption_ledger.json, when that file exists; until then these rows live here and scripts/verdict_gate.sh reads them from here",
         "rows_by_class": {
-          "content-bearing": 59,
+          "content-bearing": 60,
           "meta": 2,
-          "success-only": 12
+          "success-only": 13
         },
-        "baseline_rows": 73,
-        "rebases": 7,
+        "baseline_rows": 75,
+        "rebases": 8,
         "note": "counted in this scoreboard IN ADDITION to assumption_ledger.count; the two are disjoint until data/spine_assumption_ledger.json absorbs these rows, at which point this row must be re-based to avoid double count"
       }
     },
@@ -777,12 +567,12 @@
     },
     {
       "id": "verdict_io.site_total",
-      "value": 326,
+      "value": 355,
       "direction": "none",
       "producer": "data/verdict_io_contracts.json",
       "provenance": {
         "cross_checked_against": "data/verdict_set.json:partitions.b_io_bearing.io_site_total",
-        "authoritative_value": 326
+        "authoritative_value": 355
       }
     },
     {
@@ -793,13 +583,13 @@
     },
     {
       "id": "verdict_io.sites_issuing_io",
-      "value": 217,
+      "value": 227,
       "direction": "none",
       "producer": "data/verdict_io_contracts.json"
     },
     {
       "id": "verdict_io.content_bearing",
-      "value": 177,
+      "value": 182,
       "direction": "none",
       "producer": "data/verdict_io_contracts.json"
     },

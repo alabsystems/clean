@@ -8,9 +8,19 @@
 #
 # Usage: ./scripts/kernel_soundness_gate.sh
 #
-# On completion the gate writes reports/kernel-soundness-launch-evidence.json.
-# The evidence file is cleared at startup so a failed or interrupted run cannot
-# leave an old passing artifact behind.
+# On completion the gate writes a run record to $KERNEL_SOUNDNESS_EVIDENCE_PATH,
+# or, when that is unset, to a fresh temporary file whose path it prints. The
+# record is cleared at startup so a failed or interrupted run cannot leave an
+# old passing artifact behind.
+#
+# It never writes the committed launch receipt,
+# reports/kernel-soundness-launch-evidence.json, and refuses a path naming it
+# before any lane runs. That receipt has one producer, `clean replacement
+# trust-core-evidence --kernel-soundness`, which stamps the v2 schema and the
+# shared-digest pins that `clean-evidence check trustcore-staleness` compares.
+# Until the EV0 review (2026-11-17) this script wrote the receipt by default,
+# hashing the module tree with a Python copy of the Rust digest and writing none
+# of the v2 pins, so a bare run replaced a fresh receipt with a stale one.
 #
 # Issue: #2134
 # Design: designs/2026-03-11-2134-structured-kernel-soundness-gate.md
@@ -23,7 +33,20 @@ cd "$REPO_ROOT"
 export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-1}"
 
 EVIDENCE_SCHEMA_VERSION="Clean-kernel-soundness-launch-evidence-v1"
-EVIDENCE_PATH="${KERNEL_SOUNDNESS_EVIDENCE_PATH:-reports/kernel-soundness-launch-evidence.json}"
+COMMITTED_RECEIPT="reports/kernel-soundness-launch-evidence.json"
+if [ -n "${KERNEL_SOUNDNESS_EVIDENCE_PATH:-}" ]; then
+    EVIDENCE_PATH="$KERNEL_SOUNDNESS_EVIDENCE_PATH"
+else
+    EVIDENCE_PATH="$(mktemp "${TMPDIR:-/tmp}/clean-kernel-soundness-run.XXXXXX")"
+fi
+mkdir -p "$(dirname "$EVIDENCE_PATH")"
+evidence_real="$(cd "$(dirname "$EVIDENCE_PATH")" && pwd -P)/$(basename "$EVIDENCE_PATH")"
+if [ "$evidence_real" = "$(pwd -P)/$COMMITTED_RECEIPT" ] \
+    || [ "$EVIDENCE_PATH" -ef "$COMMITTED_RECEIPT" ]; then
+    echo "kernel soundness gate: refusing to write $COMMITTED_RECEIPT -- its one producer is" >&2
+    echo "  clean replacement trust-core-evidence --kernel-soundness --evidence $COMMITTED_RECEIPT" >&2
+    exit 2
+fi
 EXPECTED_STEPS=3
 
 PASS=0
@@ -37,7 +60,6 @@ cleanup() {
 
 trap cleanup EXIT
 
-mkdir -p "$(dirname "$EVIDENCE_PATH")"
 rm -f "$EVIDENCE_PATH"
 
 record_lane() {
@@ -86,40 +108,10 @@ SOURCE_PATHS = [
     BASELINE_PATH,
     EXPRESSIONS_PATH,
 ]
-
-
-# TRUST-CORE PINS (added 2026-08-27). The in-binary validator
-# (cmd_replacement/launch_validation.rs -> validate_trust_core_module_tree_sha)
-# and scripts/check_trustcore_evidence_staleness.py both REQUIRE these two
-# keys, but this minter never wrote them, so every freshly minted artifact was
-# born stale and the only previous remedy was hand-editing a generated file
-# (2b3ee69ee). Mint them instead.
-TRUST_CORE_MODULE_FILE = Path("crates/clean-cli/src/cmd_replacement.rs")
-TRUST_CORE_MODULE_DIR = Path("crates/clean-cli/src/cmd_replacement")
-TRUST_CORE_MODULE_TREE_KEY = "crates/clean-cli/src/cmd_replacement/**/*.rs"
-
-
-def trust_core_module_tree_digest(root: Path) -> str:
-    """Byte-identical replication of `sha256_repo_module_tree` (artifact_io.rs)."""
-    entries = []
-    for path in root.rglob("*"):
-        if path.is_symlink() or not path.is_file():
-            continue
-        stem, dot, ext = path.name.rpartition(".")
-        if dot != "." or stem == "" or ext != "rs":
-            continue
-        rel = path.relative_to(root).as_posix()
-        if rel.startswith("tests/"):
-            continue
-        entries.append((rel.encode("utf-8"), path.read_bytes()))
-    entries.sort(key=lambda entry: entry[0])
-    hasher = hashlib.sha256()
-    for rel_bytes, data in entries:
-        hasher.update(rel_bytes)
-        hasher.update(b"\x00")
-        hasher.update(len(data).to_bytes(8, "little"))
-        hasher.update(data)
-    return hasher.hexdigest()
+# This run record pins only the inputs above. The trust-core module-tree and
+# shared-digest pins belong to the committed v2 receipt, which only the Rust
+# producer writes; the Python copy of that digest that lived here was deleted
+# in the EV0 review (2026-11-17).
 
 
 def sha256_file(path: Path) -> str:
@@ -195,11 +187,7 @@ artifact = {
         "baseline_sha256": sha256_file(BASELINE_PATH),
         "expressions_file_sha256": sha256_file(EXPRESSIONS_PATH),
     },
-    "source_sha256": {
-        **{str(p): sha256_file(p) for p in SOURCE_PATHS},
-        str(TRUST_CORE_MODULE_FILE): sha256_file(TRUST_CORE_MODULE_FILE),
-        TRUST_CORE_MODULE_TREE_KEY: trust_core_module_tree_digest(TRUST_CORE_MODULE_DIR),
-    },
+    "source_sha256": {str(p): sha256_file(p) for p in SOURCE_PATHS},
     "lanes": lanes,
 }
 EVIDENCE_PATH.write_text(json.dumps(artifact, indent=2, sort_keys=True) + "\n", encoding="utf-8")

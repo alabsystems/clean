@@ -106,35 +106,13 @@ fn insert_self_ref_args(expr: Expr, ind_name: &Name, extra_args: &[Expr]) -> Exp
     }
 
     impl ExprFolder for SelfRefArgInserter<'_> {
-        fn fold_app(&mut self, f: &Expr, a: &Expr) -> Expr {
-            // Check if the function head (innermost Const in app spine) is the
-            // inductive self-reference. If so, insert extra args after the Const
-            // and before the existing arguments.
-            let head = f.get_app_fn();
-            if let clean_kernel::ExprKind::Const(name, _) = head.kind() {
-                if name == self.ind_name {
-                    // Collect existing args from the application spine
-                    let mut args: Vec<Expr> = f
-                        .get_app_args()
-                        .into_iter()
-                        .map(|e| self.fold_expr(e))
-                        .collect();
-                    args.push(self.fold_expr(a));
-
-                    // Build: head extra_arg0 extra_arg1 ... arg0 arg1 ...
-                    let mut result = head.clone();
-                    for extra in self.extra_args {
-                        result = Expr::app(result, extra.clone());
-                    }
-                    for arg in args {
-                        result = Expr::app(result, arg);
-                    }
-                    return result;
-                }
+        fn fold_const(&mut self, name: &Name, levels: &LevelVec) -> Expr {
+            let head = Expr::const_(name.clone(), levels.clone());
+            if name == self.ind_name {
+                Expr::apps(head, self.extra_args.iter().cloned())
+            } else {
+                head
             }
-
-            // Default: recurse into f and a
-            Expr::app(self.fold_expr(f), self.fold_expr(a))
         }
     }
 
@@ -271,6 +249,7 @@ impl<'a> ElabCtx<'a> {
         // Collect fvars and elaborated types for parameters
         // We store the elaborated types to avoid re-elaborating them multiple times
         // (once for push_local, once for ind_ty, and once per constructor)
+        let ambient_count = super::family_section_parameters::section_prefix(binders);
         let mut param_fvars = Vec::new();
         let mut param_tys = Vec::new();
 
@@ -280,6 +259,7 @@ impl<'a> ElabCtx<'a> {
         let header_auto_start = self.auto_implicit_count();
 
         // Elaborate parameters and store both fvars and types
+        let mut param_instances = 0;
         for binder in binders {
             let binder_ty = if let Some(t) = &binder.ty {
                 self.elaborate(t)?
@@ -290,6 +270,12 @@ impl<'a> ElabCtx<'a> {
             let binder_ty = self.coerce_type_position(binder_ty);
             self.check_instance_binder_annotation(binder.info, &binder_ty)?;
             let fvar = self.push_local(binder.name.clone(), binder_ty.clone());
+            if binder.name.is_section_variable()
+                && self.binder_is_local_instance(convert_binder_info(binder.info), &binder_ty)
+            {
+                self.push_local_instance(fvar, binder_ty.clone());
+                param_instances += 1;
+            }
             param_fvars.push(fvar);
             param_tys.push(binder_ty);
         }
@@ -341,7 +327,7 @@ impl<'a> ElabCtx<'a> {
         // Build the inductive type: (param1 : T1) → ... → (paramN : TN) → result_ty
         // Reuse the stored param_tys instead of re-elaborating
         let mut ind_ty = result_ty.clone();
-        for i in (0..binders.len()).rev() {
+        for i in (ambient_count..binders.len()).rev() {
             let binder = &binders[i];
             ind_ty = ind_ty.abstract_fvar(param_fvars[i]);
             let bi = convert_binder_info(binder.info);
@@ -448,12 +434,24 @@ impl<'a> ElabCtx<'a> {
             }
         }
 
+        let uses = std::iter::once(&ind_ty)
+            .chain(header_packet.iter().map(|(_, _, ty)| ty))
+            .chain(raw_ctors.iter().flat_map(|(_, ty, autos)| {
+                std::iter::once(ty).chain(autos.iter().map(|(_, _, ty)| ty))
+            }));
+        let selected = self.used_family_section(ambient_count, &param_fvars, &param_tys, uses);
         let mut decl_level_params = Vec::new();
         let ind_ty_levels = self.metas.instantiate_levels(&ind_ty);
         collect_expr_level_params(&ind_ty_levels, &mut decl_level_params);
         // Header locals have not been abstracted into `ind_ty` yet. Their
         // types can carry the family's only universe parameters (for example,
         // `α` in `(p : α → Prop)`), so collect those before freezing self refs.
+        for &i in &selected {
+            let ty = self
+                .metas
+                .instantiate_levels(&self.metas.instantiate(&param_tys[i]));
+            collect_expr_level_params(&ty, &mut decl_level_params);
+        }
         for (_, _, implicit_ty) in &header_packet {
             let ty = self
                 .metas
@@ -480,8 +478,9 @@ impl<'a> ElabCtx<'a> {
         collect_expr_meta_fvars(&ind_ty_inst, &mut shared_meta_ids);
 
         let mut constructors = Vec::new();
+        let mut constructor_param_infos = Vec::new();
         let mut ctor_return_arg_sets: Vec<Vec<Expr>> = Vec::new();
-        for (ctor_name, ctor_ty_raw, ctor_auto_implicits) in raw_ctors {
+        for (ctor, (ctor_name, ctor_ty_raw, ctor_auto_implicits)) in ctors.iter().zip(raw_ctors) {
             // Instantiate solved metas so elab_app-inserted metas that were
             // resolved during unification become concrete values.
             let mut ctor_ty_raw = self.metas.instantiate(&ctor_ty_raw);
@@ -574,17 +573,43 @@ impl<'a> ElabCtx<'a> {
             // the auto-implicit binders. Extra binders come first since their
             // types may be referenced by auto-implicits (e.g. c : Cover α x y z
             // depends on the x,y,z ctor-local metas).
+            let generated = extra_ctor_binders.len();
             let mut all_ctor_implicits = extra_ctor_binders;
             all_ctor_implicits.extend(ctor_auto_implicits);
+            let implicit_infos =
+                all_ctor_implicits
+                    .iter()
+                    .enumerate()
+                    .map(|(index, (name, _, _))| {
+                        let name = if index < generated {
+                            Name::anon()
+                        } else {
+                            name.name().clone()
+                        };
+                        (name, BinderInfo::Implicit)
+                    });
+            constructor_param_infos.push(
+                implicit_infos
+                    .chain(crate::value_binder_names::surface_forall_telescope(
+                        &ctor.ty,
+                    ))
+                    .collect::<Vec<_>>(),
+            );
 
             let mut ctor_ty = Self::wrap_type_with_auto_implicits(ctor_ty_raw, &all_ctor_implicits);
 
             // Abstract constructor type over parameters from the inside out so
             // nested constructor-local binders keep the right de Bruijn indices.
             // Lean 4 also treats inductive parameters as implicit in constructors.
-            for (param_fvar, param_ty) in param_fvars.iter().zip(param_tys.iter()).rev() {
-                ctor_ty = ctor_ty.abstract_fvar(*param_fvar);
-                ctor_ty = Expr::pi(BinderInfo::Implicit, param_ty.clone(), ctor_ty);
+            for i in (ambient_count..binders.len()).rev() {
+                let kind = super::family_section_parameters::constructor_parameter(
+                    convert_binder_info(binders[i].info),
+                );
+                ctor_ty = Expr::pi(
+                    kind,
+                    param_tys[i].clone(),
+                    ctor_ty.abstract_fvar(param_fvars[i]),
+                );
             }
 
             constructors.push((ctor_name, ctor_ty));
@@ -596,6 +621,9 @@ impl<'a> ElabCtx<'a> {
         // Auto-bound header locals can be interleaved with explicit parameters.
         // Remove exactly the parameter IDs; the auto-implicit drain below owns
         // the remaining header locals.
+        for _ in 0..param_instances {
+            self.pop_local_instance();
+        }
         self.locals.retain(|(_, id, _)| !param_fvars.contains(id));
 
         let mut ind_auto_implicits = self.take_auto_implicits();
@@ -704,18 +732,79 @@ impl<'a> ElabCtx<'a> {
             }
             uniform_original_prefix += 1;
         }
-        let num_params = u32::try_from(binders.len() + promoted_count + uniform_original_prefix)
-            .unwrap_or(u32::MAX);
-
-        // Substitute level constraints collected during unification
-        let ind_ty = self.metas.instantiate_levels(&ind_ty);
+        let num_params = u32::try_from(
+            selected.len() + binders.len() - ambient_count
+                + promoted_count
+                + uniform_original_prefix,
+        )
+        .unwrap_or(u32::MAX);
+        // Outermost section arguments are uniform on every recursive
+        // occurrence, including a bare self-reference in a nullary constructor.
+        let section_args: Vec<_> = selected
+            .iter()
+            .map(|&i| Expr::fvar(param_fvars[i]))
+            .collect();
+        let wrap_section = |mut ty: Expr, constructor: bool| {
+            for &i in selected.iter().rev() {
+                let info = convert_binder_info(binders[i].info);
+                let info = if constructor {
+                    super::family_section_parameters::constructor_parameter(info)
+                } else {
+                    info
+                };
+                ty = Expr::pi(
+                    info,
+                    self.metas.instantiate(&param_tys[i]),
+                    ty.abstract_fvar(param_fvars[i]),
+                );
+            }
+            self.metas.instantiate_levels(&ty)
+        };
+        let ind_ty = wrap_section(ind_ty, false);
         let constructors: Vec<_> = constructors
             .into_iter()
             .map(|(name, ty)| {
                 let ty = Self::wrap_type_with_auto_implicits(ty, &ind_auto_implicits);
-                (name, self.metas.instantiate_levels(&ty))
+                let ty = if section_args.is_empty() {
+                    ty
+                } else {
+                    insert_self_ref_args(ty, &ind_name, &section_args)
+                };
+                (name, wrap_section(ty, true))
             })
             .collect();
+
+        // Match the order in which the constructor signature was closed.
+        let param_info = |index: usize| {
+            let binder = &binders[index];
+            let kind = super::family_section_parameters::constructor_parameter(
+                convert_binder_info(binder.info),
+            );
+            (binder.name.name().clone(), kind)
+        };
+        let common_infos: Vec<_> = selected
+            .iter()
+            .copied()
+            .map(param_info)
+            .chain(
+                ind_auto_implicits
+                    .iter()
+                    .enumerate()
+                    .map(|(index, (name, _, _))| {
+                        let name = if index < promoted_count {
+                            Name::anon()
+                        } else {
+                            name.name().clone()
+                        };
+                        (name, BinderInfo::Implicit)
+                    }),
+            )
+            .chain((ambient_count..binders.len()).map(param_info))
+            .collect();
+        for ((name, type_), own_infos) in constructors.iter().zip(constructor_param_infos) {
+            let infos = common_infos.iter().cloned().chain(own_infos).collect();
+            self.note_constructor_param_infos(name, type_, infos);
+        }
 
         // Derive against an isolated environment containing the exact completed
         // parent declaration.  Built-in recursive/nested generators can then use
@@ -726,6 +815,11 @@ impl<'a> ElabCtx<'a> {
         let derived_instances = if deriving.is_empty() {
             Vec::new()
         } else {
+            let selected_binders: Vec<_> = selected
+                .iter()
+                .map(|&i| binders[i].clone())
+                .chain(binders[ambient_count..].iter().cloned())
+                .collect();
             let mut registered_candidate = self.env.clone();
             let candidate_decl = InductiveDecl {
                 level_params: decl_level_params.clone(),
@@ -775,7 +869,7 @@ impl<'a> ElabCtx<'a> {
                         &registered_candidate,
                         &ind_name,
                         universe_params,
-                        binders,
+                        &selected_binders,
                         ctors,
                         &ind_ty,
                         std::slice::from_ref(class),
@@ -805,7 +899,7 @@ impl<'a> ElabCtx<'a> {
             wants_container_rel: deriving
                 .iter()
                 .any(|c| c.name() == &Name::anon().str("ContainerRel")),
-            modifiers: *modifiers,
+            modifiers: modifiers.clone(),
         })
     }
 }

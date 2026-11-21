@@ -63,6 +63,35 @@ fn computation(env: &mut Environment, call: &str, expected: &str, wrong: &str, i
 }
 
 #[test]
+fn semr_compound_type_tag_patterns_fit_a_normal_worker_stack() {
+    // SemR.ty handles precisely these wire tags with the same or-pattern.
+    std::thread::Builder::new()
+        .stack_size(2 * 1024 * 1024)
+        .spawn(|| {
+            let mut env = Environment::with_prelude();
+            register(
+                &mut env,
+                "def compoundTag (tag : Nat) : Bool :=\n  match tag with\n  | 37 | 38 | 255 => true\n  | _ => false",
+            )
+            .expect("register the decoder's tag pattern");
+            for (id, (call, expected, wrong)) in [
+                ("compoundTag 37", "true", "false"),
+                ("compoundTag 38", "true", "false"),
+                ("compoundTag 254", "false", "true"),
+                ("compoundTag 255", "true", "false"),
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                computation(&mut env, call, expected, wrong, id);
+            }
+        })
+        .expect("start a source-check worker")
+        .join()
+        .expect("source-check worker");
+}
+
+#[test]
 fn nested_literal_matches_exact_value_and_rejects_the_original_false_theorem() {
     let mut env = Environment::with_prelude();
     // A single concrete arm reaches the nested planner directly; two some

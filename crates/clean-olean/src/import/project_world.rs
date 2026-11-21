@@ -22,10 +22,10 @@
 //! package's toolchain; Lake builds every package of a workspace with the
 //! root's toolchain, so a file under `<ws>/.lake/packages/` takes `<ws>`'s.
 //! A caller that elaborates several files into one environment selects the
-//! world once, for its entry file (`clean check`, `clean-native`). A world of
-//! `lean_worlds.tsv` read without
-//! a declaration (R81), installed as that world's build, supplies the stdlib
-//! root in place of the pin; any other is refused by name
+//! world once, for its entry file (`clean check`, `clean-native`). The
+//! historical and frontend worlds and a project pin to stable Lean 4.36.0
+//! supply their own stdlib after its identity is checked. An unavailable
+//! world is refused by name
 //! ([`ImportWorldRefusal`]) and never resolved in another.
 //!
 //! `MATHLIB_PATH` / `LEAN_PATH` / `LEAN_PACKAGES_PATH` and Lake roots are
@@ -63,8 +63,8 @@ pub enum ImportWorld {
     /// naming a Clean toolchain (`clean:stable`, what `clean lake new`
     /// writes): the checkout's pin.
     CheckoutPin,
-    /// The project's `lean-toolchain` names this world, read without a
-    /// declaration and installed as its build, other than the Oracle.
+    /// The project's `lean-toolchain` names this selectable world, installed
+    /// as its build, other than the Oracle.
     Project {
         /// The world, as `lean_worlds.tsv` names it (`v4.8.0`).
         world: &'static str,
@@ -189,9 +189,9 @@ pub fn source_world_of(
 }
 
 /// Select an explicit world, or reuse the existing nearest-toolchain/Lake
-/// ownership rule. A project cannot implicitly opt in to a measured world:
-/// a project world that rule refuses is carried in the decision as the
-/// refusal of its imports ([`SourceWorldDecision::imports`]).
+/// ownership rule. An exact stable 4.36.0 project pin requires its installed
+/// library. Other project refusals are carried in the decision as import
+/// refusals ([`SourceWorldDecision::imports`]).
 ///
 /// # Errors
 /// An explicit world that is a canary, missing or another build, and an
@@ -250,7 +250,12 @@ fn source_world_for(
     roots: &[PathBuf],
 ) -> Result<SourceWorldDecision, SourceWorldRefusal> {
     let imports = match explicit {
-        None => import_world_for(table, file, roots),
+        None => match import_world_for(table, file, roots) {
+            Err(error) if lean_world_tag(&error.toolchain) == Some(LeanWorld::Lean436.tag()) => {
+                return Err(error.into());
+            }
+            result => result,
+        },
         Some(world) => {
             let refuse = |reason: String| SourceWorldRefusal::Explicit { world, reason };
             let row = row_of_source_world(table, world)
@@ -302,7 +307,7 @@ fn checked_library_identity(row: &LeanWorldRow, lib: PathBuf) -> Result<PathBuf,
 }
 
 /// A checked file's project names a Lean world its imports cannot resolve
-/// in: not a world this Clean reads without a declaration, not installed, or
+/// in: not selectable by a project pin, not installed, or
 /// installed as another build.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error(
@@ -469,11 +474,17 @@ fn lean_world_tag(toolchain: &str) -> Option<&str> {
     }
 }
 
-/// The worlds of `table` read without a declaration, for a refusal to name.
+/// Which registry worlds an exact project toolchain file may select.
+fn project_selectable(row: &LeanWorldRow) -> bool {
+    row.state.implicit()
+        || (row.state == WorldState::Measured && row.world == LeanWorld::Lean436.tag())
+}
+
+/// The worlds of `table` that a project pin can select, for a refusal to name.
 fn readable_worlds(table: &[LeanWorldRow]) -> String {
     table
         .iter()
-        .filter(|row| row.state.implicit())
+        .filter(|row| project_selectable(row))
         .map(|row| format!("{} ({})", row.world, row.state.label()))
         .collect::<Vec<_>>()
         .join(", ")
@@ -500,7 +511,7 @@ fn installed_identity(lib: &Path) -> Option<HeaderIdentity> {
 /// # Errors
 ///
 /// [`ImportWorldRefusal`] when the file's `lean-toolchain` names a world
-/// `table` does not read without a declaration, one that is not installed
+/// `table` does not offer to projects, one that is not installed
 /// under `elan_roots`, or an installation whose `Init/Prelude.olean` is not
 /// that world's build.
 pub(crate) fn import_world_for(
@@ -546,15 +557,14 @@ pub(crate) fn import_world_for(
             readable_worlds(table)
         )));
     };
-    match row.state {
-        WorldState::Oracle => return Ok(ImportWorld::CheckoutPin),
-        WorldState::Historical | WorldState::FrontendOnly => {}
-        WorldState::Measured | WorldState::Canary => {
-            return Err(refuse(format!(
-                "is a {} world, which no project selects by its lean-toolchain (R38)",
-                row.state.label()
-            )))
-        }
+    if row.state == WorldState::Oracle {
+        return Ok(ImportWorld::CheckoutPin);
+    }
+    if !project_selectable(row) {
+        return Err(refuse(format!(
+            "is a {} world, which no project selects by its lean-toolchain (R38)",
+            row.state.label()
+        )));
     }
     let directory = format!("{}{}", LEAN_OWNER, row.world)
         .replace('/', "--")

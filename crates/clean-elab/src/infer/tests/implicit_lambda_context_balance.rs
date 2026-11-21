@@ -6,10 +6,8 @@
 //!
 //! `elab_implicit_lambda` introduces one local per leading non-explicit binder
 //! of the expected type before elaborating the term against what remains. An
-//! elaboration failure there is routinely RECOVERED — the speculative
-//! definition-body lane (`try_elab_def_value_without_expected`) turns any error
-//! into `Ok(None)` and retries in the SAME `ElabCtx`, and the application path
-//! has its own retries — so a local left on the stack, or worse a local
+//! application path can recover from elaboration failure and reuse the same
+//! `ElabCtx` — so a local left on the stack, or worse a local
 //! INSTANCE left on the instance stack, would be visible to whatever runs next
 //! and could make an unrelated goal resolve or a later `abstract_fvar` rewrite
 //! the wrong variable.

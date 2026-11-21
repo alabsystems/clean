@@ -14,7 +14,9 @@
 #[path = "support/lean_front_door.rs"]
 mod front_door;
 
-use front_door::{assert_run, lean, scratch, stderr, stdout, write, V4_30_0_RC2, V4_8_0};
+use front_door::{
+    assert_run, lean, lean_with_stdin, scratch, stderr, stdout, write, V4_30_0_RC2, V4_8_0,
+};
 
 fn version_line(release: &str) -> String {
     let profile = if cfg!(debug_assertions) {
@@ -122,9 +124,8 @@ fn test_help_is_leans_option_list_under_cleans_header() {
             "{text}"
         );
         assert!(text.contains(line), "{text}");
-        assert!(
-            text.ends_with("--deps-json, --print-prefix, --print-libdir, --profile, --stats.\n")
-        );
+        assert!(text.ends_with("--print-prefix, --print-libdir, --profile, --stats.\n"));
+        assert_eq!(text.contains("--deps-json"), release == V4_8_0);
     }
 }
 
@@ -285,11 +286,6 @@ fn test_every_unsupported_flag_is_refused_by_name() {
             &["--print-libdir"],
             "--print-libdir",
             "Clean has no Lean library directory",
-        ),
-        (
-            &["--deps-json", "a.lean"],
-            "--deps-json",
-            "Clean does not print Lean's JSON",
         ),
     ];
     for (args, flag, why) in cases {
@@ -520,6 +516,40 @@ fn test_lean_front_door_in_a_clean_scaffolded_project_speaks_the_pin() {
 }
 
 #[test]
+fn modern_json_dependencies_batch_headers_and_errors() {
+    let dir = tempfile::tempdir().expect("scratch");
+    let path = dir.path();
+    write(
+        path,
+        "With space.lean",
+        "moduleprelude\npublic import all «A B».«C.D»\nmeta import «Foo\tbar»\n/-- end of header -/\nimport Ignored\n",
+    );
+    write(path, "Bad.lean", "module\n\timport Foo\n");
+    let expected = concat!(
+        r#"{"imports":[{"errors":[],"result":{"imports":[{"importAll":true,"isExported":true,"isMeta":false,"module":"«A B».«C.D»"},{"importAll":false,"isExported":false,"isMeta":true,"module":"«Foo\u0009bar»"}],"isModule":true}},"#,
+        r#"{"errors":["Bad.lean:2:0: tabs are not allowed; please configure your editor to expand them"]}]}"#,
+        "\n",
+    );
+    for release in [V4_30_0_RC2, "4.36.0"] {
+        let args = ["--src-deps", "--deps-json", "With space.lean", "Bad.lean"];
+        assert_run(&lean(path, release, &args), 0, expected, "");
+        let from_stdin = lean_with_stdin(
+            path,
+            release,
+            &["--stdin", "--deps-json", "Unused.lean"],
+            Some("With space.lean\r\nBad.lean"),
+        );
+        assert_run(&from_stdin, 0, expected, "");
+        assert_run(
+            &lean(path, release, &["--deps-json"]),
+            0,
+            "{\"imports\":[]}\n",
+            "",
+        );
+    }
+}
+
+#[test]
 fn test_binary_invoked_as_lean_is_the_front_door() {
     let dir = scratch("argv0");
     let link = dir.join("lean");
@@ -601,4 +631,146 @@ fn test_run_prints_the_files_messages_then_runs_main_with_its_status() {
     let run = lean(&dir, V4_30_0_RC2, &["--run", "bad.lean"]);
     assert_eq!(run.status.code(), Some(1));
     assert!(!stdout(&run).contains("ran"), "{}", stdout(&run));
+}
+
+#[cfg(unix)]
+#[test]
+fn dependency_lists_use_the_real_executable_path_for_both_modern_releases() {
+    use std::os::unix::fs::symlink;
+    use std::process::Command;
+
+    let temp = tempfile::tempdir().expect("dependency listing scratch");
+    let root = temp.path().canonicalize().expect("real scratch path");
+    write(&root, "Missing.lean", "prelude\nimport Missing.Child\n");
+    let elan = root.join("elan");
+    let tools = elan.join("toolchains");
+    std::fs::create_dir_all(&tools).expect("create elan root");
+
+    for release in [V4_30_0_RC2, "4.36.0"] {
+        let sdk = root.join(format!("real-{release}"));
+        let lib = sdk.join("lib/lean");
+        std::fs::create_dir_all(lib.join("Init")).expect("SDK library");
+        let prelude: &[u8] = if release == "4.36.0" {
+            include_bytes!("../../../tests/fixtures/olean/v4.36.0/plain/StablePlain.olean")
+        } else {
+            b""
+        };
+        std::fs::write(lib.join("Init/Prelude.olean"), prelude).expect("SDK prelude path");
+        std::fs::create_dir(sdk.join("bin")).expect("SDK bin directory");
+        std::fs::write(sdk.join("bin/lean"), b"").expect("SDK executable path");
+        symlink(&sdk, tools.join(format!("leanprover--lean4---v{release}")))
+            .expect("elan SDK alias");
+        let source = sdk.join("bin/../src/lean");
+        for (flag, extension, paths) in [
+            ("--deps", "olean", vec![lib]),
+            ("--src-deps", "lean", vec![source.join("lake"), source]),
+        ] {
+            let actual = Command::new(front_door::clean_path())
+                .args(["lean", flag, "Missing.lean"])
+                .current_dir(&root)
+                .env("ELAN_HOME", &elan)
+                .env("CLEAN_LEAN_VERSION", release)
+                .env_remove("LEAN_PATH")
+                .env_remove("LEAN_SRC_PATH")
+                .env_remove("LEAN_SYSROOT")
+                .output()
+                .expect("spawn dependency listing");
+            let paths = paths
+                .iter()
+                .map(|path| path.display().to_string())
+                .collect::<Vec<_>>()
+                .join("\n");
+            let expected = format!(
+                "unknown module prefix 'Missing'\n\nNo directory 'Missing' or file \
+                 'Missing.{extension}' in the search path entries:\n{paths}\n"
+            );
+            assert_run(&actual, 1, "", &expected);
+        }
+    }
+}
+
+#[test]
+fn stable_sdk_queries_use_the_selected_physical_installation() {
+    use std::os::unix::fs::symlink;
+    use std::process::Command;
+
+    let temp = tempfile::tempdir().expect("SDK query scratch");
+    let root = temp.path().canonicalize().expect("canonical scratch");
+    let sdk = root.join("sdk");
+    let lib = sdk.join("lib/lean");
+    let tools = root.join("toolchains");
+    std::fs::create_dir_all(&tools).expect("toolchains");
+    std::fs::create_dir_all(lib.join("Init")).expect("SDK Prelude directory");
+    std::fs::create_dir_all(sdk.join("bin")).expect("SDK bin");
+    std::fs::write(
+        lib.join("Init/Prelude.olean"),
+        include_bytes!("../../../tests/fixtures/olean/v4.36.0/plain/StablePlain.olean"),
+    )
+    .expect("pinned SDK header");
+    let executable = sdk.join("bin/lean");
+    std::fs::write(&executable, b"").expect("SDK executable path");
+    symlink(&sdk, tools.join("leanprover--lean4---v4.36.0")).expect("SDK alias");
+    let run = |args: &[&str]| {
+        Command::new(front_door::clean_path())
+            .arg("lean")
+            .args(args)
+            .current_dir(&root)
+            .env("CLEAN_LEAN_VERSION", "4.36.0")
+            .env("ELAN_HOME", &root)
+            .env_remove("LEAN_SYSROOT")
+            .output()
+            .expect("run clean lean")
+    };
+    for args in [
+        &["--print-prefix"][..],
+        &["--print-libdir", "--print-prefix"],
+        &["--print-prefix", "--print-libdir"],
+        &["--print-prefix", "missing.lean"],
+        &["--deps-json", "--print-prefix", "missing.lean"],
+        &["--profile", "--print-prefix"],
+    ] {
+        assert_run(&run(args), 0, &format!("{}\n", sdk.display()), "");
+    }
+    assert_run(
+        &run(&["--print-libdir"]),
+        0,
+        &format!("{}\n", lib.display()),
+        "",
+    );
+    for args in [
+        &["--print-libdir", "--deps-json", "missing.lean"][..],
+        &["--stats", "--print-libdir"],
+    ] {
+        assert_run(&run(args), 0, &format!("{}\n", lib.display()), "");
+    }
+    for args in [
+        &["--features"][..],
+        &["--print-prefix", "--features", "--version"],
+        &["--features", "--unknown-option"],
+    ] {
+        assert_run(&run(args), 0, "[]\n", "");
+    }
+    let feature_value = run(&["--features=bad"]);
+    assert_eq!(feature_value.status.code(), Some(1));
+    assert!(stdout(&feature_value).is_empty());
+    assert!(stderr(&feature_value).contains("doesn't allow an argument"));
+
+    let version = run(&["--print-prefix", "--version"]);
+    assert_eq!(version.status.code(), Some(0));
+    assert!(stdout(&version).starts_with("Clean (version "));
+    let bad = run(&["--print-prefix", "--bogus"]);
+    assert_eq!(bad.status.code(), Some(1));
+    assert!(stdout(&bad).is_empty());
+    assert!(stderr(&bad).contains("Unknown command line option"));
+
+    let other = root.join("other");
+    std::fs::create_dir_all(other.join("bin")).expect("other SDK bin");
+    std::fs::create_dir_all(other.join("lib/lean")).expect("other SDK library");
+    std::fs::write(other.join("bin/lean"), b"").expect("other executable path");
+    std::fs::remove_file(&executable).expect("replace selected executable");
+    symlink(other.join("bin/lean"), &executable).expect("mismatched executable alias");
+    let mismatch = run(&["--print-prefix"]);
+    assert_eq!(mismatch.status.code(), Some(1));
+    assert!(stdout(&mismatch).is_empty());
+    assert!(stderr(&mismatch).contains("belong to different SDKs"));
 }

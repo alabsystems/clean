@@ -458,8 +458,8 @@ fn lift_code(
 /// functions it CALLS.
 ///
 /// A nested local function may call an enclosing one — the shape
-/// `to_lcnf::sink_ih` produces when a recursive arm's induction hypothesis
-/// moves into the `do` continuation that uses it:
+/// `to_lcnf::rec_ih` produces when a recursive arm's induction hypothesis is
+/// used inside a `do` continuation, where its call of `go` is made:
 ///
 /// ```text
 /// fun go (xs) := cases xs | cons => ..

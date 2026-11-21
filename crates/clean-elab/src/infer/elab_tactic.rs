@@ -88,29 +88,7 @@ impl<'a> TacticEval for ElabCtx<'a> {
         ps: &ProofState,
         expr: &SurfaceExpr,
     ) -> Result<ElaboratedRefine, TacticError> {
-        let goal = ps.current_goal().ok_or(TacticError::NoGoals)?.clone();
-        // In the CURRENT goal's context, as `elaborate_open` below: a compound
-        // tactic may have extended it since it started — the tactic `match h :
-        // e` generalizes `e` to a fresh local and then refines a `match` on
-        // that local ("Unknown identifier" for it otherwise). Bridging is
-        // deduplicated by FVarId, so a plain `refine` sees exactly what it saw.
-        let locals_before = self.locals.len();
-        let local_instances_before = self.local_instances.len();
-        // Consumed declaration binders are hidden (lane C), bridged locals the
-        // goal renamed take its names (lane B, G66): undo the renames on the
-        // vector they index, then restore the hidden binders' snapshot.
-        let hidden = self.hide_consumed_binders(ps, &goal);
-        let renamed = self.push_goal_locals(&goal);
-        let result = self.elaborate_bridged_term(&goal, expr, BridgedTermTarget::Goal);
-        self.restore_bridged_names(renamed);
-        match hidden {
-            Some(hidden) => self.restore_hidden_binders(hidden),
-            None => self.locals.truncate(locals_before),
-        }
-        while self.local_instances.len() > local_instances_before {
-            self.pop_local_instance();
-        }
-        result.map_err(TacticError::from_elab_error)
+        self.scoped_bridged_term(ps, expr, BridgedTermTarget::Goal)
     }
 
     fn elaborate_open(
@@ -118,29 +96,16 @@ impl<'a> TacticEval for ElabCtx<'a> {
         ps: &ProofState,
         expr: &SurfaceExpr,
     ) -> Result<ElaboratedRefine, TacticError> {
-        let goal = ps.current_goal().ok_or(TacticError::NoGoals)?.clone();
-        // The term is elaborated in the CURRENT goal's context, which a
-        // tactic may have extended since it started (Lean's `g.withContext`):
-        // a typed rcases pattern `⟨x, hx : p x⟩` elaborates `p x` after the
-        // destructure bound `x`, and `eval_tactic_inner` only bridged the
-        // locals that existed when `obtain` began ("Unknown identifier: x").
-        let locals_before = self.locals.len();
-        let local_instances_before = self.local_instances.len();
-        // Consumed declaration binders are hidden (lane C), bridged locals the
-        // goal renamed take its names (lane B, G66): undo the renames on the
-        // vector they index, then restore the hidden binders' snapshot.
-        let hidden = self.hide_consumed_binders(ps, &goal);
-        let renamed = self.push_goal_locals(&goal);
-        let result = self.elaborate_bridged_term(&goal, expr, BridgedTermTarget::Open);
-        self.restore_bridged_names(renamed);
-        match hidden {
-            Some(hidden) => self.restore_hidden_binders(hidden),
-            None => self.locals.truncate(locals_before),
-        }
-        while self.local_instances.len() > local_instances_before {
-            self.pop_local_instance();
-        }
-        result.map_err(TacticError::from_elab_error)
+        self.scoped_bridged_term(ps, expr, BridgedTermTarget::Open)
+    }
+
+    fn elaborate_lifted(
+        &mut self,
+        ps: &ProofState,
+        expr: &SurfaceExpr,
+        expected: Option<&Expr>,
+    ) -> Result<ElaboratedRefine, TacticError> {
+        self.scoped_bridged_term(ps, expr, BridgedTermTarget::Lifted(expected))
     }
 
     fn metas(&self) -> &MetaState {
@@ -164,11 +129,13 @@ impl<'a> TacticEval for ElabCtx<'a> {
 /// What a bridged term is elaborated against — see
 /// [`ElabCtx::elaborate_bridged_term`].
 #[derive(Debug, Clone, Copy)]
-enum BridgedTermTarget {
+enum BridgedTermTarget<'a> {
     /// Against the goal target (`refine`).
     Goal,
     /// With no expected type (a `rw` rule).
     Open,
+    /// Local declaration value, lifting only explicit synthetic goals.
+    Lifted(Option<&'a Expr>),
 }
 
 /// Whether `e` mentions a metavariable-encoded free variable (after the
@@ -362,6 +329,37 @@ fn adopt_one_residual_meta(
 }
 
 impl<'a> ElabCtx<'a> {
+    fn scoped_bridged_term(
+        &mut self,
+        ps: &ProofState,
+        expr: &SurfaceExpr,
+        target: BridgedTermTarget<'_>,
+    ) -> Result<ElaboratedRefine, TacticError> {
+        let goal = ps.current_goal().ok_or(TacticError::NoGoals)?.clone();
+        // The term is elaborated in the CURRENT goal's context, which a
+        // tactic may have extended since it started (Lean's `g.withContext`):
+        // a typed rcases pattern `⟨x, hx : p x⟩` elaborates `p x` after the
+        // destructure bound `x`, and `eval_tactic_inner` only bridged the
+        // locals that existed when `obtain` began ("Unknown identifier: x").
+        let locals_before = self.locals.len();
+        let local_instances_before = self.local_instances.len();
+        // Consumed declaration binders are hidden (lane C), bridged locals the
+        // goal renamed take its names (lane B, G66): undo the renames on the
+        // vector they index, then restore the hidden binders' snapshot.
+        let hidden = self.hide_consumed_binders(ps, &goal);
+        let renamed = self.push_goal_locals(&goal);
+        let result = self.elaborate_bridged_term(&goal, expr, target);
+        self.restore_bridged_names(renamed);
+        match hidden {
+            Some(hidden) => self.restore_hidden_binders(hidden),
+            None => self.locals.truncate(locals_before),
+        }
+        while self.local_instances.len() > local_instances_before {
+            self.pop_local_instance();
+        }
+        result.map_err(TacticError::from_elab_error)
+    }
+
     /// Elaborate a `by tactic_seq` expression.
     ///
     /// The expected type must be known (from a type annotation or the declaration
@@ -467,29 +465,16 @@ impl<'a> ElabCtx<'a> {
     }
 
     fn elab_by_tactic_inner(&mut self, tactics: &[SurfaceTactic]) -> Result<Expr, ElabError> {
-        let target = self
+        let expected = self
             .current_expected_type
             .clone()
             .unwrap_or_else(|| self.fresh_meta(Expr::type_()));
 
-        // Instantiate metavars and beta-reduce the expected type before it
-        // becomes the tactic goal. Inside an anonymous constructor, a later
-        // field's expected type is the constructor's dependent Pi domain applied
-        // to earlier elaborated fields — e.g. for `⟨1, by omega⟩ : ∃ n, n > 0`
-        // the raw expected type is the redex `(fun n => n > 0) 1`, not `1 > 0`.
-        // Handing the redex to the tactic makes head-matching tactics (omega,
-        // decide, rfl) fail to recognize the goal.
-        //
-        // We beta-reduce (not full WHNF): beta removes the `(fun n => …) 1`
-        // redex to yield `1 > 0` while keeping the `GT.gt`/`LE.le` typeclass
-        // head that omega/decide pattern-match on. Full WHNF would unfold the
-        // typeclass projection all the way to `Nat.le …`, which those tactics
-        // do not recognize. Beta preserves the type by beta-defeq (the reduced
-        // goal is definitionally equal to the original), and `verify_tactic_proof`
-        // re-checks the produced proof against the original target, so this can
-        // only let currently-failing-but-valid proofs through, never an unsound
-        // one. Mirrors Lean's `getMainTarget` (instantiateMVars before the
-        // tactic block sees the goal).
+        // A dependent constructor field can put a redex at the head of the
+        // expected proposition, e.g. (fun n => n > 0) 1 for `by omega`.
+        // Expose that head without normalizing its arguments: occurrence-based
+        // tactics key on the elaborated spelling of subterms under Eq, binders
+        // and applications. Computation tactics normalize their own input.
         // U2 stage 1a (entry): resolve SOLVED universe levels through the
         // ElabCtx metas before anything crosses the bridge. `instantiate`
         // substitutes expression metas only, so without `instantiate_levels`
@@ -499,11 +484,10 @@ impl<'a> ElabCtx<'a> {
         // set below, could not even re-derive it. Genuinely-unsolved params
         // (declared `.{u}`, still-abstract `Sort*` mints) pass through
         // unchanged, exactly as before.
-        let target = tactic::simp::beta_reduce(
-            &self
-                .metas
-                .instantiate_levels(&self.metas.instantiate(&target)),
-        );
+        let expected = self
+            .metas
+            .instantiate_levels(&self.metas.instantiate(&expected));
+        let target = tactic::op_projection::head_beta(&expected);
 
         // The locals cross the bridge under the SAME two-step instantiation the
         // target just had, and for the same reason. This used to run
@@ -883,8 +867,8 @@ impl<'a> ElabCtx<'a> {
                 // kernel's `Nat : Sort u_1` check against the concrete `Sort 1`.
                 // `instantiate_levels` is a no-op when no level was solved.
                 let proof = self.metas.instantiate_levels(&proof);
-                let target = self.metas.instantiate_levels(&target);
-                self.verify_tactic_proof(&proof, &target)?;
+                let expected = self.metas.instantiate_levels(&expected);
+                self.verify_tactic_proof(&proof, &expected)?;
                 Ok(proof)
             }
             None => {
@@ -977,7 +961,7 @@ impl<'a> ElabCtx<'a> {
         &mut self,
         goal: &tactic::Goal,
         expr: &SurfaceExpr,
-        target: BridgedTermTarget,
+        target: BridgedTermTarget<'_>,
     ) -> Result<ElaboratedRefine, ElabError> {
         let existing: HashSet<_> = self.metas.iter().map(|(id, _)| id).collect();
         // The ElabCtx locals the term was elaborated UNDER (as opposed to
@@ -1007,6 +991,14 @@ impl<'a> ElabCtx<'a> {
                 term
             }
             BridgedTermTarget::Open => self.elaborate_with_expected_type(expr, None)?,
+            BridgedTermTarget::Lifted(expected) => {
+                let term = self.elaborate_with_expected_type(expr, expected.cloned())?;
+                if let Some(ty) = expected {
+                    let actual = self.infer_type(&term)?;
+                    self.try_unify(&actual, ty);
+                }
+                term
+            }
         };
 
         let term = self.metas.instantiate(&term);
@@ -1048,11 +1040,13 @@ impl<'a> ElabCtx<'a> {
                         ty: ty.clone(),
                     })
                     .collect();
-                // A `?name` synthetic hole recorded its name against this meta;
-                // carry it into the pending goal so the refine bridge tags the
-                // tactic goal, letting `case name => …` select it. Anonymous
-                // holes have no entry, so their goals stay untagged.
-                let tag = self.hole_names.get(&meta_id).cloned();
+                let name = self.hole_names.get(&meta_id);
+                if matches!(target, BridgedTermTarget::Lifted(_)) && name.is_none() {
+                    return Err(ElabError::TacticFailed(TacticError::ElaborationFailed {
+                        detail: "cannot synthesize placeholder in lifted value".to_string(),
+                    }));
+                }
+                let tag = name.filter(|n| !n.name().is_anon()).cloned();
                 Ok(RefinePendingGoal {
                     meta_id,
                     locals,
@@ -1385,6 +1379,163 @@ impl<'a> ElabCtx<'a> {
         result
     }
 
+    /// Solve the holes in a proposed target in the current goal's local context.
+    /// Keep only the concrete term. The ordinary `change` handler then checks
+    /// definitional equality on the original proof state.
+    fn elaborate_change_target(
+        &mut self,
+        ps: &mut ProofState,
+        arg: &SurfaceExpr,
+        expected: Option<&Expr>,
+    ) -> Result<Expr, ElabError> {
+        let term = self.elaborate(arg)?;
+        let term = self
+            .metas
+            .instantiate_levels(&self.metas.instantiate(&term));
+        if !contains_unassigned_meta_fvar(&term) {
+            return Ok(term);
+        }
+        let goal = ps.current_goal().ok_or(TacticError::NoGoals)?.clone();
+        ps.metas.push_scope();
+        let result = (|| {
+            // Elaboration and the goal own separate metavariable identities.
+            let pattern = adopt_residual_elab_metas_into(
+                ps,
+                &self.metas,
+                &term,
+                &mut HashMap::new(),
+                "change",
+            )?;
+            let ctx = ps.build_local_ctx(&goal);
+            let (metas, env) = ps.metas_and_env();
+            let success = matches!(
+                crate::unify::Unifier::with_env(metas, env, ctx)
+                    .unify(&pattern, expected.unwrap_or(&goal.target)),
+                crate::unify::UnifyResult::Success
+            );
+            let resolved = metas.instantiate_levels(&metas.instantiate(&pattern));
+            if success && !contains_unassigned_meta_fvar(&resolved) {
+                Ok(resolved)
+            } else {
+                Err(TacticError::GoalMismatch(
+                    "change: new type is not definitionally equal to current target".to_owned(),
+                ))
+            }
+        })();
+        ps.metas.pop_scope();
+        result.map_err(ElabError::from)
+    }
+
+    fn change_at_location(
+        &mut self,
+        ps: &mut ProofState,
+        arg: &SurfaceExpr,
+        location: Option<&SurfaceName>,
+    ) -> Result<(), ElabError> {
+        let goal = ps.current_goal().cloned().ok_or(TacticError::NoGoals)?;
+        let expected = location
+            .map(|name| {
+                goal.local_ctx
+                    .iter()
+                    .rev()
+                    .find(|decl| tactic::pattern::names::hypothesis_named(&decl.name, name))
+                    .map(|decl| &decl.ty)
+                    .ok_or_else(|| TacticError::HypothesisNotFound(name.to_string()))
+            })
+            .transpose()?;
+        // Each location gets its own elaboration against its current type.
+        // An earlier change may have replaced fvars in the dependent context.
+        let locals_before = self.locals.len();
+        let instances_before = self.local_instances.len();
+        let renamed = self.push_goal_locals(&goal);
+        let saved_expected = self.current_expected_type.take();
+        let term = self.elaborate_change_target(ps, arg, expected);
+        self.current_expected_type = saved_expected;
+        self.locals.truncate(locals_before);
+        self.restore_bridged_names(renamed);
+        while self.local_instances.len() > instances_before {
+            self.pop_local_instance();
+        }
+        let replacement = term?;
+        match location {
+            Some(name) => tactic::term_close::change_at(ps, name, replacement),
+            None => tactic::term_close::change(ps, replacement),
+        }
+        .map_err(ElabError::from)
+    }
+
+    fn change_at_locations(
+        &mut self,
+        ps: &mut ProofState,
+        arg: &SurfaceExpr,
+        locations: &[SurfaceExpr],
+    ) -> Result<(), ElabError> {
+        let names = locations
+            .iter()
+            .map(tactic::builtins::surface_expr_to_name)
+            .collect::<Result<Vec<_>, _>>()?;
+        let wildcard = SurfaceName::generated_path("*");
+        if matches!(names.as_slice(), [name] if name.same_syntax(&wildcard)) {
+            let goal = ps.current_goal().ok_or(TacticError::NoGoals)?;
+            let locations: Vec<_> = std::iter::once(None)
+                .chain(
+                    goal.local_ctx
+                        .iter()
+                        .rev()
+                        .map(|decl| Some(decl.name.clone())),
+                )
+                .collect();
+            let mut worked = false;
+            for location in locations {
+                let saved = ps.clone();
+                self.metas.push_scope();
+                match self.change_at_location(ps, arg, location.as_ref()) {
+                    Ok(()) => {
+                        self.metas.commit();
+                        worked = true;
+                    }
+                    Err(_) => {
+                        self.metas.pop_scope();
+                        *ps = saved;
+                    }
+                }
+            }
+            return if worked {
+                Ok(())
+            } else {
+                Err(
+                    TacticError::GoalMismatch("change: no location matches the new type".into())
+                        .into(),
+                )
+            };
+        }
+        let goal = SurfaceName::generated_path("⊢");
+        for name in &names {
+            let hypothesis = (!name.same_syntax(&goal)).then_some(name);
+            self.change_at_location(ps, arg, hypothesis)?;
+        }
+        Ok(())
+    }
+
+    fn refine_tactic_goal(
+        &mut self,
+        ps: &mut ProofState,
+        arg: &SurfaceExpr,
+    ) -> Result<(), ElabError> {
+        let goal = ps
+            .current_goal()
+            .cloned()
+            .ok_or_else(|| ElabError::from(TacticError::NoGoals))?;
+        let refined = self.elaborate_bridged_term(&goal, arg, BridgedTermTarget::Goal)?;
+        tactic::term_close::refine_elaborated_from_pending(
+            ps,
+            refined.term,
+            &self.metas,
+            &refined.pending_goals,
+        )
+        .map_err(ElabError::from)
+    }
+
     /// The dispatch body of [`Self::eval_tactic`] (under [`Self::eval_tactic_inner`]).
     ///
     /// Pushes the current goal's local context into ElabCtx before
@@ -1413,6 +1564,9 @@ impl<'a> ElabCtx<'a> {
 
         let result = match tac {
             SurfaceTactic::Term(..) => self.eval_term_tactic(ps, tac),
+            SurfaceTactic::IntroPattern(span, pattern) => {
+                self.refine_tactic_goal(ps, &pattern.intro_refinement(*span))
+            }
 
             // Compound tactics: registry-only dispatch (Phase 3D Waves 3-6).
             // 23 compound variants have registered handlers in
@@ -1429,6 +1583,7 @@ impl<'a> ElabCtx<'a> {
             | SurfaceTactic::Simpa { .. }
             | SurfaceTactic::Have(..)
             | SurfaceTactic::Let(..)
+            | SurfaceTactic::LetI(..)
             | SurfaceTactic::Suffices(..)
             | SurfaceTactic::Replace(..)
             | SurfaceTactic::Obtain { .. }
@@ -1441,6 +1596,7 @@ impl<'a> ElabCtx<'a> {
             | SurfaceTactic::Try(..)
             | SurfaceTactic::First(..)
             | SurfaceTactic::Repeat(..)
+            | SurfaceTactic::RepeatAll(..)
             | SurfaceTactic::SeqFocus(..)
             | SurfaceTactic::Paren(..)
             | SurfaceTactic::FocusBlock(..)
@@ -1493,19 +1649,9 @@ impl<'a> ElabCtx<'a> {
                             expected: "an argument".into(),
                         })
                     })?;
-                    let goal = ps
-                        .current_goal()
-                        .cloned()
-                        .ok_or_else(|| ElabError::from(TacticError::NoGoals))?;
-                    let refined =
-                        self.elaborate_bridged_term(&goal, arg, BridgedTermTarget::Goal)?;
-                    tactic::term_close::refine_elaborated_from_pending(
-                        ps,
-                        refined.term,
-                        &self.metas,
-                        &refined.pending_goals,
-                    )
-                    .map_err(ElabError::from)
+                    self.refine_tactic_goal(ps, arg)
+                } else if name == "change" && args.len() > 1 {
+                    self.change_at_locations(ps, &args[0], &args[1..])
                 } else {
                     let entry = self.tactic_registry.get(name).cloned();
                     if let Some(entry) = entry {
@@ -1620,7 +1766,12 @@ impl<'a> ElabCtx<'a> {
                         // kernel-rechecked by `verify_tactic_proof`/`add_decl`.
                         let binder_name_slot = |idx: usize| -> bool {
                             match name.as_str() {
+                                // These arguments name new locals. A namespace member with the
+                                // same spelling must not qualify the name carried to the handler.
+                                "intro" | "intros" | "rintro" | "ext" | "funext" | "by_contra"
+                                | "rename_i" => true,
                                 "by_cases" => idx == 0,
+                                "injection" => idx > 0,
                                 // `wlog h p` names a NEW hypothesis `h` (B104),
                                 // exactly like `by_cases h : p`.
                                 "wlog" => idx == 0,
@@ -1679,6 +1830,29 @@ impl<'a> ElabCtx<'a> {
                                         // unification before the handler runs.
                                         if let Some(goal) = &exact_goal {
                                             return self.elaborate_exact_term(goal, a);
+                                        }
+                                        if name == "change" {
+                                            return self.elaborate_change_target(ps, a, None);
+                                        }
+                                        if name == "by_cases" && idx == 1 {
+                                            // Init.ByCases opens Classical around the condition
+                                            // as well as the search for its decision.
+                                            let classical = clean_parser::OpenPath {
+                                                path: SurfaceName::component("_root_", false)
+                                                    .append(&SurfaceName::component(
+                                                        "Classical",
+                                                        false,
+                                                    )),
+                                                names: vec![],
+                                                hiding: vec![],
+                                                renaming: vec![],
+                                            };
+                                            return self.elab_open_in(
+                                                &[classical],
+                                                false,
+                                                a,
+                                                Some(Expr::prop()),
+                                            );
                                         }
                                         if is_ident_pattern {
                                             if let SurfaceExpr::Ident(_, ident_name) = a {
@@ -1907,6 +2081,7 @@ fn compound_tactic_name(tac: &SurfaceTactic) -> Option<&'static str> {
         SurfaceTactic::Focus(..) => Some("focus"),
         SurfaceTactic::FocusBlock(..) => Some("focus_block"),
         SurfaceTactic::Repeat(..) => Some("repeat"),
+        SurfaceTactic::RepeatAll(..) => Some("repeat'"),
         SurfaceTactic::AllGoals(..) => Some("all_goals"),
         SurfaceTactic::AnyGoals(..) => Some("any_goals"),
         SurfaceTactic::First(..) => Some("first"),
@@ -1914,6 +2089,7 @@ fn compound_tactic_name(tac: &SurfaceTactic) -> Option<&'static str> {
         SurfaceTactic::Case(..) => Some("case"),
         SurfaceTactic::Have(..) => Some("have"),
         SurfaceTactic::Let(..) => Some("let"),
+        SurfaceTactic::LetI(..) => Some("letI"),
         SurfaceTactic::Suffices(..) => Some("suffices"),
         SurfaceTactic::Replace(..) => Some("replace"),
         SurfaceTactic::Obtain { .. } => Some("obtain"),

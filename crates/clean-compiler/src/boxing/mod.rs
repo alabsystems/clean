@@ -12,6 +12,7 @@ pub(crate) mod config;
 pub(crate) mod context;
 #[cfg(feature = "trust-ir-backend")]
 pub(crate) mod entry_check;
+pub(crate) mod erase_void;
 mod native_signature;
 #[cfg(test)]
 mod native_signature_tests;

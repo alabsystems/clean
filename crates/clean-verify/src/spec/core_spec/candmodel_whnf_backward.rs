@@ -42,10 +42,10 @@ impl Specification {
         // the fixed `the_red_env`.
         let inert = |nm: &str| {
             format!(
-                "(hdef : Eq (OptionType KExpr) \
-                 (defval_for (red_def the_red_env) {nm}) (OptionType.none KExpr)) \
-                 (hrec : Eq (OptionType RecMeta) \
-                 (recmeta_for (red_rec the_red_env) {nm}) (OptionType.none RecMeta))"
+                "(hdef : @Eq (OptionType KExpr) \
+                 (defval_for (red_def the_red_env) {nm}) (@OptionType.none KExpr)) \
+                 (hrec : @Eq (OptionType RecMeta) \
+                 (recmeta_for (red_rec the_red_env) {nm}) (@OptionType.none RecMeta))"
             )
         };
         // `fun n => redw_acc_to_sort n <redex> <blind>` — the whole transfer.

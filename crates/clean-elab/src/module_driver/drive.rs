@@ -131,7 +131,12 @@ pub fn elaborate_decls<O: ModuleObserver + ?Sized>(
         {
             continue;
         }
-        if !body_started && !matches!(decl, SurfaceDecl::Import { .. }) {
+        if !body_started
+            && !matches!(
+                decl,
+                SurfaceDecl::Prelude { .. } | SurfaceDecl::Import { .. }
+            )
+        {
             observer.before_body(env);
             body_started = true;
         }

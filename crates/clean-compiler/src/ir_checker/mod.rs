@@ -38,12 +38,48 @@ mod layout_limit_tests;
 mod tests;
 
 use crate::compiler_env::CompilerEnv;
-use crate::ir::{IRDecl, IRType, JoinPointId, VarId};
+use crate::ir::{IRBody, IRDecl, IRExpr, IRLiteral, IRType, JoinPointId, VarId};
 use clean_kernel::Name;
 use std::collections::HashMap;
 use thiserror::Error;
 
 use checker::IRChecker;
+
+/// The public Vec-backed wide literal must keep its wire invariant even for
+/// callers constructing IR directly, including emitters with type checking off.
+pub(crate) fn validate_nat_literals(decls: &[IRDecl]) -> Result<(), IRError> {
+    let mut pending: Vec<_> = decls.iter().map(|decl| &decl.body).collect();
+    while let Some(body) = pending.pop() {
+        match body {
+            IRBody::VDecl { value, rest, .. } => {
+                if matches!(value, IRExpr::Lit(IRLiteral::NatLimbs(words))
+                    if !crate::ir::canonical_nat_limbs(words))
+                {
+                    return Err(IRError::NonCanonicalNatLimbs);
+                }
+                pending.push(rest);
+            }
+            IRBody::JDecl { body, rest, .. } => {
+                pending.push(body);
+                pending.push(rest);
+            }
+            IRBody::Case { alts, default, .. } => {
+                pending.extend(alts.iter().map(|alt| alt.body.as_ref()));
+                if let Some(body) = default {
+                    pending.push(body);
+                }
+            }
+            IRBody::Inc { rest, .. }
+            | IRBody::Dec { rest, .. }
+            | IRBody::Set { rest, .. }
+            | IRBody::SetTag { rest, .. }
+            | IRBody::USet { rest, .. }
+            | IRBody::SSet { rest, .. } => pending.push(rest),
+            IRBody::Jmp { .. } | IRBody::Ret(_) | IRBody::Unreachable => {}
+        }
+    }
+    Ok(())
+}
 
 /// Runtime limits from Lean 4 object system.
 pub(crate) const MAX_CTOR_TAG: u32 = 65535;
@@ -73,6 +109,8 @@ pub(crate) const MAX_CTOR_SCALAR_BYTES: u32 = 255;
 #[derive(Debug, Clone, Error)]
 #[non_exhaustive]
 pub enum IRError {
+    #[error("wide Nat literal requires at least three limbs and a nonzero top limb")]
+    NonCanonicalNatLimbs,
     #[error("undefined variable: x{}", _0.0)]
     UndefinedVariable(VarId),
 

@@ -17,8 +17,8 @@
 //! the kernels decide each such theorem by evaluating the checker (that the
 //! compiled executable prints `expected_output.txt` is a dated measurement, not
 //! this test's); the axiom closures are the committed ones; the checker's
-//! definitions (with the auxiliary constants holding their bodies) and the
-//! forged runs' statements have the committed digests; and
+//! definitions, the theorems and the forged runs' statements have the
+//! committed meaning digests (below); and
 //! an accepted run's verdict is admitted at its own statement while each forged
 //! run's claimed verdict is refused at its statement (the design's three
 //! counter-examples, E6, a forged block, K, the decoder, declaration refusals,
@@ -43,6 +43,34 @@
 //! show admission of this proof by the adopted checker, compiled-byte lineage,
 //! an additional quorum vote or a transfer of authority. The legacy checker
 //! `theories/kcheck` is qualified separately by `kcheck_core.rs`.
+//!
+//! Every pin in `theories/kcheck_labelled/statement_pins.json` is the meaning
+//! digest (`support/meaning_digest.rs`) of a package constant: the constant
+//! and every definition, inductive type, constructor and compiler auxiliary
+//! of `cic_l`, `cic_l_model`, `kcheck_spec` and `kcheck_labelled` it reaches,
+//! down to Init, a reached theorem by its statement. The package is the
+//! theories the fixture family `kcheck_labelled` compiles. A checker
+//! definition's pin therefore moves when anything the checker runs changes,
+//! under its name or not (`kcheck_labelled/meaning_pins.rs` shows that this
+//! covers the prefix rule the pins used before, and holds the mutation
+//! controls). `kcheck_labelled/semantic_soundness.rs` pins
+//! `theories/kcheck_soundness/statement_pins.json` the same way. Re-pin both with
+//! `CLEAN_REPIN_STATEMENT_PINS=1 scripts/heavy_gate.sh run 16 kcheck-labelled-repin --
+//! "$(rustup run trust rustc --print sysroot)/bin/targo" --unverified test -p
+//! clean-olean --locked --test kcheck_labelled`: the run rewrites the pin files
+//! that differ and still fails, and the next run without the variable (after
+//! the test binary is rebuilt, since the pins are compiled in) confirms them.
+//!
+//! The checker is to be compiled and run by Trust, so its package must use
+//! nothing that changes executed code without moving a pin: the
+//! compiled-checker refusal (`support/compiled_code.rs`, negative controls in
+//! `compiled_code.rs`) reads every package module's compiled data and the
+//! load's summaries and refuses an import of anything but `Init` and the
+//! package, `@[implemented_by]`, `@[extern]`, `@[csimp]`, `@[export]`,
+//! `initialize`, `builtin_initialize`, `@[cpass]`, a constant folder, `opaque`
+//! and any `unsafe` or `partial` declaration but the compiler's `._unsafe_rec`
+//! copy of a safe recursive definition, and any other declaration named
+//! `<d>._unsafe_rec`, which compiled code runs in `<d>`'s place.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::process::Command;
@@ -57,6 +85,7 @@ use clean_olean::{
     load_module_with_deps, read_artifact, reference_base_closed, require_pinned_lean_lib_path,
     ArtifactDepth,
 };
+use meaning_digest::{MeaningDigests, Package};
 use sha2::{Digest, Sha256};
 
 /// Import-only fixture aggregate generated from every labelled ORDER root.
@@ -629,40 +658,6 @@ fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
-fn digest(statement: &Expr) -> String {
-    let bytes = bincode::serde::encode_to_vec(statement, bincode::config::standard())
-        .expect("serialize a statement");
-    hex(&Sha256::digest(&bytes))
-}
-
-/// A constant's type and value, in that order, each length-prefixed.
-fn feed_constant(hasher: &mut Sha256, constant: &ConstantInfo) {
-    for part in std::iter::once(&constant.type_).chain(constant.value.as_ref()) {
-        let bytes = bincode::serde::encode_to_vec(part, bincode::config::standard())
-            .expect("serialize a checker part");
-        hasher.update((bytes.len() as u64).to_le_bytes());
-        hasher.update(&bytes);
-    }
-}
-
-/// A checker definition's digest: its type and value, then the name, type and
-/// value of each auxiliary constant declared under its name (`<definition>.*`),
-/// in name order. Structural recursion puts a body in such a constant: the
-/// mutual block's `KCheck.whnf` is a `Nat.brecOn` over `KCheck.whnf._f`, which
-/// holds the code, so a digest of `KCheck.whnf` alone misses every change to
-/// it (the first run of the re-check of Revision 4's changes moved no pin of
-/// the mutual block).
-fn checker_digest(constant: &ConstantInfo, auxiliaries: &[(String, &ConstantInfo)]) -> String {
-    let mut hasher = Sha256::new();
-    feed_constant(&mut hasher, constant);
-    for (auxiliary, info) in auxiliaries {
-        hasher.update((auxiliary.len() as u64).to_le_bytes());
-        hasher.update(auxiliary.as_bytes());
-        feed_constant(&mut hasher, info);
-    }
-    hex(&hasher.finalize())
-}
-
 /// `@Eq.refl T v` for the statement `@Eq T lhs v`: a proof whose left side is
 /// the claimed verdict itself.
 fn verdict_refl(statement: &Expr) -> Expr {
@@ -776,7 +771,7 @@ fn kcheck_labelled_rechecks_through_two_kernels_with_forged_runs() {
     eprintln!("raw export preflight: {} distinct names", raw_exports.len());
 
     let mut loaded = Environment::for_lean_replay();
-    let summaries = load_module_with_deps(&mut loaded, ROOT, &[compiled.clone(), lib])
+    let summaries = load_module_with_deps(&mut loaded, ROOT, &[compiled.clone(), lib.clone()])
         .expect("load the compiled checker");
     let expected_modules: BTreeSet<_> = stems.iter().map(|stem| stem.replace('/', ".")).collect();
     let loaded_modules: BTreeSet<_> = summaries
@@ -788,6 +783,26 @@ fn kcheck_labelled_rechecks_through_two_kernels_with_forged_runs() {
     assert_eq!(
         expected_modules, loaded_modules,
         "all and only labelled ORDER modules must be loaded"
+    );
+    let package = Package::of_fixture(
+        &compiled,
+        "kcheck_labelled",
+        &["cic_l", "cic_l_model", "kcheck_spec", "kcheck_labelled"],
+    );
+    eprintln!(
+        "{}",
+        compiled_code::require_none(
+            &compiled_code::refusals(
+                &compiled,
+                package.modules(),
+                &compiled_code::complete_summaries(
+                    &summaries,
+                    package.modules(),
+                    &[compiled.clone(), lib.clone()],
+                ),
+            ),
+            "kcheck_labelled (cic_l, cic_l_model, kcheck_spec, kcheck_labelled)",
+        )
     );
 
     // The subjects are the constants the package's own modules declare, read
@@ -1148,65 +1163,35 @@ fn kcheck_labelled_rechecks_through_two_kernels_with_forged_runs() {
             .clone()
             .unwrap_or_else(|| panic!("{pin} is not a proposition definition"))
     };
-    let mut observed_pins: BTreeMap<String, String> = BTreeMap::new();
+    // The pins, each the meaning digest of a package constant
+    // (`kcheck_labelled/meaning_pins.rs`). Every legacy key keeps its name;
+    // the auxiliaries the prefix rule bound and no pinned definition reaches
+    // are pinned under their own names.
+    let contract = |pin: &str| name(&format!("KCheck.CheckerContracts.{pin}"));
+    let mut pins: Vec<meaning_pins::Pin> = Vec::new();
     for (_, pin) in FORGED_RUNS {
-        assert!(
-            observed_pins
-                .insert((*pin).to_owned(), digest(&statement(pin)))
-                .is_none(),
-            "{pin} is listed twice"
-        );
+        pins.push(meaning_pins::Pin::statement(pin, contract(pin)));
     }
-    assert!(
-        observed_pins
-            .insert(FORGED_REPORT.to_owned(), digest(&statement(FORGED_REPORT)))
-            .is_none(),
-        "{FORGED_REPORT} is listed twice"
-    );
-    assert!(
-        observed_pins
-            .insert(FORGED_BOUND.to_owned(), digest(&statement(FORGED_BOUND)))
-            .is_none(),
-        "{FORGED_BOUND} is listed twice"
-    );
-    assert!(
-        observed_pins
-            .insert(
-                PER_TOKEN_FORGED.to_owned(),
-                digest(&statement(PER_TOKEN_FORGED))
-            )
-            .is_none(),
-        "{PER_TOKEN_FORGED} is listed twice"
-    );
-    assert!(
-        observed_pins
-            .insert(
-                PER_TOKEN_THEOREM.to_owned(),
-                digest(&per_token_theorem.type_)
-            )
-            .is_none(),
-        "{PER_TOKEN_THEOREM} is listed twice"
-    );
+    for pin in [FORGED_REPORT, FORGED_BOUND, PER_TOKEN_FORGED] {
+        pins.push(meaning_pins::Pin::statement(pin, contract(pin)));
+    }
+    pins.push(meaning_pins::Pin::theorem(PER_TOKEN_THEOREM));
     for theorem in C3_THEOREMS {
         let constant = loaded
             .get_const(&name(theorem))
             .unwrap_or_else(|| panic!("missing C3 theorem {theorem}"));
         assert!(
-            observed_pins
-                .insert((*theorem).to_owned(), digest(&constant.type_))
-                .is_none(),
-            "{theorem} is listed twice"
+            constant.value.is_some(),
+            "{theorem} is pinned as a theorem and has no proof"
         );
+        pins.push(meaning_pins::Pin::theorem(theorem));
     }
     for (_, pin) in BETA_CONTRACTS.iter().chain(BETA_FORGED) {
-        assert!(
-            observed_pins
-                .insert((*pin).to_owned(), digest(&beta_statement(pin)))
-                .is_none(),
-            "{pin} is listed twice"
-        );
+        pins.push(meaning_pins::Pin::statement(
+            pin,
+            name(&format!("KCheck.BetaContracts.{pin}")),
+        ));
     }
-    let mut pinned_auxiliaries: BTreeSet<String> = BTreeSet::new();
     for definition in CHECKER
         .iter()
         .chain(BETA_DEFINITIONS)
@@ -1220,64 +1205,51 @@ fn kcheck_labelled_rechecks_through_two_kernels_with_forged_runs() {
             "{definition} is pinned as a definition and has no value"
         );
         let prefix = format!("{definition}.");
-        let mut auxiliaries: Vec<(String, &ConstantInfo)> = targets
+        let mut auxiliaries: Vec<Name> = targets
             .iter()
-            .filter_map(|subject| {
-                let text = subject.to_string();
-                text.starts_with(&prefix).then(|| {
-                    let info = loaded.get_const(subject).expect("resident subject");
-                    (text, info)
-                })
-            })
+            .filter(|subject| subject.to_string().starts_with(&prefix))
+            .cloned()
             .collect();
-        auxiliaries.sort_by(|left, right| left.0.cmp(&right.0));
-        eprintln!(
-            "checker-pin {definition} auxiliaries [{}]",
-            auxiliaries
-                .iter()
-                .map(|(text, _)| text.as_str())
-                .collect::<Vec<_>>()
-                .join(", ")
-        );
-        pinned_auxiliaries.extend(auxiliaries.iter().map(|(text, _)| text.clone()));
-        assert!(
-            observed_pins
-                .insert(
-                    (*definition).to_owned(),
-                    checker_digest(constant, &auxiliaries)
-                )
-                .is_none(),
-            "{definition} is listed twice"
-        );
+        auxiliaries.sort_by_key(ToString::to_string);
+        pins.push(meaning_pins::Pin::definition(definition, auxiliaries));
     }
-    for member in [
-        "KCheck.whnf",
-        "KCheck.conv",
-        "KCheck.inferAnn",
-        "KCheck.check",
-        "KCheck.walk",
-    ] {
-        assert!(
-            pinned_auxiliaries.contains(&format!("{member}._f")),
-            "the body of {member} ({member}._f) is not pinned"
-        );
-    }
-    let old_pin_count = observed_pins.len();
-    for subject in &owned_theorems {
-        let pin = digest(&loaded.get_const(subject).expect("owned theorem").type_);
-        if let Some(previous) = observed_pins.insert(subject.to_unambiguous_string(), pin.clone()) {
-            assert_eq!(
-                previous, pin,
-                "existing theorem statement pin must remain unchanged: {subject}"
-            );
+    let named = pins.len();
+    assert_eq!(
+        named,
+        FORGED_RUNS.len()
+            + 2
+            + C3_THEOREMS.len()
+            + CHECKER.len()
+            + BETA_CONTRACTS.len()
+            + BETA_FORGED.len()
+            + BETA_DEFINITIONS.len()
+            + PER_TOKEN_DEFINITIONS.len()
+            + 2,
+        "preserved named pin denominator including Main per-token controls"
+    );
+    // The module-origin index: every other own theorem by its statement and
+    // every other own definition by its record. A key a named pin already
+    // holds keeps that pin, whose root must be the same constant.
+    let mut keyed: BTreeMap<String, Name> = pins
+        .iter()
+        .map(|pin| (pin.key.clone(), pin.root.clone()))
+        .collect();
+    for (subject, theorem) in owned_theorems
+        .iter()
+        .map(|subject| (subject, true))
+        .chain(owned_data.iter().map(|subject| (subject, false)))
+    {
+        let key = subject.to_unambiguous_string();
+        if let Some(root) = keyed.get(&key) {
+            assert_eq!(root, subject, "the named pin {key} pins its own constant");
+            continue;
         }
-    }
-    for subject in &owned_data {
-        // A preserved named checker digest may also include its auxiliaries.
-        // Keep that exact old meaning rather than replacing it by a bare body.
-        observed_pins
-            .entry(subject.to_unambiguous_string())
-            .or_insert_with(|| checker_digest(loaded.get_const(subject).expect("owned data"), &[]));
+        keyed.insert(key, subject.clone());
+        pins.push(if theorem {
+            meaning_pins::Pin::owned_theorem(subject)
+        } else {
+            meaning_pins::Pin::owned_definition(subject)
+        });
     }
     let expected_pin_keys: BTreeSet<String> = FORGED_RUNS
         .iter()
@@ -1302,27 +1274,39 @@ fn kcheck_labelled_rechecks_through_two_kernels_with_forged_runs() {
         .chain(owned_data.iter().map(Name::to_unambiguous_string))
         .collect();
     assert_eq!(
-        observed_pins.keys().cloned().collect::<BTreeSet<_>>(),
+        keyed.keys().cloned().collect::<BTreeSet<_>>(),
         expected_pin_keys,
         "pin keys must equal the complete named-plus-module-origin registration index"
     );
-    let added_pin_count = expected_pin_keys.len() - old_pin_count;
-    for (pin, value) in &observed_pins {
-        eprintln!("statement-pin {pin} {value}");
-    }
-    assert_eq!(
-        old_pin_count,
-        FORGED_RUNS.len()
-            + 2
-            + C3_THEOREMS.len()
-            + CHECKER.len()
-            + BETA_CONTRACTS.len()
-            + BETA_FORGED.len()
-            + BETA_DEFINITIONS.len()
-            + PER_TOKEN_DEFINITIONS.len()
-            + 2,
-        "preserved named pin denominator including Main per-token controls"
-    );
+    let legacy = pins.len();
+    let added_pin_count = legacy - named;
+    let observed_pins = {
+        let digests = MeaningDigests::new(kernel.environment(), &package);
+        let own = meaning_pins::subsume_prefix_rule(&digests, &mut pins);
+        assert_eq!(pins.len(), legacy + own, "pin denominator");
+        let measured = meaning_pins::measure(&digests, &pins);
+        for (pin, value) in &measured {
+            eprintln!("statement-pin {pin} {value}");
+        }
+        // What each legacy key held before this change, recomputed over the
+        // loaded package: the record of what the meaning digests replaced.
+        let mut legacy_lines = 0_usize;
+        for pin in &pins {
+            if let Some(old) = meaning_pins::old_digest(&loaded, pin) {
+                eprintln!("legacy-pin {} {old}", pin.key);
+                legacy_lines += 1;
+            }
+        }
+        assert_eq!(legacy_lines, legacy, "one legacy digest per legacy key");
+        let roots: Vec<Name> = pins.iter().map(|pin| pin.root.clone()).collect();
+        eprintln!(
+            "{}",
+            digests
+                .describe(&package, &roots)
+                .unwrap_or_else(|error| panic!("{error}"))
+        );
+        measured
+    };
     let committed_closures: BTreeMap<String, BTreeSet<String>> = serde_json::from_str(
         include_str!("../../../theories/kcheck_labelled/axiom_closures.json"),
     )
@@ -1335,10 +1319,26 @@ fn kcheck_labelled_rechecks_through_two_kernels_with_forged_runs() {
         observed_closures, committed_closures,
         "observed axiom closures differ from theories/kcheck_labelled/axiom_closures.json"
     );
-    assert_eq!(
-        observed_pins, committed_pins,
-        "observed statements differ from theories/kcheck_labelled/statement_pins.json"
+    // Compared (and, under the re-pin variable, written) before the mutation
+    // controls run, and refused after them, so one run shows both.
+    let pin_check = meaning_digest::check_pins(
+        &observed_pins,
+        &committed_pins,
+        "theories/kcheck_labelled/statement_pins.json",
     );
+    meaning_pins::mutation_controls(
+        &loaded,
+        &package,
+        &pins,
+        &meaning_pins::Paths {
+            compiled: &compiled,
+            lib: &lib,
+            lean: &lean,
+        },
+    );
+    if let Err(failure) = pin_check {
+        panic!("{failure}");
+    }
 
     // An accepted run's proof is admitted at its own statement and refused at
     // `False`, and `Eq.refl` of the verdict it states is admitted at it too: the
@@ -1617,6 +1617,8 @@ fn kcheck_labelled_rechecks_through_two_kernels_with_forged_runs() {
         "the height-2 checker-bound proof must fail at height 1: {bad_bound:?}"
     );
 
+    rule_families::replay(&raw_exports, &loaded, &mut kernel);
+
     eprintln!(
         "kcheck_labelled subjects {}, modules {}, cases {} ({accepted_cases} accepted, \
          {refused_cases} refused), checker pins {}, C3 theorems {}, forged runs {}, \
@@ -1635,6 +1637,15 @@ fn kcheck_labelled_rechecks_through_two_kernels_with_forged_runs() {
         PER_TOKEN_DEFINITIONS.len()
     );
 }
+
+#[path = "support/compiled_code.rs"]
+mod compiled_code;
+#[path = "support/meaning_digest.rs"]
+mod meaning_digest;
+#[path = "kcheck_labelled/meaning_pins.rs"]
+mod meaning_pins;
+#[path = "kcheck_labelled/rule_families.rs"]
+mod rule_families;
 
 #[path = "kcheck_labelled/semantic_soundness.rs"]
 mod semantic_soundness;

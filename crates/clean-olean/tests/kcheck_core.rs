@@ -25,7 +25,21 @@
 //! clean-olean --locked --test kcheck_core`: the run rewrites
 //! `theories/kcheck/statement_pins.json` and still fails, and the next run
 //! without the variable confirms it.
+//!
+//! The checker is compiled and run (by Lean today, by Trust by design), so
+//! its package must use nothing that changes executed code without moving a
+//! pin: the compiled-checker refusal (`support/compiled_code.rs`) reads every
+//! package module's compiled data and the load's summaries and refuses an
+//! import of anything but `Init` and the package, `@[implemented_by]`,
+//! `@[extern]`, `@[csimp]`, `@[export]`, `initialize`, `builtin_initialize`,
+//! `@[cpass]`, a constant folder, `opaque` and any `unsafe` or `partial`
+//! declaration but the compiler's `._unsafe_rec` copy of a safe recursive
+//! definition, and any other declaration named `<d>._unsafe_rec`, which
+//! compiled code runs in `<d>`'s place. Its negative controls are
+//! `compiled_code.rs`.
 
+#[path = "support/compiled_code.rs"]
+mod compiled_code;
 #[path = "support/meaning_digest.rs"]
 mod meaning_digest;
 
@@ -161,9 +175,21 @@ fn kcheck_core_rechecks_through_two_kernels_with_forged_controls() {
     );
 
     let mut loaded = Environment::for_lean_replay();
-    let summaries = load_module_with_deps(&mut loaded, ROOT, &[compiled.clone(), lib])
-        .expect("load the compiled checker");
+    let search = [compiled.clone(), lib];
+    let summaries =
+        load_module_with_deps(&mut loaded, ROOT, &search).expect("load the compiled checker");
     let package = Package::of_fixture(&compiled, "kcheck_core", &["cic_l", "kcheck"]);
+    eprintln!(
+        "{}",
+        compiled_code::require_none(
+            &compiled_code::refusals(
+                &compiled,
+                package.modules(),
+                &compiled_code::complete_summaries(&summaries, package.modules(), &search),
+            ),
+            "kcheck_core (cic_l, kcheck)",
+        )
+    );
 
     // The subjects are the constants the package's own modules declare, read
     // from each artifact's name table: no name prefix decides membership, so

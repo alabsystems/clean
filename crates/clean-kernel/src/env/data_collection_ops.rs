@@ -6,9 +6,10 @@
 //!
 //! This module contains:
 //! - Option operations (map, bind, getD)
-//! - List operations (append, reverse, map)
+//! - List operations (append, reverse, map, flatten, flatMap)
 
 use super::decl_builder::EnvDeclBuilder;
+use super::monad_term::{cst, type_at, Tele};
 use crate::env::{Declaration, EnvError, Environment};
 use crate::expr::{BinderInfo, Expr, ExprKind};
 use crate::level::Level;
@@ -694,7 +695,69 @@ impl Environment {
         self.option_ops_init
     }
 
-    /// Add List operations: append, reverse, map
+    /// The two equations for `List.flatten` and `flatten (map b as)` from
+    /// Lean's Init.Prelude. The import prelude loads the upstream bodies.
+    fn init_list_flatten_and_flat_map(&mut self, u: &Name, v: &Name) -> Result<(), EnvError> {
+        let domain = Level::param(u.clone());
+        let codomain = Level::param(v.clone());
+        let list = cst("List", std::slice::from_ref(&domain));
+
+        // flatten [] = []; flatten (head :: tail) = head ++ flatten tail.
+        let mut flatten = Tele::new();
+        let alpha = flatten.imp(type_at(&domain));
+        let list_alpha = Expr::app(list.clone(), alpha.clone());
+        let nested = Expr::app(list.clone(), list_alpha.clone());
+        let lists = flatten.arg(nested.clone());
+        let mut motive = Tele::child(&flatten);
+        let _ = motive.arg(nested.clone());
+        let mut cons = Tele::child(&flatten);
+        let head = cons.arg(list_alpha.clone());
+        let _ = cons.arg(nested);
+        let tail_result = cons.arg(list_alpha.clone());
+        let append = Expr::apps(
+            cst("List.append", std::slice::from_ref(&domain)),
+            [alpha.clone(), head, tail_result],
+        );
+        let body = Expr::apps(
+            cst("List.rec", &[Level::succ(domain.clone()), domain.clone()]),
+            [
+                list_alpha.clone(),
+                motive.lam(list_alpha.clone()),
+                Expr::app(cst("List.nil", std::slice::from_ref(&domain)), alpha),
+                cons.lam(append),
+                lists,
+            ],
+        );
+        self.add_decl(Declaration::Definition {
+            name: Name::from_string("List.flatten"),
+            level_params: vec![u.clone()],
+            type_: flatten.pi(list_alpha),
+            value: flatten.lam(body),
+            is_reducible: true,
+        })?;
+
+        let mut flat_map = Tele::new();
+        let alpha = flat_map.imp(type_at(&domain));
+        let beta = flat_map.imp(type_at(&codomain));
+        let list_beta = Expr::app(cst("List", std::slice::from_ref(&codomain)), beta.clone());
+        let mapper = flat_map.arg(Expr::arrow(alpha.clone(), list_beta.clone()));
+        let values = flat_map.arg(Expr::app(list, alpha.clone()));
+        let mapped = Expr::apps(
+            cst("List.map", &[domain, codomain.clone()]),
+            [alpha, list_beta.clone(), mapper, values],
+        );
+        let body = Expr::apps(cst("List.flatten", &[codomain]), [beta, mapped]);
+        self.add_decl(Declaration::Definition {
+            name: Name::from_string("List.flatMap"),
+            level_params: vec![u.clone(), v.clone()],
+            type_: flat_map.pi(list_beta),
+            value: flat_map.lam(body),
+            is_reducible: true,
+        })?;
+        Ok(())
+    }
+
+    /// Add List operations including append, reverse, map, flatten and flatMap.
     ///
     /// # Contract
     ///
@@ -1081,7 +1144,8 @@ impl Environment {
                 value: map_value,
                 is_reducible: true,
             })?;
-        } // end import-mode List.append/reverseAux/reverse/map suppression
+            self.init_list_flatten_and_flat_map(&u, &v)?;
+        } // Import mode gets this recursive List cluster from the genuine .olean.
 
         // Ensure Option / Bool are available for get?/set/find?.
         self.init_option()?;

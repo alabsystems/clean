@@ -41,7 +41,11 @@ use clean_parser::parse_file_with_tactics;
 /// its members failed — the failure is an `ElabResult::Failed` LEAF, not an
 /// `Err` (see `lean4_corpus_tests::assert_all_ok`) — so every leaf is walked;
 /// checking only the outer `Result` passes a block whose members failed.
-fn elab_into(env: &mut Environment, file_ctx: &mut FileContext, src: &str) -> Option<String> {
+pub(crate) fn elab_into(
+    env: &mut Environment,
+    file_ctx: &mut FileContext,
+    src: &str,
+) -> Option<String> {
     let patterns = builtin_tactic_patterns();
     let decls = parse_file_with_tactics(src, &patterns)
         .unwrap_or_else(|e| panic!("fixture must parse: {e:?}\n{src}"));

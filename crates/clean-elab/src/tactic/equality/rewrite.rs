@@ -14,8 +14,8 @@ use clean_kernel::{BinderInfo, Expr, ExprKind, FVarId, Level, LocalContext, Name
 use super::super::op_projection::{is_hetero_op_projection, reduce_op_projection_head};
 use super::super::{Goal, ProofState, TacticError, TacticResult};
 use super::expr_utils::{
-    abstract_over, contains_expr, find_defeq_subterm_with, match_equality, match_iff, replace_expr,
-    rewrite_candidate_summaries,
+    abstract_over, contains_expr, find_defeq_subterm_with, first_matching_subterm, match_equality,
+    match_iff, named_operator_field, replace_expr, rewrite_candidate_summaries,
 };
 use super::rewrite_delta::{delta_rule, shadowed_by_local, unfold_at_hyp, unfold_in_goal};
 use crate::unify::{MetaId, MetaState, Unifier, UnifyResult};
@@ -487,7 +487,7 @@ fn peel_and_resolve_rewrite_equation(
     // them.
     let from_pattern = if reverse { rhs.clone() } else { lhs.clone() };
     let haystack = state.metas.instantiate(haystack);
-    if !unify_pattern_with_subterm(state, goal, &from_pattern, &haystack) {
+    let Some(matched) = unify_pattern_with_subterm(state, goal, &from_pattern, &haystack) else {
         let shown = resolve_all(state, &from_pattern);
         return Err(TacticError::RewriteNoMatch {
             tactic: "rewrite".to_owned(),
@@ -498,7 +498,7 @@ fn peel_and_resolve_rewrite_equation(
             focus_path,
             candidates: rewrite_candidate_summaries(&haystack, &shown, 5),
         });
-    }
+    };
 
     // Build the proof `proof_base meta₀ meta₁ …`, then fully resolve so the
     // now-solved value metavariables and universe-level params become concrete.
@@ -525,14 +525,41 @@ fn peel_and_resolve_rewrite_equation(
         .map(|l| state.metas.instantiate_level(l))
         .collect();
 
-    Ok(RewriteEquation {
+    let mut eqn = RewriteEquation {
         pending_args,
         eq_type: resolve_all(state, &eq_type),
         lhs: resolve_all(state, &lhs),
         rhs: resolve_all(state, &rhs),
         eq_levels,
         proof: resolve_all(state, &proof),
-    })
+    };
+    // Instantiation can introduce redexes in ordinary higher-order matches.
+    // An application keyed on an existing lambda, however, was selected in
+    // its unreduced form. Keep that occurrence for the Eq.subst motive.
+    retain_lambda_occurrence(&mut eqn, reverse, &from_pattern, matched);
+    Ok(eqn)
+}
+
+fn retain_lambda_occurrence(
+    equation: &mut RewriteEquation,
+    reverse: bool,
+    pattern: &Expr,
+    occurrence: &Expr,
+) {
+    if matches!(pattern.get_app_fn().kind(), ExprKind::Lam(..)) {
+        let from = if reverse {
+            &mut equation.rhs
+        } else {
+            &mut equation.lhs
+        };
+        *from = occurrence.clone();
+    }
+}
+
+fn instantiate_rule(state: &ProofState, expr: &Expr) -> Expr {
+    state
+        .metas
+        .instantiate_levels(&state.metas.instantiate(expr))
 }
 
 /// Resolve both expression metavariables and universe-level constraints in
@@ -541,8 +568,7 @@ fn peel_and_resolve_rewrite_equation(
 /// only substitutes expression metavariables, so the levels must be canonicalized
 /// separately for the resulting term to be syntactically concrete.
 fn resolve_all(state: &ProofState, expr: &Expr) -> Expr {
-    let inst = state.metas.instantiate(expr);
-    let inst = state.metas.instantiate_levels(&inst);
+    let inst = instantiate_rule(state, expr);
     // Beta-contract what the substitution just created. A higher-order match
     // solves a motive as `?p := fun x1 => p`, and substituting it leaves the
     // redex `(fun x1 => p) x` in the resolved side. The rewriter's search is
@@ -564,15 +590,47 @@ fn resolve_all(state: &ProofState, expr: &Expr) -> Expr {
 /// that a *failed* unification leaves no partial bindings behind — without this,
 /// a failed match at the root could assign a meta to a wrong subterm and poison
 /// the later successful match (mirrors simp's fresh-`MetaState`-per-attempt).
-/// On the first success the scope is committed and `true` is returned.
-fn unify_pattern_with_subterm(
+/// The first successful scope commits and returns the actual matched subterm.
+/// A node containing loose bound variables cannot be an occurrence in this
+/// goal context, but its children may still contain closed occurrences.
+fn unify_pattern_with_subterm<'a>(
     state: &mut ProofState,
     goal: &Goal,
     pattern: &Expr,
-    haystack: &Expr,
-) -> bool {
+    haystack: &'a Expr,
+) -> Option<&'a Expr> {
     let ctx = state.build_local_ctx(goal);
 
+    let mut saw_field = false;
+    let constant_pattern = matches!(pattern.get_app_fn().kind(), ExprKind::Const(..));
+    let ordinary = first_matching_subterm(haystack, &mut |candidate| {
+        if unify_rewrite_occurrence(state, goal, &ctx, pattern, candidate) {
+            return true;
+        }
+        if constant_pattern && !saw_field {
+            saw_field = named_operator_field(state.env(), candidate).is_some();
+        }
+        false
+    });
+    if ordinary.is_some() || !saw_field {
+        return ordinary;
+    }
+    // Try registered fields in source order only after every ordinary
+    // occurrence has refused. Keep the original subterm for the checked cast.
+    first_matching_subterm(haystack, &mut |candidate| {
+        named_operator_field(state.env(), candidate)
+            .and_then(|projection| crate::tactic::simp::reduce_proj(state, goal, &projection))
+            .is_some_and(|field| keyed_head_unify(state, goal, &ctx, pattern, &field))
+    })
+}
+
+fn unify_rewrite_occurrence(
+    state: &mut ProofState,
+    goal: &Goal,
+    ctx: &LocalContext,
+    pattern: &Expr,
+    haystack: &Expr,
+) -> bool {
     // Keyed (head-symbol) match first, mirroring Lean's `rw`, which selects a
     // rewrite target by its head constant *without* whnf-reducing the goal.
     // `Unifier::unify` reduces both sides to WHNF before structural comparison,
@@ -584,7 +642,8 @@ fn unify_pattern_with_subterm(
     // environment-constant path consistent so `rw [f.eq_def]` rewrites a *use*
     // of an imported WF-defined function. Argument-level unification still uses
     // the full (WHNF-capable) unifier, so genuinely def-eq arguments match.
-    if keyed_head_unify(state, goal, &ctx, pattern, haystack) {
+    let closed = !haystack.has_loose_bvars();
+    if closed && keyed_head_unify(state, goal, ctx, pattern, haystack) {
         return true;
     }
 
@@ -601,7 +660,13 @@ fn unify_pattern_with_subterm(
     // the typeclass-projection bridge, so here we only run the full unifier when
     // the heads are not a rigid-const mismatch, and otherwise recurse
     // structurally into the children to find the matchable node.
-    if !rigid_const_head_mismatch(pattern, haystack) {
+    // A lambda application is a distinct rewrite key. Beta-definitional
+    // equality of the arguments does not erase the key or its arity.
+    let lambda_key = matches!(pattern.get_app_fn().kind(), ExprKind::Lam(..));
+    let candidate_lambda = matches!(haystack.get_app_fn().kind(), ExprKind::Lam(..));
+    let same_key = lambda_key == candidate_lambda
+        && (!lambda_key || pattern.get_app_num_args() == haystack.get_app_num_args());
+    if closed && same_key && !rigid_const_head_mismatch(pattern, haystack) {
         state.metas.push_scope();
         let unified = {
             let (metas, env) = state.metas_and_env();
@@ -621,25 +686,7 @@ fn unify_pattern_with_subterm(
         }
         state.metas.pop_scope();
     }
-    match haystack.kind() {
-        ExprKind::App(f, a) => {
-            unify_pattern_with_subterm(state, goal, pattern, f)
-                || unify_pattern_with_subterm(state, goal, pattern, a)
-        }
-        ExprKind::Lam(_, ty, body) | ExprKind::Pi(_, ty, body) => {
-            unify_pattern_with_subterm(state, goal, pattern, ty)
-                || unify_pattern_with_subterm(state, goal, pattern, body)
-        }
-        ExprKind::Let(_, ty, val, body, _) => {
-            unify_pattern_with_subterm(state, goal, pattern, ty)
-                || unify_pattern_with_subterm(state, goal, pattern, val)
-                || unify_pattern_with_subterm(state, goal, pattern, body)
-        }
-        ExprKind::Proj(_, _, inner) | ExprKind::MData(_, inner) | ExprKind::Squash(inner) => {
-            unify_pattern_with_subterm(state, goal, pattern, inner)
-        }
-        _ => false,
-    }
+    false
 }
 
 /// Whether `pattern` and `haystack` are applications whose ultimate spine heads
@@ -874,7 +921,9 @@ fn find_defeq_subterm(
     haystack: &Expr,
     needle: &Expr,
 ) -> Option<Expr> {
-    find_defeq_subterm_with(haystack, needle, &mut |a, b| state.is_def_eq(goal, a, b))
+    find_defeq_subterm_with(state.env(), haystack, needle, &mut |a, b| {
+        state.is_def_eq(goal, a, b)
+    })
 }
 
 /// Expose unsolved arguments of the actual instantiated rule after a successful
@@ -1188,11 +1237,20 @@ fn mentions_meta(expr: &Expr) -> bool {
 /// Fully resolve every part of an equation (expression metavariables and
 /// universe levels) so the structural search downstream sees concrete terms.
 fn resolve_equation(state: &ProofState, eqn: RewriteEquation) -> RewriteEquation {
+    // Keep lambda-headed sides as the rule states them. Metavariable
+    // substitution can still create a beta-redex at an originally flex head.
+    let resolve_side = |side: &Expr| {
+        if matches!(side.get_app_fn().kind(), ExprKind::Lam(..)) {
+            instantiate_rule(state, side)
+        } else {
+            resolve_all(state, side)
+        }
+    };
     RewriteEquation {
         pending_args: eqn.pending_args,
         eq_type: resolve_all(state, &eqn.eq_type),
-        lhs: resolve_all(state, &eqn.lhs),
-        rhs: resolve_all(state, &eqn.rhs),
+        lhs: resolve_side(&eqn.lhs),
+        rhs: resolve_side(&eqn.rhs),
         eq_levels: eqn
             .eq_levels
             .iter()
@@ -1238,7 +1296,7 @@ fn term_rewrite_equation(
     haystack: &Expr,
 ) -> Result<RewriteEquation, TacticError> {
     let original_proof = proof;
-    let original_ty = resolve_all(state, &state.infer_type(goal, &original_proof)?);
+    let original_ty = instantiate_rule(state, &state.infer_type(goal, &original_proof)?);
     let is_equation = |ty: &Expr| match_equality(ty).is_ok() || match_iff(ty).is_some();
     let mut proof = original_proof.clone();
     let mut proof_ty = original_ty.clone();
@@ -1262,7 +1320,7 @@ fn term_rewrite_equation(
             pending_args.push(meta_id);
             let meta = Expr::fvar(MetaState::to_fvar(meta_id));
             proof = Expr::app(proof, meta.clone());
-            proof_ty = resolve_all(state, &codomain.instantiate(&meta));
+            proof_ty = instantiate_rule(state, &codomain.instantiate(&meta));
         }
         if is_equation(&proof_ty) {
             state.metas.commit();
@@ -1285,7 +1343,7 @@ fn term_rewrite_equation(
         Err(eq_err) => match iff_rewrite_equation(&proof_ty, resolve_all(state, &proof)) {
             Some(eqn) => eqn,
             None => {
-                let reduced = resolve_all(state, &state.whnf(goal, &proof_ty));
+                let reduced = instantiate_rule(state, &state.whnf(goal, &proof_ty));
                 let (eq_type, lhs, rhs, eq_levels) =
                     match_equality(&reduced).map_err(|_| eq_err)?;
                 RewriteEquation {
@@ -1306,8 +1364,10 @@ fn term_rewrite_equation(
     if mentions_meta(from_pattern) {
         let from_pattern = from_pattern.clone();
         let haystack = state.metas.instantiate(haystack);
-        if unify_pattern_with_subterm(state, goal, &from_pattern, &haystack) {
-            return Ok(resolve_equation(state, eqn));
+        if let Some(matched) = unify_pattern_with_subterm(state, goal, &from_pattern, &haystack) {
+            let mut resolved = resolve_equation(state, eqn);
+            retain_lambda_occurrence(&mut resolved, reverse, &from_pattern, matched);
+            return Ok(resolved);
         }
     }
     Ok(eqn)

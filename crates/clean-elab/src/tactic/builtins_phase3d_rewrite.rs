@@ -872,6 +872,46 @@ fn write_congr_focus_rewrite(
     Ok(())
 }
 
+/// Opt-in timing for the two passes of a source `simpa`. As with
+/// `CLEAN_SIMP_MATCH_TRACE`, the value is a substring filter, read once. An
+/// empty value traces every module. The surface span is the tactic keyword's
+/// half-open UTF-8 byte range in the enclosing module.
+struct SimpaTrace {
+    module: Option<String>,
+    span: clean_parser::Span,
+    only: bool,
+}
+
+impl SimpaTrace {
+    fn new(ps: &ProofState, span: clean_parser::Span, only: bool) -> Self {
+        static FILTER: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
+        let filter = FILTER.get_or_init(|| std::env::var("CLEAN_SIMPA_PHASE_TRACE").ok());
+        let module = filter.as_ref().and_then(|filter| {
+            let module = ps
+                .namespace_state()
+                .and_then(crate::namespace::NamespaceState::main_module)
+                .map_or_else(|| "<unknown>".to_owned(), ToString::to_string);
+            module.contains(filter).then_some(module)
+        });
+        Self { module, span, only }
+    }
+
+    fn phase<T>(&self, phase: &str, run: impl FnOnce() -> T) -> T {
+        let Some(module) = &self.module else {
+            return run();
+        };
+        let (start, end, only) = (self.span.start, self.span.end, self.only);
+        eprintln!(
+            "[simpa-phase] module={module} bytes={start}..{end} only={only} phase={phase} start"
+        );
+        let started = std::time::Instant::now();
+        let result = run();
+        let elapsed_us = started.elapsed().as_micros();
+        eprintln!("[simpa-phase] module={module} bytes={start}..{end} only={only} phase={phase} end elapsed_us={elapsed_us}");
+        result
+    }
+}
+
 /// `simpa (only)? [lemmas] (using term)?` — simp the goal, then close it.
 ///
 /// With `using term`, the goal is simplified (best effort) and then closed with
@@ -892,7 +932,7 @@ fn compound_simpa() -> CompoundTacticEntry {
                 lemmas,
                 use_hypotheses,
                 using_term,
-                ..
+                span,
             } = tac
             else {
                 return Err(TacticError::InvalidTarget {
@@ -928,7 +968,8 @@ fn compound_simpa() -> CompoundTacticEntry {
 
             // Simplify the goal. A `NoProgress` result is tolerated: the closing
             // step below may still discharge the (unchanged) goal.
-            match super::simp(ps, config.clone()) {
+            let trace = SimpaTrace::new(ps, *span, *only);
+            match trace.phase("goal", || super::simp(ps, config.clone())) {
                 Ok(()) => {}
                 Err(TacticError::NoProgress { .. }) | Err(TacticError::NoGoals) => {}
                 Err(e) => return Err(e),
@@ -940,7 +981,7 @@ fn compound_simpa() -> CompoundTacticEntry {
             }
 
             match using_term {
-                Some(term) => {
+                Some(term) => trace.phase("using", || {
                     // Lean elaborates the using term with no expected type
                     // (`elabTerm stx none`), so a constant's leading implicit
                     // arguments become metavariables that the closing `exact`
@@ -979,7 +1020,7 @@ fn compound_simpa() -> CompoundTacticEntry {
                             }
                         }
                     }
-                }
+                }),
                 None => super::assumption(ps),
             }
         }),

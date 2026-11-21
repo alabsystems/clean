@@ -108,8 +108,17 @@ pub(super) fn elab_ctx_for<'a>(
     env: &'a Environment,
     node: &Node,
     siblings: &[UnstagedSibling],
-) -> ElabCtx<'a> {
+) -> Result<ElabCtx<'a>, ElabError> {
+    let lex = &node.lex;
+    let world = lex
+        .import_world()
+        .map(|_| lex.lean_world())
+        .transpose()
+        .map_err(|error| ElabError::SourceWorld(error.to_string()))?;
     let mut ctx = ElabCtx::new(env);
+    if let Some(world) = world {
+        ctx.set_source_world(world);
+    }
     ctx.set_unstaged_siblings(
         siblings
             .iter()
@@ -117,7 +126,6 @@ pub(super) fn elab_ctx_for<'a>(
             .cloned()
             .collect(),
     );
-    let lex = &node.lex;
     ctx.set_term_info_capture(lex.term_info_capture());
     ctx.set_namespace_state(replay_directives(
         env,
@@ -155,7 +163,7 @@ pub(super) fn elab_ctx_for<'a>(
     // walked past them, against an environment without the batch and under
     // none of its `open`s; resolve them again against this one.
     replay_templates(env, &mut ctx, &node.templates);
-    ctx
+    Ok(ctx)
 }
 
 /// Make again, against `env`, the pre-resolution of each of `templates` that
@@ -288,11 +296,20 @@ pub(super) fn elaborate_node(
     node: &Node,
     siblings: &[UnstagedSibling],
 ) -> NodeElaboration {
-    let mut ctx = elab_ctx_for(env, node, siblings);
+    let mut ctx = match elab_ctx_for(env, node, siblings) {
+        Ok(ctx) => ctx,
+        Err(error) => {
+            return NodeElaboration {
+                result: Err(error),
+                attributes: CtxAttributes::default(),
+                hole_contexts: Vec::new(),
+            };
+        }
+    };
     let result = ctx.elab_decl(&node.decl);
     ctx.finish_term_info();
     let hole_contexts = ctx.collect_hole_contexts();
-    let attributes = CtxAttributes::collect(&mut ctx);
+    let attributes = CtxAttributes::collect(&mut ctx, result.as_ref().ok());
     NodeElaboration {
         result,
         attributes,
@@ -309,9 +326,13 @@ pub(super) fn register_node<'a>(
     env: &mut Environment,
     node: &mut Node,
     result: &'a ElabResult,
-    attributes: CtxAttributes,
+    mut attributes: CtxAttributes,
 ) -> Result<crate::source_family_authority::PublishedSourceResult<'a>, ElabError> {
-    let publication = crate::source_family_authority::register_source(env, result)?;
+    let publication = crate::source_family_authority::register_source_with_matchers(
+        env,
+        result,
+        std::mem::take(&mut attributes.matchers),
+    )?;
     // The batch is one elaboration run: every node's lexical snapshot keeps
     // the caller's run, so an `attribute [..]` command of the batch may name
     // a declaration of the batch (`crate::declared_here`).
@@ -488,5 +509,46 @@ pub(super) fn referenced_names(result: &ElabResult, out: &mut std::collections::
             }
         }
         _ => {}
+    }
+}
+
+#[cfg(test)]
+mod source_world_tests {
+    use super::*;
+    use crate::module_batch::{elaborate_module, BatchOptions, SourceUnit, UnitId};
+    use crate::FileContext;
+    use std::path::Path;
+
+    #[test]
+    fn unknown_selected_world_refuses_written_and_inferred_declarations() {
+        let _lock = crate::module_driver::module_elaboration_lock();
+        let declarations = clean_parser::parse_file(
+            "def refusedWritten : Nat := Nat.zero\ndef refusedInferred := Nat.zero\n",
+        )
+        .expect("parse declarations");
+        let mut context = FileContext::new();
+        context.set_import_context(
+            Path::new("Unknown.lean"),
+            Ok(clean_olean::ImportWorld::Project {
+                world: "v0.0.0-unknown-source",
+                lean_toolchain: "lean-toolchain".into(),
+                lib: "unused".into(),
+            }),
+        );
+        let mut env = Environment::with_prelude();
+        let units = [SourceUnit {
+            id: UnitId(0),
+            decls: &declarations,
+        }];
+        let outcome = elaborate_module(
+            &mut env,
+            &mut context,
+            &units,
+            BatchOptions::per_declaration(),
+        );
+        assert!(!outcome.is_clean(), "{outcome:#?}");
+        for name in ["refusedWritten", "refusedInferred"] {
+            assert!(env.get_const(&clean_kernel::Name::from_string(name)).is_none());
+        }
     }
 }

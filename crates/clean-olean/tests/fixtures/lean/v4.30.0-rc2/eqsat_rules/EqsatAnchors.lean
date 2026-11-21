@@ -623,13 +623,18 @@ theorem expectTy_soft (pb : Nat) (v : Val) (t : Ty) : Soft (fun _ => True) (expe
       · exact h
       · exact Or.inr (Or.inr ⟨_, rfl⟩)
     · exact Or.inr (Or.inr ⟨_, rfl⟩)
+  have range : ∀ (raw limit : Nat) (message : String),
+      Soft (fun _ => True) (if raw < limit then R.ok () else tyR message) := by
+    intro raw limit message
+    by_cases h : raw < limit
+    · exact Or.inl ⟨(), if_pos h, trivial⟩
+    · exact Or.inr (Or.inr ⟨_, if_neg h⟩)
   unfold expectTy
   apply key
-  cases v <;> try exact Or.inl ⟨(), rfl, trivial⟩
-  rename_i it raw
-  by_cases h3 : raw < modulus (it.bits pb)
-  · exact Or.inl ⟨(), if_pos h3, trivial⟩
-  · exact Or.inr (Or.inr ⟨_, if_neg h3⟩)
+  cases v <;>
+    first
+    | exact Or.inl ⟨(), rfl, trivial⟩
+    | exact range _ _ _
 
 theorem expectInt_soft {v : Val} (h : Scalar v) : Soft (fun _ => True) (expectInt v) := by
   cases v <;>

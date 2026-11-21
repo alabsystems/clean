@@ -17,9 +17,10 @@
 //! or the checkout's pin. Its genuine Init is loaded over the bare backbone
 //! by the module driver's [`SourceModuleSetup`], and the module's cited
 //! closure is re-admitted over [`foundation_import_base`], the citation base
-//! `clean check` gives a genuine-Init consumer. A `prelude` module and a
-//! module whose project world is refused keep the bootstrap prelude
-//! unchanged ([`ModuleWorld::Bootstrap`]).
+//! `clean check` gives a genuine-Init consumer. A recent world's `prelude`
+//! module begins with the same bare kernel environment as the checker.
+//! Refused projects get the bootstrap prelude and search only their built
+//! workspace dependencies.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -28,53 +29,43 @@ use std::sync::{Arc, Mutex};
 use clean_elab::module_driver::{foundation_import_base, EnvironmentSetup, SourceModuleSetup};
 use clean_kernel::Environment;
 use clean_olean::{ImportedConeGate, SourceWorldDecision};
+use clean_parser::{FileHeader, Parser};
 
-/// Where one module's elaboration starts.
-#[derive(Debug, Clone)]
-pub(crate) enum ModuleWorld {
-    /// A module without `prelude` in an admitted world: genuine Init of
-    /// `decision`'s library, found on `search_paths`.
-    GenuineInit {
-        decision: SourceWorldDecision,
-        search_paths: Vec<PathBuf>,
-    },
-    /// A `prelude` module, or a project whose Lean world is refused: Clean's
-    /// bootstrap prelude, with stdlib imports on the default search paths.
-    Bootstrap,
+/// The grammar, header and artifact roots of one workspace module.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ModuleWorld {
+    pub(crate) decision: SourceWorldDecision,
+    header: FileHeader,
+    pub(crate) stdlib_search_paths: Vec<PathBuf>,
 }
 
 impl ModuleWorld {
     /// Select the world of the module at `source` whose text is `content`.
     pub(crate) fn of(source: &Path, content: &str) -> Result<Self, String> {
-        let header = clean_parser::Parser::parse_header(content)
-            .map_err(|error| format!("invalid module header: {error}"))?;
-        if header.is_prelude {
-            return Ok(Self::Bootstrap);
-        }
         let decision = clean_olean::source_world_for_file(source, None)
             .map_err(|error| format!("cannot select the module's Lean world: {error}"))?;
-        let Ok(imports) = decision.imports() else {
-            // R111: a refused project world resolves no Lean module.
-            return Ok(Self::Bootstrap);
-        };
-        let search_paths = clean_olean::search_paths_in_world(imports);
-        Ok(Self::GenuineInit {
+        let header = Parser::parse_header_in_world(content, decision.world())
+            .map_err(|error| format!("invalid module header: {error}"))?;
+        let stdlib_search_paths = decision
+            .imports()
+            .map_or_else(|_| Vec::new(), clean_olean::search_paths_in_world);
+        Ok(Self {
             decision,
-            search_paths,
+            header,
+            stdlib_search_paths,
         })
     }
 
-    /// The paths toolchain imports of this module resolve on.
-    pub(crate) fn stdlib_search_paths(&self) -> Vec<PathBuf> {
-        match self {
-            Self::GenuineInit { search_paths, .. } => search_paths.clone(),
-            Self::Bootstrap => clean_olean::default_search_paths(),
-        }
+    pub(crate) fn imports(&self) -> impl Iterator<Item = String> + '_ {
+        self.header
+            .imports
+            .iter()
+            .map(|import| import.module.name().to_string())
     }
 
     /// Whether the module implicitly imports genuine Init.
     pub(crate) fn imports_init(&self) -> bool {
-        matches!(self, Self::GenuineInit { .. })
+        !self.header.is_prelude && self.decision.imports().is_ok()
     }
 }
 
@@ -140,7 +131,7 @@ pub(crate) fn genuine_init(
     let setup = EnvironmentSetup::default();
     let mut source = SourceModuleSetup::new(setup, decision).map_err(|e| e.to_string())?;
     let environment = clean_kernel::tc::with_declaration_budget_suspended(|| {
-        source.initial_environment(&clean_parser::FileHeader::default())
+        source.initial_environment(&FileHeader::default())
     })
     .map_err(|e| e.to_string())?;
     let citation_base = foundation_import_base(decision).map_err(|e| e.to_string())?;

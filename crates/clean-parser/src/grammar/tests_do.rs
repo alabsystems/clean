@@ -17,6 +17,59 @@ use super::*;
 // ── do notation basic tests ──────────────────────────────────────────
 
 #[test]
+fn tuple_loop_accepts_the_original_checker_entry() {
+    let source = include_str!("../../../../theories/kcheck_labelled/KCheckLabelledMain.lean");
+    let report = crate::parse_file_with_diagnostics(source).unwrap();
+    assert!(report.diagnostics.is_empty(), "{:?}", report.diagnostics);
+    assert!(!report
+        .decls
+        .iter()
+        .any(|decl| matches!(decl, SurfaceDecl::RawDecl { .. })));
+
+    // The maintained entry now delegates to streamRows. Preserve the
+    // original entry from 72a5318c75 as the structural tuple-loop probe.
+    let original = r#"
+open KCheck.LabelledMain in
+def main : IO UInt32 := do
+  let mut accepted := 0
+  let mut refused := 0
+  for (name, verdict) in rows do
+    IO.println s!"{name}: {verdict}"
+    if verdict.startsWith "accepted" then accepted := accepted + 1 else refused := refused + 1
+  IO.println s!"cases {accepted + refused}, accepted {accepted}, refused {refused}"
+  pure 0
+"#;
+    let original = crate::parse_file_with_diagnostics(original).unwrap();
+    assert!(
+        original.diagnostics.is_empty(),
+        "{:?}",
+        original.diagnostics
+    );
+    let main = original.decls.iter().find_map(|decl| match decl {
+        SurfaceDecl::Open {
+            body: Some(body), ..
+        } => match body.as_ref() {
+            SurfaceDecl::Def { name, val, .. } if name.is_unescaped_component("main") => {
+                Some(val.as_ref())
+            }
+            _ => None,
+        },
+        _ => None,
+    });
+    let Some(SurfaceExpr::Do(_, elements)) = main else {
+        panic!("expected the original checker entry's do block");
+    };
+    let [DoElem::LetMut(..), DoElem::LetMut(..), DoElem::For(_, _, _, steps), DoElem::Expr(..), DoElem::Expr(..)] =
+        elements.as_slice()
+    else {
+        panic!("expected the two counters, the loop and its continuation");
+    };
+    assert!(matches!(steps.as_slice(), [DoElem::Match(_, _, arms)]
+        if matches!(arms.as_slice(), [arm]
+            if matches!(arm.body.as_slice(), [DoElem::Expr(..), DoElem::If(..)]))));
+}
+
+#[test]
 fn test_parse_do_return() {
     let expr = Parser::parse_expr("do return 42").unwrap();
     match expr {
@@ -853,4 +906,28 @@ fn test_parse_do_let_anon_ctor_pattern_monadic_bind_desugars() {
     let src = "do\n  let ⟨a, b⟩ ← e\n  pure (a + b)";
     let expr = Parser::parse_expr(src).unwrap();
     assert!(matches!(expr, SurfaceExpr::Do(_, elems) if elems.len() == 1));
+}
+
+#[test]
+fn do_keyword_expressions_are_only_checked_as_binders_before_an_assignment() {
+    for body in [r#"panic! "stopped""#, "unreachable!"] {
+        let src = format!("def exampleDo : IO Nat := do\n  {body}");
+        let report = crate::parse_file_with_diagnostics(&src).unwrap();
+        assert!(
+            report.diagnostics.is_empty(),
+            "{body}: {:?}",
+            report.diagnostics
+        );
+        let [SurfaceDecl::Def { val, .. }] = report.decls.as_slice() else {
+            panic!("expected a definition for {body}");
+        };
+        assert!(
+            matches!(val.as_ref(), SurfaceExpr::Do(_, elems) if matches!(elems.as_slice(), [DoElem::Expr(_, _)]))
+        );
+    }
+    let rejected = crate::parse_file_with_diagnostics(
+        "def exampleDo : IO Nat := do\n  panic! ← pure 1\n  pure 2",
+    )
+    .unwrap();
+    assert!(!rejected.diagnostics.is_empty());
 }

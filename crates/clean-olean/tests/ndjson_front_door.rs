@@ -70,6 +70,33 @@ fn test_front_door_honest_control_is_accepted() {
     assert_eq!((report.declarations, report.admitted), (1, 1), "{report:?}");
 }
 
+#[test]
+fn reference_export_yields_its_fenced_kernel_only_after_complete_acceptance() {
+    use clean_kernel::Expr;
+    use clean_olean::ndjson::{reference_check_export_reader, reference_kernel_from_export};
+
+    let input = format!("{META}\n{}\n", exports::FALSE_BLOCK.join("\n"));
+    let (kernel, report) = reference_kernel_from_export(input.as_bytes(), &[]).unwrap();
+    assert!(report.accepted);
+    let subject = Expr::const_str("False");
+    kernel.check_closed_term(&Expr::prop(), &subject).unwrap();
+    assert!(kernel.check_closed_term(&subject, &subject).is_err());
+
+    // The original closed core may admit False, but a forbidden axiom in
+    // the same export still withholds the entire portable environment.
+    let forged = format!(
+        "{input}{}\n{}\n",
+        r#"{"in":6,"str":{"pre":0,"str":"forged"}}"#,
+        r#"{"axiom":{"name":6,"levelParams":[],"type":0,"isUnsafe":false}}"#
+    );
+    let refusal = reference_kernel_from_export(forged.as_bytes(), &[]).unwrap_err();
+    assert!(!refusal.accepted && !refusal.refusals.is_empty());
+    assert_eq!(
+        refusal.refusals,
+        reference_check_export_reader(forged.as_bytes(), &[]).refusals
+    );
+}
+
 // -- (a) the archive ---------------------------------------------------------
 
 #[test]
@@ -289,6 +316,36 @@ fn test_front_door_arm_b_format_and_lean_versions_outside_the_table_decline() {
     let report = check_lines(&format30, &HONEST);
     assert_eq!(report.exit, ExitClass::Decline, "{report:?}");
     assert_eq!(rule(&report), "format-version-unsupported", "{report:?}");
+}
+
+#[test]
+fn test_front_door_reviewed_lean_431_producer() {
+    let lean431 = META.replace("4.29.1", "4.31.0").replace(
+        "f72c35b3f637c8c6571d353742168ab66cc22c00",
+        "68218e876d2a38b1985b8590fff244a83c321783",
+    );
+    // lean4export 8554815c2dc6b7abe99ec1f08849c9759ba77947 minted this
+    // closure from S21WorldWitness.lean with the exact stable 4.31.0 producer.
+    let accepted = check_bytes(
+        include_bytes!("fixtures/lean/v4.31.0/ndjson_minted/S21WorldWitness.ndjson"),
+        ExportCheckOptions::default(),
+    );
+    assert_eq!(accepted.exit, ExitClass::Accept, "{accepted:?}");
+    assert_eq!(
+        verdict_of(&accepted, "S21WorldWitness.bound"),
+        Some(DeclarationVerdict::Admitted),
+        "{accepted:?}"
+    );
+
+    for header in [
+        META.replace("4.29.1", "4.31.0"),
+        lean431.replace("4.31.0", "4.31.1"),
+    ] {
+        let refused = check_lines(&header, &HONEST);
+        assert_eq!(refused.exit, ExitClass::Decline, "{refused:?}");
+        assert_eq!(refused.exit_code, 2);
+        assert_eq!(rule(&refused), "lean-version-unmapped", "{refused:?}");
+    }
 }
 
 #[test]

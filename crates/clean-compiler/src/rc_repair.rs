@@ -329,6 +329,17 @@ fn repair_domain(
 /// prefixed to qualifies; a cast feeding a `case` scrutinee (a read in both
 /// representations) does not. Domain variables are skipped: the domain
 /// repair manages them whole, treating every `unbox` as the read it is.
+///
+/// The object→erased direction is the same representation change: an
+/// object argument of a `Unit`/`PUnit` parameter (bound erased by
+/// `to_ir::lower_param`, never read or released by the callee) is cast to
+/// an `Erased` temp with `u := box v`. LCNF RC cannot see it: a projection
+/// out of a polymorphic field has no instantiated type there (`ForInStep.yield
+/// PUnit.unit`'s field is typed `α`), so it is managed and balanced for the
+/// call. Measured (X4): `for c in xs do IO.println c` in `IO`, whose loop
+/// continuation now calls `go(tail, s)` directly with the projected `PUnit`
+/// state, and the non-recursive `f p.1 p.2` for `f : PUnit → Nat → Nat`,
+/// were refused with `object %n is consumed 0 times with 1 incs`.
 fn release_consuming_unboxes(
     decl: IRDecl,
     pre_bound: Option<&HashSet<u32>>,
@@ -400,19 +411,27 @@ impl UnboxCtx<'_> {
                 value,
                 rest,
             } => {
-                let release = match &value {
+                // An `unbox`, or the cast boxing makes for an object passed
+                // to an ERASED slot (a `Unit`/`PUnit` parameter, which
+                // `to_ir::lower_param` binds erased: `u : Erased := box v`).
+                // Both only read `v`; neither hands its reference on.
+                let src = match &value {
                     IRExpr::Unbox {
                         arg: IRArg::Var(src),
                         ..
-                    } if !self.pre.contains(&var.0)
-                        && !self.domain.contains_key(&src.0)
-                        && self.types.get(&src.0).is_some_and(IRType::is_object)
-                        && feeds_consuming_position(var, &rest) =>
-                    {
-                        Some(*src)
-                    }
+                    } => Some(*src),
+                    IRExpr::Box {
+                        arg: IRArg::Var(src),
+                        ..
+                    } if matches!(ty, IRType::Erased | IRType::Void) => Some(*src),
                     _ => None,
                 };
+                let release = src.filter(|src| {
+                    !self.pre.contains(&var.0)
+                        && !self.domain.contains_key(&src.0)
+                        && self.types.get(&src.0).is_some_and(IRType::is_object)
+                        && feeds_consuming_position(var, &rest)
+                });
                 let rest = self.rewrite(*rest);
                 let rest = match release {
                     Some(src) => IRBody::Dec {

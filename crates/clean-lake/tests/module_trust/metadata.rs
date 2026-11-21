@@ -198,6 +198,8 @@ fn reverse_table_over_recursor_projections(p: &mut CleanPayload) {
             body,
         ));
     }
+    p.refresh_compiler_identities()
+        .expect("rebind rewritten projection bodies; kernel gates still judge them");
 }
 
 /// Y2: the table reversed and both projection constants removed.
@@ -342,7 +344,15 @@ theorem K1Lib.t : 1 = 1 := Eq.refl 1
             ],
         );
         assert!(build(&dir).failed.is_empty(), "{tag}: fixture builds");
-        tamper(&dir, "Z", move |p| p.constants.push(carried));
+        tamper(&dir, "Z", move |p| {
+            p.constants.push(carried);
+            // This control deliberately constructs a low-level logical
+            // payload. It claims no source compilation context for the
+            // donated declaration, so the independent duplicate-declaration
+            // barrier remains the one exercised by the second import.
+            p.compiler_context = clean_olean::CompilerContextKind::LogicalOnly;
+            p.csimp.clear();
+        });
         let mut env = builder_base().0;
         clean_olean::load_module_with_deps(&mut env, "Z", &load_paths(&dir)).expect("Z loads");
         let second = clean_olean::load_module_with_deps(&mut env, "K1Lib", &load_paths(&dir));
@@ -377,6 +387,8 @@ fn a_definition_that_depends_on_itself_is_refused_at_import() {
             .find(|c| c.name == name("K1Lib.v"))
             .expect("K1Lib.v");
         c.value = Some(value);
+        p.refresh_compiler_identities()
+            .expect("rebind untrusted rewritten body; no typing evidence");
     };
     // Control: a rewritten value that does not mention `K1Lib.v` loads (the
     // re-check, not the import, is what judges it).

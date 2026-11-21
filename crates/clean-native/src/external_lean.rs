@@ -14,11 +14,13 @@ use std::collections::{BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
 #[cfg(test)]
 use std::process::Command;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use clean_compiler::cli::EmitFormat;
 use clean_compiler::pass_manager::PipelineConfig;
-use clean_compiler::runtime_lcnf::RuntimeEnvironmentCapture;
+use clean_compiler::runtime_lcnf::{
+    RuntimeEnvironmentCapture, RuntimeSourceCaptureLimits, RuntimeSourceRecord,
+};
 use clean_compiler::Decl;
 use clean_kernel::{ConstantInfo, Environment, LeanWorld, Name};
 #[cfg(test)]
@@ -87,8 +89,8 @@ pub enum ExternalLeanError {
 /// owned source/import bytes. No constructor accepts Environment or hashes.
 /// The declaration tables stay private and immutable to callers.
 pub struct ExternalLeanProgram {
-    env: Environment,
-    base: Environment,
+    env: Arc<Environment>,
+    base: Arc<Environment>,
     module_names: BTreeSet<Name>,
     custody: Arc<Custody>,
     usage: inspection::Usage,
@@ -96,14 +98,28 @@ pub struct ExternalLeanProgram {
 
 struct Custody {
     world: LeanWorld,
-    #[cfg(feature = "trust-ir-backend")]
     source: Arc<Environment>,
-    #[cfg(feature = "trust-ir-backend")]
     base: Arc<Environment>,
-    observation: RuntimeEnvironmentCapture,
+    /// Frontend-owned bytes are available before any compiler row observation.
+    sources: Vec<RuntimeSourceRecord>,
+    /// Program and selection retain the same frozen inputs for full diagnostics.
+    global_observation: OnceLock<RuntimeEnvironmentCapture>,
     inputs: Vec<InputObservation>,
     primary_artifact: Result<primary_artifact::PrimaryArtifactCapture, PrimaryArtifactError>,
     _snapshot: tempfile::TempDir,
+}
+
+impl Custody {
+    fn global_observation(&self) -> &RuntimeEnvironmentCapture {
+        self.global_observation.get_or_init(|| {
+            RuntimeEnvironmentCapture::capture(
+                &self.base,
+                &self.source,
+                self.sources.clone(),
+                RuntimeSourceCaptureLimits::default(),
+            )
+        })
+    }
 }
 
 impl ExternalLeanProgram {
@@ -111,7 +127,7 @@ impl ExternalLeanProgram {
         self.custody.world
     }
     pub fn source_capture(&self) -> &RuntimeEnvironmentCapture {
-        &self.custody.observation
+        self.custody.global_observation()
     }
     pub fn inputs(&self) -> &[InputObservation] {
         &self.custody.inputs
@@ -209,7 +225,7 @@ impl ExternalLeanProgram {
             .map_err(|e| ExternalLeanError::Compile(e.to_string()))?;
         let select = |closure: Option<&clean_compiler::RuntimeBindingClosure>| match closure {
             Some(closure) => crate::compile::select_in_environment_in_runtime_closure(
-                self.env.clone(),
+                (*self.env).clone(),
                 &HashSet::new(),
                 root,
                 opt_level,
@@ -218,7 +234,7 @@ impl ExternalLeanProgram {
                 closure,
             ),
             None => crate::compile::select_in_environment(
-                self.env.clone(),
+                (*self.env).clone(),
                 &HashSet::new(),
                 root,
                 opt_level,
@@ -324,7 +340,7 @@ impl ExternalLeanSelection {
         self.custody.world
     }
     pub fn source_capture(&self) -> &RuntimeEnvironmentCapture {
-        &self.custody.observation
+        self.custody.global_observation()
     }
     pub fn inputs(&self) -> &[InputObservation] {
         &self.custody.inputs
@@ -350,7 +366,6 @@ impl ExternalLeanSelection {
     pub fn emit_object(&self, output: &Path) -> Result<(), ExternalLeanError> {
         let source = self
             .custody
-            .observation
             .sources
             .first()
             .map(|record| Path::new(&record.path));
@@ -371,12 +386,7 @@ impl ExternalLeanSelection {
     /// differing primitive representation refuses; no binary proof is granted.
     #[cfg(feature = "trust-ir-backend")]
     pub fn load_scalar_call(&self) -> Result<crate::scalar_call::ScalarCall, ExternalLeanError> {
-        let source = self
-            .custody
-            .observation
-            .sources
-            .first()
-            .map(|s| Path::new(&s.path));
+        let source = self.custody.sources.first().map(|s| Path::new(&s.path));
         if !Arc::ptr_eq(&self.custody, &self.source_context.owner)
             || !Arc::ptr_eq(&self.custody.source, &self.source_context.original)
             || !Arc::ptr_eq(&self.custody.base, &self.source_context.base)
@@ -402,13 +412,13 @@ impl ExternalLeanSelection {
         let plan = clean_compiler::RuntimeBindingPlan::discover(
             &self.source_context.original,
             &source_roots,
-            clean_compiler::runtime_lcnf::RuntimeSourceCaptureLimits::default().declarations,
+            RuntimeSourceCaptureLimits::default().declarations,
         )
         .map_err(|e| ExternalLeanError::Compile(e.to_string()))?;
         let observation = clean_compiler::runtime_lcnf::RuntimeScopedEnvironmentCapture::capture(
             &self.source_context.base,
             &self.source_context.original,
-            self.custody.observation.sources.clone(),
+            self.custody.sources.clone(),
             &plan,
         );
         if !observation.is_complete() {

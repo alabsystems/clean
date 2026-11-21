@@ -325,8 +325,13 @@ impl Parser {
     // =========================================================================
 
     /// Parse optional `at h1 h2`, `at h1 h2 ⊢`, or `at *` location specifier.
+    pub(super) fn at_tactic_location(&self) -> bool {
+        matches!(self.current_kind(), TokenKind::Ident(ref s) if s == "at")
+            && !self.current().ident_escaped
+    }
+
     pub(crate) fn parse_tactic_location(&mut self) -> SurfaceTacticLocation {
-        if matches!(self.current_kind(), TokenKind::Ident(ref s) if s == "at") {
+        if self.at_tactic_location() {
             self.advance();
             if self.eat(&TokenKind::Star) {
                 let _ = self.eat(&TokenKind::Turnstile);
@@ -353,11 +358,9 @@ impl Parser {
 
     /// The hypothesis names of `at h₁ … hₙ`. Lean's `locationHyp` is
     /// `(ppSpace colGt term:max)+`: a name on a later line belongs to the list
-    /// only right of the tactic block's column, so `push_neg at h` followed by
-    /// `obtain ⟨x, hx⟩ := h` on the next line of the block ends the list at
-    /// `obtain`. Only `try_eat_ident`'s keyword and tactic-name stops applied
-    /// before, so a tactic that is neither (`obtain`, `rcases`) was read as a
-    /// further hypothesis name and the declaration fell to parser recovery.
+    /// only right of the tactic block's column. Contextual spellings such as
+    /// `right` are local names in this slot. A new tactic at the block column
+    /// ends the list.
     fn parse_location_hyp_list(&mut self) -> Vec<SurfaceName> {
         let mut names = Vec::new();
         loop {
@@ -369,10 +372,14 @@ impl Parser {
                     }
                 }
             }
-            let Some(name) = self.try_eat_ident() else {
+            let TokenKind::Ident(name) = &tok.kind else {
                 break;
             };
-            names.push(name);
+            if tok.lean_keyword {
+                break;
+            }
+            names.push(SurfaceName::component(name.clone(), tok.ident_escaped));
+            self.advance();
         }
         names
     }

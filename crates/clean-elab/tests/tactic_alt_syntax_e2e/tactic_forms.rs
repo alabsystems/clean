@@ -167,6 +167,47 @@ fn test_case_dotted_tag_in_wrong_order_is_rejected() {
 const ITE_FALSE: &str = "(a b : Nat) : (if False then a else b) = b := by\n  simp only ";
 
 #[test]
+fn simp_applied_lemma_instantiates_its_universe_at_each_match() {
+    let accepted = r#"
+theorem appliedIfMixed {T : Type u} (p : Prop) [Decidable p] (yes : p)
+    (x y : Nat) (a b : T) :
+    ((if p then x else y), (if p then a else b)) = (x, a) := by
+  simp only [if_pos yes]
+"#;
+    expect_axiom_free(
+        accepted,
+        "one simp proof at two universes",
+        &["appliedIfMixed"],
+    );
+
+    let refused = r#"
+theorem appliedIfWrong (p q : Prop) [Decidable p] (yes : q) (x y : Nat) :
+    (if p then x else y) = x := by
+  simp only [if_pos yes]
+"#;
+    expect_refused_at(
+        refused,
+        "a proof of the wrong condition",
+        "appliedIfWrong",
+        &[],
+    );
+}
+
+#[test]
+fn bare_proof_infers_the_written_family_argument() {
+    let source = r"
+def Written (A : Type u) : Prop := True
+theorem writtenWitness {A : Type u} : Written A := True.intro
+theorem bareWrittenWitness (A : Type u) : Written A := writtenWitness
+";
+    expect_axiom_free(
+        source,
+        "bare proof at a written family",
+        &["bareWrittenWitness"],
+    );
+}
+
+#[test]
 fn test_simp_only_naming_reduce_ite_runs_it() {
     // `reduceIte` is a Lean 4.8.0 builtin simproc: it resolves with no
     // constant in the environment, marked or not, and under `simp only`
@@ -442,4 +483,127 @@ fn test_alternative_binder_spelled_like_a_tactic_binds_the_field() {
     let src = "theorem alt_lhs (i : Nat × Nat) : i.1 = i.1 := by\n  cases i with\n  \
                | mk lhs rhs => show lhs = lhs; rfl\n";
     expect_axiom_free(src, "`| mk lhs rhs`", &["alt_lhs"]);
+}
+
+#[test]
+fn constructor_tries_the_next_constructor_when_indices_do_not_unify() {
+    let source = "inductive Mark : Nat → Prop where\n  \
+        | base : Mark 0\n  | step (n : Nat) : Mark n → Mark (Nat.succ n)\n\n\
+        theorem markTwo : Mark 2 := by repeat' constructor\n";
+    let env = expect_accepted(source, "reach the later matching indexed constructor");
+    assert_no_axioms(&env, "markTwo");
+}
+
+#[test]
+fn constructor_refuses_an_impossible_index_and_keeps_the_first_applicable_branch() {
+    let source = "inductive Select : Nat → Prop where\n  \
+        | first : False → Select 0\n  | second : Select 0\n";
+    for (index, reason) in [(1, "no applicable constructor"), (0, "unsolved goal")] {
+        expect_refused_at(
+            &format!("{source}theorem choose : Select {index} := by constructor\n"),
+            "constructor tries candidates only until application succeeds",
+            "choose",
+            &[reason],
+        );
+    }
+}
+
+#[test]
+fn constructor_rolls_back_a_witness_from_an_inapplicable_indexed_constructor() {
+    let source = r#"
+inductive Probe : Nat → Nat → Prop where
+  | first : Probe 0 0
+  | second : Probe 1 1
+
+theorem existsOne : ∃ n, Probe n 1 := by
+  apply Exists.intro
+  constructor
+"#;
+    let env = expect_accepted(source, "the second candidate can assign the witness to one");
+    assert_no_axioms(&env, "existsOne");
+}
+
+#[test]
+fn change_holes_follow_the_focused_goal_and_refuse_a_crossed_local_bound() {
+    // Pinned Lean accepts these three proofs and refuses the crossed change.
+    let source = r#"
+theorem changeBound : True ∧ ((0 : Nat) < 1 ∧ True) :=
+  ⟨True.intro, ⟨by change (_ : Nat) < _; decide, True.intro⟩⟩
+theorem changeLocal (n m : Nat) (h : n < m) : True ∧ n < m :=
+  ⟨True.intro, by change (_ : Nat) < _; exact h⟩
+theorem changeRollback (n m : Nat) (h : n < m) : n < m := by
+  first | change (_ : Nat) < n | change (_ : Nat) < _
+  exact h
+"#;
+    expect_axiom_free(
+        source,
+        "focused change with placeholders",
+        &["changeBound", "changeLocal", "changeRollback"],
+    );
+    expect_refused_at(
+        "theorem changeWrong (n m : Nat) (h : n < m) : n < m := by\n  change (_ : Nat) < n\n  exact h",
+        "change with crossed rigid upper bound",
+        "changeWrong",
+        &["change: new type is not definitionally equal"],
+    );
+}
+
+#[test]
+fn change_rechecks_hypotheses_and_their_dependents() {
+    let accepted = r#"
+theorem changeHyp (n m : Nat) (h : n < m) (proof : h = h) : h = h := by
+  change (_ : Nat) < _ at h
+  exact proof
+theorem changeMany (n m p : Nat) (h : n < m) (k : m < p) : n < m ∧ m < p := by
+  change (_ : Nat) < _ at h k
+  exact ⟨h, k⟩
+theorem changeAll (n m : Nat) (h : n < m) : True ∧ n < m := by
+  change (_ : Nat) < _ at *
+  exact ⟨True.intro, h⟩
+theorem changeRight (p : Nat → Prop) (h : p (1 + 1)) : p 2 := by
+  have right := h
+  have checked : p 2 := by
+    change p 2 at right
+    exact right
+  exact checked
+"#;
+    expect_axiom_free(
+        accepted,
+        "change at checked hypothesis locations",
+        &["changeHyp", "changeMany", "changeAll", "changeRight"],
+    );
+    expect_refused_at(
+        "theorem changeBadHyp (n m : Nat) (h : n < m) : True := by\n  change n = m at h\n  exact True.intro",
+        "change at an incompatible hypothesis",
+        "changeBadHyp",
+        &["not definitionally equal to hypothesis"],
+    );
+}
+
+#[test]
+fn constructor_named_args_use_the_checked_source_telescope() {
+    let declaration = "inductive NamedTyping (policy : Nat → Prop) : Nat → Prop where\n\
+        | constant {Γ argument : Nat} (equality : argument = Γ) : NamedTyping policy Γ\n";
+    let theorem = "theorem originalConstructor {policy : Nat → Prop} : NamedTyping policy 2 :=\n\
+        NamedTyping.constant (argument := 2) (Γ := 2) rfl\n";
+    let combined = format!("{declaration}{theorem}");
+    expect_axiom_free(
+        &combined,
+        "named source constructor",
+        &["originalConstructor"],
+    );
+    let wrong_value = combined.replace("argument := 2", "argument := 1");
+    expect_refused_at(
+        &wrong_value,
+        "wrong source constructor endpoint",
+        "originalConstructor",
+        &[],
+    );
+    let wrong_name = combined.replace("argument := 2", "missing := 2");
+    expect_refused_at(
+        &wrong_name,
+        "unknown source constructor binder",
+        "originalConstructor",
+        &[],
+    );
 }

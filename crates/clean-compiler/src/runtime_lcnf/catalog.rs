@@ -6,7 +6,7 @@
 use clean_kernel::{Expr, Name};
 use clean_olean::import::runtime::{RuntimeBody, RuntimeDeclaration, RuntimeFamily};
 use clean_olean::module::{ConstantKind, DefinitionSafety};
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 
 #[derive(Clone, Debug)]
 pub struct RuntimeCatalogDeclaration {
@@ -40,40 +40,84 @@ impl From<&RuntimeDeclaration> for RuntimeCatalogDeclaration {
     }
 }
 
-pub(super) fn references(
-    expressions: impl IntoIterator<Item = Expr>,
-    limit: usize,
-) -> Result<BTreeSet<Name>, String> {
+const MAX_REFERENCE_DEPTH: usize = 256;
+
+enum Visit<'a> {
+    Enter(&'a Expr),
+    Finish(&'a Expr),
+}
+
+fn schedule_children<'a>(
+    expr: &'a Expr,
+    names: &mut BTreeSet<Name>,
+    pending: &mut Vec<Visit<'a>>,
+) -> Result<(), String> {
     use clean_kernel::ExprKind;
-    let mut pending: Vec<_> = expressions.into_iter().map(|e| (e, 0usize)).collect();
-    let mut names = BTreeSet::new();
-    let mut steps = 0usize;
-    while let Some((expr, depth)) = pending.pop() {
-        steps += 1;
-        if steps > limit || depth > 256 {
-            return Err("environment expression reference bound".into());
+    match expr.kind() {
+        ExprKind::Const(name, _) => {
+            names.insert(name.clone());
         }
-        match expr.kind() {
-            ExprKind::Const(name, _) => {
-                names.insert(name.clone());
-            }
-            ExprKind::App(f, a) | ExprKind::Lam(_, f, a) | ExprKind::Pi(_, f, a) => {
-                pending.push((f.as_ref().clone(), depth + 1));
-                pending.push((a.as_ref().clone(), depth + 1));
-            }
-            ExprKind::Let(_, ty, value, body, _) => {
-                for child in [ty, value, body] {
-                    pending.push((child.as_ref().clone(), depth + 1));
+        ExprKind::App(f, a) | ExprKind::Lam(_, f, a) | ExprKind::Pi(_, f, a) => {
+            pending.extend([Visit::Enter(f), Visit::Enter(a)]);
+        }
+        ExprKind::Let(_, ty, value, body, _) => {
+            pending.extend([Visit::Enter(ty), Visit::Enter(value), Visit::Enter(body)]);
+        }
+        ExprKind::Proj(name, _, value) => {
+            names.insert(name.clone());
+            pending.push(Visit::Enter(value));
+        }
+        ExprKind::MData(_, value) => pending.push(Visit::Enter(value)),
+        ExprKind::BVar(_) | ExprKind::Sort(_) | ExprKind::Lit(_) => {}
+        _ => return Err("unsupported environment expression in dependency inventory".into()),
+    }
+    Ok(())
+}
+
+pub(super) fn references(expressions: Vec<Expr>, limit: usize) -> Result<BTreeSet<Name>, String> {
+    use std::ptr::from_ref;
+
+    // All roots and their Arc children stay live while addresses are keys.
+    // A completed node records the longest distance in edges to a leaf.
+    let mut heights = HashMap::new();
+    let mut open: Vec<usize> = Vec::new();
+    let mut pending = Vec::new();
+    let mut names = BTreeSet::new();
+    for root in &expressions {
+        pending.push(Visit::Enter(root));
+        while let Some(visit) = pending.pop() {
+            let height = match visit {
+                Visit::Enter(expr) => {
+                    let cached = heights.get(&from_ref(expr)).copied();
+                    if open.len() + cached.unwrap_or(0) > MAX_REFERENCE_DEPTH {
+                        return Err("environment expression reference depth bound".into());
+                    }
+                    let Some(height) = cached else {
+                        // Charge on entry, including unfinished ancestors. Each
+                        // distinct node schedules at most three children and one finish.
+                        if heights.len() + open.len() >= limit {
+                            return Err("environment expression reference node bound".into());
+                        }
+                        open.push(0);
+                        pending.push(Visit::Finish(expr));
+                        schedule_children(expr, &mut names, &mut pending)?;
+                        continue;
+                    };
+                    height
                 }
+                Visit::Finish(expr) => {
+                    let height = open.pop().expect("finish matches an entered expression");
+                    heights.insert(from_ref(expr), height);
+                    height
+                }
+            };
+            if let Some(parent_height) = open.last_mut() {
+                *parent_height = (*parent_height).max(height + 1);
             }
-            ExprKind::Proj(name, _, value) => {
-                names.insert(name.clone());
-                pending.push((value.as_ref().clone(), depth + 1));
-            }
-            ExprKind::MData(_, value) => pending.push((value.as_ref().clone(), depth + 1)),
-            ExprKind::BVar(_) | ExprKind::Sort(_) | ExprKind::Lit(_) => {}
-            _ => return Err("unsupported environment expression in dependency inventory".into()),
         }
     }
     Ok(names)
 }
+
+#[cfg(test)]
+mod tests;

@@ -99,7 +99,7 @@
         {
           "item": "CICL.levelSubstitution",
           "kind": "def",
-          "file": "CICL/CoreTyping.lean"
+          "file": "CICL/Declaration.lean"
         }
       ],
       "note": "The safety check and the declared-universe check that sit inside infer_constant are the rows constant-safety and universe-params-declared.",
@@ -2676,7 +2676,7 @@
         {
           "item": "CICL.levelSubstitution",
           "kind": "def",
-          "file": "CICL/CoreTyping.lean"
+          "file": "CICL/Declaration.lean"
         },
         {
           "item": "CICL.Expr.mapLevels",

@@ -425,3 +425,108 @@ theorem psp_fst : psp.fst = 0 := rfl
     .expect("`Σ' n : Nat, n = n := ⟨0, rfl⟩` (Prop second component) must elaborate");
     assert_axiom_free(&env, &["psp", "psp_fst"]);
 }
+
+const NESTED_MATCH_EQUATION: &str = r"
+structure Signature where
+  arguments : List Bool
+  variadic : Bool
+
+structure Witness (lookup : Nat → Option Signature) (n : Nat) : Type where
+  signature : lookup n = some ⟨[true, true], false⟩
+
+def checkSignature (lookup : Nat → Option Signature) (n : Nat) : Option (Witness lookup n) :=
+  match hs : lookup n with
+  | some ⟨[true, true], false⟩ => some { signature := hs }
+  | _ => none
+";
+
+#[test]
+fn nested_field_equation_refines_the_witness_and_computes() {
+    let source = format!(
+        "{NESTED_MATCH_EQUATION}\n{}",
+        r"
+theorem accepts_exact : (checkSignature (fun _ => some ⟨[true, true], false⟩) 0).isSome = true := rfl
+theorem rejects_argument : (checkSignature (fun _ => some ⟨[true, false], false⟩) 0).isSome = false := rfl
+theorem rejects_variadic : (checkSignature (fun _ => some ⟨[true, true], true⟩) 0).isSome = false := rfl
+"
+    );
+    let env = elaborate_module(&source)
+        .expect("the successful branch carries its complete pattern equation");
+    assert_axiom_free(
+        &env,
+        &[
+            "checkSignature",
+            "accepts_exact",
+            "rejects_argument",
+            "rejects_variadic",
+        ],
+    );
+}
+
+#[test]
+fn different_nested_field_cannot_supply_the_witness_equation() {
+    let source = NESTED_MATCH_EQUATION.replace(
+        "| some ⟨[true, true], false⟩",
+        "| some ⟨[true, false], false⟩",
+    );
+    let error = expect_rejected(&source, "a different signature list");
+    assert!(error.contains("Witness.signature"), "{error}");
+}
+
+const REWRITTEN_FIELD_EQUATION: &str = r"
+structure Keyed where
+  key : Nat
+  active : Bool
+
+structure KeyWitness (lookup : Nat → Option Keyed) (n desired : Nat) : Type where
+  equation : lookup n = some ⟨desired, true⟩
+
+def checkKey (lookup : Nat → Option Keyed) (n desired : Nat) : Option (KeyWitness lookup n desired) :=
+  match h : lookup n with
+  | some ⟨key, true⟩ =>
+    if he : key = desired then some { equation := by simpa [he] using h }
+    else none
+  | _ => none
+";
+
+#[test]
+fn nested_field_binder_can_rewrite_an_annotated_equation() {
+    let source = format!(
+        "{REWRITTEN_FIELD_EQUATION}\n{}",
+        r"
+theorem key_accepted : (checkKey (fun _ => some ⟨1, true⟩) 0 1).isSome = true := rfl
+theorem key_refused : (checkKey (fun _ => some ⟨1, true⟩) 0 2).isSome = false := rfl
+"
+    );
+    let env =
+        elaborate_module(&source).expect("the guard rewrites its matched field in the witness");
+    assert_axiom_free(&env, &["checkKey", "key_accepted", "key_refused"]);
+}
+
+#[test]
+fn different_guard_cannot_rewrite_the_requested_key() {
+    let source = REWRITTEN_FIELD_EQUATION.replace("if he : key = desired", "if he : key = n");
+    let error = expect_rejected(&source, "a guard rewriting the wrong key");
+    assert!(error.contains("KeyWitness.equation"), "{error}");
+}
+
+#[test]
+fn a_named_discriminant_keeps_its_pattern_variable_abstract() {
+    let plain = r"
+def variableLocal (n : Nat) : Nat :=
+  match n with
+  | x => let proof : n = x := rfl; x
+theorem computes : variableLocal 3 = 3 := rfl
+";
+    let env = elaborate_module(plain).expect("the unannotated variable match reduces");
+    assert_axiom_free(&env, &["variableLocal", "computes"]);
+    let annotated = plain.replace("match n with", "match h : n with");
+    let error = expect_rejected(
+        &annotated,
+        "using rfl in place of the discriminant equation",
+    );
+    assert!(
+        error.contains("Type mismatch") && error.contains("value of let binding"),
+        "{error}"
+    );
+}

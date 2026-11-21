@@ -20,28 +20,30 @@
   },
   "closure_limit": "This is a REFERENCE closure at module granularity, NOT the per-body CALL closure. The call closure needs the trust-host whole-crate dump that data/spine_set.PENDING.md records as not yet produced (the same blocker G-SPINE-SET has). Until that dump exists, lane (a)'s membership is a conservative module-level surface: it can contain bodies no verdict path reaches, and it can MISS a body reached only through a dyn/fn-pointer edge. scripts/verdict_gate.sh refuses on this.",
   "input_pins": {
-   "data/env_bypass_census.json": "556ec4d360725263dd3bfec5a43e907540060034ca92275e06ddded20d20c2df",
-   "data/gate_registry.json": "9b2931e8ac9b10d6d8044b7ddba5629f7302e4e2fe6f24cfe4d0eac791bfa4fc"
+   "data/env_bypass_census.json": "3c6ab0d33b41754dad2b590f74a3773c053c0fd566ed5fd0056a577f415490b7",
+   "data/gate_registry.json": "6a35513ddb43177ec6199c1ab5aa585fbd733883502a119afeb0788a93c79b58"
   },
   "regenerate": "scripts/verdict_set.py            (--check to verify the committed copy)"
  },
  "partitions": {
   "a_pure_rust": {
    "obligation": "every member chained with the spine recipe (five links), against the committed spine set; Ring R2 gate: verdict_gate.sh over this artifact",
-   "member_count": 163,
+   "member_count": 201,
    "chained_count": 0,
    "sublane_counts": {
     "a-mathverse-shard-digest-kv": 50,
-    "a-olean-structural": 43,
+    "a-olean-structural": 81,
     "a-verify-checker-census-firewall": 70
    },
    "depth_histogram": {
     "depth_0": 18,
-    "depth_1": 35,
-    "depth_2": 27,
-    "depth_3": 55,
-    "depth_4": 27,
-    "depth_5": 1
+    "depth_1": 36,
+    "depth_2": 31,
+    "depth_3": 56,
+    "depth_4": 34,
+    "depth_5": 15,
+    "depth_6": 9,
+    "depth_7": 2
    },
    "members": [
     {
@@ -468,8 +470,8 @@
      "why": [
       "reached by the in-crate reference closure from a root"
      ],
-     "lines": 2875,
-     "sha256": "fe6f39da26aca3fce4f48a4fdf21e18d8fa636ad0c08cf040d60e11fd36ef7d5",
+     "lines": 2885,
+     "sha256": "9facfa4b8f0eb3c5ac0c41b6eff7ada0f256ab105a8640089fc70ac7fc535e62",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -1275,8 +1277,8 @@
      "why": [
       "reached by the in-crate reference closure from a root"
      ],
-     "lines": 1057,
-     "sha256": "299203e9ee1b5e8ace97ac10e3248705db78d5826a313a74472892bcf30c31e7",
+     "lines": 1083,
+     "sha256": "53db6b85cdca0a4e51131f924bba3d7bb5bb7605c462ad8fa6f23905d207054b",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -1300,6 +1302,29 @@
      ],
      "lines": 126,
      "sha256": "b7219f8eb2dacbc8f940acdda52000bed603b4e1b4ca3394109cfc9fa52b84b4",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-olean/src/import/binder_spine.rs",
+     "crate": "clean-olean",
+     "module": "import::binder_spine",
+     "sublane": "a-olean-structural",
+     "depth": 2,
+     "selector": "in-crate reference closure (depth 2)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 49,
+     "sha256": "b5b2fc57c3ec5282c956b29d051546196c7b3dcba5deec92936134e8789f4ed4",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -1344,8 +1369,8 @@
      "why": [
       "reached by the in-crate reference closure from a root"
      ],
-     "lines": 826,
-     "sha256": "a65069e2e1f23b0aba6d8b9b3950f3cccd5e8d577038dcffba95b1dd3d582ed9",
+     "lines": 833,
+     "sha256": "c1eaa5e3cb7fe0967b8c097baafc0ed6e39cebbf7446df5725f6049e5c4c6ca7",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -1367,8 +1392,8 @@
      "why": [
       "reached by the in-crate reference closure from a root"
      ],
-     "lines": 322,
-     "sha256": "dcab1f71f2328a5512d88e43b2089d889e041e89685f77120b9686edfcae73cb",
+     "lines": 329,
+     "sha256": "52f14809ea5e621530888a81f5023478cd31f744926cdc44fb8c21d239100b8c",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -1459,8 +1484,54 @@
      "why": [
       "reached by the in-crate reference closure from a root"
      ],
-     "lines": 255,
-     "sha256": "89156aa980af44daa0b290c97a2bed1a91152e16f82ec2f7d6566640fa860425",
+     "lines": 253,
+     "sha256": "d8abc021a123aafa1d8164d2228ae073df02bf78a1a4ad4a62208b72e0cb12c4",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-olean/src/import/export_fields.rs",
+     "crate": "clean-olean",
+     "module": "import::export_fields",
+     "sublane": "a-olean-structural",
+     "depth": 1,
+     "selector": "in-crate reference closure (depth 1)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 62,
+     "sha256": "ea85fc086843cbd1e403cb8f4f5c879e3a8d3f1d20af50a286d0f61bc228792f",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-olean/src/import/exported_numeral_prefix.rs",
+     "crate": "clean-olean",
+     "module": "import::exported_numeral_prefix",
+     "sublane": "a-olean-structural",
+     "depth": 2,
+     "selector": "in-crate reference closure (depth 2)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 296,
+     "sha256": "dd4e80762fb3bb6a17d6160929a89e266cddf351fe67747f1fc570e7908a4061",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -1505,8 +1576,31 @@
      "why": [
       "reached by the in-crate reference closure from a root"
      ],
-     "lines": 467,
-     "sha256": "8714a692f4d2e1663eba9c044813d57178576ff3be64d16e347036c26226bf4c",
+     "lines": 747,
+     "sha256": "9336b883261467d00f66fe7cc1a80603d95514e193be90f25db63938c6d02026",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-olean/src/import/load/cached/visible_syntax.rs",
+     "crate": "clean-olean",
+     "module": "import::load::cached::visible_syntax",
+     "sublane": "a-olean-structural",
+     "depth": 4,
+     "selector": "in-crate reference closure (depth 4)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 161,
+     "sha256": "56931b0d8c55ac72fc2e32cb072e2672f1f01ba83ac0df7c0e465f6548356beb",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -1551,8 +1645,8 @@
      "why": [
       "reached by the in-crate reference closure from a root"
      ],
-     "lines": 678,
-     "sha256": "55ff83eb105daee98102980d61b98cc578aaa9c60bf00160f4b20de090a1c67d",
+     "lines": 681,
+     "sha256": "db0c3fa2ef4d293219af4d2a6efbe074e7e7e8a9cd1f07ac708c5f2b2c581c37",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -1574,8 +1668,8 @@
      "why": [
       "reached by the in-crate reference closure from a root"
      ],
-     "lines": 449,
-     "sha256": "5d119e292daf97544c269ca7e7f32ebafea370f61b3a2046e2084bbb43794280",
+     "lines": 438,
+     "sha256": "93f6fe75b089450475054a7a516f2882f4459face00e1b82fcaa35935606740a",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -1597,8 +1691,8 @@
      "why": [
       "R-OLEAN-S: env_bypass_census:axiom-stub-upgrade-checked(S); env_bypass_census:ind-meta-structural(S)"
      ],
-     "lines": 5926,
-     "sha256": "a5a2685bc4b7ff40c7b1a18a12ad37356b4c02d3610445671514f08e547a2cd5",
+     "lines": 6167,
+     "sha256": "e70c57118261ff7ad16b6b40f8b9c092e7b0806be05d7bde735c604b82455b45",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -1647,6 +1741,29 @@
      ],
      "lines": 201,
      "sha256": "9885becdd18dd96f224138dadb600823d241fd8dffcf8e35cd45acd16f3647c7",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-olean/src/import/parser_tokens.rs",
+     "crate": "clean-olean",
+     "module": "import::parser_tokens",
+     "sublane": "a-olean-structural",
+     "depth": 2,
+     "selector": "in-crate reference closure (depth 2)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 170,
+     "sha256": "f6c1eb2d36046b3a0b137a68e47f65ca729af740950db57a2c7608e7764297be",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -1783,8 +1900,8 @@
      "why": [
       "reached by the in-crate reference closure from a root"
      ],
-     "lines": 228,
-     "sha256": "3f15a0d0816526990289f43566a5dbf304c9a4a25f259a2f399599a957c35858",
+     "lines": 226,
+     "sha256": "7ac5276e0af38cb1848f12f21bc43809a18ac216eef5e3c6f955156bbaf97f29",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -1829,8 +1946,8 @@
      "why": [
       "reached by the in-crate reference closure from a root"
      ],
-     "lines": 209,
-     "sha256": "8090d7ec410d151933dda55393647a1e86e14a8ed2fe19c7ce2a28aad659a3d9",
+     "lines": 207,
+     "sha256": "34f04ab8c17e34c4d257d2890fbd2ccf315c5b90aac446a6961cb96bec752c67",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -1852,8 +1969,8 @@
      "why": [
       "reached by the in-crate reference closure from a root"
      ],
-     "lines": 349,
-     "sha256": "8e72f28b64a17df6710216394d62dbea8e8fee941ce97ca504e1f17d6c447ced",
+     "lines": 367,
+     "sha256": "7b3c52712d0da34124d4a912173d04bca6caf870bef25a10b0e09112dbaf784b",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -1875,8 +1992,8 @@
      "why": [
       "reached by the in-crate reference closure from a root"
      ],
-     "lines": 880,
-     "sha256": "6f9052341e9b521913d24d6f24d9ca1fb5c9330fc9c04e5d47e3df2a35364bb9",
+     "lines": 980,
+     "sha256": "a58d621978d4bc27132b4b1f7cf995a4fd7ff6d62c11e536d7e2919940e0d6b9",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -1912,6 +2029,52 @@
      "ledger_rows": []
     },
     {
+     "path": "crates/clean-olean/src/lean_ir/exported_term_eval.rs",
+     "crate": "clean-olean",
+     "module": "lean_ir::exported_term_eval",
+     "sublane": "a-olean-structural",
+     "depth": 3,
+     "selector": "in-crate reference closure (depth 3)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 803,
+     "sha256": "795c23e5ffd6b07a91a9cb48b8e02a858b5a7693bb39d79acfde2959f92cc9c3",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-olean/src/lean_ir/exported_term_eval/providers.rs",
+     "crate": "clean-olean",
+     "module": "lean_ir::exported_term_eval::providers",
+     "sublane": "a-olean-structural",
+     "depth": 4,
+     "selector": "in-crate reference closure (depth 4)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 294,
+     "sha256": "702fc7dcf4562850319ef1cda1492a1dd5e16c35a18b0f12798fddbb8ab511db",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
      "path": "crates/clean-olean/src/lean_ir/format.rs",
      "crate": "clean-olean",
      "module": "lean_ir::format",
@@ -1921,8 +2084,31 @@
      "why": [
       "reached by the in-crate reference closure from a root"
      ],
-     "lines": 150,
-     "sha256": "e289dca9ef61c5b22f16eb41b6c07577cad28a4fb31ea357d855063c68695c73",
+     "lines": 178,
+     "sha256": "5b87bee465a5f06ee3b8441e3511f8a4529c548ff5918890345eb40205315987",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-olean/src/lean_ir/native_owners.rs",
+     "crate": "clean-olean",
+     "module": "lean_ir::native_owners",
+     "sublane": "a-olean-structural",
+     "depth": 5,
+     "selector": "in-crate reference closure (depth 5)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 261,
+     "sha256": "a4e1b0cd153366347d795005fbfd87ec687ef9d6d77a9608d3f583ba69a681c6",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -1944,8 +2130,8 @@
      "why": [
       "reached by the in-crate reference closure from a root"
      ],
-     "lines": 442,
-     "sha256": "b0579f3969ab5b6ed0895cb8833a8dfe2a27c9d9646c146ea3186078413a8bf8",
+     "lines": 450,
+     "sha256": "29656cf5c646dc3b319d76ef5e2c680ac8c6e080c7e85c159104f04610fcf4aa",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -2059,8 +2245,8 @@
      "why": [
       "reached by the in-crate reference closure from a root"
      ],
-     "lines": 685,
-     "sha256": "fd4c5fe39298aa7e2793fe09c92bc3b26a69dbd91ea0b12abcb9ebf2d4244ff4",
+     "lines": 689,
+     "sha256": "8690d792a87956df1e736f6ab530edd275e8b2b309aea6cad961464a03e91da0",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -2082,8 +2268,422 @@
      "why": [
       "reached by the in-crate reference closure from a root"
      ],
-     "lines": 243,
-     "sha256": "01b6a81f44968f4c37856d6b147fcaa8dadea7d8a3be433a371f6fbf17bd92ad",
+     "lines": 248,
+     "sha256": "5dcab139036616370d44fe72eaab030685f66430e407220f71194f671e10e712",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-olean/src/module/typed_extensions/decode.rs",
+     "crate": "clean-olean",
+     "module": "module::typed_extensions::decode",
+     "sublane": "a-olean-structural",
+     "depth": 2,
+     "selector": "in-crate reference closure (depth 2)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 774,
+     "sha256": "31276356838427051cfce7a1b06a52c10e0c53ac0291d171ab26a3149fc64f90",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-olean/src/ndjson/closure.rs",
+     "crate": "clean-olean",
+     "module": "ndjson::closure",
+     "sublane": "a-olean-structural",
+     "depth": 5,
+     "selector": "in-crate reference closure (depth 5)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 132,
+     "sha256": "7e38cb9de978e8862217678806a6ed30a45424f12518736f22adfde64a10fa9b",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-olean/src/ndjson/decl.rs",
+     "crate": "clean-olean",
+     "module": "ndjson::decl",
+     "sublane": "a-olean-structural",
+     "depth": 5,
+     "selector": "in-crate reference closure (depth 5)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 191,
+     "sha256": "1020e4164582e6860b191a8da74f8ebfb6d8a8b6c0c8af03fe2e71bb6460b538",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-olean/src/ndjson/error.rs",
+     "crate": "clean-olean",
+     "module": "ndjson::error",
+     "sublane": "a-olean-structural",
+     "depth": 4,
+     "selector": "in-crate reference closure (depth 4)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 510,
+     "sha256": "3c2ff871824e641e0f9650178154f3465ef5f4d45546ba14fc35346c7b5584ce",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-olean/src/ndjson/fields.rs",
+     "crate": "clean-olean",
+     "module": "ndjson::fields",
+     "sublane": "a-olean-structural",
+     "depth": 5,
+     "selector": "in-crate reference closure (depth 5)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 169,
+     "sha256": "5f82f8f1e6cb0bb759182fc04df3024fc04b8faa0066aafb1afe4ec4140ddf47",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-olean/src/ndjson/json.rs",
+     "crate": "clean-olean",
+     "module": "ndjson::json",
+     "sublane": "a-olean-structural",
+     "depth": 5,
+     "selector": "in-crate reference closure (depth 5)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 448,
+     "sha256": "2bb168892840c4a60c4e955bece6c4ea405c56c9592af1e54909286051108692",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-olean/src/ndjson/levels.rs",
+     "crate": "clean-olean",
+     "module": "ndjson::levels",
+     "sublane": "a-olean-structural",
+     "depth": 5,
+     "selector": "in-crate reference closure (depth 5)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 417,
+     "sha256": "5b4f74325c239a6701410cadfa8ead9f0f63179f8cf08462bcebc194a10a60b3",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-olean/src/ndjson/load.rs",
+     "crate": "clean-olean",
+     "module": "ndjson::load",
+     "sublane": "a-olean-structural",
+     "depth": 5,
+     "selector": "in-crate reference closure (depth 5)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 544,
+     "sha256": "d2b53ee94bd502b31ac8b3cd6deafa982e870ae593c329dd5e2e940c7be6c26a",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-olean/src/ndjson/names.rs",
+     "crate": "clean-olean",
+     "module": "ndjson::names",
+     "sublane": "a-olean-structural",
+     "depth": 5,
+     "selector": "in-crate reference closure (depth 5)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 70,
+     "sha256": "83474a20df8004ae425144cfedda33d5e7294c7d8ff05c329dc59dfe16177461",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-olean/src/ndjson/natval.rs",
+     "crate": "clean-olean",
+     "module": "ndjson::natval",
+     "sublane": "a-olean-structural",
+     "depth": 4,
+     "selector": "in-crate reference closure (depth 4)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 157,
+     "sha256": "acf684006d1646d38100f02abaed6e250c12cdc198c61a30fe312a6960214b37",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-olean/src/ndjson/quot.rs",
+     "crate": "clean-olean",
+     "module": "ndjson::quot",
+     "sublane": "a-olean-structural",
+     "depth": 6,
+     "selector": "in-crate reference closure (depth 6)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 103,
+     "sha256": "003ca9db64c39cb9e4d1d06f78707f5603a7d49ad9511f4984efe85a830c9a18",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-olean/src/ndjson/records.rs",
+     "crate": "clean-olean",
+     "module": "ndjson::records",
+     "sublane": "a-olean-structural",
+     "depth": 5,
+     "selector": "in-crate reference closure (depth 5)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 457,
+     "sha256": "84b54a1483406356f57e3c3daa89be939ba0855f8eeddd00feadb1037a15e420",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-olean/src/ndjson/replay.rs",
+     "crate": "clean-olean",
+     "module": "ndjson::replay",
+     "sublane": "a-olean-structural",
+     "depth": 4,
+     "selector": "in-crate reference closure (depth 4)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 551,
+     "sha256": "ce49b256dad6a9070935aa8df54f1c8b14abc891210e2876b101cb40b6fdbec6",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-olean/src/ndjson/tables.rs",
+     "crate": "clean-olean",
+     "module": "ndjson::tables",
+     "sublane": "a-olean-structural",
+     "depth": 4,
+     "selector": "in-crate reference closure (depth 4)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 665,
+     "sha256": "351b7f4af646ce41193884764a46fe9f395180ce0a3ef75342dde297539d40cf",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-olean/src/ndjson/tables/expr.rs",
+     "crate": "clean-olean",
+     "module": "ndjson::tables::expr",
+     "sublane": "a-olean-structural",
+     "depth": 5,
+     "selector": "in-crate reference closure (depth 5)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 256,
+     "sha256": "3d3ceb93cc9b3a39a3cac1806f88e46224cce298534874e379e02773ebd3c846",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-olean/src/ndjson/world.rs",
+     "crate": "clean-olean",
+     "module": "ndjson::world",
+     "sublane": "a-olean-structural",
+     "depth": 4,
+     "selector": "in-crate reference closure (depth 4)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 214,
+     "sha256": "9ad9ff5310ed77d5de09bd81d30ed9dfdd71a4e2e3ff10bf221112266d6e5e39",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-olean/src/ndjson/write/cone.rs",
+     "crate": "clean-olean",
+     "module": "ndjson::write::cone",
+     "sublane": "a-olean-structural",
+     "depth": 5,
+     "selector": "in-crate reference closure (depth 5)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 316,
+     "sha256": "79136650b7ec388a0746612e80c049618a09752861c2e57cd18b4b5155d3a14e",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-olean/src/ndjson/write/json.rs",
+     "crate": "clean-olean",
+     "module": "ndjson::write::json",
+     "sublane": "a-olean-structural",
+     "depth": 5,
+     "selector": "in-crate reference closure (depth 5)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 152,
+     "sha256": "dcaccfd37717e1317fefb1ac9dabb8d8c73622f6466d22d24c72f9a21b6efa71",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -2105,8 +2705,261 @@
      "why": [
       "reached by the in-crate reference closure from a root"
      ],
-     "lines": 466,
-     "sha256": "9afc6e7c10de9ef8f486b55fe1b019c09f401ee0642867ad5204cdd0bf410c2a",
+     "lines": 514,
+     "sha256": "c4f4724069f35d8162c080e0f12c536120b86bcf7c542738604029e5bbeb8707",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-olean/src/recheck_closed.rs",
+     "crate": "clean-olean",
+     "module": "recheck_closed",
+     "sublane": "a-olean-structural",
+     "depth": 5,
+     "selector": "in-crate reference closure (depth 5)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 984,
+     "sha256": "01cb96db12b04c33cfaea94e62aace1c758ef032b6de7ee36173dcffef05b111",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-olean/src/recheck_closed/cone_plan.rs",
+     "crate": "clean-olean",
+     "module": "recheck_closed::cone_plan",
+     "sublane": "a-olean-structural",
+     "depth": 6,
+     "selector": "in-crate reference closure (depth 6)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 97,
+     "sha256": "8e21974cb793f79378bf04bb260bf6d575def8dcb0d85ca9cd2961a169f244a6",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-olean/src/recheck_closed/drive.rs",
+     "crate": "clean-olean",
+     "module": "recheck_closed::drive",
+     "sublane": "a-olean-structural",
+     "depth": 6,
+     "selector": "in-crate reference closure (depth 6)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 269,
+     "sha256": "14ac30b62c1d7a56142c42ebb42a82adc9e48a74eed3306299f8437d36707a8f",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-olean/src/recheck_closed/extension_binding.rs",
+     "crate": "clean-olean",
+     "module": "recheck_closed::extension_binding",
+     "sublane": "a-olean-structural",
+     "depth": 6,
+     "selector": "in-crate reference closure (depth 6)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 731,
+     "sha256": "42647ec1a20d2adec4ef47a916a42846df2a154723017006a6eafb69dc80f44d",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-olean/src/recheck_closed/extension_binding_pins.rs",
+     "crate": "clean-olean",
+     "module": "recheck_closed::extension_binding_pins",
+     "sublane": "a-olean-structural",
+     "depth": 7,
+     "selector": "in-crate reference closure (depth 7)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 327,
+     "sha256": "e56e73b18ed32beba971616803dc82f0ff2b5fc78016966c21d9a85e04966f99",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-olean/src/recheck_closed/family_index.rs",
+     "crate": "clean-olean",
+     "module": "recheck_closed::family_index",
+     "sublane": "a-olean-structural",
+     "depth": 6,
+     "selector": "in-crate reference closure (depth 6)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 96,
+     "sha256": "72b7ce642659aba5030e40f30883f9fc736269c1f396c8f85b7d60266dba5986",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-olean/src/recheck_closed/fingerprint.rs",
+     "crate": "clean-olean",
+     "module": "recheck_closed::fingerprint",
+     "sublane": "a-olean-structural",
+     "depth": 6,
+     "selector": "in-crate reference closure (depth 6)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 491,
+     "sha256": "3b0b992c9b9cebc715d049f6a57da6d50d415186e4ba1b745ed9c5624d0dd736",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-olean/src/recheck_closed/imported.rs",
+     "crate": "clean-olean",
+     "module": "recheck_closed::imported",
+     "sublane": "a-olean-structural",
+     "depth": 6,
+     "selector": "in-crate reference closure (depth 6)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 651,
+     "sha256": "c7103d4e33d45bbcaef763c8267f4e76b97b70b594336f9f93688e3b77573723",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-olean/src/recheck_closed/level.rs",
+     "crate": "clean-olean",
+     "module": "recheck_closed::level",
+     "sublane": "a-olean-structural",
+     "depth": 6,
+     "selector": "in-crate reference closure (depth 6)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 120,
+     "sha256": "211fd0918815dfcde80e5519fa1a54971d19b61017c4506db7f0e808e06ce9c9",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-olean/src/recheck_closed/replay.rs",
+     "crate": "clean-olean",
+     "module": "recheck_closed::replay",
+     "sublane": "a-olean-structural",
+     "depth": 7,
+     "selector": "in-crate reference closure (depth 7)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 513,
+     "sha256": "e3ac38ad52b73c08084c650e6505ac3942df6ac48badb1794171e956811d2823",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
+     "path": "crates/clean-olean/src/recheck_closed/source.rs",
+     "crate": "clean-olean",
+     "module": "recheck_closed::source",
+     "sublane": "a-olean-structural",
+     "depth": 6,
+     "selector": "in-crate reference closure (depth 6)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 191,
+     "sha256": "562d3d748f4b15f262e927194874bd877f712db52da963fd1efa99980ca53120",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -2165,6 +3018,29 @@
      "ledger_rows": []
     },
     {
+     "path": "crates/clean-olean/src/verify_batch_full.rs",
+     "crate": "clean-olean",
+     "module": "verify_batch_full",
+     "sublane": "a-olean-structural",
+     "depth": 5,
+     "selector": "in-crate reference closure (depth 5)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 1031,
+     "sha256": "bfa74c91416699275349414a9ac2495594c189dfc1de6d9b8ea4ec5d0d16b563",
+     "io_token_count": 0,
+     "io_sites": [],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": []
+    },
+    {
      "path": "crates/clean-olean/src/world.rs",
      "crate": "clean-olean",
      "module": "world",
@@ -2174,8 +3050,8 @@
      "why": [
       "reached by the in-crate reference closure from a root"
      ],
-     "lines": 180,
-     "sha256": "0ead1658b5f0ca07fb5e9362476e227bd19acad475ea3780784bef0d0acff552",
+     "lines": 194,
+     "sha256": "abdc59ba8f9b5e54f1aa7bc1e5eb87730d140d86ce756725a33a3ffbabb7fcc9",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -3324,8 +4200,8 @@
      "why": [
       "reached by the in-crate reference closure from a root"
      ],
-     "lines": 366,
-     "sha256": "fabe2248b7d8119e6c8809e6d2a1587372ac56e11869cac6ec05eb095baa47b5",
+     "lines": 383,
+     "sha256": "87e20bc267a741073edd25ab5d3cac42aaa8cfaa45962bd0461a75b4ec064ef1",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -3577,8 +4453,8 @@
      "why": [
       "reached by the in-crate reference closure from a root"
      ],
-     "lines": 887,
-     "sha256": "d29c11c91c28fdf66bcc24d43f2e4dcc77b53d375326c2cea9a0a887a3c386ad",
+     "lines": 891,
+     "sha256": "9447d3c6255fe41de9ab6eea099ff0686d60a5f9fb9d72659ac4fb1a0579f9e2",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -3801,22 +4677,23 @@
   },
   "b_io_bearing": {
    "obligation": "decode-pure separated from read-IO where feasible; every residual IO boundary contract-modeled and ledgered with a probe (program \u00a73.6)",
-   "member_count": 44,
+   "member_count": 52,
    "ledgered_count": 0,
    "separated_count": 0,
    "sublane_counts": {
     "a-mathverse-shard-digest-kv": 29,
-    "a-olean-structural": 12,
+    "a-olean-structural": 20,
     "a-verify-checker-census-firewall": 3
    },
    "depth_histogram": {
     "depth_0": 5,
     "depth_1": 12,
     "depth_2": 14,
-    "depth_3": 11,
-    "depth_4": 2
+    "depth_3": 12,
+    "depth_4": 5,
+    "depth_5": 4
    },
-   "io_site_total": 326,
+   "io_site_total": 355,
    "members": [
     {
      "path": "crates/clean-mathverse/src/artifacts.rs",
@@ -5338,16 +6215,16 @@
      "why": [
       "reached by the in-crate reference closure from a root"
      ],
-     "lines": 428,
-     "sha256": "4fea8372621d1f4b22facdd15e800905811ebc3fe82fa8e1bb146951030ca4c5",
+     "lines": 458,
+     "sha256": "7fbd1e95d58744dc29b1155fd56a3d3956a3042b706a1078564b2c3c86ec8d9b",
      "io_token_count": 2,
      "io_sites": [
       {
-       "line": 125,
+       "line": 137,
        "token": "std::fs"
       },
       {
-       "line": 125,
+       "line": 137,
        "token": "fs::*"
       }
      ],
@@ -5428,32 +6305,32 @@
      "why": [
       "reached by the in-crate reference closure from a root"
      ],
-     "lines": 990,
-     "sha256": "bc744660dee13c63adbaff7633d2e6d077c280aa3b1e9508d47cfd402f36a47c",
+     "lines": 1003,
+     "sha256": "3372a1a02cea0fc66b9e0fedcaab91c5de4000c60149d42ff26678d2a0ed13f0",
      "io_token_count": 6,
      "io_sites": [
       {
-       "line": 89,
+       "line": 91,
        "token": "std::fs"
       },
       {
-       "line": 89,
+       "line": 91,
        "token": "fs::*"
       },
       {
-       "line": 642,
+       "line": 644,
        "token": "std::fs"
       },
       {
-       "line": 642,
+       "line": 644,
        "token": "fs::*"
       },
       {
-       "line": 947,
+       "line": 960,
        "token": "std::fs"
       },
       {
-       "line": 947,
+       "line": 960,
        "token": "fs::*"
       }
      ],
@@ -5481,16 +6358,16 @@
      "why": [
       "reached by the in-crate reference closure from a root"
      ],
-     "lines": 111,
-     "sha256": "a73e7fc3a41839b5b23acfc1e9b3579539d441d8de4acb42a347cc25f3d499ba",
+     "lines": 117,
+     "sha256": "b07e35793417ac131862129fee8992f1a4710cee455f628862ab4e18c52ce9c4",
      "io_token_count": 2,
      "io_sites": [
       {
-       "line": 96,
+       "line": 102,
        "token": "std::fs"
       },
       {
-       "line": 96,
+       "line": 102,
        "token": "fs::*"
       }
      ],
@@ -5518,16 +6395,16 @@
      "why": [
       "reached by the in-crate reference closure from a root"
      ],
-     "lines": 1026,
-     "sha256": "614d12f0aa8f6ccce100ca8027aad04ac50f8104a10fe4f4b34224f000279ee2",
+     "lines": 1055,
+     "sha256": "bc850af8fbf312b8ec48e449e9e8b50fd0adfe0af51e88613bc599cd63ff273b",
      "io_token_count": 2,
      "io_sites": [
       {
-       "line": 241,
+       "line": 257,
        "token": "std::io"
       },
       {
-       "line": 257,
+       "line": 273,
        "token": "std::io"
       }
      ],
@@ -5555,12 +6432,12 @@
      "why": [
       "reached by the in-crate reference closure from a root"
      ],
-     "lines": 230,
-     "sha256": "fb95ce9aa0b46e6c9e9f30f05c8cf55ec9af5bc1dcb04e543b7bc2491ce7831c",
+     "lines": 241,
+     "sha256": "ef44928f7c197ad1be97bfce90a8fa72dba1369121e4b21e0f98fecf38dddcbc",
      "io_token_count": 1,
      "io_sites": [
       {
-       "line": 110,
+       "line": 116,
        "token": "std::fs"
       }
      ],
@@ -5588,8 +6465,8 @@
      "why": [
       "reached by the in-crate reference closure from a root"
      ],
-     "lines": 327,
-     "sha256": "d64fed99f532931b776288a727765d6c2711961e21caef896a7277d10dab58b4",
+     "lines": 316,
+     "sha256": "04f111eba5bc6e87b51b35961a7bf80de1f9e61a62285d01254024f322f0017b",
      "io_token_count": 5,
      "io_sites": [
       {
@@ -5605,11 +6482,11 @@
        "token": "std::io"
       },
       {
-       "line": 285,
+       "line": 271,
        "token": "OpenOptions"
       },
       {
-       "line": 317,
+       "line": 306,
        "token": "std::fs"
       }
      ],
@@ -5698,40 +6575,40 @@
      "why": [
       "reached by the in-crate reference closure from a root"
      ],
-     "lines": 605,
-     "sha256": "2824dc2970f33a4354ecd898465bbdc37a1fbad68da844d07c4e359b4ecb1971",
+     "lines": 691,
+     "sha256": "c5abd95909bbe7c93740690866ccc82df0542864fc5fb9145a6f2b55e05e7e65",
      "io_token_count": 11,
      "io_sites": [
       {
-       "line": 177,
+       "line": 244,
        "token": "std::fs"
       },
       {
-       "line": 177,
+       "line": 244,
        "token": "std::io"
       },
       {
-       "line": 235,
+       "line": 302,
        "token": "std::fs"
       },
       {
-       "line": 235,
+       "line": 302,
        "token": "std::io"
       },
       {
-       "line": 292,
+       "line": 359,
        "token": "std::fs"
       },
       {
-       "line": 292,
+       "line": 359,
        "token": "std::io"
       },
       {
-       "line": 357,
+       "line": 424,
        "token": "env::var"
       },
       {
-       "line": 358,
+       "line": 425,
        "token": "std::fs"
       }
      ],
@@ -5759,40 +6636,40 @@
      "why": [
       "reached by the in-crate reference closure from a root"
      ],
-     "lines": 632,
-     "sha256": "f2a193849f23b2fd1b8873350034579aed683cea8da47e203ee415ab599eb3ad",
+     "lines": 642,
+     "sha256": "6f0fcccd4e01f16b0aec8170251d2207ebb72f4b8dc379b64c7349819e18e06e",
      "io_token_count": 16,
      "io_sites": [
       {
-       "line": 369,
+       "line": 374,
        "token": "std::fs"
       },
       {
-       "line": 369,
+       "line": 374,
        "token": "fs::*"
       },
       {
-       "line": 369,
+       "line": 374,
        "token": "read_to_string"
       },
       {
-       "line": 485,
+       "line": 496,
        "token": "std::io"
       },
       {
-       "line": 485,
+       "line": 496,
        "token": "io::*"
       },
       {
-       "line": 487,
+       "line": 498,
        "token": "std::fs"
       },
       {
-       "line": 487,
+       "line": 498,
        "token": "fs::*"
       },
       {
-       "line": 487,
+       "line": 498,
        "token": "File::open/create"
       }
      ],
@@ -5820,8 +6697,8 @@
      "why": [
       "reached by the in-crate reference closure from a root"
      ],
-     "lines": 621,
-     "sha256": "a8376f4bc73e328b1c487e50cb026f5deb3aa87848bba83f57a5a7eca04a1dc4",
+     "lines": 713,
+     "sha256": "8778d81c78de9ad43410cdc261ce416d7820f04fa84bb1a0acbf1864a9d6170e",
      "io_token_count": 2,
      "io_sites": [
       {
@@ -5834,6 +6711,342 @@
       }
      ],
      "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": [],
+     "separation": {
+      "status": "not-separated",
+      "recorded_by": null,
+      "note": "decode-pure half not split out; the whole module is in the IO lane"
+     }
+    },
+    {
+     "path": "crates/clean-olean/src/ndjson/mod.rs",
+     "crate": "clean-olean",
+     "module": "ndjson",
+     "sublane": "a-olean-structural",
+     "depth": 3,
+     "selector": "in-crate reference closure (depth 3)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 129,
+     "sha256": "7d383ea0d6fdfcb34c0e401c0a84290ab0539d1be0a7c87a58f7e874669830d6",
+     "io_token_count": 7,
+     "io_sites": [
+      {
+       "line": 76,
+       "token": "std::io"
+      },
+      {
+       "line": 76,
+       "token": "io::*"
+      },
+      {
+       "line": 118,
+       "token": "std::fs"
+      },
+      {
+       "line": 118,
+       "token": "fs::*"
+      },
+      {
+       "line": 118,
+       "token": "File::open/create"
+      },
+      {
+       "line": 119,
+       "token": "BufReader"
+      },
+      {
+       "line": 119,
+       "token": "std::io"
+      }
+     ],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": [],
+     "separation": {
+      "status": "not-separated",
+      "recorded_by": null,
+      "note": "decode-pure half not split out; the whole module is in the IO lane"
+     }
+    },
+    {
+     "path": "crates/clean-olean/src/ndjson/reference.rs",
+     "crate": "clean-olean",
+     "module": "ndjson::reference",
+     "sublane": "a-olean-structural",
+     "depth": 4,
+     "selector": "in-crate reference closure (depth 4)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 239,
+     "sha256": "d72faf802c441c43689498f0bd2cbec9c0bfd15aed85cb9b59addc6d6e6627fc",
+     "io_token_count": 2,
+     "io_sites": [
+      {
+       "line": 44,
+       "token": "std::io"
+      },
+      {
+       "line": 44,
+       "token": "io::*"
+      }
+     ],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": [],
+     "separation": {
+      "status": "not-separated",
+      "recorded_by": null,
+      "note": "decode-pure half not split out; the whole module is in the IO lane"
+     }
+    },
+    {
+     "path": "crates/clean-olean/src/ndjson/source.rs",
+     "crate": "clean-olean",
+     "module": "ndjson::source",
+     "sublane": "a-olean-structural",
+     "depth": 4,
+     "selector": "in-crate reference closure (depth 4)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 297,
+     "sha256": "dd2793ce9217c1b5642e96467d9cb25aa8d67d0a232a18d24bd5a66dcda7c04a",
+     "io_token_count": 2,
+     "io_sites": [
+      {
+       "line": 23,
+       "token": "std::io"
+      },
+      {
+       "line": 23,
+       "token": "io::*"
+      }
+     ],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": [],
+     "separation": {
+      "status": "not-separated",
+      "recorded_by": null,
+      "note": "decode-pure half not split out; the whole module is in the IO lane"
+     }
+    },
+    {
+     "path": "crates/clean-olean/src/ndjson/write/error.rs",
+     "crate": "clean-olean",
+     "module": "ndjson::write::error",
+     "sublane": "a-olean-structural",
+     "depth": 5,
+     "selector": "in-crate reference closure (depth 5)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 98,
+     "sha256": "0724acdc5b952dcd2b0a6928f12d8b9a480ab5e14095ce261712145e6a6744c7",
+     "io_token_count": 1,
+     "io_sites": [
+      {
+       "line": 19,
+       "token": "std::io"
+      }
+     ],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": [],
+     "separation": {
+      "status": "not-separated",
+      "recorded_by": null,
+      "note": "decode-pure half not split out; the whole module is in the IO lane"
+     }
+    },
+    {
+     "path": "crates/clean-olean/src/ndjson/write/mod.rs",
+     "crate": "clean-olean",
+     "module": "ndjson::write",
+     "sublane": "a-olean-structural",
+     "depth": 4,
+     "selector": "in-crate reference closure (depth 4)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 308,
+     "sha256": "b7020368174b2314ee4da418512a85ff677f1051217ceff0b09cc35f2e3ab75f",
+     "io_token_count": 2,
+     "io_sites": [
+      {
+       "line": 65,
+       "token": "std::io"
+      },
+      {
+       "line": 279,
+       "token": "std::io"
+      }
+     ],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": [],
+     "separation": {
+      "status": "not-separated",
+      "recorded_by": null,
+      "note": "decode-pure half not split out; the whole module is in the IO lane"
+     }
+    },
+    {
+     "path": "crates/clean-olean/src/ndjson/write/records.rs",
+     "crate": "clean-olean",
+     "module": "ndjson::write::records",
+     "sublane": "a-olean-structural",
+     "depth": 5,
+     "selector": "in-crate reference closure (depth 5)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 203,
+     "sha256": "719075df80cb5777d31566781dd56c72a276b743bac22113d64120554cb2deb2",
+     "io_token_count": 2,
+     "io_sites": [
+      {
+       "line": 15,
+       "token": "std::io"
+      },
+      {
+       "line": 15,
+       "token": "io::*"
+      }
+     ],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": [],
+     "separation": {
+      "status": "not-separated",
+      "recorded_by": null,
+      "note": "decode-pure half not split out; the whole module is in the IO lane"
+     }
+    },
+    {
+     "path": "crates/clean-olean/src/ndjson/write/tables.rs",
+     "crate": "clean-olean",
+     "module": "ndjson::write::tables",
+     "sublane": "a-olean-structural",
+     "depth": 5,
+     "selector": "in-crate reference closure (depth 5)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 403,
+     "sha256": "248421951f5e11fc122e5c732e744cb16b52b79f8e07279544ea3ba06be48d9e",
+     "io_token_count": 2,
+     "io_sites": [
+      {
+       "line": 27,
+       "token": "std::io"
+      },
+      {
+       "line": 27,
+       "token": "io::*"
+      }
+     ],
+     "io_sites_truncated": 0,
+     "hazard_tokens": {},
+     "chain": {
+      "status": "unchained",
+      "links_held": 0,
+      "note": "no five-link chain record names this body; Ring R2 lane (a) owes one per member"
+     },
+     "ledger_rows": [],
+     "separation": {
+      "status": "not-separated",
+      "recorded_by": null,
+      "note": "decode-pure half not split out; the whole module is in the IO lane"
+     }
+    },
+    {
+     "path": "crates/clean-olean/src/recheck_closed/reference_base.rs",
+     "crate": "clean-olean",
+     "module": "recheck_closed::reference_base",
+     "sublane": "a-olean-structural",
+     "depth": 5,
+     "selector": "in-crate reference closure (depth 5)",
+     "why": [
+      "reached by the in-crate reference closure from a root"
+     ],
+     "lines": 692,
+     "sha256": "c919130fd3ad0d0044f8f89c8e7de8f21a8b21d6b4a12232639a29dec5412879",
+     "io_token_count": 11,
+     "io_sites": [
+      {
+       "line": 430,
+       "token": "std::fs"
+      },
+      {
+       "line": 430,
+       "token": "fs::*"
+      },
+      {
+       "line": 430,
+       "token": "BufWriter"
+      },
+      {
+       "line": 430,
+       "token": "std::io"
+      },
+      {
+       "line": 437,
+       "token": "std::io"
+      },
+      {
+       "line": 437,
+       "token": "io::*"
+      },
+      {
+       "line": 615,
+       "token": "std::fs"
+      },
+      {
+       "line": 615,
+       "token": "fs::*"
+      }
+     ],
+     "io_sites_truncated": 3,
      "hazard_tokens": {},
      "chain": {
       "status": "unchained",
@@ -5981,15 +7194,15 @@
    "member_count": 150,
    "rewritten_to_rust_count": 0,
    "tcb_declared_count": 150,
-   "demonstrated_count": 113,
+   "demonstrated_count": 114,
    "waived_count": 1,
-   "undemonstrated_unwaived_count": 36,
+   "undemonstrated_unwaived_count": 35,
    "undemonstrated_with_self_test_count": 7,
    "line_ratchet": {
     "what": "total committed lines of the TCB script surface; may fall freely, may rise only through scripts/verdict_set.py --rebase-up '<reason>' (recorded below)",
     "direction": "down",
-    "baseline_total_lines": 132372,
-    "measured_total_lines": 132372,
+    "baseline_total_lines": 134082,
+    "measured_total_lines": 134082,
     "minted_utc": "2026-11-14T21:29:51Z",
     "rebases": [
      {
@@ -7791,6 +9004,96 @@
       "from": 132105,
       "to": 132372,
       "reason": "2026-11-17: qualified Python-only fixture source-readset guard adds267 production lines over Mainf6 baseline132105 to132372: dynamic ORDER/config discovery plus bounded selector/owner recognizer and malformed-source refusals. Same C-script members/counting/exclusions, preserve prior rebases. Focused13 Git-only source tests passed; no Rust/SDK/native/formal/fullCI/parity claim."
+     },
+     {
+      "date": "2026-11-18",
+      "from": 132184,
+      "to": 132215,
+      "reason": "2026-11-17 p3lc-natrepr: verdict_io_contracts.py classifies the two IO sites the 8e7 source-epoch landing (18836c92d8) made verdict-bearing and left unclassified, aborting the IO-contract derivation: std::io::sink() in crates/clean-olean/src/ndjson/write/mod.rs (E-NOIO, discards every byte) and a struct field typed Option<std::io::BufWriter<std::fs::File>> in crates/clean-olean/src/recheck_closed/reference_base.rs (E-TYPE). Each rule has a self-test arm with a control that a real write stays write-file; no other site changes class."
+     },
+     {
+      "date": "2026-11-18",
+      "from": 132215,
+      "to": 132355,
+      "reason": "2026-11-17: W18-W26 C5 + S1-S6 verify_runner and lean_axiom_census package entries"
+     },
+     {
+      "date": "2026-11-18",
+      "from": 132355,
+      "to": 132956,
+      "reason": "Merge origin/main into W27A"
+     },
+     {
+      "date": "2026-11-18",
+      "from": 132956,
+      "to": 133091,
+      "reason": "X4 W28-W31 merge with origin/main"
+     },
+     {
+      "date": "2026-11-19",
+      "from": 132759,
+      "to": 132764,
+      "reason": "bda700a565 adds the retained-child memo release test to the existing selector and required-pass lists in scripts/verify_runner.py (7,963 to 7,968 lines). The runner rejects an exit-zero receipt that omits its pass. All other lane (c) members retain their exact bytes."
+     },
+     {
+      "date": "2026-11-19",
+      "from": 132764,
+      "to": 133248,
+      "reason": "kstar_inputs row (Q4 source-input rule, 481 lines, now counted by its own registry row) and verify_runner gate::kstar-recheck digesting the rule and its lexer (+3), 2026-11-19 Q4 source inputs: evaluate an include or refuse"
+     },
+     {
+      "date": "2026-11-19",
+      "from": 133248,
+      "to": 133249,
+      "reason": "30b3c39e44 adds the labelled checker source read by the clean-parser refutable-do test to verify_runner\u2019s clean-parser::lib input list. This one additional claim-owning script line binds cached test results to the exact KCheck/Kernel.lean input."
+     },
+     {
+      "date": "2026-11-19",
+      "from": 133249,
+      "to": 133265,
+      "reason": "7d44d8755f wires the reduction_bound_all_lengths test of the non-default clean-elab crate into both local_gate.sh modes. Its 16 added lines document and invoke the dedicated reduction-bound theorem leg, whose test-fast omission otherwise leaves its theorem, statement, witness, and axiom checks outside the ordinary full diagnostic."
+     },
+     {
+      "date": "2026-11-19",
+      "from": 133265,
+      "to": 133266,
+      "reason": "72a5318c75 adds the original KCheckLabelledMain.lean entry read by the tuple-loop parser test to verify_runner\u2019s clean-parser::lib source inputs. The single added script line invalidates cached test results when that original entry changes."
+     },
+     {
+      "date": "2026-11-19",
+      "from": 133266,
+      "to": 133647,
+      "reason": "2026-11-19 Q4 source-input rule, narrowed claim (docs/DECISIONS.md, 'Q4 source inputs: evaluate an include or refuse', correction): scripts/kstar_inputs.py 481->855 lines, each form its docstring lists evaluated exactly or refused (lexer spans, bracket-balanced attributes, tomllib manifests, lexical refusals, build-script declarations); scripts/kstar_recheck.sh 16->23, resolving a Python with tomllib"
+     },
+     {
+      "date": "2026-11-19",
+      "from": 133647,
+      "to": 133724,
+      "reason": "Q4 source-input rule, second 2026-11-19 correction: kstar_inputs.py 855 to 931 lines (the evaluated forms shrunk to those the tree uses, every other form refused by name, Cargo configuration and build-script rustc_env/out_dir checks added); kstar_recheck.py 389 to 390 lines (its docstring names the lists)"
+     },
+     {
+      "date": "2026-11-19",
+      "from": 133684,
+      "to": 133821,
+      "reason": "Q4 freshness rests on the members' build read sets (docs/DECISIONS.md 2026-11-19): kstar_recheck.py parses cargo's dep-info, hashes each listed repository file and refuses what the dep-info cannot show (+119); kstar_inputs.py's docstring names it a coarse conjunct and lists the fourth round's known misses (+18)"
+     },
+     {
+      "date": "2026-11-19",
+      "from": 133821,
+      "to": 133906,
+      "reason": "2026-11-19: P1 adds 85 counted lines in check_authority_sites.py. The census checks the P3 NDJSON reader against the actual acceptance entry and its entry-local kernel path. Removal, absent measurement and wrong path controls exercise the check. No production site changes checker."
+     },
+     {
+      "date": "2026-11-19",
+      "from": 133906,
+      "to": 134068,
+      "reason": "Q4 build read sets, 2026-11-19 correction (docs/DECISIONS.md, 'Q4 freshness rests on the members' build read sets', correction): scripts/kstar_recheck.py 509->666 (+157) for --build-member's build-start stamp and git state, the stamp, clean-tree, tracked-blob and symbolic-link refusals in build_reads, and the build read set's shape check; scripts/kstar_recheck.sh 23->28 (+5), refusing --build-member outside a reservation"
+     },
+     {
+      "date": "2026-11-19",
+      "from": 134068,
+      "to": 134082,
+      "reason": "Q4 build reads, last round (K1 to K4): build_reads refuses any dirty tracked path, listed or not, and its docstring names the uncovered residuals outside the repository (docs/DECISIONS.md, 2026-11-19, last-round correction of 'Q4 freshness rests on the members' build read sets'); kstar_recheck.py 666 to 680"
      }
     ]
    },
@@ -7857,7 +9160,8 @@
      "self_test_entry_point": true,
      "wired_by": [
       "scripts/local_gate.sh",
-      "scripts/run_build_regression_gate.sh"
+      "scripts/run_build_regression_gate.sh",
+      "scripts/run_w0_scoreboard_gate.sh"
      ]
     },
     {
@@ -7903,7 +9207,8 @@
       "scripts/release_readiness_smoke.sh",
       "scripts/rust_modules.py",
       "scripts/test_ck0_custody_loader.py",
-      "scripts/verdict_set.py"
+      "scripts/verdict_set.py",
+      "scripts/verify_runner.py"
      ]
     },
     {
@@ -7912,8 +9217,8 @@
      "kind": "gate",
      "claims": "soundness",
      "disposition": "tcb-declared",
-     "lines": 2361,
-     "sha256": "713cf10ca1945e1fb9df73d17db9e3c03e62fc55ffc6da576eb51bc49484b87b",
+     "lines": 3026,
+     "sha256": "246d4cc40a04b13fce62464494da87c1d8d14565bd6ef1fe2cbf400dfa86d495",
      "demonstrated": true,
      "waived": false,
      "self_test_entry_point": true,
@@ -8256,8 +9561,8 @@
      "kind": "gate",
      "claims": "evidence",
      "disposition": "tcb-declared",
-     "lines": 439,
-     "sha256": "924ec0babda746ae61bc0c70e52237831364ae164a1fe1d8136aa3d8d0b7b38e",
+     "lines": 448,
+     "sha256": "95ad5fbcb2435f9803964ff216255a4b0588865faef94b82a9606728dbd99cec",
      "demonstrated": true,
      "waived": false,
      "self_test_entry_point": true,
@@ -8495,22 +9800,6 @@
      "waived": false,
      "self_test_entry_point": true,
      "wired_by": [
-      "scripts/local_gate.sh"
-     ]
-    },
-    {
-     "path": "scripts/check_trustcore_evidence_staleness.py",
-     "registry_id": "check_trustcore_evidence_staleness",
-     "kind": "gate",
-     "claims": "evidence",
-     "disposition": "tcb-declared",
-     "lines": 186,
-     "sha256": "c31755a985027ffa6ecca7b6850977f442d6839b98377df8c0bbad842df310b5",
-     "demonstrated": false,
-     "waived": false,
-     "self_test_entry_point": false,
-     "wired_by": [
-      "scripts/githooks/pre-push",
       "scripts/local_gate.sh"
      ]
     },
@@ -8904,8 +10193,8 @@
      "kind": "gate",
      "claims": "soundness",
      "disposition": "tcb-declared",
-     "lines": 704,
-     "sha256": "6acb3ada8596e7fc260c57a5dd8b4f94c019f59477174ebd2452298368b106d2",
+     "lines": 702,
+     "sha256": "ac3b710607bf27b853a6c4d2ae8de04aa589b734d40b5d55ffcef1d46d85dbbf",
      "demonstrated": true,
      "waived": false,
      "self_test_entry_point": true,
@@ -9088,8 +10377,8 @@
      "kind": "gate",
      "claims": "soundness",
      "disposition": "tcb-declared",
-     "lines": 2782,
-     "sha256": "fd49db586e0524cb729bb093fa2de896a5700070c279979fa4a205f5fc208538",
+     "lines": 2784,
+     "sha256": "f348d1b1d6f29dbc0dfa5210e6684724b9048fb1f0ed0e14002609fa0ad48aed",
      "demonstrated": true,
      "waived": false,
      "self_test_entry_point": true,
@@ -9194,8 +10483,8 @@
      "kind": "gate",
      "claims": "evidence",
      "disposition": "tcb-declared",
-     "lines": 421,
-     "sha256": "232babb7c432fb2d660e4b984c341b346b00169414aeed243aa71b1189d19ffd",
+     "lines": 423,
+     "sha256": "6fd376474f00c911bb6c1dd91d2f8d7bb482ced737dca627fb9b9afc2023cd7c",
      "demonstrated": true,
      "waived": false,
      "self_test_entry_point": true,
@@ -9240,8 +10529,8 @@
      "kind": "gate",
      "claims": "soundness",
      "disposition": "tcb-declared",
-     "lines": 398,
-     "sha256": "6ae414c5b97bcef5080a253fcd9286df0144011b9057ef3b100755f9be8a66f9",
+     "lines": 386,
+     "sha256": "7dac012f49583c20d8a571d9e52b7f17e8776107fad78357ca780f37c323e29e",
      "demonstrated": true,
      "waived": false,
      "self_test_entry_point": false,
@@ -9251,13 +10540,29 @@
      ]
     },
     {
+     "path": "scripts/kstar_inputs.py",
+     "registry_id": "kstar_inputs",
+     "kind": "gate",
+     "claims": "evidence",
+     "disposition": "tcb-declared",
+     "lines": 949,
+     "sha256": "7e38027e12d9679af6be73b480dd5203be702a49740e5c5fb406c327989b19f8",
+     "demonstrated": true,
+     "waived": false,
+     "self_test_entry_point": true,
+     "wired_by": [
+      "scripts/kstar_recheck.py",
+      "scripts/verify_runner.py"
+     ]
+    },
+    {
      "path": "scripts/kstar_recheck.py",
      "registry_id": "kstar_recheck_driver",
      "kind": "gate",
      "claims": "evidence",
      "disposition": "tcb-declared",
-     "lines": 389,
-     "sha256": "bb4cad2a9a658c028eac7641f8b9c47b0f749fd2c1562edea1ddecc5115996b5",
+     "lines": 680,
+     "sha256": "f7e991be8fdad4fb272ff55dc12c237fe9ac9186e5959eac8a8f2419f477af3c",
      "demonstrated": true,
      "waived": false,
      "self_test_entry_point": true,
@@ -9271,8 +10576,8 @@
      "kind": "gate",
      "claims": "evidence",
      "disposition": "tcb-declared",
-     "lines": 16,
-     "sha256": "092b336ff8e274d03b7ae72793f139424740c3a7e333665c83c18ef6668aff57",
+     "lines": 28,
+     "sha256": "4fce99ee6aacbc0b28cc36226eeb484fedf75e9c3a9b65e2653f97f497776d37",
      "demonstrated": true,
      "waived": false,
      "self_test_entry_point": true,
@@ -9350,8 +10655,8 @@
      "kind": "gate",
      "claims": "evidence",
      "disposition": "tcb-declared",
-     "lines": 410,
-     "sha256": "15c07b659973c07598baf33a77a3b3f1c5ad3764a2d1b5c95c7460d46def98b2",
+     "lines": 443,
+     "sha256": "7fce67cfb06cf74aac38c81dc85806e9d42069b896f38189b9e2b407887c7696",
      "demonstrated": true,
      "waived": false,
      "self_test_entry_point": true,
@@ -9414,8 +10719,8 @@
      "kind": "gate",
      "claims": "hygiene",
      "disposition": "tcb-declared",
-     "lines": 2592,
-     "sha256": "d055ac65a6d26459a8582a8da6c6a51d788f9102ecc75bdf0aea951224f5277f",
+     "lines": 2613,
+     "sha256": "b116c6a2e738ad95cff5d51ac45ba0e8f1bfd1f929ecaae4f889be350bdf0c39",
      "demonstrated": false,
      "waived": false,
      "self_test_entry_point": true,
@@ -9618,6 +10923,21 @@
      ]
     },
     {
+     "path": "scripts/run_w0_scoreboard_gate.sh",
+     "registry_id": "run_w0_scoreboard_gate",
+     "kind": "gate",
+     "claims": "evidence",
+     "disposition": "tcb-declared",
+     "lines": 149,
+     "sha256": "9da3c051a804e7097cf28b9994a09d4d7262a0ebfecdbd0466fa2736bf64a2b5",
+     "demonstrated": true,
+     "waived": false,
+     "self_test_entry_point": false,
+     "wired_by": [
+      "scripts/local_gate.sh"
+     ]
+    },
+    {
      "path": "scripts/rust_cfg.py",
      "registry_id": "rust_cfg",
      "kind": "tool",
@@ -9704,28 +11024,13 @@
      "kind": "gate",
      "claims": "evidence",
      "disposition": "tcb-declared",
-     "lines": 642,
-     "sha256": "dbd178396a631c9ba7cdd3bc3624598238accd46e583f1d59717447bec0169ea",
+     "lines": 715,
+     "sha256": "eb60c78f501344950a0370aa83e45d4bb938d0f3929b4306696c25576bd28b1b",
      "demonstrated": true,
      "waived": false,
      "self_test_entry_point": true,
      "wired_by": [
       "scripts/verify_runner.py"
-     ]
-    },
-    {
-     "path": "scripts/self_proof_scoreboard.py",
-     "registry_id": "self_proof_scoreboard",
-     "kind": "gate",
-     "claims": "evidence",
-     "disposition": "tcb-declared",
-     "lines": 430,
-     "sha256": "587bf69ac95f759ff58166ab54a36b54f35571f064e48a15fdad00df6384d717",
-     "demonstrated": true,
-     "waived": false,
-     "self_test_entry_point": true,
-     "wired_by": [
-      "scripts/local_gate.sh"
      ]
     },
     {
@@ -10111,8 +11416,8 @@
      "kind": "gate",
      "claims": "evidence",
      "disposition": "tcb-declared",
-     "lines": 1780,
-     "sha256": "407cae9dfb4f7a22c84b8fcfc0fe1eadc1380fa8ebd0e100a967cebb2ffac36b",
+     "lines": 1811,
+     "sha256": "0a1d365dcf48aeca10f4fe3e560214d7022aa34cba56c23ea48484b0f07f6689",
      "demonstrated": true,
      "waived": false,
      "self_test_entry_point": true,
@@ -10149,8 +11454,8 @@
      "kind": "tool",
      "claims": "evidence",
      "disposition": "tcb-declared",
-     "lines": 7830,
-     "sha256": "0abbc2ebaa31b94ffb42c9661048826ecf6355b2fb5c7cc1b1798d6ad021bbcc",
+     "lines": 7933,
+     "sha256": "28564c72b67f9ba349372d648a4028e299ced01c977431b1287f75d46272b568",
      "demonstrated": false,
      "waived": false,
      "self_test_entry_point": false,
@@ -10378,6 +11683,41 @@
      "reason": "not a script under scripts/"
     },
     {
+     "path": "scripts/self_proof_fleet_product.py",
+     "id": "self_proof_fleet_product",
+     "reason": "registry row claims nothing \u2014 not claim-owning"
+    },
+    {
+     "path": "scripts/self_proof_fleet_product_test.py",
+     "id": "self_proof_fleet_product_test",
+     "reason": "registry row claims nothing \u2014 not claim-owning"
+    },
+    {
+     "path": "scripts/test_run_w0_scoreboard_gate.py",
+     "id": "test_run_w0_scoreboard_gate",
+     "reason": "registry row claims nothing \u2014 not claim-owning"
+    },
+    {
+     "path": "scripts/self_proof_fleet_w0.py",
+     "id": "self_proof_fleet_w0",
+     "reason": "registry row claims nothing \u2014 not claim-owning"
+    },
+    {
+     "path": "scripts/self_proof_scoreboard.py",
+     "id": "self_proof_scoreboard",
+     "reason": "registry row claims nothing \u2014 not claim-owning"
+    },
+    {
+     "path": "crates/clean-evidence/src/w0_mutation/record.rs",
+     "id": "w0-receipt-validation",
+     "reason": "not a script under scripts/"
+    },
+    {
+     "path": "crates/clean-cli/src/cmd_evidence/w0_scoreboard.rs",
+     "id": "w0-scoreboard-comparator",
+     "reason": "not a script under scripts/"
+    },
+    {
      "path": "scripts/replacement_performance_inventory.py",
      "id": "replacement_performance_inventory",
      "reason": "registry row claims nothing \u2014 not claim-owning"
@@ -10584,12 +11924,18 @@
    {
     "id": "R-OLEAN-NONS-doors",
     "date": "2026-08-25",
-    "statement": "R-OLEAN-S admits only the lanes R1 keeps STRUCTURAL, because that is the sentence Ring R2 wrote. Measured consequence: 1 clean-olean source file(s) carrying a non-S env-bypass door are outside the verdict set and are reached by no other root. A 'P' (provable-in-place) classification is an intention, not a proof \u2014 until R1's theorem lands, that door mints admissions the same way an S door does. Either the rule widens to P/unclassified doors or a dated decision records why lane (a) stops at S.",
+    "statement": "R-OLEAN-S admits only the lanes R1 keeps STRUCTURAL, because that is the sentence Ring R2 wrote. Measured consequence: 2 clean-olean source file(s) carrying a non-S env-bypass door are outside the verdict set and are reached by no other root. A 'P' (provable-in-place) classification is an intention, not a proof \u2014 until R1's theorem lands, that door mints admissions the same way an S door does. Either the rule widens to P/unclassified doors or a dated decision records why lane (a) stops at S.",
     "sites": [
      {
       "file": "crates/clean-olean/src/verify_batch.rs",
       "census_row": "env-snapshot-restore",
       "classification": "P",
+      "reason": "census classification does not contain S (not a lane R1 keeps structural)"
+     },
+     {
+      "file": "crates/clean-olean/src/fixed_cohort/source_context.rs",
+      "census_row": "structure-field-metadata",
+      "classification": "M",
       "reason": "census classification does not contain S (not a lane R1 keeps structural)"
      }
     ],
@@ -10714,6 +12060,12 @@
     "reason": "census classification does not contain S (not a lane R1 keeps structural)"
    },
    {
+    "file": "crates/clean-elab/src/source_family_authority.rs",
+    "census_row": "reducibility-hints",
+    "classification": "unclassified",
+    "reason": "census classification does not contain S (not a lane R1 keeps structural)"
+   },
+   {
     "file": "crates/clean-olean/src/import/load_register.rs",
     "census_row": "reducibility-hints",
     "classification": "unclassified",
@@ -10757,6 +12109,12 @@
    },
    {
     "file": "crates/clean-olean/src/import/load_register.rs",
+    "census_row": "structure-field-metadata",
+    "classification": "M",
+    "reason": "census classification does not contain S (not a lane R1 keeps structural)"
+   },
+   {
+    "file": "crates/clean-olean/src/fixed_cohort/source_context.rs",
     "census_row": "structure-field-metadata",
     "classification": "M",
     "reason": "census classification does not contain S (not a lane R1 keeps structural)"
@@ -10852,6 +12210,9 @@
   ],
   "unresolved_refs": {
    "clean-olean": [
+    "CapturedModuleBytes",
+    "CompilerContextKind::LogicalOnly",
+    "CompilerContextKind::Source",
     "ConstantKind",
     "ConstantKind::Axiom",
     "ConstantKind::Definition",
@@ -10860,9 +12221,12 @@
     "ConstantKind::Theorem",
     "DefinitionSafety",
     "DefinitionSafety::Safe",
+    "ExportedTermProviders",
+    "ExportedTermProviders::default",
     "OleanError",
     "OleanError::Region",
     "ParsedConstant",
+    "environment_world",
     "lean_toolchain::direct_elan_roots",
     "parse_header",
     "pinned_lean_lib_path",

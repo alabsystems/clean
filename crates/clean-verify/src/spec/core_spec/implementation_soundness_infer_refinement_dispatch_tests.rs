@@ -195,7 +195,7 @@ fn test_dispatcher_value_src_uses_kexpr_rec_and_named_motive() {
         .expect("kernel_infer_returns_well_typed should have a proof term");
 
     for snippet in [
-        "KExpr.rec InferSoundAt",
+        "@KExpr.rec InferSoundAt",
         "infer_sound_at_sort",
         "infer_sound_at_bvar",
         "infer_sound_at_app",

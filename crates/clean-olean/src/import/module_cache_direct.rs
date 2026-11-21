@@ -13,8 +13,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 mod capture;
-pub(super) use capture::CaptureBudget;
 pub use capture::ModuleCaptureLimits;
+pub(super) use capture::{required as read_required_part, CaptureBudget};
 
 #[derive(Clone, PartialEq, Eq)]
 struct PartIdentity {
@@ -32,12 +32,18 @@ impl PartIdentity {
 }
 
 #[derive(Clone, PartialEq, Eq)]
+pub(super) struct IrParts<T> {
+    pub(super) signature: Option<T>,
+    pub(super) body: Option<T>,
+}
+
+#[derive(Clone, PartialEq, Eq)]
 struct ModuleIdentity {
     base: PartIdentity,
     server: Option<PartIdentity>,
     private: Option<PartIdentity>,
     // Unchecked legacy capture versus checked absence/content are distinct.
-    captured_ir: Option<Option<PartIdentity>>,
+    captured_ir: Option<IrParts<PartIdentity>>,
 }
 
 /// One captured population: optional means absent on disk, never unreadable or
@@ -48,7 +54,7 @@ pub(super) struct CapturedModule {
     pub(super) base: Vec<u8>,
     pub(super) server: Option<Vec<u8>>,
     pub(super) private: Option<Vec<u8>>,
-    pub(super) captured_ir: Option<Option<Vec<u8>>>,
+    pub(super) captured_ir: Option<IrParts<Vec<u8>>>,
     identity: ModuleIdentity,
 }
 
@@ -142,9 +148,13 @@ impl CapturedModule {
         resolved: &Path,
         budget: &mut CaptureBudget,
     ) -> Result<Self, ImportError> {
-        let ir = capture::optional(&resolved.with_extension("ir"), budget)?;
-        self.identity.captured_ir = Some(ir.as_deref().map(PartIdentity::of));
-        self.captured_ir = Some(ir);
+        let body = capture::optional(&resolved.with_extension("ir"), budget)?;
+        let signature = capture::optional(&resolved.with_extension("ir.sig"), budget)?;
+        self.identity.captured_ir = Some(IrParts {
+            signature: signature.as_deref().map(PartIdentity::of),
+            body: body.as_deref().map(PartIdentity::of),
+        });
+        self.captured_ir = Some(IrParts { signature, body });
         Ok(self)
     }
 
@@ -154,7 +164,8 @@ impl CapturedModule {
                 base: Arc::from(self.base.as_slice()),
                 server: self.server.as_deref().map(Arc::from),
                 private: self.private.as_deref().map(Arc::from),
-                ir: ir.as_deref().map(Arc::from),
+                ir: ir.body.as_deref().map(Arc::from),
+                ir_signature: ir.signature.as_deref().map(Arc::from),
             })
         });
         // Parse every present part before the bundle can enter the cache or an

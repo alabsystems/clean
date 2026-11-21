@@ -32,6 +32,9 @@ impl Parser {
     }
 
     pub(super) fn current_kind(&self) -> &TokenKind {
+        if !self.mixfix_operand_ends.is_empty() && self.at_mixfix_operand_end(0) {
+            return &TokenKind::Eof;
+        }
         &self.current().kind
     }
 
@@ -95,6 +98,7 @@ impl Parser {
 
     pub(super) fn check(&self, kind: &TokenKind) -> bool {
         std::mem::discriminant(self.current_kind()) == std::mem::discriminant(kind)
+            && (matches!(kind, TokenKind::Eof) || !self.longer_notation_atom_at(1, 0))
     }
 
     pub(super) fn eat(&mut self, kind: &TokenKind) -> bool {
@@ -120,6 +124,9 @@ impl Parser {
 
     /// Peek at token kind at offset from current position
     pub(super) fn peek_kind(&self, offset: usize) -> Option<&TokenKind> {
+        if !self.mixfix_operand_ends.is_empty() && self.at_mixfix_operand_end(offset) {
+            return Some(&TokenKind::Eof);
+        }
         self.tokens.get(self.pos + offset).map(|t| &t.kind)
     }
 
@@ -186,12 +193,54 @@ impl Parser {
         self.indent_context_stack.pop();
     }
 
+    /// Lean's `withPosition p`: run `parse` with the CURRENT token's column
+    /// saved as the position that `checkColGt` / `checkColGe` compare
+    /// against, restoring the enclosing position afterwards (on error too).
+    /// Lean's `manyIndent` / `sepByIndent` are `withPosition` around their
+    /// item loop, so the saved column is the first item's
+    /// (`Lean/Parser/Extra.lean:199-204`).
+    pub(super) fn with_position<T>(
+        &mut self,
+        construct: &str,
+        parse: impl FnOnce(&mut Self) -> T,
+    ) -> T {
+        let col = self.current().col;
+        self.push_indent_for(col, construct);
+        let result = parse(self);
+        self.pop_indent();
+        result
+    }
+
+    /// Lean's `withoutPosition p`: run `parse` with no saved position, so
+    /// `checkColGt` / `checkColGe` pass until a nested `withPosition` saves
+    /// one again (see [`Parser::position_suppressed_at`]).
+    pub(super) fn without_position<T>(&mut self, parse: impl FnOnce(&mut Self) -> T) -> T {
+        let saved = self.position_suppressed_at;
+        self.position_suppressed_at = Some(self.indent_stack.len());
+        let result = parse(self);
+        self.position_suppressed_at = saved;
+        result
+    }
+
     /// Whether the parse is inside a bracketed term group with no
     /// indentation frame pushed since it opened (Lean's `withoutPosition`;
     /// see [`Parser::position_suppressed_at`]). Column-based stops must not
     /// fire here: the group's closer is the only boundary.
     pub(super) fn position_suppressed(&self) -> bool {
         self.position_suppressed_at == Some(self.indent_stack.len())
+    }
+
+    /// Lean's `checkColGt` (`Lean/Parser/Basic.lean`, `checkColGtFn`): the
+    /// current token's column is strictly greater than the saved position's,
+    /// or no position is saved. Unlike [`Parser::at_dedent`] it does not ask
+    /// whether the token begins a line — Lean compares columns only.
+    pub(super) fn col_gt_saved_position(&self) -> bool {
+        if self.position_suppressed() {
+            return true;
+        }
+        self.indent_stack
+            .last()
+            .is_none_or(|&saved_col| self.current().col > saved_col)
     }
 
     /// Current token is on a new line at a column strictly less than the

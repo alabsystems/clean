@@ -342,7 +342,9 @@ impl TacticError {
             // *variant*. Unwrapping keeps every such decision byte-identical to
             // the pre-attribution behaviour; the enclosing block re-attributes
             // on the way out.
-            ElabError::InTactic { source, .. } => Self::from_elab_error(*source),
+            ElabError::InTactic { source, .. } | ElabError::AtBodyTerm { source, .. } => {
+                Self::from_elab_error(*source)
+            }
             other => Self::UpstreamElabError {
                 source: Box::new(other),
             },

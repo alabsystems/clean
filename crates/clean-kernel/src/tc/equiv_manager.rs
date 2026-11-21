@@ -81,7 +81,6 @@ impl EquivManager {
         self.to_node.len()
     }
 
-    #[cfg(test)]
     pub(crate) fn is_empty(&self) -> bool {
         self.to_node.is_empty()
     }

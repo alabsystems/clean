@@ -4,8 +4,7 @@
 
 //! Tests for instance tactic registration semantics (#2072).
 //!
-//! Verifies that letI, haveI, and inferI register resolved instances
-//! in the ProofState's InstanceTable for subsequent typeclass resolution.
+//! Goal-local and table-backed instance resolution in tactic proof states.
 
 use super::*;
 use crate::instances::InstanceTable;
@@ -39,26 +38,29 @@ fn state_with_class(class: &str) -> ProofState {
 }
 
 #[test]
-fn test_let_i_registers_instance_in_table() {
+fn test_let_i_resolves_only_in_the_extended_goal() {
     let mut state = state_with_class("Decidable");
 
     let ty = Expr::const_(Name::from_string("Decidable"), vec![]);
     let value = Expr::const_(Name::from_string("classical_dec"), vec![]);
+    let original = state.current_goal().unwrap().clone();
     let_i(
         &mut state,
         &clean_parser::SurfaceName::generated_path("inst"),
-        ty,
+        ty.clone(),
         value,
     )
     .unwrap();
 
-    // The instance should be registered in the table
-    let instances = state.instances().expect("should have instance table");
-    let registered = instances.get_instances(&Name::from_string("Decidable"));
-    assert!(
-        !registered.is_empty(),
-        "letI should register instance in table"
+    let goal = state.current_goal().unwrap();
+    let local = goal.local_ctx.last().unwrap();
+    assert_eq!(
+        state.synthesize_class_in_goal(goal, &ty, None),
+        Some(Expr::fvar(local.fvar)),
     );
+    assert!(state
+        .synthesize_class_in_goal(&original, &ty, None)
+        .is_none());
 }
 
 #[test]

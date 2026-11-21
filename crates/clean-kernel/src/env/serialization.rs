@@ -41,6 +41,13 @@ pub struct JsonEnvironment {
     /// Structure field information
     #[serde(default)]
     pub structure_fields: Vec<StructureFieldInfo>,
+    /// Diagnostic extern bindings, including legacy symbol-only rows.
+    #[serde(default)]
+    pub extern_bindings: Vec<(Name, String)>,
+    /// Exact persisted typed compiler annotations, including malformed rows
+    /// which remain a typed refusal after restoration.
+    #[serde(default)]
+    pub compiler_extern_storage: Option<super::PersistentEnvExtensionState>,
 }
 
 /// Information about structure fields for a given structure type
@@ -79,6 +86,15 @@ impl JsonEnvironment {
             constructors: env.constructors.values().cloned().collect(),
             recursors: env.recursors.values().cloned().collect(),
             quotients: env.quotients.values().cloned().collect(),
+            extern_bindings: env
+                .extern_bindings
+                .iter()
+                .map(|(name, symbol)| (name.clone(), symbol.clone()))
+                .collect(),
+            compiler_extern_storage: env
+                .persistent_extensions
+                .get(&super::compiler_extern::storage_key())
+                .cloned(),
             structure_fields: env
                 .structure_fields
                 .iter()
@@ -92,8 +108,9 @@ impl JsonEnvironment {
 
     /// Convert into an Environment.
     ///
-    /// Non-serialized fields (init flags, registries, attributes) use their
-    /// `Default` values — all bools are `false`, all maps/sets are empty.
+    /// Other non-serialized fields use their `Default` values. The explicit
+    /// extern diagnostic table and its raw typed carrier are retained; older
+    /// JSON without those fields cannot acquire complete extern metadata.
     pub(super) fn into_env(self) -> Environment {
         let quot_init = !self.quotients.is_empty();
         Environment {
@@ -129,6 +146,13 @@ impl JsonEnvironment {
                 .map(|q| (q.name.clone(), q))
                 .collect(),
             quot_init,
+            extern_bindings: self.extern_bindings.into_iter().collect(),
+            persistent_extensions: super::extension_storage::PersistentExtensions::from_states(
+                self.compiler_extern_storage
+                    .into_iter()
+                    .map(|state| (super::compiler_extern::storage_key(), state))
+                    .collect(),
+            ),
             structure_fields: self
                 .structure_fields
                 .into_iter()

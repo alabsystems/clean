@@ -195,8 +195,7 @@ impl ExprEqWalk {
         // conjunction succeeds. A false field aborts before any ancestor
         // completion can enter the proven-pair memo.
         pending.push(Task::Complete(key, memoizable));
-        pending.push(Task::Kinds(&a.kind, &b.kind));
-        true
+        Self::schedule_kind(&a.kind, &b.kind, pending)
     }
 
     fn children<'a, const N: usize>(

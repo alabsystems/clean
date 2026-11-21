@@ -6,26 +6,10 @@
 //! loops over mutable state** (`docs/plans/GAP_SWEEP_2026-07-09.md`, the B08
 //! successor for the for/break/continue cases).
 //!
-//! B08 (`elab_do_mut`) landed the PURE state-threading lane for straight-line
-//! `mut` reassignment, `if`-joins over one `mut` var, and tail early-`return`,
-//! and DESCOPED `for`/`while`/`break`/`continue` LOUD. B23 extends the pure
-//! lane to `for x in xs do <mut body>`: the loop lowers to the inlined
-//! `List.forIn` recursion (`elab_do_pure_for` → `build_list_forin_fold`, the
-//! kernel-registered `List.forIn` body of `data_for_in.rs`) with the mutable
-//! accumulator threaded as the `ForIn` accumulator `β`. `break`/`continue`
-//! lower to `ForInStep.done`/`.yield`.
-//!
-//! The emitted terms are ordinary `List.rec`/`ForInStep.rec`/`Bind.bind`/
-//! `Pure.pure` applications; the B07 materialization pass rewrites the
-//! `Bind.bind`/`Pure.pure` over `Option`/`Id` into computing instance-projected
-//! form, so each `theorem … := rfl` **value pin** below COMPUTES (the loop runs,
-//! mutation accumulates, break/continue short-circuit).
-//!
-//! Everything outside the honest computable fragment (`while`, `repeat`, nested
-//! loops, multiple accumulators, early `return` inside a loop, non-`List`
-//! collections, `break`/`continue` outside a loop) is descoped LOUD: a typed
-//! `Unsupported` error, asserted here to NEVER surface as "free variables" or a
-//! raw kernel reject.
+//! A loop uses the selected `ForIn` dictionary. Its accumulator carries the
+//! mutable state, and each step returns `ForInStep.done` or `ForInStep.yield`.
+//! The tests check the resulting values by definitional equality, including
+//! early exits, nested accumulators, and a user-defined iterator.
 //!
 //! These tests drive the SAME pipeline as `clean check`
 //! (`parse_file → preprocess_decl_with_context → elaborate_decl_and_register`).
@@ -87,6 +71,75 @@ fn b23_p12_for_in_mut_sum_value_certified() {
     expect_pass(
         "def f12 : Option Nat := do\n  let mut s := 0\n  for x in [1, 2, 3] do\n    s := s + x\n  pure s\n\n\
          theorem f12_pin : f12 = some 6 := rfl",
+    );
+}
+
+const FOR_TUPLE_ACTIONS: &str = r#"
+def tupleLoopAction (n : Nat) : Option Unit :=
+  if n = 0 then none else some ()
+
+def tupleActionLoop (xs : List (Nat × Nat)) : Option Nat := do
+  let left := 7
+  let mut count := 0
+  for (left, right) in xs do
+    tupleLoopAction left
+    count := 10 * count + left * right
+  pure (count + left)
+"#;
+
+#[test]
+fn mutable_for_tuple_binds_and_sequences_actions() {
+    expect_pass(&format!(
+        "{FOR_TUPLE_ACTIONS}\n\
+         theorem orderPin : tupleActionLoop [(2, 3), (4, 5)] = some 87 := rfl\n\
+         theorem discardedError : tupleActionLoop [(2, 3), (0, 5)] = none := rfl\n\
+         theorem zeroSteps : tupleActionLoop [] = some 7 := rfl"
+    ));
+    expect_loud_reject(&format!(
+        "{FOR_TUPLE_ACTIONS}\n theorem wrongOrder : tupleActionLoop [(4, 5), (2, 3)] = some 87 := rfl"
+    ));
+}
+
+#[test]
+fn mutable_for_tuple_refuses_refutable_subpattern() {
+    expect_loud_reject(
+        r#"
+def partialLoop (xs : List (Option Nat × Nat)) : Option Nat := do
+  let mut count := 0
+  for (some left, right) in xs do
+    count := count + left * right
+  pure count
+"#,
+    );
+}
+
+#[test]
+fn mutable_for_tuple_refuses_to_shadow_the_accumulator() {
+    expect_loud_reject(
+        r#"
+def shadowingLoop (xs : List (Nat × Nat)) : Option Nat := do
+  let mut total := 7
+  for (total, amount) in xs do
+    total := total + amount
+  pure total
+"#,
+    );
+}
+
+#[test]
+fn mutable_for_tuple_ignores_mutable_declarations_after_the_loop() {
+    expect_pass(
+        r#"
+def becomesMutableLater (xs : List (Nat × Nat)) : Option Nat := do
+  let total := 7
+  let mut sum := 0
+  for (total, amount) in xs do
+    sum := sum + total * amount
+  let mut total := total
+  total := total + 1
+  pure (sum + total)
+theorem laterPin : becomesMutableLater [(2, 3)] = some 14 := rfl
+"#,
     );
 }
 
@@ -252,4 +305,44 @@ fn b23_for_reassign_immutable_loud_reject() {
         e.to_lowercase().contains("immutable") || e.to_lowercase().contains("mut"),
         "expected an immutable-reassignment descope, got: {e}"
     );
+}
+
+#[test]
+fn mutable_for_matches_constructors_in_kernel_order() {
+    let definition = r#"
+def sumPairs (xs : List (Option (Nat × Nat))) : Option Nat := do
+  let mut total := 1
+  for x in xs do
+    match x with
+    | some (a, b) => total := total + a * b
+    | none => break
+  pure total
+"#;
+    expect_pass(&format!(
+        "{definition}\ntheorem sumPin : sumPairs [some (2, 3), none, some (7, 8)] = some 7 := rfl"
+    ));
+    expect_loud_reject(&format!(
+        "{definition}\ntheorem wrong : sumPairs [some (2, 3), none, some (7, 8)] = some 63 := rfl"
+    ));
+    expect_loud_reject(&definition.replace("    | none => break\n", ""));
+}
+
+#[test]
+fn a_higher_priority_for_in_instance_controls_a_mutable_loop() {
+    let source = r#"
+local instance (priority := 20000) skipAll : ForIn Id (List Nat) Nat where
+  forIn _ initial _ := initial
+
+def selectedCount (xs : List Nat) : Nat := Id.run do
+  let mut n := 0
+  for x in xs do
+    n := n + x
+  return n
+"#;
+    expect_pass(&format!(
+        "{source}\ntheorem yes : selectedCount [1, 2, 3] = 0 := rfl"
+    ));
+    expect_loud_reject(&format!(
+        "{source}\ntheorem no : selectedCount [1, 2, 3] = 6 := rfl"
+    ));
 }

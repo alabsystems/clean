@@ -70,6 +70,46 @@ fn test_parse_modern_flags_are_unknown_to_4_8_0() {
 }
 
 #[test]
+fn stable_incremental_flags_are_named_refusals_and_old_dialect_keeps_its_option_set() {
+    for flag in ["--incr-save", "--incr-load", "--incr-header-save"] {
+        let args = words(&format!("{flag}=snapshot file.lean"));
+        let line = parse(LeanDialect::V4_36_0, &args).expect("stable flag");
+        assert_eq!(
+            opts(&line),
+            vec![Opt::Refused(Refusal::IncrementalSnapshot)]
+        );
+        assert!(parse(LeanDialect::V4_30_0Rc2, &args).is_err());
+    }
+}
+
+#[test]
+fn stable_short_and_long_run_preserve_program_arguments() {
+    for run in ["--run file.lean args --flag", "-r file.lean args --flag"] {
+        let line = parse(LeanDialect::V4_36_0, &words(run)).expect("stable run flag");
+        assert_eq!(opts(&line), vec![Opt::RunFile]);
+        assert_eq!(
+            line.run_file,
+            Some(("file.lean".to_owned(), words("args --flag")))
+        );
+    }
+    let attached = parse(LeanDialect::V4_36_0, &words("-rfile.lean args")).unwrap();
+    assert_eq!(
+        attached.run_file,
+        Some(("-rfile.lean".to_owned(), words("args")))
+    );
+    let inline = parse(LeanDialect::V4_36_0, &words("--run=file.lean")).unwrap_err();
+    assert_eq!(
+        inline.getopt_line.as_deref(),
+        Some("lean: option `--run' doesn't allow an argument")
+    );
+    for run in ["ignored.lean --run", "ignored.lean -r"] {
+        let line = parse(LeanDialect::V4_36_0, &words(run)).unwrap();
+        assert_eq!(opts(&line), vec![Opt::RunFile]);
+        assert!(line.run_file.is_none() && line.operands.is_empty());
+    }
+}
+
+#[test]
 fn test_parse_missing_argument_messages() {
     let err = parse(LeanDialect::V4_8_0, &words("f.lean -D")).expect_err("no argument");
     assert_eq!(
@@ -131,6 +171,23 @@ fn test_parse_refused_options_are_named() {
     assert_eq!(line.options[0].spelling, "-o");
     assert_eq!(line.options[0].value.as_deref(), Some("x.olean"));
     assert_eq!(line.operands, vec!["f.lean"]);
+}
+
+#[test]
+fn stable_olean_output_accepts_short_and_assigned_long_paths() {
+    for args in [
+        "-o x.olean F.lean",
+        "-ox.olean F.lean",
+        "--o=x.olean F.lean",
+    ] {
+        let line = parse(LeanDialect::V4_36_0, &words(args)).expect("stable output option");
+        assert_eq!(opts(&line), vec![Opt::OleanOutput]);
+        assert_eq!(line.options[0].value.as_deref(), Some("x.olean"));
+        assert_eq!(line.operands, vec!["F.lean"]);
+    }
+    let line = parse(LeanDialect::V4_36_0, &words("--o x.olean F.lean")).expect("optional arg");
+    assert_eq!(opts(&line), vec![Opt::OleanOutput]);
+    assert_eq!(line.options[0].value, None);
 }
 
 #[test]

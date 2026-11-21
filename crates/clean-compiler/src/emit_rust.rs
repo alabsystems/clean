@@ -289,8 +289,8 @@ impl RustEmitter {
         self.base.emit_args_joined(args)
     }
 
-    fn emit_literal(&self, lit: &IRLiteral) -> String {
-        match lit {
+    fn emit_literal(&self, lit: &IRLiteral) -> Result<String, IRError> {
+        Ok(match lit {
             IRLiteral::Bool(b) => if *b { "1u8" } else { "0u8" }.to_string(),
             IRLiteral::UInt8(n) => format!("{}u8", n),
             IRLiteral::UInt16(n) => format!("{}u16", n),
@@ -300,6 +300,9 @@ impl RustEmitter {
             // Big Nat literal (>= 2^64): heap Nat from two u64 limbs (RUNG B).
             IRLiteral::NatBig(v) => {
                 format!("clean_nat_big({}u64, {}u64)", *v as u64, (*v >> 64) as u64)
+            }
+            IRLiteral::NatLimbs(limbs) => {
+                return emit_wide_nat_literal(limbs);
             }
             IRLiteral::Float32(f) if f.is_nan() => "f32::NAN".to_string(),
             IRLiteral::Float32(f) if f.is_infinite() => if f.is_sign_positive() {
@@ -317,7 +320,7 @@ impl RustEmitter {
             }
             .to_string(),
             IRLiteral::Float64(f) => format!("{}f64", f),
-        }
+        })
     }
 
     /// Emit a constructor expression. Part of #1974, #2005.
@@ -381,7 +384,7 @@ impl RustEmitter {
                 IRType::UInt32 => format!("clean_unbox_uint32({})", self.emit_arg(arg)),
                 _ => format!("clean_unbox({})", self.emit_arg(arg)),
             },
-            IRExpr::Lit(lit) => self.emit_literal(lit),
+            IRExpr::Lit(lit) => self.emit_literal(lit)?,
             IRExpr::Apply { fn_id, args } => {
                 // Saturated-call + `clean_closure_apply` over-application
                 // discipline (parity with `emit_c::emit_apply` /
@@ -540,6 +543,7 @@ pub fn emit_rust(decls: &[IRDecl]) -> Result<String, IRError> {
 
 /// Emit Rust code with custom configuration.
 pub fn emit_rust_with_config(decls: &[IRDecl], config: RustEmitConfig) -> Result<String, IRError> {
+    crate::ir_checker::validate_nat_literals(decls)?;
     if config.check_ir {
         check_decls(decls)?;
     }
@@ -548,4 +552,16 @@ pub fn emit_rust_with_config(decls: &[IRDecl], config: RustEmitConfig) -> Result
     emitter.emit_header();
     emitter.emit_decls(&lowered)?;
     Ok(emitter.finish())
+}
+
+pub(crate) fn emit_wide_nat_literal(limbs: &[u64]) -> Result<String, IRError> {
+    if !crate::ir::canonical_nat_limbs(limbs) {
+        return Err(IRError::NonCanonicalNatLimbs);
+    }
+    let words = limbs
+        .iter()
+        .map(|word| format!("{word}u64"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    Ok(format!("clean_nat_from_limbs(&[{words}])"))
 }

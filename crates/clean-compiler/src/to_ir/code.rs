@@ -151,7 +151,7 @@ pub(super) fn lower_const_application(
     // tagged-constructor allocation happens for non-`Nat`/`Bool` inductives.
     // `Nat`/`Bool` constructors are already rewritten to literals / `Bool`
     // shims by `to_mono` and never reach here as constructor `Const`s.
-    if state.lookup_ctor_meta(name).is_some() {
+    if state.lookup_ctor_meta(name).is_some() && !state.external_constructors.contains(name) {
         if *name == Name::from_string("String.ofByteArray") {
             if state.is_byte_array_string_constructor(name) {
                 return lower_byte_array_string_constructor(name, args, state);
@@ -322,6 +322,11 @@ pub(crate) fn compute_proj_expr(
                 idx,
                 field_count: field_types.len(),
             })?;
+    if field_ty.is_void() {
+        return Err(CompilerError::Unsupported(
+            "world-token projection must be bound as an erased value".to_owned(),
+        ));
+    }
 
     let preceding = &field_types[..idx_usize];
 
@@ -458,9 +463,7 @@ pub(super) fn lower_let_value(
             // *constructor* name, because `inductive_env` only stores the tag-0
             // constructor's layout — see `to_lcnf::lower::lower_generic_cases` and
             // `to_ir::ctor_env::build_ctor_env`.
-            let meta = state
-                .lookup_proj_meta(type_name)
-                .or_else(|| state.lookup_ctor_meta(type_name));
+            let meta = state.lookup_proj_meta(type_name);
             match meta {
                 Some(meta) => {
                     let field_types = meta.field_types.clone();
@@ -508,6 +511,9 @@ pub(super) fn lower_let_value(
             levels: _,
             args,
         } => {
+            if state.external_constructors.contains(name) {
+                return lower_const_application(name, args, state, declared_ty);
+            }
             if state.is_byte_array_string_constructor(name) {
                 return lower_byte_array_string_constructor(name, args, state);
             }
@@ -596,10 +602,9 @@ pub(super) fn ctor_field_args<'a>(
 /// layout partitioning (`partition_ctor_fields`) can never pair a value with
 /// another field's type.
 ///
-/// EVERY declared field keeps its slot; an erased argument fills it with a
-/// boxed unit (`IRArg::Erased` emits as `clean_box(0)`). The consumers read
-/// this object by the DECLARED layout — `compute_proj_expr` counts the
-/// declared `field_types` of the projection metadata, and the synthesized
+/// A checked world field has no slot. Every other declared field keeps its
+/// slot and an erased argument fills its object slot with a boxed unit
+/// (`IRArg::Erased` emits as `clean_box(0)`). `compute_proj_expr` and the synthesized
 /// recursor arms bind fields by the declared constructor type — so a producer
 /// that dropped an erased argument built a SHORTER object than every reader
 /// assumed. Measured 2026-09-25 through `clean run`, against pinned Lean
@@ -631,6 +636,14 @@ fn lower_ctor_parts(
     let mut field_types = Vec::with_capacity(meta.field_types.len());
     for (field, (arg, ty)) in field_args.iter().zip(meta.field_types.iter()).enumerate() {
         let ir_arg = lower_arg(arg, state)?;
+        if ty.is_void() {
+            if !matches!(ir_arg, IRArg::Erased) {
+                return Err(CompilerError::Unsupported(format!(
+                    "constructor {name} field {field}: world token still has a runtime value"
+                )));
+            }
+            continue;
+        }
         // An erased argument can only stand in an OBJECT slot (a boxed unit);
         // a scalar slot fed an erased value has no faithful representation.
         if matches!(ir_arg, IRArg::Erased) && !ty.is_rc_type() {

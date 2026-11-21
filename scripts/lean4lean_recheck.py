@@ -42,6 +42,8 @@ ROOT = Path(__file__).resolve().parents[1]
 ARENA = nano.ARENA
 PIN = 'data/lean4lean_q4_pin.json'
 REASONS = 'data/lean4lean_q4_arena_reasons.json'
+PATCH_DIRECTORY = Path('data/lean4lean_q4_patches')
+REFERENCE_OBSERVATION = 'reports/self-proof-q4-corrected-reference-2026-11-18/control-observation.json'
 AX0 = nano.AX0
 ANSWERS_PINNED_INPUTS = True
 CHECKED = re.compile(r'^checked (\d+) declarations$')
@@ -295,10 +297,39 @@ def recheck(binary, data, seconds, binary_digest):
     return policy(run(binary, data, seconds, binary_digest), data, pin)
 
 
+
+def patch_files(pin=None, root=ROOT):
+    """Name and check only the declared source patches; this checks custody, not a kernel verdict."""
+    pin = json.loads((root / PIN).read_text()) if pin is None else pin
+    entries = pin.get('patches', [])
+    if not isinstance(entries, list):
+        raise ValueError('source patch inventory is not a list')
+    directory = root / PATCH_DIRECTORY
+    if directory.is_symlink():
+        raise ValueError('source patch directory is a symlink')
+    names = []
+    for entry in entries:
+        relative = Path(entry['file'])
+        if relative.parent != PATCH_DIRECTORY or relative.suffix != '.patch':
+            raise ValueError('source patch is outside the declared directory')
+        path = root / relative
+        if path.is_symlink() or not path.is_file():
+            raise ValueError(f'source patch is not a regular file: {relative}')
+        if nano.digest(path) != entry['sha256']:
+            raise ValueError(f'source patch digest differs from the pin: {relative}')
+        names.append(relative.as_posix())
+    if len(names) != len(set(names)):
+        raise ValueError('duplicate source patch')
+    present = {p.relative_to(root).as_posix() for p in directory.glob('*.patch')}
+    if present != set(names):
+        raise ValueError('source patch directory differs from the pin')
+    return names
+
+
 def pinned_inputs():
     table = json.loads((ARENA / 'round-2026-09.table.json').read_text())
     arena = ARENA.relative_to(ROOT)
-    return sorted({PIN, REASONS, 'scripts/nanoda_recheck.py', 'scripts/lean4lean_selftest.py',
+    return sorted({PIN, REASONS, REFERENCE_OBSERVATION, *patch_files(), 'scripts/nanoda_recheck.py', 'scripts/lean4lean_selftest.py',
                    str(arena / 'round-2026-09.table.json'),
                    str(arena / table['archive']['file'])} |
                   {nano.CONTROLS[n]['path'] for n in RUNNER_CONTROLS})
@@ -341,6 +372,7 @@ def main(argv=None):
     try:
         pin_bytes = (ROOT / PIN).read_bytes()
         pin = json.loads(pin_bytes)
+        patch_inputs = {p: nano.digest(ROOT / p) for p in patch_files(pin)}
         binary = args.binary.resolve()
         if sys.platform != 'darwin' or nano.digest(binary) != pin['binary_sha256']:
             raise ValueError('platform or binary identity mismatch')
@@ -359,6 +391,7 @@ def main(argv=None):
                       runner_sha256=nano.digest(__file__), git_commit=commit, dirty_status=dirty,
                       utc=datetime.now(timezone.utc).isoformat(), host=platform.platform(),
                       arena_reason_table_sha256=nano.digest(ROOT / REASONS),
+                      source_patch_inputs=patch_inputs,
                       qualification=[], runner_controls={}, qualified=False,
                       decisions=DECISIONS,
                       policy='arena: kernel verdicts, fixture axioms admitted; a panic after the kernel raised '

@@ -429,7 +429,7 @@ impl<'a> ElabCtx<'a> {
             final_ty,
             final_val,
             priority,
-            *modifiers,
+            modifiers.clone(),
         )
     }
 
@@ -511,7 +511,7 @@ impl<'a> ElabCtx<'a> {
             final_ty,
             final_val,
             priority,
-            *modifiers,
+            modifiers.clone(),
         )
     }
 
@@ -587,7 +587,7 @@ impl<'a> ElabCtx<'a> {
             final_ty,
             final_val,
             priority,
-            *modifiers,
+            modifiers.clone(),
         )
     }
 
@@ -772,6 +772,13 @@ impl<'a> ElabCtx<'a> {
             final_val,
         );
 
+        self.note_public_param_infos_from_names(
+            instance_name,
+            &binder_names,
+            binder_infos,
+            &auto_implicits,
+            section_auto_count,
+        );
         // Substitute level constraints collected during unification.
         let final_ty = self.metas.instantiate_levels(&final_ty);
         let final_val = self.metas.instantiate_levels(&final_val);
@@ -839,10 +846,13 @@ impl<'a> ElabCtx<'a> {
     /// (`instHashableString`), and a statement naming that core instance then
     /// meant the user's (measured 2026-09-27).
     fn fresh_global_name(&self, base: &str) -> Name {
+        self.fresh_global_name_in(base, self.env)
+    }
+
+    pub(super) fn fresh_global_name_in(&self, base: &str, env: &clean_kernel::Environment) -> Name {
         let claimed = |name: &Name| {
-            self.env.get_const(name).is_some()
-                || (self.env.models_lean_init()
-                    && crate::lean_core_names::is_lean_init_constant(name))
+            env.get_const(name).is_some()
+                || (env.models_lean_init() && crate::lean_core_names::is_lean_init_constant(name))
         };
         // This is a generated label, not identifier syntax. In particular, a
         // dot printed inside a class name must not create a namespace component.

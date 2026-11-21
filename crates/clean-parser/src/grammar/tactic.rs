@@ -82,6 +82,17 @@ impl Parser {
         expr
     }
 
+    /// Parse the type after a tactic binding's colon. The binding's own
+    /// `:=` can follow the last argument of an applied type.
+    pub(super) fn parse_tactic_binding_type(&mut self) -> Result<SurfaceExpr, ParseError> {
+        let struct_field = std::mem::take(&mut self.in_struct_field);
+        let instance_field = std::mem::take(&mut self.in_instance_field);
+        let ty = self.parse_tactic_expr();
+        self.in_struct_field = struct_field;
+        self.in_instance_field = instance_field;
+        ty
+    }
+
     /// Parse a tactic term that stops *before* a top-level `=` separator.
     ///
     /// Same newline-stop framing as [`parse_tactic_expr`], but enters the
@@ -152,7 +163,7 @@ impl Parser {
 
         while !self.at_tactic_end(0) {
             let lead = self.tactic_lead_text();
-            let mut tac = match self.tactic() {
+            let tac = match self.tactic() {
                 Ok(tac) => tac,
                 Err(err) => {
                     if let Some(prev) = prev_lead {
@@ -164,21 +175,26 @@ impl Parser {
             };
             prev_lead = Some(lead);
 
-            // Check for `<;>` sequential focus combinator: `tac1 <;> tac2`
-            // applies tac2 to every goal produced by tac1
-            while self.eat(&TokenKind::SeqFocusOp) {
-                let rhs = self.tactic()?;
-                let span = tac.span().merge(rhs.span());
-                tac = SurfaceTactic::SeqFocus(span, Box::new(tac), Box::new(rhs));
-            }
-
-            tactics.push(tac);
+            tactics.push(self.parse_seq_focus_tail(tac)?);
 
             // Consume optional semicolons between tactics
             while self.eat(&TokenKind::Semicolon) {}
         }
 
         Ok(tactics)
+    }
+
+    /// Fold a `<;>` chain after its first tactic, left to right.
+    pub(super) fn parse_seq_focus_tail(
+        &mut self,
+        mut tac: SurfaceTactic,
+    ) -> Result<SurfaceTactic, ParseError> {
+        while self.eat(&TokenKind::SeqFocusOp) {
+            let rhs = self.tactic()?;
+            let span = tac.span().merge(rhs.span());
+            tac = SurfaceTactic::SeqFocus(span, Box::new(tac), Box::new(rhs));
+        }
+        Ok(tac)
     }
 
     /// Exact source spelling of the token that *leads* a tactic (diagnostics
@@ -343,8 +359,13 @@ impl Parser {
     /// Dispatch identifier-based tactics (not lexer keywords).
     fn parse_ident_tactic(&mut self, span: Span, name: &str) -> Result<SurfaceTactic, ParseError> {
         match name {
+            "letI" if self.current().lean_keyword && !self.current().ident_escaped => {
+                self.advance();
+                self.parse_tactic_let_i(span)
+            }
             // 3C.3: ident-list tactics — hardcoded parsing, Named output (#2430 Wave 3)
-            "intro" | "ext" | "funext" | "by_contra" => self.parse_ident_list_to_named(span, name),
+            "intro" => self.parse_intro(span),
+            "ext" | "funext" | "by_contra" => self.parse_ident_list_to_named(span, name),
             // 3C.4: nonempty-ident tactics — hardcoded parsing, Named output (#2430 Wave 3)
             "subst" | "revert" | "clear" | "rename_i" => {
                 self.parse_nonempty_ident_to_named(span, name)
@@ -353,8 +374,10 @@ impl Parser {
             "arg" | "enter" => self.parse_compound_ident_tactic(span, name),
             "rw" | "rewrite" | "rwa" | "simp" | "simp_all" | "simp_only" | "simp_rw" | "cases"
             | "induction" | "case" | "next" | "first" | "calc" | "unfold" | "push_neg"
-            | "dsimp" | "conv" | "all_goals" | "any_goals" | "try" | "repeat" | "focus"
-            | "simpa" | "simpa_only" | "solve" => self.parse_compound_ident_tactic(span, name),
+            | "dsimp" | "conv" | "all_goals" | "any_goals" | "try" | "repeat" | "repeat'"
+            | "focus" | "simpa" | "simpa_only" | "solve" | "split" => {
+                self.parse_compound_ident_tactic(span, name)
+            }
             // 3C.7: compound-arg tactics — hardcoded parsing, Named output (#2430 Wave 3)
             "by_cases" => {
                 self.advance();
@@ -548,34 +571,42 @@ impl Parser {
                     args,
                 })
             }
-            // `injection h with h1 h2 …` — the `with`-clause names the resulting
-            // hypotheses.  Lean 4 grammar: `injection <term> (with <ident>+)?`.
-            // Without a dedicated arm the generic expr-list parser stops at the
-            // `with` keyword, leaving it for `tactic_seq`, which then tries to
-            // parse `with …` as a fresh tactic (term-mode `expr()` starting at a
-            // bare `with`).  That mis-parse greedily swallows the *following*
-            // tactic (e.g. `obtain ⟨_, h⟩`) and chokes mid-pattern, triggering
-            // decl-level recovery ("parser recovery produced raw declaration").
-            // The clean injection elaborator ignores the `with` names (it is
-            // registered as a `hyp_arg`), so we consume-and-discard them here.
+            // The hypothesis is a term. Each identifier or anonymous slot after
+            // `with` names one resulting field equality in constructor order.
             "injection" => {
                 self.advance();
                 let hyp = self.parse_tactic_expr()?;
+                let mut end = hyp.span();
+                let mut args = vec![hyp];
                 if self.eat(&TokenKind::With) {
-                    // Consume the result-name idents (discarded; the elaborator
-                    // does not use them).  The names sit on the same source line
-                    // as `with`; stop at the first newline-preceded token so the
-                    // *next* tactic (on its own line) is never swallowed.
-                    while matches!(self.current_kind(), TokenKind::Ident(_))
-                        && !self.current().preceded_by_newline
-                    {
-                        self.advance();
+                    while !self.current().preceded_by_newline {
+                        // The newline or punctuation ends the field list. A registered
+                        // tactic name on this line is still a valid Lean binder.
+                        let arg = if matches!(self.current_kind(), TokenKind::Ident(_))
+                            && !self.current().lean_keyword
+                        {
+                            let name = self.expect_ident("injection field name")?;
+                            SurfaceExpr::Ident(self.prev_span(), name)
+                        } else if self.eat(&TokenKind::Underscore) {
+                            SurfaceExpr::Hole(self.prev_span())
+                        } else {
+                            break;
+                        };
+                        end = arg.span();
+                        args.push(arg);
+                    }
+                    if args.len() == 1 {
+                        return Err(ParseError::UnexpectedToken {
+                            line: self.current_line(),
+                            col: self.current_span().start,
+                            message: "injection with expects at least one field name or '_'".into(),
+                        });
                     }
                 }
                 Ok(SurfaceTactic::Named {
-                    span: span.merge(hyp.span()),
+                    span: span.merge(end),
                     name: "injection".to_string(),
-                    args: vec![hyp],
+                    args,
                 })
             }
             // 3C.8: search tactics — Named output (#2430 Wave 3)
@@ -678,11 +709,11 @@ impl Parser {
                     Ok(SurfaceTactic::Paren(span, unfolds))
                 }
             }
-            "push_neg" => {
+            "push_neg" | "split" => {
                 let loc = self.parse_tactic_location();
                 Ok(SurfaceTactic::Named {
                     span,
-                    name: "push_neg".to_string(),
+                    name: name.to_string(),
                     args: location_to_args(span, loc),
                 })
             }
@@ -699,6 +730,7 @@ impl Parser {
             "any_goals" => Ok(SurfaceTactic::AnyGoals(span, self.indented_tactic_seq()?)),
             "try" => Ok(SurfaceTactic::Try(span, self.indented_tactic_seq()?)),
             "repeat" => Ok(SurfaceTactic::Repeat(span, self.indented_tactic_seq()?)),
+            "repeat'" => Ok(SurfaceTactic::RepeatAll(span, self.indented_tactic_seq()?)),
             "focus" => Ok(SurfaceTactic::Focus(span, self.indented_tactic_seq()?)),
             "simpa" => self.parse_tactic_simpa(span, false),
             "simpa_only" => self.parse_tactic_simpa(span, true),
@@ -758,6 +790,24 @@ impl Parser {
     fn parse_named_tactic_args_for(&mut self, name: &str) -> Result<Vec<SurfaceExpr>, ParseError> {
         // `optConfig` precedes every argument form in Lean's tactic grammar.
         self.eat_tactic_config_items();
+        if name == "change" && !self.at_tactic_end(0) {
+            let saved = std::mem::replace(&mut self.stop_app_at_location, true);
+            let term = self.parse_tactic_expr();
+            self.stop_app_at_location = saved;
+            let mut args = vec![term?];
+            let start = self.pos;
+            let span = self.current_span();
+            let location = self.parse_tactic_location();
+            if self.pos == start + 1 {
+                return Err(ParseError::UnexpectedToken {
+                    line: self.current_line(),
+                    col: self.current_span().start,
+                    message: "expected a location after 'at'".into(),
+                });
+            }
+            args.extend(location_to_args(span, location));
+            return Ok(args);
+        }
         match self.tactic_pattern(name).cloned() {
             Some(TacticArgPattern::Nullary) => Ok(Vec::new()),
             Some(TacticArgPattern::TermArg) => {
@@ -906,7 +956,42 @@ impl Parser {
         Ok(args)
     }
 
-    /// Parse ident-list tactics (`intro`, `ext`, `funext`, `by_contra`) → Named.
+    /// An intro argument can name a local or destructure it. Keep ordinary
+    /// introductions in their original groups so their shadowing rules apply.
+    fn parse_intro(&mut self, span: Span) -> Result<SurfaceTactic, ParseError> {
+        self.advance();
+        let mut steps = Vec::new();
+        loop {
+            let args = self.ident_list_tactic_args();
+            if !args.is_empty() {
+                steps.push(SurfaceTactic::Named {
+                    span,
+                    name: "intro".into(),
+                    args,
+                });
+            }
+            if !self.col_gt_saved_position() || !self.check(&TokenKind::LAngle) {
+                break;
+            }
+            let start = self.current_span();
+            let pattern = self.pattern()?;
+            steps.push(SurfaceTactic::IntroPattern(
+                start.merge(self.prev_span()),
+                pattern,
+            ));
+        }
+        match steps.len() {
+            0 => Ok(SurfaceTactic::Named {
+                span,
+                name: "intro".into(),
+                args: Vec::new(),
+            }),
+            1 => Ok(steps.remove(0)),
+            _ => Ok(SurfaceTactic::Paren(span.merge(self.prev_span()), steps)),
+        }
+    }
+
+    /// Parse ident-list tactics (`ext`, `funext`, `by_contra`) → Named.
     /// Uses hardcoded ident-list parsing so it works without tactic patterns.
     fn parse_ident_list_to_named(
         &mut self,
@@ -914,6 +999,14 @@ impl Parser {
         name: &str,
     ) -> Result<SurfaceTactic, ParseError> {
         self.advance();
+        Ok(SurfaceTactic::Named {
+            span,
+            name: name.to_string(),
+            args: self.ident_list_tactic_args(),
+        })
+    }
+
+    fn ident_list_tactic_args(&mut self) -> Vec<SurfaceExpr> {
         // Accept both identifiers AND `_` as names. For binder-introducing tactics
         // (`intro`/`ext`/`funext`), `_` is an ANONYMOUS binder name, so `intro _`
         // must yield an `Ident("_")` arg — NOT stop the list and leave the `_` to be
@@ -921,7 +1014,9 @@ impl Parser {
         // meta-encoded FVar into the proof: `intro _; rfl` failed closed with
         // `UnknownFVar`). `_` is read back as the name "_" by `expr_to_hyp_name`.
         let mut args: Vec<SurfaceExpr> = Vec::new();
-        loop {
+        // Lean's intro and funext arguments use colGt. A new tactic at the
+        // block column ends the list even when its spelling is a valid binder.
+        while self.col_gt_saved_position() {
             if let Some(n) = self.try_eat_ident() {
                 args.push(SurfaceExpr::Ident(self.prev_span(), n));
             } else if self.eat(&TokenKind::Underscore) {
@@ -933,11 +1028,7 @@ impl Parser {
                 break;
             }
         }
-        Ok(SurfaceTactic::Named {
-            span,
-            name: name.to_string(),
-            args,
-        })
+        args
     }
 
     /// Parse nonempty-ident-list tactics (`subst`, `revert`, `clear`, `rename_i`) → Named.
@@ -949,7 +1040,11 @@ impl Parser {
     ) -> Result<SurfaceTactic, ParseError> {
         let tactic_col = self.current().col;
         self.advance();
-        let idents = if name == "rename_i" {
+        let idents = if name == "subst" {
+            // The identifier form of Lean's `colGt term:max` operands.
+            // A contextual tactic name can refer to a local in this slot.
+            self.parse_indented_ident_list()?
+        } else if name == "rename_i" {
             // These are new binder names. A contextual tactic name such as
             // `first` is an identifier here; layout bounds the next tactic.
             let mut names = Vec::new();

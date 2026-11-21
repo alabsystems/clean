@@ -1704,6 +1704,10 @@ fn test_export_theorem_kind_preserved_through_parse() {
         clean_kernel::env::ConstantKind::Theorem,
     ));
     assert_eq!(
+        parsed.mutual_declarations,
+        Some(vec![Name::from_string("Test.kindThm")])
+    );
+    assert_eq!(
         parsed.kind,
         ParsedKind::Theorem,
         "a theorem must parse back as ConstantKind::Theorem, not Definition"
@@ -1722,6 +1726,10 @@ fn test_export_opaque_kind_preserved_through_parse() {
         clean_kernel::env::ConstantKind::Opaque,
     ));
     assert_eq!(
+        parsed.mutual_declarations,
+        Some(vec![Name::from_string("Test.kindOpaque")])
+    );
+    assert_eq!(
         parsed.kind,
         ParsedKind::Opaque,
         "an opaque constant must parse back as ConstantKind::Opaque, not Definition"
@@ -1739,6 +1747,7 @@ fn test_export_definition_kind_still_definition_after_parse() {
         "Test.kindDef",
         clean_kernel::env::ConstantKind::Definition,
     ));
+    assert_eq!(parsed.mutual_declarations, None);
     assert_eq!(
         parsed.kind,
         ParsedKind::Definition,

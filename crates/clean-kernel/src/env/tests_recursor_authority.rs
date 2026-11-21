@@ -563,6 +563,14 @@ fn test_recursor_preserves_constructor_field_binder_annotations() {
 #[test]
 fn empty_recursor_motives_remain_explicit_in_every_eliminator_order() {
     let mut env = Environment::with_prelude();
+    for name in ["Nat.rec", "Nat.casesOn", "Nat.recOn"] {
+        let name = Name::from_string(name);
+        let constant = env.get_const(&name).expect("nonempty control eliminator");
+        let ExprKind::Pi(motive, _, _) = constant.type_.kind() else {
+            panic!("nonempty motive binder");
+        };
+        assert_eq!(motive.info, BinderInfo::Implicit, "{name}");
+    }
     for (name, type_) in [
         ("EmptyMotiveProp", Expr::prop()),
         ("EmptyMotiveType", Expr::type_()),

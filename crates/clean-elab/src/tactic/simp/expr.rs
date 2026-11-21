@@ -27,7 +27,7 @@ use super::binder_domain::{binding_violates_declared_domain, statement_yields_pa
 use super::budget::SimpBudget;
 use super::instance_slot::synthesize_class_slot;
 use super::lemma_levels::{is_local_rule, LemmaLevels};
-use super::match_target::{collapse_nat_ofnat_literals, MatchTarget};
+use super::match_target::{collapse_nat_ofnat_literals, match_successor_arguments, MatchTarget};
 use super::pattern::{convert_bvars_to_metas, substitute_bvars_with_metas};
 use super::proof::{
     mk_congr, mk_congr_arg, mk_congr_fun, mk_eq_trans, mk_forall_congr, mk_funext,
@@ -412,7 +412,7 @@ pub(crate) fn simp_expr_budgeted(
 
     // (3) The growth check, at the frame that produced the growth. `admit`
     // trips the budget on failure, so every enclosing frame unwinds too.
-    if result.expr != *expr && !budget.admit(&result.expr) {
+    if result.expr != *expr && !budget.admit(&result.expr, "simplifying a subterm") {
         return SimpResult::refl(expr.clone());
     }
 
@@ -478,7 +478,7 @@ fn simp_expr_inner(
     if !config.unfold_defs.is_empty() {
         let unfolded = unfold_named_consts(&result.expr, &config.unfold_defs);
         if unfolded != result.expr {
-            if !budget.admit(&unfolded) {
+            if !budget.admit(&unfolded, "unfolding the requested definitions") {
                 return SimpResult::refl(expr.clone());
             }
             result = SimpResult {
@@ -493,12 +493,14 @@ fn simp_expr_inner(
         // a reduct far past the budget before building it. Such a `let`
         // enters a goal by unfolding a definition, so only an unfolding simp
         // pays for the check.
-        if !config.unfold_defs.is_empty() && !budget.admit_before_zeta(&result.expr) {
+        if !config.unfold_defs.is_empty()
+            && !budget.admit_before_zeta(&result.expr, "simplifying a subterm")
+        {
             return SimpResult::refl(expr.clone());
         }
         let beta_reduced = beta_reduce(&result.expr);
         if beta_reduced != result.expr {
-            if !budget.admit(&beta_reduced) {
+            if !budget.admit(&beta_reduced, "reducing a βζ redex") {
                 return SimpResult::refl(expr.clone());
             }
             result = SimpResult {
@@ -511,7 +513,7 @@ fn simp_expr_inner(
     if config.eta {
         let eta_reduced = eta_reduce(&result.expr);
         if eta_reduced != result.expr {
-            if !budget.admit(&eta_reduced) {
+            if !budget.admit(&eta_reduced, "reducing an η redex") {
                 return SimpResult::refl(expr.clone());
             }
             result = SimpResult {
@@ -526,8 +528,9 @@ fn simp_expr_inner(
     // to the budget the same way.
     if let Some(reduced) = super::matcher::reduce_matcher_app(state, goal, &result.expr, budget)
         .or_else(|| super::iota::reduce_recursor_app(state, goal, &result.expr, budget))
+        .or_else(|| super::proj_reduce::reduce_field_app(state, goal, &result.expr))
     {
-        if !budget.admit(&reduced) {
+        if !budget.admit(&reduced, "reducing a matcher, recursor or projection") {
             return SimpResult::refl(expr.clone());
         }
         result = SimpResult {
@@ -554,8 +557,12 @@ fn simp_expr_inner(
     // dispatches on: ι again, chained after their congruence proof.
     if let Some(reduced) = super::matcher::reduce_matcher_app(state, goal, &result.expr, budget)
         .or_else(|| super::iota::reduce_recursor_app(state, goal, &result.expr, budget))
+        .or_else(|| super::proj_reduce::reduce_field_app(state, goal, &result.expr))
     {
-        if budget.admit(&reduced) {
+        if budget.admit(
+            &reduced,
+            "reducing a matcher, recursor or projection after its children",
+        ) {
             let iota = SimpResult {
                 expr: reduced,
                 proof: None,
@@ -569,7 +576,7 @@ fn simp_expr_inner(
     // unifier WHNF-reduces the pattern (e.g. `Nat.add ?n 0` → `?n`) and the meta
     // absorbs the entire target, yielding an identity rewrite.
     let match_target = MatchTarget::new(state, goal, &result.expr);
-    for lemma in lemmas.candidates(state, goal, &result.expr) {
+    for lemma in lemmas.candidates_for_target(state, goal, &match_target) {
         if let Some((new_expr, proof)) = try_apply_simp_lemma_with_proof(
             state,
             goal,
@@ -762,7 +769,7 @@ fn argument_has_dependents(telescope: &Expr, args: &[&Expr], index: usize) -> bo
         let ExprKind::Pi(_, domain, codomain) = rest.kind() else {
             return false;
         };
-        if position > index && mentions_fvar(&beta_reduce(domain), sentinel) {
+        if position > index && mentions_fvar_after_beta(domain, sentinel) {
             return true;
         }
         let value = if position == index {
@@ -772,8 +779,23 @@ fn argument_has_dependents(telescope: &Expr, args: &[&Expr], index: usize) -> bo
         };
         rest = crate::tactic::bvar_ops::instantiate(codomain, &value);
     }
-    mentions_fvar(&beta_reduce(&rest), sentinel)
+    mentions_fvar_after_beta(&rest, sentinel)
 }
+
+fn mentions_fvar_after_beta(expr: &Expr, id: FVarId) -> bool {
+    // Beta and let reduction can erase a free variable, but cannot introduce
+    // one absent from the input. A possible or unknown bound needs the fold.
+    if !expr.may_contain_fvar_at_or_above(id) {
+        return false;
+    }
+    #[cfg(test)]
+    dependency_tests::BETA_FOLDS.with(|count| count.set(count.get() + 1));
+    mentions_fvar(&beta_reduce(expr), id)
+}
+
+#[cfg(test)]
+#[path = "dependency_tests.rs"]
+mod dependency_tests;
 
 /// Whether the local `id` occurs in `expr`.
 fn mentions_fvar(expr: &Expr, id: FVarId) -> bool {
@@ -853,6 +875,15 @@ fn simp_app_spine(
                 stack_safe(|| simp_expr_budgeted(state, goal, arg, lemmas, config, budget));
             (arg_result.expr, arg_result.proof)
         };
+        if old_fn == new_fn {
+            if let Some(step) = arg_proof.as_ref().and_then(|proof| {
+                super::iota::reduce_after_argument_rewrite(
+                    state, goal, expr, index, &new_arg, proof, budget,
+                )
+            }) {
+                return Some(step);
+            }
+        }
         let old_app = Expr::app(old_fn.clone(), (*arg).clone());
         let new_app = Expr::app(new_fn.clone(), new_arg.clone());
         let app_proof = if old_app == new_app {
@@ -897,7 +928,7 @@ fn simp_app_spine(
 /// lemma/simproc rewriting can run AFTER it (post-order, Lean parity).
 /// Lean's `Simp.isOfNatNatLit`: `@OfNat.ofNat α n inst` with exactly three
 /// arguments and a raw `Nat` literal `n`.
-fn is_of_nat_nat_lit(e: &Expr) -> bool {
+pub(super) fn is_of_nat_nat_lit(e: &Expr) -> bool {
     let ExprKind::Const(head, _) = e.get_app_fn().kind() else {
         return false;
     };
@@ -1048,8 +1079,16 @@ fn simp_children(
                     .as_ref()
                     .map(|bp| bp.abstract_fvar(opened.fvar))
                     .and_then(|bp| mk_funext(state, goal, ty, body, &new_body, &bp));
+                let lambda = Expr::lam(*bi, ty.as_ref().clone(), new_body);
+                // Simplifying the body can expose an eta redex. Contract
+                // it before parent patterns choose a less specific rule.
+                let expression = if config.eta {
+                    eta_reduce_fixpoint(&lambda)
+                } else {
+                    lambda
+                };
                 let lam_result = SimpResult {
-                    expr: Expr::lam(*bi, ty.as_ref().clone(), new_body),
+                    expr: expression,
                     proof: lam_proof,
                 };
                 return mk_eq_trans(result, lam_result, state, goal);
@@ -1138,7 +1177,7 @@ fn simp_children(
             // charged to the budget for the same reason they are, because a
             // projected field can be arbitrarily large.
             if let Some(reduced) = super::proj_reduce::reduce_proj(state, goal, &result.expr) {
-                if budget.admit(&reduced) {
+                if budget.admit(&reduced, format_args!("reducing projection {name}.{idx}")) {
                     let iota = SimpResult {
                         expr: reduced,
                         proof: None,
@@ -1172,7 +1211,7 @@ fn simp_children(
                 // definitional, which is sound because the two right-hand
                 // sides are def-eq and `Eq`'s type is checked up to def-eq.
                 if let Some(reduced) = super::proj_reduce::reduce_proj(state, goal, &rebuilt.expr) {
-                    if budget.admit(&reduced) {
+                    if budget.admit(&reduced, "reducing a projection after its argument") {
                         let iota = SimpResult {
                             expr: reduced,
                             proof: None,
@@ -1802,7 +1841,7 @@ pub(crate) fn try_apply_simp_lemma_with_proof(
     if !budget.charge_attempt() {
         return None;
     }
-    if star_noise_head_guard_refuses(lemma, target.expr()) {
+    if star_noise_head_guard_refuses(lemma, target.head_guard_target()) {
         if std::env::var_os("CLEAN_SIMP_HEAD_GUARD_TRACE").is_some() {
             if let Some((would_be, _proof)) =
                 try_apply_simp_lemma_unguarded(state, goal, target, lemma, lemmas, config, budget)
@@ -1878,9 +1917,35 @@ fn try_apply_simp_lemma_unguarded(
     // just been reduced to `Nat.div`, and head-keyed unification fails on the
     // head alone — even when pattern and goal subterm are otherwise byte-identical.
     // See [`peel_pattern_to_target_head`].
-    let peeled_pattern =
-        peel_pattern_to_target_head(state, goal, &pattern_with_metas, match_target);
-    let match_pattern = peeled_pattern.as_ref().unwrap_or(&pattern_with_metas);
+    // Dot notation can elaborate a lemma LHS as an applied lambda. The
+    // target traversal already beta-reduced its application and its arguments.
+    // Use the same bounded reduction on this shape before matching heads, so
+    // nested applications in the lambda body also acquire their stated heads.
+    // Proof reconstruction below still instantiates the original lemma LHS.
+    let beta_pattern = if config.beta
+        && matches!(pattern_with_metas.kind(), ExprKind::App(..))
+        && matches!(pattern_with_metas.get_app_fn().kind(), ExprKind::Lam(..))
+    {
+        if !budget.admit_before_zeta(
+            &pattern_with_metas,
+            format_args!("preparing the pattern of lemma {}", lemma.name),
+        ) {
+            return None;
+        }
+        let reduced = beta_reduce(&pattern_with_metas);
+        if !budget.admit(
+            &reduced,
+            format_args!("preparing the pattern of lemma {}", lemma.name),
+        ) {
+            return None;
+        }
+        Some(reduced)
+    } else {
+        None
+    };
+    let match_pattern = beta_pattern.as_ref().unwrap_or(&pattern_with_metas);
+    let peeled_pattern = peel_pattern_to_target_head(state, goal, match_pattern, match_target);
+    let match_pattern = peeled_pattern.as_ref().unwrap_or(match_pattern);
     // The target's literal collapse also runs when its outer head is a
     // predicate or local function. The projection peel above returns None
     // when heads already agree, so it alone leaves nested OfNat wrappers in
@@ -1969,6 +2034,8 @@ fn try_apply_simp_lemma_unguarded(
         return None;
     }
 
+    let normalized = match_successor_arguments(state, goal, match_pattern, match_target, budget);
+    let unification_target = normalized.as_ref().unwrap_or(match_target);
     let ctx = LocalContext::new();
     let unify_result = {
         // B15 (simp-set discipline): match lemma LHSs at `withReducible`
@@ -1988,7 +2055,7 @@ fn try_apply_simp_lemma_unguarded(
         // should be trivial fails on mismatched normal forms. `unify_core`
         // still reduces internally wherever discriminants disagree, so genuine
         // def-eq matches (and the `Nat.zero ≡ Lit 0` bridge) are preserved.
-        unifier.unify_no_initial_whnf(match_pattern, match_target)
+        unifier.unify_no_initial_whnf(match_pattern, unification_target)
     };
 
     match unify_result {

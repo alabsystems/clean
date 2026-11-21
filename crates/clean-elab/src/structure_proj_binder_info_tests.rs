@@ -36,11 +36,11 @@
 //! class     C2 (α : Type) [Inhabited α]  ⇒  @C2.n : {α : Type} → {inst : Inhabited α} → [self : C2 α] → α
 //! ```
 //!
-//! So EVERY parameter is implicit in a projection, for both kinds; the only
-//! parameter-binder difference between them is the instance-implicit one — a
-//! class flattens `[inst]` to `{inst}`, a plain structure keeps `[inst]`.
-//! `self` is the other axis and is unchanged by this file's fix: explicit for a
-//! structure, instance-implicit for a class.
+//! The examples have parameters determined by explicit arguments or the result
+//! range. A class field whose carrier is unused, such as `C.n : Nat`, keeps
+//! that carrier explicit: instance-implicit self alone does not infer it.
+//! Class instance parameters become `{inst}`; structures keep `[inst]`.
+//! Self is explicit for a structure and instance-implicit for a class.
 //!
 //! The CONSTRUCTOR is a separate constant and is NOT asserted here beyond the
 //! shape it already had: Clean makes ctor params unconditionally implicit,
@@ -185,6 +185,56 @@ class WithInst (α : Type) [Inhabited α] where
 }
 
 #[test]
+fn test_class_projection_unused_carrier_stays_explicit() {
+    let env = env_of(
+        "class Count (α : Type) where\n  count : Nat\n\
+         def readCount [Count Nat] : Nat := Count.count Nat\n",
+    );
+    assert_eq!(
+        binder_spine(&env, "Count.count"),
+        vec![BinderInfo::Default, BinderInfo::InstImplicit],
+        "the implicit dictionary alone does not determine a carrier unused by the field"
+    );
+    assert!(env
+        .axiom_deps(&Name::from_string("readCount"))
+        .expect("registered checked consumer")
+        .is_empty());
+}
+
+#[test]
+fn test_class_projection_parameter_inference_uses_later_explicit_parameter() {
+    let env = env_of("class Tagged (α : Type) (tag : α) where\n  count : Nat\n");
+    assert_eq!(
+        binder_spine(&env, "Tagged.count"),
+        vec![
+            BinderInfo::Implicit,
+            BinderInfo::Default,
+            BinderInfo::InstImplicit
+        ],
+        "the unused tag stays explicit and then determines its carrier"
+    );
+}
+
+#[test]
+fn test_class_projection_unused_out_parameter_stays_implicit() {
+    for annotation in ["outParam Type", "(outParam Type)", "((outParam Type))"] {
+        let env = env_of(&format!(
+            "class CountOut (α : {annotation}) where\n  count : Nat\n\
+             def readCountOut [CountOut Nat] : Nat := CountOut.count\n"
+        ));
+        assert_eq!(
+            binder_spine(&env, "CountOut.count"),
+            vec![BinderInfo::Implicit, BinderInfo::InstImplicit],
+            "mkProjections preserves the outParam annotation before inference: {annotation}"
+        );
+        assert!(env
+            .axiom_deps(&Name::from_string("readCountOut"))
+            .expect("registered checked caller")
+            .is_empty());
+    }
+}
+
+#[test]
 fn test_parent_projection_params_become_implicit() {
     let env = env_of(
         "\
@@ -241,6 +291,29 @@ fn test_projection_requires_at_for_positional_type_args() {
             "{head}: {results:?}"
         );
     }
+}
+
+#[test]
+fn test_projection_type_args_require_explicit_at() {
+    // Both actual Lean30/35 reject the original unmarked call. Preserve that
+    // source as a negative control alongside the accepted explicit twin.
+    let source = format!("{PAIR}\ndef f (p : Pair Nat Bool) : Nat := Pair.fst Nat Bool p\n");
+    let (env, results) = try_env_of(&source);
+    assert!(results.first().is_some_and(Result::is_ok));
+    assert!(
+        results.last().is_some_and(Result::is_err),
+        "ordinary type arguments must not fill implicit slots: {results:?}"
+    );
+    assert!(env.get_const(&Name::from_string("f")).is_none());
+
+    let source = format!("{PAIR}\ndef f (p : Pair Nat Bool) : Nat := @Pair.fst Nat Bool p\n");
+    let env = env_of(&source);
+    assert!(
+        env.axiom_deps(&Name::from_string("f"))
+            .expect("registered checked explicit caller")
+            .is_empty(),
+        "the explicit caller has no axiom-backed replacement"
+    );
 }
 
 #[test]

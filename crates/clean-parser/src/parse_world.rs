@@ -6,8 +6,8 @@
 //!
 //! Production parses select the shared `clean_kernel::LeanWorld`; old public
 //! APIs default to its unchanged Oracle. Olean's source decision and the CLI
-//! bind that grammar to the selected import library. Only the known rc2 world
-//! enables variable visibility; arbitrary later release strings do not.
+//! bind that grammar to the selected import library. The admitted 4.36 worlds
+//! enable variable visibility after an exact release selection.
 //!
 //! Test-only synthetic tags still exercise the prefix-reader boundary. The
 //! forall-row guard below requires an exact source decision for every registry

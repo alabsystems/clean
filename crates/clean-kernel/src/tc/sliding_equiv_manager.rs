@@ -130,9 +130,8 @@ impl SlidingEquivManager {
         self.current.len() + self.previous.len()
     }
 
-    /// Whether both generations are empty.
-    #[cfg(test)]
-    pub(crate) fn is_empty(&self) -> bool {
+    /// Whether both generations contain no retained equivalence entries.
+    pub(super) fn is_empty(&self) -> bool {
         self.current.is_empty() && self.previous.is_empty()
     }
 }

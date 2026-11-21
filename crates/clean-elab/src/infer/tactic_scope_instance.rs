@@ -136,6 +136,7 @@ impl<'a> ElabCtx<'a> {
         env: &'a Environment,
         scope: &TacticInstanceScope<'_>,
         class_ty: &Expr,
+        open_namespace: Option<&Name>,
     ) -> Option<Expr> {
         let mut ctx = match scope.instances {
             Some(table) => ElabCtx::with_instances(env, table.clone()),
@@ -159,6 +160,12 @@ impl<'a> ElabCtx<'a> {
             // `instance_visible` tests `> 0`, and the depth itself is the
             // enclosing sequence's bookkeeping, not a search parameter.
             ctx.classical_tactic_scope = u32::from(visibility.classical_scope);
+        }
+        if let Some(ns) = open_namespace.filter(|ns| !ctx.namespace_state.is_scope_active(ns)) {
+            // Opening a namespace activates its scoped instances in the injected
+            // instance view as well as in the namespace-based lookup.
+            ctx.namespace_state.open_namespace(ns.clone());
+            let _ = ctx.activate_scoped_instances_here(std::slice::from_ref(ns));
         }
         // The goal's universe parameters are PARAMETERS: a candidate whose
         // level pre-check tried `u := 1` would otherwise pin the goal's own

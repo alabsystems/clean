@@ -49,26 +49,24 @@ impl<'a> ElabCtx<'a> {
     /// elaborator, which does not go through `propagateExpectedType`
     /// (the caller's `is_hetero_binop_head` check).
     ///
-    /// SOUNDNESS: speculative — assignments are kept only when the whole
-    /// unification succeeds, and the finished term is re-checked by the
-    /// kernel.
+    /// Speculative assignments are retained only when unification succeeds
+    /// AND each new assignment checks against its instantiated declared type.
+    /// The finished term still crosses the ordinary kernel check.
     pub(super) fn propagate_expected_type(
         &mut self,
         fn_type: &Expr,
         remaining: &[SurfaceArg],
     ) -> bool {
-        self.propagate_expected_type_with_positioned_args(fn_type, remaining, false)
+        self.propagate_expected_type_with_named_prefix(fn_type, remaining, 0)
     }
 
-    /// Named-argument resolution supplies positional slots for implicit binders
-    /// too. Count each supplied slot, then resume ordinary treatment of trailing
-    /// implicit binders. The dependency and transactional-unification guards are
-    /// identical to the ordinary application path.
-    pub(super) fn propagate_expected_type_with_positioned_args(
+    /// A resolved named prefix supplies one slot per binder, including
+    /// inferred holes. Its ordinary suffix still counts only explicit binders.
+    pub(super) fn propagate_expected_type_with_named_prefix(
         &mut self,
         fn_type: &Expr,
         remaining: &[SurfaceArg],
-        positioned: bool,
+        named_prefix: usize,
     ) -> bool {
         let Some(arg) = remaining.first() else {
             return true;
@@ -108,9 +106,12 @@ impl<'a> ElabCtx<'a> {
             return true;
         }
         let fn_type = self.metas.instantiate(fn_type);
-        let Some(body) =
-            Self::forall_body_after_args(&fn_type, remaining.len(), self.explicit_mode, positioned)
-        else {
+        let Some(body) = Self::forall_body_after_args(
+            &fn_type,
+            remaining.len(),
+            self.explicit_mode,
+            named_prefix,
+        ) else {
             return true;
         };
         if body.has_loose_bvars() || self.has_opt_auto_params(&body) {
@@ -130,7 +131,7 @@ impl<'a> ElabCtx<'a> {
                 UnifyResult::Success
             )
         };
-        if unified {
+        if unified && self.current_scope_assignments_are_well_typed() {
             self.metas.commit();
             false
         } else {
@@ -139,24 +140,57 @@ impl<'a> ElabCtx<'a> {
         }
     }
 
-    /// Lean's `getForallBody` (`Lean/Elab/App.lean:350-365`, no named
-    /// arguments): the part of `ty` left after `remaining` explicit binders,
-    /// walked WITHOUT instantiating them, so a result that depends on one of
-    /// them keeps a loose bound variable. Non-explicit binders are skipped
-    /// (all binders under `@`), as are `optParam`/`autoParam` binders once
-    /// the count is exhausted. `None` when `ty` runs out of binders first.
+    /// A successful heuristic unification can still over-assign a projection's
+    /// record at the WRONG type (`?p : Nat × Nat := a : Nat × Bool`). Keeping it
+    /// would prevent the next explicit proof from determining the real record.
+    ///
+    /// Check only assignments in this attempt's undo suffix. The fresh kernel
+    /// checker fully checks arguments/domains in the instantiated typed local
+    /// context; it neither assigns expression/level metas nor uses speculative
+    /// unifier permissiveness. A failed check leaves propagation armed after
+    /// the caller rolls the entire attempt back. Type-valid projection choices
+    /// keep their existing behavior, including Lean's same-product refusal.
+    pub(super) fn current_scope_assignments_are_well_typed(&self) -> bool {
+        let Some(ids) = self.metas.current_scope_assignments() else {
+            return false;
+        };
+        ids.into_iter().all(|id| {
+            let Some(meta) = self.metas.get(id) else {
+                return false;
+            };
+            let Some(value) = &meta.assignment else {
+                return false;
+            };
+            let value = self
+                .metas
+                .instantiate_levels(&self.metas.instantiate(value));
+            let ty = self
+                .metas
+                .instantiate_levels(&self.metas.instantiate(&meta.ty));
+            let tc = TypeChecker::with_context(self.env, self.demand_local_ctx(&[&value, &ty]));
+            tc.check_type(&value, &ty).is_ok()
+        })
+    }
+
+    /// Walk the remaining argument telescope without instantiating it, so a
+    /// result depending on an argument retains a loose bound variable. The
+    /// resolved named prefix consumes every binder; the ordinary suffix uses
+    /// Lean's `getForallBody` rules (`Lean/Elab/App.lean:350-365`), skipping
+    /// non-explicit binders except under `@`. `optParam`/`autoParam` binders
+    /// are skipped once the count is exhausted. Refuse an incomplete telescope.
     fn forall_body_after_args(
         ty: &Expr,
         mut remaining: usize,
         explicit: bool,
-        positioned: bool,
+        mut named_prefix: usize,
     ) -> Option<Expr> {
         let mut cur = ty.clone();
         loop {
             let next = match cur.kind() {
                 ExprKind::Pi(bi, dom, body) => {
-                    if positioned && remaining > 0 {
-                        remaining -= 1;
+                    if named_prefix > 0 {
+                        named_prefix -= 1;
+                        remaining = remaining.checked_sub(1)?;
                         body.as_ref().clone()
                     } else if !explicit && bi.info != BinderInfo::Default {
                         body.as_ref().clone()

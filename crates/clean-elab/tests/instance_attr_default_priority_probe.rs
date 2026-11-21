@@ -58,9 +58,6 @@ use clean_kernel::name::Name;
 use clean_olean::load_module_with_deps;
 use std::path::PathBuf;
 
-/// The pinned toolchain the real-import lane runs against.
-const PINNED_TOOLCHAIN: &str = "leanprover--lean4---v4.30.0-rc2";
-
 // ----------------------------------------------------------------------------
 // Fixtures
 // ----------------------------------------------------------------------------
@@ -184,22 +181,18 @@ fn recorded_priority(env: &Environment, class: &str, instance: &str) -> Option<u
         .map(|i| i.priority)
 }
 
-fn v4_30_lib_path() -> Option<PathBuf> {
-    let home = std::env::var("HOME").ok()?;
-    let lib = PathBuf::from(home)
-        .join(".elan/toolchains")
-        .join(PINNED_TOOLCHAIN)
-        .join("lib/lean");
-    lib.join("Init.olean").is_file().then_some(lib)
+fn pinned_lib_path() -> PathBuf {
+    clean_olean::require_pinned_lean_lib_path()
+        .expect("real import probe requires the exact repository-pinned Lean standard library")
 }
 
 /// A prelude environment with a real `import Init` on top.
-fn imported_env() -> Option<Environment> {
-    let lib = v4_30_lib_path()?;
+fn imported_env() -> Environment {
+    let lib = pinned_lib_path();
     let mut env = Environment::with_prelude();
     load_module_with_deps(&mut env, "Init", &[lib])
         .unwrap_or_else(|e| panic!("importing Init must succeed: {e}"));
-    Some(env)
+    env
 }
 
 // ----------------------------------------------------------------------------
@@ -375,10 +368,7 @@ fn instance_attr_handler_is_not_on_the_dispatch_path() {
 /// buys nothing the prelude lane does not already discriminate.
 #[test]
 fn unannotated_instances_are_1000_under_real_import_init() {
-    let Some(mut env) = imported_env() else {
-        eprintln!("Skipping: {PINNED_TOOLCHAIN} not installed");
-        return;
-    };
+    let mut env = imported_env();
     eprintln!("import Init: {} constants in scope", env.num_constants());
 
     elaborate_into(&mut env, ATTR_SURFACE).expect(

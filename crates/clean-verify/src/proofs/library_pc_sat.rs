@@ -91,6 +91,7 @@ impl ProofLibrary {
                 "pc02_resolution_completeness",
                 "fun (n : Nat) => \
                  @Nat.rec \
+                   (fun (k : Nat) => ResolvComplete k) \
                    (ResolvComplete.base_empty) \
                    (fun (m : Nat) (ih : ResolvComplete m) => \
                      ResolvComplete.elim_var m m ih) \

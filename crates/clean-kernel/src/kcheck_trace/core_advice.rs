@@ -908,17 +908,58 @@ impl Producer<'_> {
         self.tick()?;
         match step {
             Step::Beta(domain, body, argument, label, rest) => {
-                let Label::Checked(label) = label else {
-                    return Err(Self::missing("advice_beta_missing_domain", &body));
-                };
-                self.tokens.push(Token::Dom);
-                self.conv(&label, &domain)?;
+                self.beta_domain(&domain, &body, &label)?;
                 Ok(Self::apply(body.instantiate(&argument), rest))
             }
             Step::Zeta(value, body, rest) => Ok(Self::apply(body.instantiate(&value), rest)),
             Step::Local(value, rest) => Ok(Self::apply(value, rest)),
             Step::Recursor(rec, levels, arguments) => self.recursor_step(rec, levels, arguments),
         }
+    }
+    fn beta_domain(&mut self, domain: &Term, body: &Term, label: &Label) -> Result<(), Refusal> {
+        let Label::Checked(argument_domain) = label else {
+            return Err(Self::missing("advice_beta_missing_domain", body));
+        };
+        self.tokens.push(Token::Dom);
+        self.conv(argument_domain, domain)
+    }
+    /// Two distinct lambda applications can meet after one beta on each side.
+    /// Stop at those reducts before an eager whnf unfolds a neutral family.
+    fn paired_beta(&mut self, left: &Term, right: &Term) -> Result<bool, Refusal> {
+        let (
+            Node::App(left_function, left_argument, left_label),
+            Node::App(right_function, right_argument, right_label),
+        ) = (left.0.as_ref(), right.0.as_ref())
+        else {
+            return Ok(false);
+        };
+        let (Node::Lam(_, left_domain, left_body), Node::Lam(_, right_domain, right_body)) =
+            (left_function.0.as_ref(), right_function.0.as_ref())
+        else {
+            return Ok(false);
+        };
+        if left.erased_eq(right) {
+            return Ok(false);
+        }
+        let left_reduct = left_body.instantiate(left_argument);
+        let right_reduct = right_body.instantiate(right_argument);
+        if !left_reduct.erased_eq(&right_reduct) {
+            return Ok(false);
+        }
+        // Erasure equality only selects a search branch. Check each labelled
+        // domain, then run ordinary conversion on the reducts and its levels.
+        self.attempt(|this| {
+            for (token, domain, body, label) in [
+                (Token::CoreL(1), left_domain, left_body, left_label),
+                (Token::CoreR(1), right_domain, right_body, right_label),
+            ] {
+                this.tick()?;
+                this.tokens.push(token);
+                this.beta_domain(domain, body, label)?;
+                this.tokens.push(Token::Stop);
+            }
+            this.conv(&left_reduct, &right_reduct)
+        })
     }
     fn unfold(&mut self, term: &Term) -> Result<Option<Term>, Refusal> {
         let (head, arguments) = Self::spine(term);
@@ -1018,7 +1059,9 @@ impl Producer<'_> {
                 self.tokens.push(Token::Refl);
                 return Ok(());
             }
-            if self.attempt(|this| this.structural(left, right))? {
+            if self.paired_beta(left, right)?
+                || self.attempt(|this| this.structural(left, right))?
+            {
                 return Ok(());
             }
             if self.attempt(|this| {
@@ -1104,6 +1147,49 @@ impl Producer<'_> {
 mod tests {
     use super::*;
     use crate::expr::BinderData;
+
+    #[test]
+    fn paired_beta_requires_both_domains_and_rolls_back_partial_advice() {
+        let env = Environment::default();
+        let prop = Term::new(Node::Sort(Level::zero()));
+        let domain = Term::new(Node::Sort(Level::succ(Level::zero())));
+        let application = |body, label| {
+            Term::new(Node::App(
+                Term::new(Node::Lam(BinderData::default(), domain.clone(), body)),
+                prop.clone(),
+                label,
+            ))
+        };
+        let left = application(Term::new(Node::BVar(0)), Label::Checked(domain.clone()));
+        let before = vec![Token::Depth(32)];
+        let mut producer = Producer {
+            lookup: CoreTracer::new(&env, 1_000),
+            context: Vec::new(),
+            remaining: 1_000,
+            tokens: before.clone(),
+        };
+        for label in [Label::Missing("test".into()), Label::Checked(prop.clone())] {
+            let right = application(prop.clone(), label);
+            assert!(matches!(producer.paired_beta(&left, &right), Ok(false)));
+            assert_eq!(producer.tokens, before);
+        }
+        let right = application(prop.clone(), Label::Checked(domain.clone()));
+        assert!(matches!(producer.paired_beta(&left, &right), Ok(true)));
+        assert_eq!(
+            &producer.tokens[1..],
+            &[
+                Token::CoreL(1),
+                Token::Dom,
+                Token::Sort,
+                Token::Stop,
+                Token::CoreR(1),
+                Token::Dom,
+                Token::Sort,
+                Token::Stop,
+                Token::Sort
+            ]
+        );
+    }
 
     #[test]
     fn unsupported_major_after_motive_recursor_rolls_back_without_tokens() {

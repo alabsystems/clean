@@ -1,3 +1,4 @@
+// Modified in Clean: typed array-lambda dialect and explicit lambda export refusal.
 //! The types for parser errors.
 
 use crate::{
@@ -12,6 +13,10 @@ use thiserror::Error;
 /// The error type for the parser.
 #[derive(Debug, Error)]
 pub enum ParserError {
+    /// Incompatible Array/Function uses or malformed array lambda inference.
+    #[error("lambda has incompatible array/function uses or malformed array typing")]
+    InvalidArrayLambda,
+
     /// The lexer encountered an unexpected character.
     #[error("unexpected character: '{0}'")]
     UnexpectedChar(char),

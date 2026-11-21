@@ -14,6 +14,8 @@ use crate::region::{is_ptr, tags, CompactedRegion, TypedModuleLayout};
 use clean_kernel::name::Name;
 use std::cell::Cell;
 
+pub(super) mod exported_term_syntax;
+
 const MAX_ITEMS: usize = 100_000;
 const MAX_TOTAL_ARRAY_ITEMS: usize = 1_000_000;
 
@@ -123,21 +125,25 @@ impl CompactedRegion<'_> {
             .iter()
             .map(|&pointer| reader.extension(pointer))
             .collect::<OleanResult<Vec<_>>>()?;
-        // The names `.olean` import's late-binding judgement reads, only in a
-        // part that binds something (`TypedExtension::compiler_names`). A
-        // table that does not read is `None`, which the judgement takes as
-        // unknown and refuses on.
+        // Inline attributes affect source compilation even without any
+        // implementedBy binding. A present unread table cannot mean no hints.
         let binds = extensions.iter().any(|extension| {
             extension
                 .entries
                 .iter()
                 .any(|entry| matches!(entry, TypedExtensionEntry::ImplementedBy { .. }))
         });
-        if binds && !reader.legacy {
-            for (extension, &pointer) in extensions.iter_mut().zip(&pointers) {
-                if let Some(table) = names_table(&extension.extension_name) {
-                    extension.compiler_names = reader.compiler_names(pointer, table).ok();
+        for (extension, &pointer) in extensions.iter_mut().zip(&pointers) {
+            match names_table(&extension.extension_name) {
+                Some(NamesTable::InlineAttrs) if !reader.legacy => {
+                    extension.compiler_names =
+                        Some(reader.compiler_names(pointer, NamesTable::InlineAttrs)?);
                 }
+                Some(NamesTable::DeclMap) if binds && !reader.legacy => {
+                    extension.compiler_names =
+                        reader.compiler_names(pointer, NamesTable::DeclMap).ok();
+                }
+                _ => {}
             }
         }
         Ok(extensions)
@@ -157,8 +163,15 @@ struct Reader<'r, 'a> {
 mod tests;
 
 #[cfg(test)]
+#[path = "decode_extern_carrier_tests.rs"]
+mod extern_carrier_tests;
+
+#[cfg(test)]
 #[path = "decode_csimp_tests.rs"]
 mod csimp_tests;
+
+#[path = "decode_parser.rs"]
+mod parser;
 
 #[path = "decode_matcher_modern.rs"]
 mod matcher_modern;
@@ -416,10 +429,14 @@ impl Reader<'_, '_> {
     /// `foreign (backend) (fn)` (tag 3) or v4.30's scalar `opaque`
     /// (`lean_box(3)`), as `lean_ir`'s decoder reads them.
     fn extern_row(&self, pointer: u64) -> OleanResult<TypedExtensionEntry> {
+        use clean_kernel::env::{
+            CompilerExternArity, CompilerExternDescriptor, CompilerExternEntry,
+            CompilerExternMetadata,
+        };
         let offset = self.object(pointer, 0, 2, 0)?;
         let decl = self.name(self.field(offset, 0)?)?;
-        let mut rendered = Vec::new();
-        let mut standard = None;
+        let mut entries = Vec::new();
+        let mut arity = CompilerExternArity::Unspecified;
         let mut current = self.field(offset, 1)?;
         if is_ptr(current)
             && self
@@ -429,60 +446,69 @@ impl Reader<'_, '_> {
                 == 0
         {
             let data = self.object(current, 0, 2, 0)?;
-            self.option_nat(self.field(data, 0)?)?;
+            arity = CompilerExternArity::Legacy(self.option_nat(self.field(data, 0)?)?);
             current = self.field(data, 1)?;
         }
         loop {
             if current == 1 {
-                break; // `List.nil` (`lean_box(0)`)
+                break;
             }
-            if rendered.len() >= MAX_EXTERN_ENTRIES {
+            if entries.len() >= MAX_EXTERN_ENTRIES {
                 return Err(invalid("ExternAttrData lists more entries than the bound"));
             }
             let cons = self.object(current, 1, 2, 0)?;
             let entry = self.field(cons, 0)?;
             current = self.field(cons, 1)?;
             if entry == 7 {
-                rendered.push("opaque".to_owned()); // `lean_box(3)`
+                entries.push(CompilerExternEntry::Opaque);
                 continue;
             }
             if !is_ptr(entry) {
                 return Err(invalid("unmeasured scalar ExternEntry"));
             }
             let at = self.region.ptr_to_offset(entry)?;
-            match self.region.read_header_at(at)?.tag {
+            entries.push(match self.region.read_header_at(at)?.tag {
                 0 => {
                     let adhoc = self.object(entry, 0, 1, 0)?;
-                    rendered.push(format!("adhoc {}", self.name(self.field(adhoc, 0)?)?));
+                    CompilerExternEntry::Adhoc {
+                        backend: self.name(self.field(adhoc, 0)?)?,
+                    }
                 }
                 tag @ (1..=3) => {
                     let row = self.object(entry, tag, 2, 0)?;
                     let backend = self.name(self.field(row, 0)?)?;
                     let text = self.string(self.field(row, 1)?)?;
-                    if tag == 2 && standard.is_none() {
-                        standard = Some(text.clone());
+                    match tag {
+                        1 => CompilerExternEntry::Inline {
+                            backend,
+                            pattern: text,
+                        },
+                        2 => CompilerExternEntry::Standard {
+                            backend,
+                            symbol: text,
+                        },
+                        _ => CompilerExternEntry::Foreign {
+                            backend,
+                            symbol: text,
+                        },
                     }
-                    let kind = match tag {
-                        1 => "inline",
-                        2 => "standard",
-                        _ => "foreign",
-                    };
-                    rendered.push(format!("{kind} {backend} {text}"));
                 }
                 _ => return Err(invalid("unmeasured ExternEntry constructor")),
-            }
+            });
         }
-        if rendered.is_empty() {
+        if entries.is_empty() {
             return Err(invalid("ExternAttrData lists no entry"));
         }
+        let descriptor = CompilerExternDescriptor { arity, entries };
         Ok(TypedExtensionEntry::Extern {
             decl,
-            symbol: standard.unwrap_or_else(|| rendered.join(", ")),
+            symbol: descriptor.diagnostic(),
+            metadata: CompilerExternMetadata::Complete(descriptor),
         })
     }
 
     /// v4.8.0's `ExternAttrData.arity?`: `none` (`lean_box(0)`) or `some n`
-    /// (tag 1, one field). Validated, then dropped: no registrar reads it.
+    /// (tag 1, one field). Retained exactly in the typed compiler carrier.
     fn option_nat(&self, pointer: u64) -> OleanResult<Option<u64>> {
         if pointer == 1 {
             return Ok(None);

@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <assert.h>
+#include <limits.h>
 
 /* ============================================================================
  * Memory Allocation
@@ -240,162 +241,533 @@ clean_obj* clean_box_float(double f) {
 }
 
 /* ============================================================================
- * Heap Nat (values >= 2^63) — RUNG B
+ * Native Nat
  * ============================================================================
- *
- * See clean_runtime.h for the representation contract. The tagged-vs-heap
- * dispatch here is the SINGLE source of truth every Nat producer/consumer
- * routes through, so heap-boxing a producer can never desync from a consumer
- * that assumed tagged (the failure mode this rung closes).
  */
 
-clean_obj* clean_nat_of_u128(unsigned __int128 v) {
-    if (v <= (unsigned __int128)CLEAN_MAX_SMALL) {
-        /* Fits the tagged immediate (< 2^63): the universal small-Nat form. */
-        return clean_box((size_t)(uint64_t)v);
+typedef struct {
+    clean_obj_header header;
+    size_t count;
+    uint64_t limbs[];
+} clean_wide_nat;
+
+/* Borrowed, normalized little-endian words. Tagged values store their
+ * only word in the view itself. A zero has no words. */
+typedef struct {
+    const uint64_t* limbs;
+    size_t count;
+    uint64_t immediate;
+} nat_view;
+
+static nat_view nat_small(uint64_t word) {
+    return (nat_view){NULL, word != 0, word};
+}
+
+static uint64_t nat_word(nat_view value, size_t index) {
+    if (index >= value.count) return 0;
+    return value.limbs ? value.limbs[index] : value.immediate;
+}
+
+static nat_view nat_view_of(clean_obj* o) {
+    if (clean_is_scalar(o)) return nat_small(clean_unbox(o));
+    if (o->header.kind == CLEAN_OBJ_KIND_WIDE_NAT) {
+        const clean_wide_nat* wide = (const clean_wide_nat*)o;
+        return (nat_view){wide->limbs, wide->count, 0};
     }
-    /* Heap two-limb cell: [lo, hi], little-endian, scalar_sz == 16. */
+    if (o->header.kind == CLEAN_OBJ_KIND_CTOR && o->header.num_objs == 0) {
+        if (o->header.scalar_sz == CLEAN_NAT_HEAP_SCALAR_SZ) {
+            const uint64_t* limbs = (const uint64_t*)o->fields;
+            return limbs[1] ? (nat_view){limbs, 2, 0} : nat_small(limbs[0]);
+        }
+        if (o->header.scalar_sz == sizeof(uint64_t)) {
+            return nat_small(*(const uint64_t*)o->fields);
+        }
+        if (o->header.scalar_sz == sizeof(uint32_t)) {
+            return nat_small(*(const uint32_t*)o->fields);
+        }
+    }
+    clean_panic("invalid native Nat carrier");
+}
+
+clean_obj* clean_nat_of_u128(unsigned __int128 v) {
+    if (v <= (unsigned __int128)CLEAN_MAX_SMALL) return clean_box((size_t)v);
     clean_obj* o = clean_alloc_ctor_uninit(0, 0, CLEAN_NAT_HEAP_SCALAR_SZ);
-    uint64_t* limbs = (uint64_t*)(o->fields);
+    uint64_t* limbs = (uint64_t*)o->fields;
     limbs[0] = (uint64_t)v;
     limbs[1] = (uint64_t)(v >> 64);
     return o;
 }
 
 clean_obj* clean_nat_of_u64(uint64_t v) {
-    return clean_nat_of_u128((unsigned __int128)v);
+    return clean_nat_of_u128(v);
 }
 
 clean_obj* clean_nat_big(uint64_t lo, uint64_t hi) {
-    return clean_nat_of_u128(((unsigned __int128)hi << 64) | (unsigned __int128)lo);
+    return clean_nat_of_u128(((unsigned __int128)hi << 64) | lo);
+}
+
+clean_obj* clean_nat_limb_step(clean_obj* hi, uint64_t lo) {
+    clean_obj* shifted = clean_nat_shift_left(hi, clean_nat_of_u64(64));
+    return clean_nat_lor(shifted, clean_nat_of_u64(lo));
+}
+
+static void nat_check_extent(size_t count) {
+    if (count > (SIZE_MAX - sizeof(clean_wide_nat)) / sizeof(uint64_t)) {
+        clean_panic("native Nat limb storage exceeds addressable memory");
+    }
+}
+
+static clean_wide_nat* nat_alloc(size_t count) {
+    nat_check_extent(count);
+    clean_wide_nat* wide = clean_malloc(sizeof(*wide) + count * sizeof(uint64_t));
+    atomic_init(&wide->header.ref_count, 0);
+    wide->header.tag = 0;
+    wide->header.kind = CLEAN_OBJ_KIND_WIDE_NAT;
+    wide->header.num_objs = 0;
+    wide->header.scalar_sz = 0;
+    wide->count = count;
+    return wide;
+}
+
+static size_t nat_trim(const uint64_t* limbs, size_t count) {
+    while (count && limbs[count - 1] == 0) --count;
+    return count;
+}
+
+clean_obj* clean_nat_from_limbs(const uint64_t* limbs, size_t count) {
+    nat_check_extent(count);
+    count = nat_trim(limbs, count);
+    if (count <= 2) {
+        return clean_nat_big(count ? limbs[0] : 0, count == 2 ? limbs[1] : 0);
+    }
+    clean_wide_nat* wide = nat_alloc(count);
+    memcpy(wide->limbs, limbs, count * sizeof(uint64_t));
+    return (clean_obj*)wide;
+}
+
+typedef struct {
+    uint64_t local[2];
+    clean_wide_nat* wide;
+    size_t count;
+} nat_buffer;
+
+static uint64_t* nat_buffer_words(nat_buffer* buffer) {
+    return buffer->wide ? buffer->wide->limbs : buffer->local;
+}
+
+static nat_buffer nat_buffer_new(size_t count) {
+    nat_buffer buffer = {{0, 0}, count > 2 ? nat_alloc(count) : NULL, count};
+    if (buffer.wide) memset(buffer.wide->limbs, 0, count * sizeof(uint64_t));
+    return buffer;
+}
+
+static clean_obj* nat_buffer_finish(nat_buffer* buffer) {
+    uint64_t* limbs = nat_buffer_words(buffer);
+    size_t count = nat_trim(limbs, buffer->count);
+    if (count <= 2) {
+        clean_obj* result = clean_nat_big(count ? limbs[0] : 0, count == 2 ? limbs[1] : 0);
+        clean_free(buffer->wide);
+        return result;
+    }
+    buffer->wide->count = count;
+    return (clean_obj*)buffer->wide;
+}
+
+clean_obj* clean_nat_from_le_bytes(const uint8_t* bytes, size_t byte_count) {
+    if (byte_count % sizeof(uint64_t) != 0) {
+        clean_panic("native Nat byte extent must contain whole limbs");
+    }
+    size_t count = byte_count / sizeof(uint64_t);
+    nat_buffer buffer = nat_buffer_new(count);
+    uint64_t* limbs = nat_buffer_words(&buffer);
+    for (size_t i = 0; i < count; ++i) {
+        for (unsigned j = 0; j < 8; ++j) {
+            limbs[i] |= (uint64_t)bytes[8 * i + j] << (8 * j);
+        }
+    }
+    return nat_buffer_finish(&buffer);
+}
+
+uint64_t clean_nat_low_u64(clean_obj* o) {
+    return nat_word(nat_view_of(o), 0);
+}
+
+static unsigned __int128 nat_u128(nat_view value) {
+    return ((unsigned __int128)nat_word(value, 1) << 64) | nat_word(value, 0);
 }
 
 unsigned __int128 clean_nat_to_u128(clean_obj* o) {
-    if (clean_is_scalar(o)) {
-        return (unsigned __int128)clean_unbox(o);
+    nat_view value = nat_view_of(o);
+    if (value.count > 2) clean_panic("native Nat does not fit u128");
+    return nat_u128(value);
+}
+
+/* The native boxed call owns n, while Lean's original scalar extern borrows it.
+ * The erased proof occupies the second Clean call slot. Validate the complete
+ * Nat before narrowing, including high limbs that would wrap to a valid Char. */
+clean_obj* clean_char_from_valid_nat_owned(clean_obj* n, clean_obj* proof) {
+    if (proof != clean_box(0)) clean_panic("Char.ofNatAux: expected an erased proof");
+    if (!n) clean_panic("invalid native Nat carrier");
+    nat_view value = nat_view_of(n);
+    uint64_t scalar = nat_word(value, 0);
+    if (value.count > 1 || scalar > 0x10ffff || (scalar >= 0xd800 && scalar <= 0xdfff)) {
+        clean_panic("invalid Unicode scalar");
     }
-    /* Heap Nat: dispatch on the inline scalar payload width. */
-    if (o->header.scalar_sz >= CLEAN_NAT_HEAP_SCALAR_SZ) {
-        const uint64_t* limbs = (const uint64_t*)(o->fields);
-        return ((unsigned __int128)limbs[1] << 64) | (unsigned __int128)limbs[0];
+    clean_dec(n);
+    return clean_box_uint32((uint32_t)scalar);
+}
+
+static clean_obj* nat_consume_pair(clean_obj* a, clean_obj* b, clean_obj* result) {
+    clean_dec(a);
+    clean_dec(b);
+    return result;
+}
+
+static int nat_compare(nat_view a, nat_view b) {
+    if (a.count != b.count) return a.count < b.count ? -1 : 1;
+    for (size_t i = a.count; i != 0;) {
+        --i;
+        uint64_t x = nat_word(a, i);
+        uint64_t y = nat_word(b, i);
+        if (x != y) return x < y ? -1 : 1;
     }
-    /* Legacy single-limb clean_box_uint64 cell (scalar_sz == 8): a UInt64-
-     * carried Nat in [2^32, 2^64). */
-    return (unsigned __int128)(*(const uint64_t*)(o->fields));
+    return 0;
 }
 
 clean_obj* clean_nat_add(clean_obj* a, clean_obj* b) {
-    unsigned __int128 x = clean_nat_to_u128(a);
-    unsigned __int128 y = clean_nat_to_u128(b);
-    clean_dec(a);
-    clean_dec(b);
-    unsigned __int128 r = x + y;
-    if (r < x) {
-        clean_panic("clean_nat_add: Nat result >= 2^128 (fail-closed)");
+    nat_view x = nat_view_of(a);
+    nat_view y = nat_view_of(b);
+    if (x.count <= 2 && y.count <= 2) {
+        unsigned __int128 left = nat_u128(x);
+        unsigned __int128 sum = left + nat_u128(y);
+        if (sum >= left) return nat_consume_pair(a, b, clean_nat_of_u128(sum));
     }
-    return clean_nat_of_u128(r);
+    size_t count = x.count > y.count ? x.count : y.count;
+    nat_buffer result = nat_buffer_new(count + 1);
+    uint64_t* words = nat_buffer_words(&result);
+    uint64_t carry = 0;
+    for (size_t i = 0; i < count; ++i) {
+        unsigned __int128 sum = (unsigned __int128)nat_word(x, i) + nat_word(y, i) + carry;
+        words[i] = (uint64_t)sum;
+        carry = (uint64_t)(sum >> 64);
+    }
+    words[count] = carry;
+    return nat_consume_pair(a, b, nat_buffer_finish(&result));
+}
+
+/* Subtract b from a, where a >= b. Dest may alias a. */
+static void nat_subtract(uint64_t* dest, size_t count, nat_view a, nat_view b) {
+    uint64_t borrow = 0;
+    for (size_t i = 0; i < count; ++i) {
+        uint64_t x = nat_word(a, i);
+        uint64_t y = nat_word(b, i);
+        uint64_t subtrahend = y + borrow;
+        borrow = subtrahend < y || x < subtrahend;
+        dest[i] = x - subtrahend;
+    }
 }
 
 clean_obj* clean_nat_sub(clean_obj* a, clean_obj* b) {
-    unsigned __int128 x = clean_nat_to_u128(a);
-    unsigned __int128 y = clean_nat_to_u128(b);
-    clean_dec(a);
-    clean_dec(b);
-    /* Lean truncated subtraction: floors at 0, never wraps. */
-    return clean_nat_of_u128(x >= y ? x - y : (unsigned __int128)0);
+    nat_view x = nat_view_of(a);
+    nat_view y = nat_view_of(b);
+    if (nat_compare(x, y) <= 0) return nat_consume_pair(a, b, clean_box(0));
+    nat_buffer result = nat_buffer_new(x.count);
+    nat_subtract(nat_buffer_words(&result), x.count, x, y);
+    return nat_consume_pair(a, b, nat_buffer_finish(&result));
 }
 
 clean_obj* clean_nat_mul(clean_obj* a, clean_obj* b) {
-    unsigned __int128 x = clean_nat_to_u128(a);
-    unsigned __int128 y = clean_nat_to_u128(b);
-    clean_dec(a);
-    clean_dec(b);
-    unsigned __int128 r = x * y;
-    if (x != 0 && r / x != y) {
-        clean_panic("clean_nat_mul: Nat result >= 2^128 (fail-closed)");
+    nat_view x = nat_view_of(a);
+    nat_view y = nat_view_of(b);
+    if (!x.count || !y.count) return nat_consume_pair(a, b, clean_box(0));
+    if (x.count <= 2 && y.count <= 2) {
+        unsigned __int128 left = nat_u128(x);
+        unsigned __int128 right = nat_u128(y);
+        unsigned __int128 product = left * right;
+        if (product / left == right) {
+            return nat_consume_pair(a, b, clean_nat_of_u128(product));
+        }
     }
-    return clean_nat_of_u128(r);
+    nat_buffer result = nat_buffer_new(x.count + y.count);
+    uint64_t* words = nat_buffer_words(&result);
+    for (size_t i = 0; i < x.count; ++i) {
+        uint64_t carry = 0;
+        uint64_t left = nat_word(x, i);
+        for (size_t j = 0; j < y.count; ++j) {
+            unsigned __int128 product = (unsigned __int128)left * nat_word(y, j)
+                + words[i + j] + carry;
+            words[i + j] = (uint64_t)product;
+            carry = (uint64_t)(product >> 64);
+        }
+        words[i + y.count] = carry;
+    }
+    return nat_consume_pair(a, b, nat_buffer_finish(&result));
+}
+
+static size_t nat_bit_count(nat_view value) {
+    if (!value.count) return 0;
+    if (value.count > SIZE_MAX / 64) clean_panic("native Nat bit extent overflow");
+    uint64_t top = nat_word(value, value.count - 1);
+    return value.count * 64 - (size_t)__builtin_clzll((unsigned long long)top);
+}
+
+static bool nat_has_single_bit(nat_view value) {
+    uint64_t top = nat_word(value, value.count - 1);
+    if ((top & (top - 1)) != 0) return false;
+    for (size_t i = 0; i < value.count - 1; ++i) {
+        if (nat_word(value, i) != 0) return false;
+    }
+    return true;
+}
+
+clean_obj* clean_nat_pow(clean_obj* base, clean_obj* exponent) {
+    nat_view power = nat_view_of(exponent);
+    if (power.count == 0) {
+        return nat_consume_pair(base, exponent, clean_box(1));
+    }
+    nat_view factor = nat_view_of(base);
+    uint64_t low_factor = nat_word(factor, 0);
+    if (factor.count <= 1 && low_factor <= 1) {
+        return nat_consume_pair(base, exponent, clean_box(low_factor));
+    }
+    uint64_t low_power = nat_word(power, 0);
+    if (power.count > 1 || low_power > UINT_MAX) {
+        clean_dec(base);
+        clean_dec(exponent);
+        fputs("INTERNAL PANIC: Nat.pow exponent is too big\n", stderr);
+        exit(1);
+    }
+    clean_dec(exponent);
+
+    if (nat_has_single_bit(factor)) {
+        /* A power of two can allocate its final limbs directly. */
+        unsigned __int128 shift = (unsigned __int128)(nat_bit_count(factor) - 1) * low_power;
+        clean_dec(base);
+        return clean_nat_shift_left(clean_box(1), clean_nat_of_u128(shift));
+    }
+
+    clean_obj* result = clean_box(1);
+    unsigned remaining = (unsigned)low_power;
+    for (;;) {
+        if ((remaining & 1U) != 0) {
+            clean_inc(base);
+            result = clean_nat_mul(result, base);
+        }
+        remaining >>= 1;
+        if (remaining == 0) {
+            break;
+        }
+        clean_inc(base);
+        base = clean_nat_mul(base, base);
+    }
+    clean_dec(base);
+    return result;
+}
+
+/* Divide a limb sequence by one nonzero word, leaving its quotient in
+ * place and returning the remainder. Shared by division and decimal output. */
+static uint64_t nat_div_word(uint64_t* words, size_t count, uint64_t divisor) {
+    uint64_t remainder = 0;
+    while (count != 0) {
+        --count;
+        unsigned __int128 step = ((unsigned __int128)remainder << 64) | words[count];
+        words[count] = (uint64_t)(step / divisor);
+        remainder = (uint64_t)(step % divisor);
+    }
+    return remainder;
+}
+
+/* Fill a zeroed buffer whose extent fits the shifted value. */
+static void nat_fill_shifted(uint64_t* dest, nat_view value, size_t words, unsigned bits) {
+    for (size_t i = 0; i < value.count; ++i) {
+        uint64_t limb = nat_word(value, i);
+        dest[words + i] |= limb << bits;
+        if (bits != 0) {
+            uint64_t high = limb >> (64 - bits);
+            if (high) dest[words + i + 1] |= high;
+        }
+    }
+}
+
+static void nat_shift_one_right(uint64_t* words, size_t count) {
+    uint64_t carry = 0;
+    while (count != 0) {
+        --count;
+        uint64_t word = words[count];
+        words[count] = (word >> 1) | carry;
+        carry = word << 63;
+    }
+}
+
+static clean_obj* nat_divide(clean_obj* a, clean_obj* b, bool want_remainder) {
+    nat_view x = nat_view_of(a);
+    nat_view y = nat_view_of(b);
+    if (!y.count || nat_compare(x, y) < 0) {
+        if (want_remainder) {
+            clean_dec(b);
+            return a;
+        }
+        return nat_consume_pair(a, b, clean_box(0));
+    }
+    if (x.count <= 2) {
+        unsigned __int128 n = nat_u128(x);
+        unsigned __int128 d = nat_u128(y);
+        return nat_consume_pair(a, b, clean_nat_of_u128(want_remainder ? n % d : n / d));
+    }
+
+    nat_buffer remainder = nat_buffer_new(x.count);
+    uint64_t* rem = nat_buffer_words(&remainder);
+    memcpy(rem, x.limbs, x.count * sizeof(uint64_t));
+    if (y.count == 1) {
+        uint64_t word = nat_div_word(rem, x.count, nat_word(y, 0));
+        if (want_remainder) {
+            clean_free(remainder.wide);
+            return nat_consume_pair(a, b, clean_nat_of_u64(word));
+        }
+        return nat_consume_pair(a, b, nat_buffer_finish(&remainder));
+    }
+
+    /* Binary long division aligns the divisor's highest set bit with the
+     * dividend, then tests and subtracts at each lower position. */
+    size_t shift = nat_bit_count(x) - nat_bit_count(y);
+    nat_buffer divisor = nat_buffer_new(x.count);
+    uint64_t* shifted = nat_buffer_words(&divisor);
+    nat_fill_shifted(shifted, y, shift / 64, (unsigned)(shift % 64));
+    nat_buffer quotient = nat_buffer_new(want_remainder ? 0 : shift / 64 + 1);
+    uint64_t* quo = nat_buffer_words(&quotient);
+    for (;;) {
+        nat_view remaining = {rem, nat_trim(rem, x.count), 0};
+        nat_view current = {shifted, nat_trim(shifted, x.count), 0};
+        if (nat_compare(remaining, current) >= 0) {
+            nat_subtract(rem, x.count, remaining, current);
+            if (!want_remainder) quo[shift / 64] |= UINT64_C(1) << (shift % 64);
+        }
+        if (shift == 0) break;
+        --shift;
+        nat_shift_one_right(shifted, current.count);
+    }
+    clean_free(divisor.wide);
+    if (want_remainder) return nat_consume_pair(a, b, nat_buffer_finish(&remainder));
+    clean_free(remainder.wide);
+    return nat_consume_pair(a, b, nat_buffer_finish(&quotient));
 }
 
 clean_obj* clean_nat_div(clean_obj* a, clean_obj* b) {
-    unsigned __int128 x = clean_nat_to_u128(a);
-    unsigned __int128 y = clean_nat_to_u128(b);
-    clean_dec(a);
-    clean_dec(b);
-    /* Lean convention: n / 0 = 0. */
-    return clean_nat_of_u128(y == 0 ? (unsigned __int128)0 : x / y);
+    return nat_divide(a, b, false);
 }
 
 clean_obj* clean_nat_mod(clean_obj* a, clean_obj* b) {
-    unsigned __int128 x = clean_nat_to_u128(a);
-    unsigned __int128 y = clean_nat_to_u128(b);
+    return nat_divide(a, b, true);
+}
+
+static int nat_compare_and_drop(clean_obj* a, clean_obj* b) {
+    int order = nat_compare(nat_view_of(a), nat_view_of(b));
     clean_dec(a);
     clean_dec(b);
-    /* Lean convention: n % 0 = n. */
-    return clean_nat_of_u128(y == 0 ? x : x % y);
+    return order;
 }
 
 clean_obj* clean_nat_dec_eq(clean_obj* a, clean_obj* b) {
-    unsigned __int128 x = clean_nat_to_u128(a);
-    unsigned __int128 y = clean_nat_to_u128(b);
-    clean_dec(a);
-    clean_dec(b);
-    /* Decidable (a = b) scrutinee: tagged 0/1, never a Nat. */
-    return clean_box(x == y ? 1 : 0);
+    return clean_box(nat_compare_and_drop(a, b) == 0);
 }
 
 clean_obj* clean_nat_ble(clean_obj* a, clean_obj* b) {
-    unsigned __int128 x = clean_nat_to_u128(a);
-    unsigned __int128 y = clean_nat_to_u128(b);
-    clean_dec(a);
-    clean_dec(b);
-    /* Bool scrutinee: tagged 0/1, never a Nat. */
-    return clean_box(x <= y ? 1 : 0);
+    return clean_box(nat_compare_and_drop(a, b) <= 0);
 }
 
 clean_obj* clean_nat_shift_right(clean_obj* a, clean_obj* b) {
-    unsigned __int128 x = clean_nat_to_u128(a);
-    unsigned __int128 k = clean_nat_to_u128(b);
-    clean_dec(a);
-    clean_dec(b);
-    /* Lean 4 `Nat.shiftRight n k = n >>> k` (arbitrary precision). Every Nat this
-     * runtime represents is < 2^128, so a shift count >= 128 yields 0 — and a C
-     * `>>` on __int128 by >= its width is undefined, so the wide count is guarded
-     * explicitly rather than executed. Heap-aware + arg-consuming (RUNG B): a
-     * result >= 2^63 heap-boxes, below it tags. */
-    unsigned __int128 r = (k >= 128) ? (unsigned __int128)0 : (x >> (unsigned)k);
-    return clean_nat_of_u128(r);
+    nat_view value = nat_view_of(a);
+    nat_view count = nat_view_of(b);
+    uint64_t k = nat_word(count, 0);
+    if (count.count > 1 || k / 64 >= value.count) {
+        return nat_consume_pair(a, b, clean_box(0));
+    }
+    size_t words = (size_t)(k / 64);
+    unsigned bits = (unsigned)(k % 64);
+    nat_buffer result = nat_buffer_new(value.count - words);
+    uint64_t* out = nat_buffer_words(&result);
+    for (size_t i = 0; i < result.count; ++i) {
+        out[i] = nat_word(value, i + words) >> bits;
+        if (bits != 0) out[i] |= nat_word(value, i + words + 1) << (64 - bits);
+    }
+    return nat_consume_pair(a, b, nat_buffer_finish(&result));
 }
 
-/* Lean 4 `Nat.land` / `Nat.lor` / `Nat.xor` (arbitrary precision). Both
- * operands are < 2^128 (the runtime's Nat bound), so each result is too and
- * `clean_nat_of_u128` represents it exactly: tagged below 2^63, heap above.
- * Heap-aware + arg-consuming (RUNG B). These replace the prelude's
- * `Nat.bitwise` body for execution — a unary-fuel definition (`fuel = m + n`,
- * one recursion level per unit) that overflows the stack at any heap input
- * (WS6.3, F-105; postmortems/2026-09-18-ws6-3-mask-crash.md). */
+clean_obj* clean_nat_shift_left(clean_obj* a, clean_obj* b) {
+    nat_view value = nat_view_of(a);
+    nat_view count = nat_view_of(b);
+    if (!value.count) return nat_consume_pair(a, b, clean_box(0));
+    uint64_t shift = nat_word(count, 0);
+    size_t k = (size_t)shift;
+    if (count.count > 1 || (uint64_t)k != shift) {
+        clean_panic("native Nat left shift exceeds addressable memory");
+    }
+    unsigned bits = (unsigned)(k % 64);
+    nat_buffer result = nat_buffer_new(value.count + k / 64 + (bits != 0));
+    nat_fill_shifted(nat_buffer_words(&result), value, k / 64, bits);
+    return nat_consume_pair(a, b, nat_buffer_finish(&result));
+}
+
+typedef enum { NAT_AND, NAT_OR, NAT_XOR } nat_bitop;
+
+static clean_obj* nat_bitwise(clean_obj* a, clean_obj* b, nat_bitop op) {
+    nat_view x = nat_view_of(a);
+    nat_view y = nat_view_of(b);
+    size_t smaller = x.count < y.count ? x.count : y.count;
+    size_t larger = x.count > y.count ? x.count : y.count;
+    nat_buffer result = nat_buffer_new(op == NAT_AND ? smaller : larger);
+    uint64_t* out = nat_buffer_words(&result);
+    for (size_t i = 0; i < result.count; ++i) {
+        uint64_t l = nat_word(x, i);
+        uint64_t r = nat_word(y, i);
+        switch (op) {
+        case NAT_AND: out[i] = l & r; break;
+        case NAT_OR: out[i] = l | r; break;
+        case NAT_XOR: out[i] = l ^ r; break;
+        }
+    }
+    return nat_consume_pair(a, b, nat_buffer_finish(&result));
+}
+
 clean_obj* clean_nat_land(clean_obj* a, clean_obj* b) {
-    unsigned __int128 x = clean_nat_to_u128(a);
-    unsigned __int128 y = clean_nat_to_u128(b);
-    clean_dec(a);
-    clean_dec(b);
-    return clean_nat_of_u128(x & y);
+    return nat_bitwise(a, b, NAT_AND);
 }
 
 clean_obj* clean_nat_lor(clean_obj* a, clean_obj* b) {
-    unsigned __int128 x = clean_nat_to_u128(a);
-    unsigned __int128 y = clean_nat_to_u128(b);
-    clean_dec(a);
-    clean_dec(b);
-    return clean_nat_of_u128(x | y);
+    return nat_bitwise(a, b, NAT_OR);
 }
 
 clean_obj* clean_nat_xor(clean_obj* a, clean_obj* b) {
-    unsigned __int128 x = clean_nat_to_u128(a);
-    unsigned __int128 y = clean_nat_to_u128(b);
-    clean_dec(a);
-    clean_dec(b);
-    return clean_nat_of_u128(x ^ y);
+    return nat_bitwise(a, b, NAT_XOR);
+}
+
+clean_obj* clean_nat_repr(clean_obj* o) {
+    nat_view value = nat_view_of(o);
+    if (value.count > SIZE_MAX / 20) clean_panic("native Nat decimal extent overflow");
+    char local[40];
+    size_t capacity = value.count > 2 ? value.count * 20 : sizeof(local);
+    char* digits = value.count > 2 ? clean_malloc(capacity) : local;
+    size_t start = capacity;
+    nat_buffer work = nat_buffer_new(value.count);
+    uint64_t* words = nat_buffer_words(&work);
+    for (size_t i = 0; i < value.count; ++i) words[i] = nat_word(value, i);
+    clean_dec(o);
+
+    size_t count = value.count;
+    do {
+        uint64_t chunk = nat_div_word(words, count, UINT64_C(10000000000000000000));
+        count = nat_trim(words, count);
+        size_t end = start;
+        do {
+            digits[--start] = (char)('0' + chunk % 10);
+            chunk /= 10;
+        } while (chunk || (count && end - start < 19));
+    } while (count);
+    clean_free(work.wide);
+
+    clean_obj* string = clean_mk_string_from_bytes(digits + start, capacity - start);
+    if (digits != local) clean_free(digits);
+    return string;
 }
 
 /* ============================================================================
@@ -433,35 +805,27 @@ clean_obj* clean_quot_ind(clean_obj* f, clean_obj* q) {
 }
 
 clean_obj* clean_nat_blt(clean_obj* a, clean_obj* b) {
-    unsigned __int128 x = clean_nat_to_u128(a);
-    unsigned __int128 y = clean_nat_to_u128(b);
-    clean_dec(a);
-    clean_dec(b);
-    /* Bool scrutinee: tagged 0/1, never a Nat. */
-    return clean_box(x < y ? 1 : 0);
+    return clean_box(nat_compare_and_drop(a, b) < 0);
 }
 
 clean_obj* clean_nat_beq(clean_obj* a, clean_obj* b) {
-    unsigned __int128 x = clean_nat_to_u128(a);
-    unsigned __int128 y = clean_nat_to_u128(b);
-    clean_dec(a);
-    clean_dec(b);
-    /* Bool scrutinee: tagged 0/1, never a Nat. */
-    return clean_box(x == y ? 1 : 0);
+    return clean_nat_dec_eq(a, b);
+}
+
+clean_obj* clean_usize_repr_owned(clean_obj* boxed) {
+    size_t word = (size_t)clean_unbox_uint64(boxed);
+    clean_dec(boxed);
+    return clean_nat_repr(clean_nat_of_u64((uint64_t)word));
 }
 
 /* ============================================================================
- * Heap-aware Int comparison — RUNG B
+ * Int comparison
  * ============================================================================
  *
  * `Int` lowers to a two-constructor Ctor cell (never a tagged scalar):
  *   - tag 0  `Int.ofNat n`     -> the value  +n
  *   - tag 1  `Int.negSucc n`   -> the value  -(n+1)
- * with the `Nat` payload `n` in object field 0. The magnitude is decoded via
- * the heap-aware `clean_nat_to_u128`, so an `Int` whose magnitude reaches into
- * `[2^63, 2^128)` compares exactly instead of decoding a heap pointer as
- * garbage. The comparison splits on the two signs rather than converting to one
- * signed integer, so no `__int128` sign overflow is ever possible.
+ * with the Nat payload n in object field 0.
  */
 
 /* Three-way compare of two `Int` ctors: -1 if a<b, 0 if a==b, +1 if a>b.
@@ -469,22 +833,10 @@ clean_obj* clean_nat_beq(clean_obj* a, clean_obj* b) {
 static int clean_int_cmp(clean_obj* a, clean_obj* b) {
     unsigned ta = clean_obj_tag(a);
     unsigned tb = clean_obj_tag(b);
-    unsigned __int128 na = clean_nat_to_u128(clean_ctor_get(a, 0));
-    unsigned __int128 nb = clean_nat_to_u128(clean_ctor_get(b, 0));
-    if (ta == 0 && tb == 0) {
-        /* +na  vs  +nb */
-        return na < nb ? -1 : (na > nb ? 1 : 0);
-    }
-    if (ta == 0) {
-        /* a = +na (>= 0), b = negSucc (< 0)  =>  a > b */
-        return 1;
-    }
-    if (tb == 0) {
-        /* a = negSucc (< 0), b = +nb (>= 0)  =>  a < b */
-        return -1;
-    }
-    /* both negSucc: a = -(na+1), b = -(nb+1)  =>  a < b iff na > nb */
-    return na > nb ? -1 : (na < nb ? 1 : 0);
+    if (ta != tb) return ta == 0 ? 1 : -1;
+    int order = nat_compare(nat_view_of(clean_ctor_get(a, 0)),
+                            nat_view_of(clean_ctor_get(b, 0)));
+    return ta == 0 ? order : -order;
 }
 
 clean_obj* clean_int_dec_lt(clean_obj* a, clean_obj* b) {
@@ -600,6 +952,18 @@ const char* clean_string_data(clean_obj* s) {
 
 size_t clean_string_len(clean_obj* s) {
     return ((clean_string*)s)->len;
+}
+
+clean_obj* clean_string_utf8_byte_size(clean_obj* s) {
+    /* len is the content byte length; embedded NULs count, the separately
+     * allocated trailing sentinel does not. This entry borrows s. */
+    return clean_nat_of_u64((uint64_t)clean_string_len(s));
+}
+
+clean_obj* clean_string_utf8_byte_size_owned(clean_obj* s) {
+    clean_obj* result = clean_string_utf8_byte_size(s);
+    clean_dec(s);
+    return result;
 }
 
 /* ============================================================================

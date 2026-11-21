@@ -1001,7 +1001,7 @@ impl Environment {
                 level_params: vec![u.clone()],
                 type_: array_size_type,
                 value: array_size_value,
-                is_reducible: true,
+                is_reducible: false,
             })?;
 
             // Common Array combinators, defined compositionally over `Array.data`

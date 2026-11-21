@@ -115,6 +115,7 @@ fn walk(
         | SurfaceExpr::Explicit(_, e)
         | SurfaceExpr::NamedArg(_, _, e)
         | SurfaceExpr::UniverseInst(_, e, _)
+        | SurfaceExpr::Borrowed(_, e)
         | SurfaceExpr::OutParam(_, e)
         | SurfaceExpr::SemiOutParam(_, e) => walk(e, param_names, found),
         SurfaceExpr::Ascription(_, a, b) | SurfaceExpr::Arrow(_, a, b) => {

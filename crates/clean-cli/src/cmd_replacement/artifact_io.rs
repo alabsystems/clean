@@ -165,43 +165,8 @@ pub(crate) fn sha256_repo_artifact(path: &'static str) -> Result<String, Replace
 /// gate does at runtime, and including it would invalidate a genuinely current
 /// artifact on every unrelated test edit.
 pub(crate) fn sha256_repo_module_tree(dir: &'static str) -> Result<String, ReplacementError> {
-    let root = repo_artifact_path(dir);
-    let mut entries: Vec<(String, Vec<u8>)> = Vec::new();
-    for entry in WalkDir::new(&root).into_iter().filter_map(Result::ok) {
-        if !entry.file_type().is_file()
-            || entry.path().extension().and_then(|ext| ext.to_str()) != Some("rs")
-        {
-            continue;
-        }
-        let relative = entry
-            .path()
-            .strip_prefix(&root)
-            .unwrap_or(entry.path())
-            .to_string_lossy()
-            .replace('\\', "/");
-        if relative.starts_with("tests/") {
-            continue;
-        }
-        let bytes = fs::read(entry.path())
-            .map_err(|source| ReplacementError::ReadArtifact { path: dir, source })?;
-        entries.push((relative, bytes));
-    }
-    // WalkDir order is filesystem-dependent; sort so the digest is stable.
-    entries.sort_by(|left, right| left.0.cmp(&right.0));
-
-    let mut hasher = Sha256::new();
-    for (relative, bytes) in entries {
-        // Length-delimit so no rename/content shuffle can collide.
-        hasher.update(relative.as_bytes());
-        hasher.update([0u8]);
-        hasher.update(bytes.len().to_le_bytes());
-        hasher.update(&bytes);
-    }
-    Ok(hasher
-        .finalize()
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect::<String>())
+    clean_evidence::digest::sha256_module_tree(&repo_artifact_path(dir))
+        .map_err(|source| ReplacementError::ReadArtifact { path: dir, source })
 }
 
 pub(crate) fn parse_repo_json<T: for<'de> Deserialize<'de>>(
@@ -300,6 +265,8 @@ pub(crate) fn load_axiom_audit_launch_evidence(
 pub(crate) fn trust_core_source_artifacts() -> Vec<&'static str> {
     vec![
         TRUST_CORE_RUST_SOURCE_PATH,
+        DIGEST_MODULE_SOURCE,
+        DIGEST_SOURCE,
         LEAN4_BASELINE_PATH,
         LEAN4_EXPRESSIONS_PATH,
         UNCHECKED_DECL_RATCHET_PATH,
@@ -318,6 +285,8 @@ pub(crate) fn trust_core_source_artifacts() -> Vec<&'static str> {
 /// `ProofSystemCertificationEvidence::missing_issue_state_snapshot`).
 pub(crate) const REQUIRED_TRUST_CORE_SOURCE_ARTIFACTS: &[&str] = &[
     TRUST_CORE_RUST_SOURCE_PATH,
+    DIGEST_MODULE_SOURCE,
+    DIGEST_SOURCE,
     LEAN4_BASELINE_PATH,
     LEAN4_EXPRESSIONS_PATH,
     UNCHECKED_DECL_RATCHET_PATH,

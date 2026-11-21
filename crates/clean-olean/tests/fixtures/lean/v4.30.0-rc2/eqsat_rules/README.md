@@ -1,11 +1,13 @@
-# `eqsat_rules` — trust-cg's e-graph rules as theorems over SemR (PKG-U2)
+# `eqsat_rules` — trust-cg's e-graph rules as theorems over SemR (PKG-U2, PKG-U4c)
 
 A rewrite rule of trust-cg's equality-saturation engine is one object: the
 five-clause rule text of trust-cg `docs/eqsat-tier-e.md` section 5.1. This
 family states what such a rule says over trust-ir's SemR and proves the rules
-of trust-cg's integer rule set. trust-cg's rule registry is to admit a rule
-at a type only when the Clean kernel accepts a lemma of this family for the
-statement trust-cg generates from its own parsed rule.
+of trust-cg's two rule files: the integer rule set
+(`rules/integer_identities.rules`, PKG-U2) and the saturation tier's rule set
+(`rules/tier_s_integer.rules`, PKG-U4c). trust-cg's rule registry is to admit
+a rule at a type only when the Clean kernel accepts a lemma of this family
+for the statement trust-cg generates from its own parsed rule.
 
 The family imports the `semr` family's `SemR.lean` unchanged
 (`from semr SemR`): there is one SemR copy in Clean. Nothing here is in
@@ -20,10 +22,13 @@ clean-kernel's built-in library or under `theories/`.
 | `EqsatAnchors.lean` | Kernel-checked statements that pin the vocabulary, each required by name by the gate with its statement pinned (`STATEMENTS`): `admits_one_iff` (one variable admits exactly what SemR's `rejectPoison` and `expectTy` accept), `admits_inhabited` and `pbOk_inhabited` (every variable list has an admitted assignment), `sound_equiv_iff` and `sound_refines_iff` (the two branches of `Sound`, unfolded), `equiv_gives_refines` and its converse for total operators `refines_gives_equiv_of_total`, every operator arm of `Pat.eval` against SemR in general (`bin_eval`, `un_eval`, `cmp_eval`, `sel_eval`, the `*_stop*` theorems, `bin_int`, `un_int`, `cmp_int`, `sel_int`) and on concrete values (`bin_reads`, `un_reads`, `cmp_reads`, `sel_reads`, `stop_order`), what a direction says of a side that is not a value, what `Satisfiable` adds to `Sound`, and how literals, unbound variables, operand types and side conditions read. |
 | `EqsatIntRuleDefs.lean` | GENERATED. One `def EqsatRule.Defs.<rule> : EqsatRule.Rule` per rule of trust-cg `crates/trust-cg-eqsat/rules/integer_identities.rules` (76 rules). |
 | `EqsatIntWrongRuleDefs.lean` | GENERATED. One `def EqsatRule.WrongDefs.<file> : EqsatRule.Rule` per file of trust-cg `crates/trust-cg-eqsat/tests/wrong_rules/` (10 rules). |
-| `STATEMENTS` | Not Lean. One `name digest` row per theorem of `EqsatAnchors` and `EqsatIntControls` and per satisfiability lemma: the gate's pin of each statement (below). |
-| `LEMMAS` | Not Lean. GENERATED. One `rule scope kind lemma` row per rule of the integer rule set and scope of its domain: the lemma that scope needs, or `-` for a `fold_*` rule. The gate requires every lemma named there, with exactly its row's statement (below). |
+| `STATEMENTS` | Not Lean. One `name digest` row per theorem of `EqsatAnchors`, `EqsatIntControls` and `EqsatTierSControls` and per satisfiability lemma: the gate's pin of each statement (below). |
+| `LEMMAS` | Not Lean. GENERATED. One `rule scope kind lemma` row per rule of the two rule files and scope of its domain: the lemma that scope needs, or `-` for a `fold_*` rule. The rows of the integer rule set come first, then the rows of the rules only the saturation tier's file has; a rule name both files have is one row. The gate requires every lemma named there, with exactly its row's statement (below). |
 | `EqsatIntSample.lean` | Six lemmas of the integer rule set, in the namespace and under the names the rest of the set uses: `EqsatInt.add_zero`, `select_same` and `rotl_full` at every integer type, `select_same_bool`, `band_true`, and the one-way `band_false`; and `rotl_full_sat`, the satisfiability lemma of a rule with a `where` clause. |
 | `EqsatIntArith.lean`, `EqsatIntCmpSelBool.lean`, `EqsatIntBitwise.lean`, `EqsatIntNegRot.lean` | The lemma groups of the integer rule set (below): every other lemma of the set, and the satisfiability lemmas `sub_const_to_add_sat` and `rotr_full_sat`. Each module's header lists its rules and names its helpers (`arith_*`, `bitwise_*`, `negrot_*`). |
+| `EqsatTierSRuleDefs.lean` | GENERATED. One `def EqsatRule.TierSDefs.<rule> : EqsatRule.Rule` per rule of trust-cg `crates/trust-cg-eqsat/rules/tier_s_integer.rules` (10 rules). |
+| `EqsatTierSInt.lean` | Lemma group e (below): the lemmas of the eight rules only the saturation tier's file has, commutativity, associativity both ways and distribution both ways, each stated on its `TierSDefs` literal. Its helpers are `tiers_*`. |
+| `EqsatTierSControls.lean` | The two rule names both rule files have, `add_zero` and `mul_one`: the two generated literals of each are one term (`add_zero_is_the_integer_rule`, `mul_one_is_the_integer_rule`), which is why each has one row and one lemma. |
 | `EqsatIntControls.lean` | The non-vacuity evidence: `¬ Sound` for each wrong rule that is false as a statement, at a named small type and at every integer type (`<rule>_all`); the pointer-width controls (`ptr64_only_not_usize`, `ptr32_only_not_usize`, `not_sixteen_holds_usize`); the direction controls (`udiv_self_refines_u8`, `panic_only_udiv_self_u8`, `refines_does_not_give_equiv`, and `band_false_as_equiv_is_true`); a refines statement with a non-term right side that holds (`refines_ub_left_any_rhs`); a rule that is `Sound` for want of an assignment and not `Satisfiable` (`contradictory`); and two pairs of different literals with one proposition (`same_residue_one_statement`, `eval_free_twin_holds`). |
 
 ## What a rule says
@@ -120,10 +125,21 @@ What is not established:
   `var_cvar_one_statement`, `same_residue_one_statement`,
   `eval_free_twin_holds`; the gate asserts both acceptances on Clean's
   entry). No false rule is admitted by this, since one proposition has one
-  truth value. But an edit of this kind is refused by the rule digest only,
-  and whether a row is a `fold_*` row or carries `checker-ground-eval` must
-  be read from the parsed rule (its right side is, or contains, `eval`),
-  never from the statement or the record.
+  truth value. But the kernel does not refuse an edit of this kind: the
+  rule digest does, in trust-cg, and in Clean the gate's pin of each
+  generated file's bytes ("Generated modules"). Whether a row is a `fold_*`
+  row or carries `checker-ground-eval` must be read from the parsed rule
+  (its right side is, or contains, `eval`), never from the statement or the
+  record.
+* **The kernel does not hold which rule file a rule is from.** `add_zero` and
+  `mul_one` are written with the same text in both rule files, so each has
+  one literal under two names (`EqsatTierSControls`), one proposition, one
+  row of `LEMMAS` and one lemma, stated on the integer rule set's literal;
+  the entry accepts `EqsatInt.add_zero` for `Sound TierSDefs.add_zero <type>`
+  and `EqsatInt.mul_one` for `Sound TierSDefs.mul_one <type>` at every
+  integer type (the gate requires all 24 acceptances). Which rule file a
+  derivation's rule belongs to is the rule digest's and the registry's, in
+  trust-cg.
 * The registry's own well-formedness refusals (an ordered comparison at
   `bool`, a non-total operator) are not restated in `Pat.eval`, which gives
   such a pattern SemR's value or SemR's refusal.
@@ -147,7 +163,25 @@ proposition is a kernel refusal there, never a proved rule. A different
 literal with the same proposition is accepted ("What is not established").
 The script reads rule text as UTF-8 and accepts and refuses what the
 checker's tokenizer does; `python3 gen_rule_defs.py --self-test` runs its own
-controls.
+controls, on the reader and on the command line (a table and a module written
+from two rule files in a temporary directory, `--check` on each, and the
+command lines it refuses).
+
+**A generated file is never edited by hand, and the gate pins its bytes.**
+The three generated modules and `LEMMAS` each have the SHA-256 of their bytes
+in the gate (`GENERATED_FILES` in
+`crates/clean-olean/tests/eqsat_rules/lemmas.rs`); a file of the family that
+says it is generated and has no pin is refused too. This is the only thing in
+Clean that holds a literal: the kernel requires a lemma's type by the
+literal's name, the environment digest is not pinned, and the rule text is in
+trust-cg, so `--check` (below) is no lane here. Without the pin, a literal
+edited together with its proof, or edited so that the proposition is the same
+(a `const` flag, `var` against `cvar`), went through the gate. With it such an
+edit fails the gate's source test until the row is re-pinned. The pin says
+the file is the reviewed one, not that it is what the rule text generates:
+that is `--check` with the rule file at hand, and trust-cg's registry, which
+builds each literal from its own parsed rule. Re-pin only after regenerating,
+with the rule file's revision in the commit message.
 
 Regenerate (from this directory; the script's header has the same commands):
 
@@ -168,14 +202,41 @@ python3 gen_rule_defs.py --module EqsatIntWrongRuleDefs --namespace WrongDefs \
     --name-from-file --allow-partial-ops \
     --source "trust-cg crates/trust-cg-eqsat/tests/wrong_rules/" \
     /tmp/wrong_rules/*.rules > EqsatIntWrongRuleDefs.lean
+
+git -C ~/trust-cg show $R/rules/tier_s_integer.rules > /tmp/tier_s_integer.rules
+python3 gen_rule_defs.py --module EqsatTierSRuleDefs --namespace TierSDefs \
+    --source "trust-cg crates/trust-cg-eqsat/rules/tier_s_integer.rules" \
+    /tmp/tier_s_integer.rules > EqsatTierSRuleDefs.lean
 ```
 
-`LEMMAS` is the first command with `--lemmas` and `> LEMMAS`. Add
-`--check <file>` to any of the three to compare a committed file with the
-rule text instead of printing; `--table` prints
+`LEMMAS` is the first command with the saturation tier's rule file added
+(`--also NAMESPACE SOURCE FILE`), `--lemmas` and `> LEMMAS`:
+
+```sh
+python3 gen_rule_defs.py --module EqsatIntRuleDefs --namespace Defs \
+    --source "trust-cg crates/trust-cg-eqsat/rules/integer_identities.rules" \
+    --also TierSDefs "trust-cg crates/trust-cg-eqsat/rules/tier_s_integer.rules" \
+        /tmp/tier_s_integer.rules \
+    --lemmas /tmp/integer_identities.rules > LEMMAS
+```
+
+The table is keyed by rule name in the one lemma namespace `EqsatInt`,
+whatever the rule file, which is how trust-cg's registry reads it. A rule
+name both files have gets one row, and the script refuses the table unless
+the files give that name one literal, one kind and one domain. It also
+refuses a namespace given twice and an `--also` file whose name or whose
+bytes are those of another file of the table. Add
+`--check <file>` to any of the four commands to compare a committed file
+with the rule text instead of printing; `--table` prints
 `name direction kind domain` rows. Each generated module's header records the
-SHA-256 of the rule text it was read from (trust-cg `8bac4e06d`; the same
-bytes at `43cb5a33d2`).
+SHA-256 of the rule text it was read from, the table's header records both
+files', and the gate requires the table and a module to record one digest
+for a file:
+
+| Rule file | SHA-256 | Read at |
+|---|---|---|
+| `integer_identities.rules` | `6e3f959350a33df8c3092ca4261bbe58db545d9f7f779b89cac5c16837b96c0c` | trust-cg `8bac4e06d`; the same bytes at `43cb5a33d2` and `65d9b915d` |
+| `tier_s_integer.rules` | `51d62eb2554c2cda9c235ddb2863d2b2e9f3c8d41d0ab3a82bff934c6df9bf50` | trust-cg `65d9b915d` |
 
 ## Lemma names and the record term
 
@@ -195,6 +256,19 @@ All lemmas are in namespace `EqsatInt`:
   `EqsatRule.Satisfiable <literal> <type>` with the same literal and type as
   the `Sound` statement, and the term at `u64` is
   `EqsatInt.<rule>_sat SemR.IntTy.u64`.
+
+`Defs` above is the namespace of the literals generated from the rule's
+file: `EqsatRule.Defs` for a rule of the integer rule set, and
+`EqsatRule.TierSDefs` for a rule only the saturation tier's file has, so
+
+* `EqsatInt.<rule> : ∀ t, EqsatRule.Sound EqsatRule.TierSDefs.<rule> (.int t)`
+  for each of those eight rules; the record term at `u64` is
+  `EqsatInt.<rule> SemR.IntTy.u64` there too.
+
+A rule name both files have (`add_zero`, `mul_one`) has the one lemma of the
+integer rule set, stated on `Defs.<rule>`, and no second one: the same term
+is the record term for the saturation tier's statement
+`Sound TierSDefs.<rule> <type>` ("The saturation tier's rule set").
 
 A lemma that cannot be proved is not stated: it is left out and the row is
 `timed-out`, with what was tried.
@@ -241,6 +315,58 @@ fallback).
 | c. bitwise and not | `EqsatIntBitwise` | `and_const_right`, `or_const_right`, `xor_const_right`, `and_self`, `and_zero`, `and_ones`, `or_self`, `or_zero`, `or_ones`, `xor_self`, `xor_zero`, `not_not`, `and_and_const`, `or_or_const`, `xor_xor_const`: 15 rules, 15 lemmas |
 | d. negation, rotation, per-type | `EqsatIntNegRot` | `mul_neg_one`, `mul_255_neg_i8` (at `i8` and at `u8`), `neg_neg`, `zero_sub`, `add_neg`, `sub_const_to_add`, `rotl_full` (in `EqsatIntSample`), `rotr_full`: 8 rules, 9 lemmas |
 
+## The saturation tier's rule set
+
+`tier_s_integer.rules` has 10 rules, each `equiv`, each with all twelve
+integer types in its domain, none with a `where` clause (so none needs a
+satisfiability lemma; the gate fails if one gains a clause) and none a
+`fold_*` rule. Two of them, `add_zero` and `mul_one`, are rules of the
+integer rule set too, written there with the same text; the other 8 need 8
+lemmas, each at every integer type. **All 8 are proved; none is timed out.**
+With the two lemmas the integer rule set already has, every rule of the file
+is proved at each of the twelve integer types: 120 statements on the
+`TierSDefs` literals, each accepted by the entry, which the gate requires.
+
+`LEMMAS` lists the 8 after the integer rule set's rows, under the same
+rules: the gate requires each named lemma as a theorem whose type is
+`∀ t, Sound TierSDefs.<rule> (.int t)` term for term, checks that Clean's
+entry accepts its record term at each of the twelve types, and refuses a
+`Sound` theorem of `EqsatTierSInt` that no row names. So the table has 84
+rule names (76 and 8), 28 of them `fold_*`, and 64 lemma rows (56 and 8).
+
+| Group | Module | Rules (lemmas) |
+|---|---|---|
+| e. commutativity, associativity, distribution | `EqsatTierSInt` | `add_comm`, `mul_comm`, `add_assoc_right`, `add_assoc_left`, `mul_assoc_right`, `mul_assoc_left`, `distribute`, `factor`: 8 rules, 8 lemmas |
+
+Each is one proof at an arbitrary width, as in the integer rule set: `Nat`
+arithmetic modulo SemR's modulus (`Nat.add_comm`, `Nat.mul_comm`, and the
+residue facts `tiers_add_assoc`, `tiers_mul_assoc`, `tiers_add_mul`), no split
+on the type or the width, no use of the pointer-width hypothesis.
+
+* `add_assoc_left`, `mul_assoc_left` and `factor` are `add_assoc_right`,
+  `mul_assoc_right` and `distribute` with the sides exchanged. An `equiv`
+  statement is one common value of both sides, so each is its counterpart's
+  lemma with the two equations exchanged; the kernel checks that the
+  exchanged sides are the generated literal's. The two statements of a pair
+  are still different propositions: the entry refuses `add_assoc_left`'s
+  lemma for `add_assoc_right`'s statement, `factor`'s for `distribute`'s and
+  `distribute`'s for `factor`'s (the gate asserts each beside its accepted
+  control, and that the table refuses each such exchange).
+* `add_zero` and `mul_one` get no second lemma and no second row. The gate
+  requires that the names the two generated modules share are exactly these
+  two, that the two generated literals of each are the same text and, on the
+  replayed environment, the same term (the two definitions have one value),
+  the two identities of `EqsatTierSControls` with their statements pinned,
+  and the entry's acceptance of `EqsatInt.add_zero` and `EqsatInt.mul_one`
+  for the statements on `TierSDefs.add_zero` and `TierSDefs.mul_one` at each
+  integer type. A rule file edited on one side only makes the regenerated
+  literal another term: `gen_rule_defs.py --lemmas` then refuses the table
+  and `EqsatTierSControls` does not compile, until the later file's rule has
+  a name, a row and a lemma of its own.
+
+Until PKG-U4c the eight rules had no lemma, and trust-cg's registry recorded
+their 96 instances `Unsupported("no-lemma")`.
+
 ## Compiling
 
 The pinned Lean is v4.30.0-rc2. `compiled_fixture_dir("eqsat_rules")`
@@ -260,9 +386,10 @@ every closure is within `propext`, `Classical.choice` and `Quot.sound`.
 `crates/clean-olean/tests/eqsat_rules.rs` replays every declaration of the
 family from the empty environment through Clean's reference entry, runs the
 kernel controls, pins the closure digests of `EqsatRule.Sound` and
-`EqsatRule.Satisfiable`, requires every theorem of `EqsatAnchors` and
-`EqsatIntControls` and every `_sat` lemma by name with its statement pinned,
-and requires every lemma of `LEMMAS` with its row's statement:
+`EqsatRule.Satisfiable`, requires every theorem of `EqsatAnchors`,
+`EqsatIntControls` and `EqsatTierSControls` and every `_sat` lemma by name
+with its statement pinned, and requires every lemma of `LEMMAS` with its
+row's statement:
 
 ```sh
 targo --unverified test --locked --profile authority -p clean-olean \
@@ -276,7 +403,17 @@ the two).
 SHA-256 over the theorem's type as the kernel holds it and the closure digest
 of every constant the type names, so it moves when the statement is edited
 and when the meaning of anything it mentions changes, and not when a proof
-does. The gate fails when a theorem of the two pinned modules has no row, when
+does. The gate fails when a theorem of the three pinned modules has no row, when
 a row names a theorem the replayed environment lacks, or when a digest
 differs; it prints the table it computed. Re-pin a row only with the reason
 in the commit message.
+
+A closure digest hashes the kernel's whole record of every member, so the two
+closure pins and the statement rows also move when the kernel changes what it
+records for a declaration whose source did not change. That happened once:
+since Clean e3b7ac3d1b the replay keeps the unfolding height Lean wrote for a
+definition instead of one it computed, 31 of the 860 members of `Sound`'s
+closure have another height, and both pins and 139 rows were re-pinned with
+PKG-U4c. `docs/DECISIONS.md` (PKG-U4c) has the comparison that shows nothing
+else in a pinned record moved. A kernel from a Clean revision before that
+commit computes the earlier digests for the same sources.

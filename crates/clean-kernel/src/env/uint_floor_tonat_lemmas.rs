@@ -169,7 +169,8 @@ impl Environment {
         self.init_uint_arith()?; // UIntN.div
         self.init_uint_decidable_ord()?; // UIntN.le/.lt, instLE/instLT UIntN
         self.init_nat_floor_order_lemmas()?; // Nat.mod_eq_of_lt, Nat.div_le_self
-                                             // `instDivUIntN`, `UIntN.instOfNat` — the constants Lean's statements name.
+        self.register_nat_lt_of_le_of_lt_proof()?; // quotient bound in UInt.toNat_div
+                                                   // `instDivUIntN`, `UIntN.instOfNat` — the constants Lean's statements name.
         self.init_lean_uint_instances()?;
 
         let c = FloorConsts::new();

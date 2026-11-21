@@ -31,7 +31,7 @@ pub(crate) fn code_mentions_name(code: &Code, target: &Name) -> bool {
 /// This intentionally ignores type annotations, constructor names, and other
 /// metadata-only references. Lean 4's `Decl.recursive` bit is driven by
 /// executable references inside a declaration block, not by type mentions.
-pub(crate) fn code_called_constant_names(code: &Code) -> HashSet<Name> {
+pub fn code_called_constant_names(code: &Code) -> HashSet<Name> {
     let mut collector = CallNameCollector::default();
     collector.visit_code(code);
     collector.names

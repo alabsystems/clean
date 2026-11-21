@@ -37,9 +37,10 @@ impl ExternalLeanInspection {
     /// world and source/input bookends as executable elaboration. Full compiler
     /// row capture is attempted and disclosed, but confers no native authority.
     pub fn elaborate(input: ExternalLeanInput<'_>) -> Result<Self, ExternalLeanError> {
-        Ok(Self {
-            program: ExternalLeanProgram::capture(input)?,
-        })
+        let program = ExternalLeanProgram::capture(input)?;
+        // Logical inspection discloses the full global diagnostics, even on failure.
+        program.source_capture();
+        Ok(Self { program })
     }
 
     pub fn world(&self) -> LeanWorld {

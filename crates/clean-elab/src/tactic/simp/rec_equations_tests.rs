@@ -501,3 +501,6 @@ fn test_polymorphic_rec_equations_refuse_undeclared_universes() {
         Err("undeclared universe parameter")
     ));
 }
+
+#[path = "rec_equations_predicate_tests.rs"]
+mod source_predicate;

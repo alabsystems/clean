@@ -76,15 +76,16 @@ impl<'a> ElabCtx<'a> {
     /// 1. Structure projection: `s.field` → `proj(StructName, idx, s)`
     /// 2. Dot notation: `expr.method` → `T.method expr` where `T = typeof(expr)`
     /// 3. Qualified name: `Foo.bar` where `Foo` is a namespace, not a value
-    pub(crate) fn elab_proj(
+    pub(super) fn elab_proj(
         &mut self,
         expr: &SurfaceExpr,
         proj: &Projection,
+        receiver: Option<&mut DotHeadCapture>,
     ) -> Result<Expr, ElabError> {
         // How this term was reached decides an explicit-motive eliminator
         // head (`elab_dot_elim.rs`); the frame is restored on every exit.
         let saved = self.open_dot_elim_frame(expr, proj);
-        let result = self.elab_proj_framed(expr, proj);
+        let result = self.elab_proj_framed(expr, proj, receiver);
         self.dot_elim.restore_frame(saved);
         result
     }
@@ -112,8 +113,9 @@ impl<'a> ElabCtx<'a> {
         &mut self,
         expr: &SurfaceExpr,
         proj: &Projection,
+        receiver_capture: Option<&mut DotHeadCapture>,
     ) -> Result<Expr, ElabError> {
-        let outcome = self.elab_proj_resolved(expr, proj);
+        let outcome = self.elab_proj_resolved(expr, proj, receiver_capture);
         let Err(error) = outcome else {
             return outcome;
         };
@@ -141,6 +143,7 @@ impl<'a> ElabCtx<'a> {
         &mut self,
         expr: &SurfaceExpr,
         proj: &Projection,
+        receiver_capture: Option<&mut DotHeadCapture>,
     ) -> Result<Expr, ElabError> {
         // Projection/qualified-name disambiguation (#497, #501):
         // The parser produces Proj for all dotted terms like `x.y`.
@@ -211,7 +214,12 @@ impl<'a> ElabCtx<'a> {
                             return Err(Self::shadowed_receiver_error(base_name, field));
                         }
                         DottedIdent::FieldOfGlobal { receiver, fields } => {
-                            return self.elab_global_receiver_chain(expr.span(), receiver, &fields);
+                            return self.elab_global_receiver_chain(
+                                expr.span(),
+                                receiver,
+                                &fields,
+                                receiver_capture,
+                            );
                         }
                         DottedIdent::UnsupportedGlobalReceiver => {
                             return Err(Self::unsupported_global_receiver_error(base_name, field));
@@ -298,6 +306,7 @@ impl<'a> ElabCtx<'a> {
                                     expr.span(),
                                     receiver,
                                     &fields,
+                                    receiver_capture,
                                 );
                             }
                             DottedIdent::UnsupportedGlobalReceiver => {
@@ -565,8 +574,7 @@ impl<'a> ElabCtx<'a> {
 
         // Try single-constructor-inductive projection first.
         match self.resolve_projection_target(&expr_val) {
-            Ok((struct_name, num_fields, is_structure)) => {
-                // Single-ctor projection: expr.field -> proj(struct_name, idx, expr)
+            Ok((struct_name, receiver_type, num_fields, is_structure)) => {
                 match proj {
                     Projection::Named(name) => {
                         // Named `.field` requires structure field-name metadata.
@@ -577,7 +585,7 @@ impl<'a> ElabCtx<'a> {
                         // mirrors Lean's `resolveLValAux`, which only emits the
                         // named projection function when `isStructure`.
                         if !is_structure {
-                            return self.elab_dot_notation(&expr_val, proj);
+                            return self.elab_dot_notation(&expr_val, proj, receiver_capture);
                         }
                         let field_name = name.name().clone();
                         match self
@@ -588,7 +596,12 @@ impl<'a> ElabCtx<'a> {
                                 // Another module's private structure: Lean
                                 // refuses the field from an importer (G21 B3).
                                 self.check_imported_private_field(&struct_name, &field_name)?;
-                                Ok(Expr::proj(struct_name, idx, expr_val))
+                                Ok(self.elaborated_field(
+                                    &struct_name,
+                                    &receiver_type,
+                                    idx,
+                                    expr_val,
+                                ))
                             }
                             None => {
                                 // Not a real field — but it may be a *method* in the
@@ -599,7 +612,9 @@ impl<'a> ElabCtx<'a> {
                                 // dot-notation resolves this. Fall through to
                                 // `elab_dot_notation`; only if THAT also fails do we
                                 // report the (more informative) unknown-field error.
-                                if let Ok(method_expr) = self.elab_dot_notation(&expr_val, proj) {
+                                if let Ok(method_expr) =
+                                    self.elab_dot_notation(&expr_val, proj, receiver_capture)
+                                {
                                     return Ok(method_expr);
                                 }
                                 // INHERITED FIELD, composed ON THE FLY — Lean's
@@ -693,7 +708,7 @@ impl<'a> ElabCtx<'a> {
                         }
                         // `*idx >= 1` is guaranteed by the `== 0` guard above, so the
                         // subtraction cannot underflow.
-                        Ok(Expr::proj(struct_name, *idx - 1, expr_val))
+                        Ok(self.elaborated_field(&struct_name, &receiver_type, *idx - 1, expr_val))
                     }
                 }
             }
@@ -720,7 +735,7 @@ impl<'a> ElabCtx<'a> {
                 // Fallback: dot notation for non-structure types (#155)
                 // For `expr.field` where expr : T (non-structure), look for T.field constant
                 // and apply as `T.field expr`
-                self.elab_dot_notation(&expr_val, proj)
+                self.elab_dot_notation(&expr_val, proj, receiver_capture)
             }
             Err(e) => Err(e),
         }
@@ -789,6 +804,7 @@ impl<'a> ElabCtx<'a> {
         span: clean_parser::Span,
         receiver: Name,
         fields: &[SurfaceName],
+        receiver_capture: Option<&mut DotHeadCapture>,
     ) -> Result<Expr, ElabError> {
         let head = SurfaceExpr::Paren(
             span,
@@ -797,16 +813,20 @@ impl<'a> ElabCtx<'a> {
                 SurfaceName::global_constant(receiver),
             )),
         );
-        let chain = fields.iter().fold(head, |acc, field| {
-            SurfaceExpr::Paren(
+        let mut chain = head;
+        let mut capture = receiver_capture;
+        for (i, field) in fields.iter().enumerate() {
+            let projection = Projection::Named(field.clone());
+            if i + 1 == fields.len() {
+                if let Some(capture) = capture.take() {
+                    return self.elab_proj(&chain, &projection, Some(capture));
+                }
+            }
+            chain = SurfaceExpr::Paren(
                 span,
-                Box::new(SurfaceExpr::Proj(
-                    span,
-                    Box::new(acc),
-                    Projection::Named(field.clone()),
-                )),
-            )
-        });
+                Box::new(SurfaceExpr::Proj(span, Box::new(chain), projection)),
+            );
+        }
         self.elaborate(&chain)
     }
 
@@ -832,10 +852,7 @@ impl<'a> ElabCtx<'a> {
             return resolution.chain.clone();
         }
         // A user template's free reference walks from its declaring namespace.
-        let namespace_prefix = match dotted.template_origin() {
-            Some(origin) => SurfaceName::from_name(origin.namespace.clone()),
-            None => self.namespace_prefix.clone(),
-        };
+        let namespace_prefix = self.term_lookup_namespace(dotted);
         if !namespace_prefix.is_anonymous() {
             let mut prefix = namespace_prefix;
             loop {
@@ -971,8 +988,8 @@ impl<'a> ElabCtx<'a> {
                 return true;
             }
         }
-        if !self.namespace_prefix.is_anonymous() {
-            let mut prefix = self.namespace_prefix.clone();
+        let mut prefix = self.term_lookup_namespace(name);
+        if !prefix.is_anonymous() {
             loop {
                 let qualified = prefix.append(name).into_name();
                 if is_known(&qualified) {
@@ -1029,8 +1046,8 @@ impl<'a> ElabCtx<'a> {
                 return true;
             }
         }
-        if !self.namespace_prefix.is_anonymous() {
-            let mut prefix = self.namespace_prefix.clone();
+        let mut prefix = self.term_lookup_namespace(name);
+        if !prefix.is_anonymous() {
             loop {
                 let qualified = prefix.append(name).into_name();
                 if is_type_former(&qualified) {
@@ -1049,7 +1066,12 @@ impl<'a> ElabCtx<'a> {
     ///
     /// For `expr.field` where `expr : T` and `T` is not a structure,
     /// looks up `T.field` as a constant and applies it: `T.field expr`.
-    fn elab_dot_notation(&mut self, expr_val: &Expr, proj: &Projection) -> Result<Expr, ElabError> {
+    fn elab_dot_notation(
+        &mut self,
+        expr_val: &Expr,
+        proj: &Projection,
+        mut receiver_capture: Option<&mut DotHeadCapture>,
+    ) -> Result<Expr, ElabError> {
         let field_name = match proj {
             Projection::Named(n) => n.clone(),
             Projection::Index(_) => {
@@ -1111,8 +1133,8 @@ impl<'a> ElabCtx<'a> {
                     }
                 }
             }
-            if !self.namespace_prefix.is_anonymous() {
-                let mut prefix = self.namespace_prefix.clone();
+            let mut prefix = self.term_lookup_namespace(&dotted);
+            if !prefix.is_anonymous() {
                 loop {
                     let qualified = self.with_private_step(prefix.append(&dotted).into_name());
                     if self.is_const_accessible(&qualified) {
@@ -1178,8 +1200,8 @@ impl<'a> ElabCtx<'a> {
                     if let Some(q) = self.namespace_state.resolve(dotted.name()) {
                         candidates.push(q.clone());
                     }
-                    if !self.namespace_prefix.is_anonymous() {
-                        let mut prefix = self.namespace_prefix.clone();
+                    let mut prefix = self.term_lookup_namespace(&dotted);
+                    if !prefix.is_anonymous() {
                         loop {
                             candidates.push(prefix.append(&dotted).into_name());
                             prefix = prefix.parent();
@@ -1240,8 +1262,14 @@ impl<'a> ElabCtx<'a> {
                     };
                     let fn_expr = Expr::const_(name, levels);
                     let type_name = head_name.clone();
-                    return self
-                        .apply_dot_receiver(fn_expr, &fn_type, expr_val, &expr_ty, &type_name);
+                    return self.apply_or_capture_dot_receiver(
+                        fn_expr,
+                        &fn_type,
+                        expr_val,
+                        &expr_ty,
+                        &type_name,
+                        receiver_capture,
+                    );
                 }
             }
         }
@@ -1363,8 +1391,12 @@ impl<'a> ElabCtx<'a> {
             // Clean-specific attempts below run only when that finds nothing.
             if leading_implicit {
                 self.metas.push_scope();
-                match self.resolve_field_through_consumed_implicits(expr_val, &expr_ty, &field_name)
-                {
+                match self.resolve_field_through_consumed_implicits(
+                    expr_val,
+                    &expr_ty,
+                    &field_name,
+                    receiver_capture.as_deref_mut(),
+                ) {
                     Ok(Some(resolved)) => {
                         self.metas.commit();
                         return Ok(resolved);
@@ -1436,12 +1468,13 @@ impl<'a> ElabCtx<'a> {
                                     .instantiate_level_params_direct(&const_level_params, &levels)
                             };
                             let fn_expr = Expr::const_(name, levels);
-                            return self.apply_dot_receiver(
+                            return self.apply_or_capture_dot_receiver(
                                 fn_expr,
                                 &fn_type,
                                 &applied_expr,
                                 &resolved_ty,
                                 &type_name,
+                                receiver_capture,
                             );
                         }
                     }
@@ -1462,9 +1495,12 @@ impl<'a> ElabCtx<'a> {
             // produced `Function.<field> … receiver` application is kernel-
             // re-checked. No kernel/TCB touched.
             if !leading_implicit {
-                if let Some(applied) =
-                    self.apply_function_namespace_field(&field_name, expr_val, &expr_ty)
-                {
+                if let Some(applied) = self.apply_function_namespace_field(
+                    &field_name,
+                    expr_val,
+                    &expr_ty,
+                    receiver_capture.as_deref_mut(),
+                ) {
                     return Ok(applied);
                 }
             }
@@ -1580,7 +1616,7 @@ impl<'a> ElabCtx<'a> {
                 // (axiom-free) conversion: `xs.length` becomes
                 // `List.length (Value._List.toContainer xs)`.
                 if let Some(result) =
-                    self.try_aux_container_dot(&type_name, &field_name, expr_val)?
+                    self.try_aux_container_dot(&type_name, &field_name, expr_val, receiver_capture)?
                 {
                     return Ok(result);
                 }
@@ -1613,7 +1649,14 @@ impl<'a> ElabCtx<'a> {
             const_type.instantiate_level_params_direct(&const_level_params, &levels)
         };
         let fn_expr = Expr::const_(name, levels);
-        self.apply_dot_receiver(fn_expr, &fn_type, expr_val, &expr_ty, &type_name)
+        self.apply_or_capture_dot_receiver(
+            fn_expr,
+            &fn_type,
+            expr_val,
+            &expr_ty,
+            &type_name,
+            receiver_capture,
+        )
     }
 
     /// Build the named refusal for a dot-notation target that did not resolve
@@ -1690,6 +1733,7 @@ impl<'a> ElabCtx<'a> {
         type_name: &Name,
         field_name: &SurfaceName,
         receiver: &Expr,
+        capture: Option<&mut DotHeadCapture>,
     ) -> Result<Option<Expr>, ElabError> {
         let to_container_name = type_name.clone().str("toContainer");
         let tc_info = match self.env.get_const(&to_container_name) {
@@ -1753,6 +1797,7 @@ impl<'a> ElabCtx<'a> {
             &converted,
             &converted_ty,
             &container_name,
+            capture,
         )?;
         Ok(Some(result))
     }
@@ -1787,6 +1832,7 @@ impl<'a> ElabCtx<'a> {
         receiver: &Expr,
         receiver_ty: &Expr,
         type_name: &Name,
+        capture: Option<&mut DotHeadCapture>,
     ) -> Result<Expr, ElabError> {
         // A recursor-family head with an EXPLICIT motive (`x.casesOn`,
         // `x : Empty`) is Lean's eliminator elaboration, not a lambda over
@@ -1823,30 +1869,7 @@ impl<'a> ElabCtx<'a> {
         while let ExprKind::Pi(bi, arg_ty, body_ty) = ty.kind() {
             let arg_ty_inst = self.metas.instantiate(arg_ty);
 
-            // Receiver ("self") slot detection, computed for EVERY binder (not
-            // just explicit ones): the slot is the receiver's when its type head
-            // is the namespace type `T`.
-            //
-            // Check the *syntactic* (un-WHNF'd) head first: when `T` is a
-            // definition that unfolds to a `Pi` (Track UU, e.g.
-            // `def ValueMap := ValueId → Option Value`, so the self-slot of
-            // `ValueMap.get : ValueMap → ValueId → Option Value` is written
-            // `ValueMap` but WHNFs to a function type), WHNFing the slot type
-            // destroys the `ValueMap` head and the self-slot would never match.
-            // Matching the syntactic head recovers it. Fall back to the WHNF
-            // head for the ordinary case where the slot type only reveals its
-            // head constant after reduction (e.g. an abbreviation
-            // `def MyNat := Nat` used as the self type).
-            let syntactic_head_matches = matches!(
-                arg_ty_inst.get_app_fn().kind(),
-                ExprKind::Const(n, _) if n == type_name
-            );
-            let arg_head = self.whnf(&arg_ty_inst);
-            let head_matches = syntactic_head_matches
-                || matches!(
-                    arg_head.get_app_fn().kind(),
-                    ExprKind::Const(n, _) if n == type_name
-                );
+            let head_matches = self.dot_parameter_matches_namespace(&arg_ty_inst, type_name)?;
 
             // A CLASS projection carries its receiver as an INSTANCE-IMPLICIT
             // `self` (`@B.f : {α} → [self : B α] → …` — B06/`mkProjections`), so
@@ -1901,6 +1924,7 @@ impl<'a> ElabCtx<'a> {
                 return Ok(Self::wrap_pre_receiver_lambdas(
                     applied,
                     &pre_receiver_binders,
+                    capture,
                 ));
             }
 
@@ -1928,6 +1952,7 @@ impl<'a> ElabCtx<'a> {
         Ok(Self::wrap_pre_receiver_lambdas(
             applied,
             &pre_receiver_binders,
+            capture,
         ))
     }
 
@@ -1972,7 +1997,14 @@ impl<'a> ElabCtx<'a> {
     /// abstracting their fvars. Binders are abstracted innermost-first so the
     /// resulting `λ a₁ … aₙ => body` re-exposes them in source order for the
     /// caller's positional arguments.
-    fn wrap_pre_receiver_lambdas(body: Expr, binders: &[(FVarId, BinderInfo, Expr)]) -> Expr {
+    fn wrap_pre_receiver_lambdas(
+        body: Expr,
+        binders: &[(FVarId, BinderInfo, Expr)],
+        capture: Option<&mut DotHeadCapture>,
+    ) -> Expr {
+        if let Some(DotHeadCapture::Positional { generated_binders }) = capture {
+            *generated_binders = binders.len();
+        }
         let mut acc = body;
         for (fvar_id, info, arg_ty) in binders.iter().rev() {
             let closed = acc.abstract_fvar(*fvar_id);
@@ -2010,10 +2042,31 @@ impl<'a> ElabCtx<'a> {
         })
     }
 
+    /// A written field uses its registered accessor on a Lean structure. Plain
+    /// single-constructor inductives and incomplete bootstrap field tables have
+    /// the kernel's primitive projection. The accessor's body verifies that its
+    /// name designates this field of this receiver.
+    fn elaborated_field(
+        &self,
+        owner: &Name,
+        receiver_type: &Expr,
+        index: u32,
+        receiver: Expr,
+    ) -> Expr {
+        crate::structure_cmd::field_accessor_application(
+            self.env,
+            owner,
+            receiver_type,
+            index,
+            &receiver,
+        )
+        .unwrap_or_else(|| Expr::proj(owner.clone(), index, receiver))
+    }
+
     /// Resolve the projection target for a single-constructor inductive.
     ///
     /// Ensures the receiver's type reduces to a single-constructor inductive and
-    /// returns `(struct_name, num_fields, is_registered_structure)`. The
+    /// returns the owner, normalized receiver type, field count and structure flag. The
     /// `is_registered_structure` flag is `true` iff the inductive was declared
     /// (or registered) as a Lean `structure` and therefore has field-name
     /// metadata.
@@ -2024,14 +2077,14 @@ impl<'a> ElabCtx<'a> {
     /// taken from the constructor — NOT gated on `structure`-ness. Only the
     /// *named* `.field` accessor requires `structure` metadata. The caller
     /// (`elab_proj`) is responsible for branching on the projection kind:
-    /// `Index` proceeds for any single-ctor inductive (kernel `Expr.proj`),
-    /// while `Named` requires `is_structure` (else falls through to
+    /// `Index` uses the structure accessor when available and the primitive
+    /// projection on a plain inductive. `Named` requires `is_structure` (else falls through to
     /// dot-notation, e.g. `τ.eval` where `T` is a plain inductive with a def
     /// `T.eval`, not a structure field).
     pub(crate) fn resolve_projection_target(
         &self,
         expr: &Expr,
-    ) -> Result<(Name, u32, bool), ElabError> {
+    ) -> Result<(Name, Expr, u32, bool), ElabError> {
         let expr_ty = self.infer_type(expr)?;
         let expr_ty_whnf = self.whnf(&expr_ty);
 
@@ -2068,12 +2121,17 @@ impl<'a> ElabCtx<'a> {
             ElabError::InvalidProjectionTarget(format!("missing constructor {ctor_name}"))
         })?;
 
-        Ok((struct_name, ctor.num_fields, is_registered_structure))
+        Ok((
+            struct_name,
+            expr_ty_whnf,
+            ctor.num_fields,
+            is_registered_structure,
+        ))
     }
 
     /// Numeric `.idx` projection on a receiver whose type is a LEADING-IMPLICIT
     /// `Pi`, by peeling the leading implicit/instance binders to expose a
-    /// single-constructor inductive head, then emitting the kernel projection.
+    /// single-constructor inductive head, then elaborating its ordinal field.
     ///
     /// Handles e.g. `not_and_or.1` where
     /// `not_and_or : {a b : Prop} → (¬(a ∧ b) ↔ ¬a ∨ ¬b)`: the receiver type is
@@ -2106,7 +2164,7 @@ impl<'a> ElabCtx<'a> {
         let (applied_expr, _) =
             self.insert_implicit_args(expr_val.clone(), &expr_ty_whnf, ArgsFollow::No);
         match self.resolve_projection_target(&applied_expr) {
-            Ok((struct_name, num_fields, is_structure)) => {
+            Ok((struct_name, receiver_type, num_fields, is_structure)) => {
                 if idx == 0 || idx > num_fields {
                     return Err(ElabError::ProjectionIndexOutOfBounds {
                         struct_name,
@@ -2123,7 +2181,12 @@ impl<'a> ElabCtx<'a> {
                 // `apply_dot_receiver`); the kernel re-checks the result.
                 let applied_expr = self.metas.instantiate(&applied_expr);
                 let applied_expr = self.metas.instantiate_levels(&applied_expr);
-                Ok(Some(Expr::proj(struct_name, idx - 1, applied_expr)))
+                Ok(Some(self.elaborated_field(
+                    &struct_name,
+                    &receiver_type,
+                    idx - 1,
+                    applied_expr,
+                )))
             }
             Err(_) => Ok(None),
         }

@@ -1,7 +1,7 @@
 // Copyright 2026 Andrew Yates
 // SPDX-License-Identifier: Apache-2.0
 
-//! Optional, proof-checked normalization of an ORIGINAL conditional decision.
+//! Optional, proof-checked normalization of an original UInt decision.
 //! A proposition's syntax selects at most four UInt proposals; only an exact
 //! closed kernel value equality can authorize replacement. Compiled runtime
 //! overrides are a separate meaning and conservatively decline this shortcut.
@@ -51,7 +51,19 @@ fn operands(proposition: &Expr) -> Option<(u32, Expr, Expr)> {
             }
         }
     }
-    None
+    // A standalone `decide` can arrive with its proposition unfolded to
+    // `Nat.le`, with `Nat.succ` on the left for strict comparison.
+    // The coercion spines only propose operands for the same checked equality.
+    let sides = args_of(proposition, "Nat.le", &[], 2)?;
+    let left = args_of(sides[0], "Nat.succ", &[], 1).map_or(sides[0], |args| args[0]);
+    let lhs_bits = args_of(left, "BitVec.toNat", &[], 2)?[1];
+    let rhs_bits = args_of(sides[1], "BitVec.toNat", &[], 2)?[1];
+    [8, 16, 32, 64].into_iter().find_map(|width| {
+        let projection = format!("UInt{width}.toBitVec");
+        let lhs = args_of(lhs_bits, &projection, &[], 1)?[0];
+        let rhs = args_of(rhs_bits, &projection, &[], 1)?[0];
+        Some((width, lhs.clone(), rhs.clone()))
+    })
 }
 
 /// Close BOTH sides, their exact expected type, and their equality under every
@@ -332,7 +344,7 @@ fn accepted(ctx: &LcnfContext<'_>, p: &Expr, original: &Expr, candidate: &Expr) 
 
 /// Return the candidate in the ORIGINAL BVar scope, not the opened proof scope.
 /// No match, missing scope/type, changed compiled meaning, or checker/budget
-/// rejection returns None so lower_dite_ite lowers its original instance.
+/// rejection returns None so the caller lowers its original instance.
 pub(super) fn normalize(ctx: &LcnfContext<'_>, p: &Expr, original: &Expr) -> Option<Expr> {
     let (width, a, b) = operands(p)?;
     for operation in ["decLt", "decLe"] {

@@ -283,6 +283,26 @@ fn test_parse_by_unfold_several_names() {
     );
 }
 
+/// The hypothesis location belongs to `split`, not to a trailing tactic.
+#[test]
+fn test_split_location_is_one_tactic_with_an_actual_name_argument() {
+    let expr = Parser::parse_expr("by split at h").unwrap();
+    let SurfaceExpr::ByTactic(_, tactics) = expr else {
+        panic!("expected a tactic block");
+    };
+    assert_eq!(
+        tactics.len(),
+        1,
+        "the location must not become another tactic"
+    );
+    let SurfaceTactic::Named { name, args, .. } = &tactics[0] else {
+        panic!("expected named split, got {:?}", tactics[0]);
+    };
+    assert_eq!(name, "split");
+    assert_eq!(args.len(), 1);
+    assert!(matches!(&args[0], SurfaceExpr::Ident(_, name) if name.to_string() == "h"));
+}
+
 /// Every name is unfolded at the one location the tactic names.
 #[test]
 fn test_parse_by_unfold_several_names_share_the_location() {

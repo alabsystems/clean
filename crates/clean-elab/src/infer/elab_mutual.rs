@@ -295,7 +295,7 @@ impl<'a> ElabCtx<'a> {
         let mut results: Vec<ElabResult> = Vec::with_capacity(lowered.len());
         for member in lowered {
             let entry = &entries[member.index];
-            let (is_theorem, modifiers) = kinds[member.index];
+            let (is_theorem, modifiers) = kinds[member.index].clone();
             results.push(if is_theorem {
                 ElabResult::Theorem {
                     name: entry.name.clone(),
@@ -854,7 +854,7 @@ impl ElabCtx<'_> {
                 val: val_expr,
                 structural_major,
             });
-            kinds.push((is_theorem, *modifiers));
+            kinds.push((is_theorem, modifiers.clone()));
             entry_idx += 1;
         }
         Ok((predefs, kinds, auto_implicit_counts))

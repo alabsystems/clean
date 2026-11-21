@@ -9,6 +9,22 @@
 //! every declaration from its modules is re-admitted through the fenced Clean
 //! reference entry. Every theorem statement and every declaration's observed
 //! axiom closure is pinned, including compiler-generated and private names.
+//!
+//! A theorem's, contract's or dependency definition's pin is its meaning
+//! digest (`support/meaning_digest.rs`) over the package of the fixture family
+//! `kcheck_sort_bounds` (`cic_l`, `cic_l_model`, `kcheck_spec`,
+//! `kcheck_sort_bounds`): the constant and every package definition,
+//! inductive type, constructor and compiler auxiliary it reaches, down to
+//! Init, a reached theorem by its statement. The two canonical helpers keep
+//! their `::type-and-value` pins, which bind their proofs. Re-pin with
+//! `CLEAN_REPIN_STATEMENT_PINS=1 scripts/heavy_gate.sh run 16 kcheck-sort-bounds-repin
+//! -- "$(rustup run trust rustc --print sysroot)/bin/targo" --unverified test -p
+//! clean-olean --locked --test kcheck_sort_bounds`: the run rewrites
+//! `theories/kcheck_sort_bounds/statement_pins.json` and still fails, and the
+//! next run without the variable, after a rebuild, confirms it.
+
+#[path = "support/meaning_digest.rs"]
+mod meaning_digest;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
@@ -22,6 +38,7 @@ use clean_olean::{
     load_module_with_deps, read_artifact, reference_base_closed, require_pinned_lean_lib_path,
     ArtifactDepth,
 };
+use meaning_digest::{MeaningDigests, Package};
 use sha2::{Digest, Sha256};
 
 const ROOT: &str = "KCheckSortBounds";
@@ -81,15 +98,6 @@ fn theorem_name(short: &str) -> Name {
 
 fn contract_name(short: &str) -> Name {
     name(&format!("KCheckSortBounds.Contracts.{short}"))
-}
-
-fn digest(statement: &Expr) -> String {
-    let bytes = bincode::serde::encode_to_vec(statement, bincode::config::standard())
-        .expect("serialize statement");
-    Sha256::digest(bytes)
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect()
 }
 
 fn constant_digest(constant: &ConstantInfo) -> String {
@@ -281,6 +289,7 @@ fn sort_bounds_helpers_recheck_with_pins_and_refutations() {
     let mut artifact_equations = BTreeSet::new();
     for module in modules.iter().map(String::as_str).chain([
         "CICL.CoreTyping",
+        "KCheckSpec.TermData",
         "KCheckSpec.Term",
         "KCheckSpec.Env",
     ]) {
@@ -324,6 +333,17 @@ fn sort_bounds_helpers_recheck_with_pins_and_refutations() {
     );
     eprintln!("fenced-helper-replay {}", checked.report.verdict_sentence());
     let mut kernel = checked.into_kernel().expect("all fenced admissions passed");
+    let meaning_package = Package::of_fixture(
+        &compiled,
+        "kcheck_sort_bounds",
+        &["cic_l", "cic_l_model", "kcheck_spec", "kcheck_sort_bounds"],
+    );
+    let digests = MeaningDigests::new(kernel.environment(), &meaning_package);
+    let meaning = |subject: &Name| -> String {
+        digests
+            .digest(subject)
+            .unwrap_or_else(|error| panic!("{subject}: {error}"))
+    };
 
     let allowed: BTreeSet<String> = [
         "propext",
@@ -355,7 +375,7 @@ fn sort_bounds_helpers_recheck_with_pins_and_refutations() {
             .get_const(subject)
             .expect("resident helper declaration");
         if constant.kind == ConstantKind::Theorem {
-            observed_pins.insert(subject.to_string(), digest(&constant.type_));
+            observed_pins.insert(subject.to_string(), meaning(subject));
         }
     }
     let statement = |short: &str| -> Expr {
@@ -379,7 +399,10 @@ fn sort_bounds_helpers_recheck_with_pins_and_refutations() {
     for short in contract_names {
         assert!(
             observed_pins
-                .insert(contract_name(short).to_string(), digest(&statement(short)))
+                .insert(
+                    contract_name(short).to_string(),
+                    meaning(&contract_name(short))
+                )
                 .is_none(),
             "duplicate contract {short}"
         );
@@ -399,7 +422,11 @@ fn sort_bounds_helpers_recheck_with_pins_and_refutations() {
                     } else {
                         (*dependency).to_owned()
                     },
-                    constant_digest(constant),
+                    if CANONICAL_HELPERS.contains(dependency) {
+                        constant_digest(constant)
+                    } else {
+                        meaning(&name(dependency))
+                    },
                 )
                 .is_none(),
             "duplicate dependency pin {dependency}"
@@ -419,6 +446,14 @@ fn sort_bounds_helpers_recheck_with_pins_and_refutations() {
     for (subject, pin) in &observed_pins {
         eprintln!("statement-pin {subject} {pin}");
     }
+    let roots: Vec<Name> = replay_targets.iter().cloned().collect();
+    eprintln!(
+        "{}",
+        digests
+            .describe(&meaning_package, &roots)
+            .unwrap_or_else(|error| panic!("{error}"))
+    );
+    drop(digests);
     let committed_closures: BTreeMap<String, BTreeSet<String>> = serde_json::from_str(
         include_str!("../../../theories/kcheck_sort_bounds/axiom_closures.json"),
     )
@@ -431,10 +466,13 @@ fn sort_bounds_helpers_recheck_with_pins_and_refutations() {
         observed_closures, committed_closures,
         "exact helper axiom census"
     );
-    assert_eq!(
-        observed_pins, committed_pins,
-        "all helper theorem statements pinned"
-    );
+    if let Err(failure) = meaning_digest::check_pins(
+        &observed_pins,
+        &committed_pins,
+        "theories/kcheck_sort_bounds/statement_pins.json",
+    ) {
+        panic!("all helper theorem statements pinned: {failure}");
+    }
 
     let mut control_names = BTreeSet::new();
     for (short, contract) in CONTRACTS {

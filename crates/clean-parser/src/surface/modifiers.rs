@@ -44,8 +44,11 @@ pub enum DeclScope {
 /// Lean 4 allows modifiers like `private partial def ...` or
 /// `noncomputable protected def ...`. These are accumulated into
 /// this struct and attached to the resulting `SurfaceDecl`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
 pub struct DeclModifiers {
+    /// A real declaration doc comment, retained until attachment at registration.
+    /// It is not a logical visibility/computability flag.
+    pub documentation: Option<super::DocComment>,
     /// Visibility: public (legacy default), protected, or private
     pub visibility: Visibility,
     /// Whether the definition is `partial` (allowed to be non-terminating)
@@ -204,6 +207,7 @@ mod tests {
     #[test]
     fn test_modifiers_all_set() {
         let m = DeclModifiers {
+            documentation: None,
             visibility: Visibility::Private,
             is_partial: true,
             is_noncomputable: true,
@@ -237,7 +241,7 @@ mod tests {
             is_partial: true,
             ..Default::default()
         };
-        let m2 = m;
+        let m2 = m.clone();
         assert_eq!(m, m2);
     }
 }

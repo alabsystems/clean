@@ -66,15 +66,48 @@ fn test_parse_bitwise_operators_lower_to_h_ops() {
         binop_head(&parse_expr("a >>> b").unwrap()),
         &SurfaceName::generated_path("HShiftRight.hShiftRight")
     );
-    // Bool `&&`/`||` lower to `and`/`or`.
-    assert_eq!(
-        binop_head(&parse_expr("a && b").unwrap()),
-        &SurfaceName::generated_path("and")
-    );
-    assert_eq!(
-        binop_head(&parse_expr("a || b").unwrap()),
-        &SurfaceName::generated_path("or")
-    );
+    // Bool notation names its definitions in Init, irrespective of use-site aliases.
+    for (source, expected) in [("a && b", "Bool.and"), ("a || b", "Bool.or")] {
+        let expr = parse_expr(source).unwrap();
+        let head = binop_head(&expr);
+        assert_eq!(head, &SurfaceName::global_path(expected));
+        assert!(head.is_global_reference());
+    }
+}
+
+#[test]
+fn test_boolean_and_propositional_operator_grouping() {
+    for (text, root_name, nested_operand, nested_name) in [
+        ("a || b || c", "Bool.or", 0, "Bool.or"),
+        ("a && b && c", "Bool.and", 0, "Bool.and"),
+        ("a || (b || c)", "Bool.or", 1, "Bool.or"),
+        ("a && (b && c)", "Bool.and", 1, "Bool.and"),
+        ("a && b || c", "Bool.or", 0, "Bool.and"),
+        ("a || b && c", "Bool.or", 1, "Bool.and"),
+        ("a ∨ b ∨ c", "Or", 1, "Or"),
+        ("a ∧ b ∧ c", "And", 1, "And"),
+        ("a ∨ b || c", "Or", 1, "Bool.or"),
+        ("a ∧ b && c", "And", 1, "Bool.and"),
+    ] {
+        let expr = parse_expr(text).unwrap();
+        assert_eq!(
+            binop_head(&expr),
+            &SurfaceName::global_path(root_name),
+            "{text}"
+        );
+        let SurfaceExpr::App(_, _, args) = &expr else {
+            unreachable!()
+        };
+        let nested = match &args[nested_operand].expr {
+            SurfaceExpr::Paren(_, inner) => inner.as_ref(),
+            other => other,
+        };
+        assert_eq!(
+            binop_head(nested),
+            &SurfaceName::global_path(nested_name),
+            "{text}"
+        );
+    }
 }
 
 #[test]

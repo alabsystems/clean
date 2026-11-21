@@ -8,6 +8,7 @@ installed policy, resource, execution, proof or platform-permission authority.
 from __future__ import annotations
 
 import re
+from ay_package_version import is_ay_028_patch
 
 
 AY_URL = "https://github.com/alabsystems/ay.git"
@@ -96,7 +97,7 @@ def locked_identity(packages, revision, ay_version):
                     incoming.append((row, target))
     if not vendors and not incoming:
         return None
-    require(ay_version == "0.28.0" and len(vendors) == 1 and len(owners) == 1,
+    require(is_ay_028_patch(ay_version) and len(vendors) == 1 and len(owners) == 1,
             "unsupported AY version or duplicate/missing actual owner")
     vendor, owner = vendors[0], owners[0]
     require(identity(vendor) == (NAME, VERSION, source)

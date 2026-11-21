@@ -86,7 +86,12 @@ fn test_driver_for_a_nullary_nat_entry_prints_the_result() {
         "{driver}"
     );
     assert!(driver.contains("int main(void) {"), "{driver}");
-    assert!(driver.contains("clean_unbox(_r)"), "{driver}");
+    assert!(driver.contains("clean_nat_repr(_r)"), "{driver}");
+    assert!(
+        driver.contains("puts(clean_string_data(_text))"),
+        "{driver}"
+    );
+    assert!(driver.contains("clean_dec(_text)"), "{driver}");
 }
 
 fn ptr_decl(symbol: &str, arity: usize) -> LinkSignature {
@@ -120,6 +125,68 @@ fn test_shim_abi_check_accepts_the_real_arity_and_refuses_another() {
     let mut scalar = ptr_decl("l_Nat_add", 2);
     scalar.params[0] = AbiSlot::Other("U64".to_owned());
     assert!(shim_abi_mismatch(definition, &scalar).is_some());
+}
+
+#[test]
+fn executable_console_checks_select_the_definition_each_symbol_will_link() {
+    let archive = prelude_shim_definitions();
+    let mixed_symbols = [
+        ptr_decl("l_IO_println", 3),
+        ptr_decl("l_IO_eprintln", 1),
+        ptr_decl("l_IO_print", 3),
+    ];
+    let shims = checks::program_shim_definitions(&mixed_symbols);
+    checks::check_link_demand_recording(&mixed_symbols, &shims, None, None)
+        .expect("each console demand has one matching executable definition");
+    let err = checks::check_link_demand_recording(&mixed_symbols, &archive, None, None)
+        .expect_err("standalone objects still require the public archive's one-pointer ABI");
+    assert_eq!(err.step(), "link-demand");
+    assert!(err
+        .cause()
+        .contains("l_IO_println: declared with 3 parameter(s), the shim defines 1"));
+    let bootstrap = [ptr_decl("l_IO_print", 1), ptr_decl("l_IO_eprintln", 1)];
+    assert_eq!(checks::program_shim_definitions(&bootstrap), archive);
+}
+
+#[test]
+fn executable_console_checks_refuse_conflicting_and_unsupported_demands() {
+    let scalar = AbiSlot::Other("U64".to_owned());
+    for symbol in ["l_IO_println", "l_IO_print", "l_IO_eprintln"] {
+        let bootstrap = ptr_decl(symbol, 1);
+        let genuine = ptr_decl(symbol, 3);
+        let mut wrong_arg = genuine.clone();
+        wrong_arg.params[1] = scalar.clone();
+        let mut wrong_result = genuine.clone();
+        wrong_result.returns = vec![scalar.clone()];
+        let mut variadic = genuine.clone();
+        variadic.vararg = true;
+        for (demands, reason) in [
+            (
+                vec![bootstrap.clone(), genuine.clone()],
+                "1 parameter(s), the shim defines 3",
+            ),
+            (
+                vec![genuine.clone(), bootstrap],
+                "1 parameter(s), the shim defines 3",
+            ),
+            (
+                vec![ptr_decl(symbol, 2)],
+                "2 parameter(s), the shim defines 1",
+            ),
+            (vec![wrong_arg], "parameter 1 declared Other"),
+            (vec![wrong_result], "declared returning [Other"),
+            (vec![variadic], "declared variadic"),
+        ] {
+            let shims = checks::program_shim_definitions(&demands);
+            let err = checks::check_link_demand_recording(&demands, &shims, None, None)
+                .expect_err("one compatible C definition must satisfy every use of the symbol");
+            assert_eq!(err.step(), "link-demand");
+            assert!(
+                err.cause().contains(symbol) && err.cause().contains(reason),
+                "{err}"
+            );
+        }
+    }
 }
 
 #[test]

@@ -22,22 +22,93 @@
 
 use super::dialect::LeanDialect;
 use clean_kernel::name::NameInner;
+use clean_olean::{ImportWorld, SourceWorldDecision};
 use clean_parser::{Parser, SurfaceName};
 use std::path::{Path, PathBuf};
 
-/// `LEAN_PATH`'s existing entries, then the modelled release's library.
-pub(crate) fn search_path(dialect: LeanDialect) -> Vec<PathBuf> {
-    let mut paths: Vec<PathBuf> = std::env::var_os("LEAN_PATH")
-        .map(|value| {
-            std::env::split_paths(&value)
-                .filter(|p| p.exists())
-                .collect()
-        })
-        .unwrap_or_default();
-    let toolchain = format!("leanprover/lean4:v{}", dialect.version());
-    if let Some(lib) = clean_olean::installed_lean_lib_path(&toolchain) {
-        if !paths.contains(&lib) {
+/// `LEAN_PATH` followed by the modelled release's library. Stable Lean
+/// preserves empty, missing and repeated entries in dependency diagnostics.
+pub(crate) fn search_path(
+    dialect: LeanDialect,
+    decision: Option<&SourceWorldDecision>,
+) -> Vec<PathBuf> {
+    let mut paths = environment_paths("LEAN_PATH", dialect);
+    if decision.is_none() {
+        paths.retain(|path| path.exists());
+    }
+    if let Some(lib) = selected_library(dialect, decision) {
+        if decision.is_some() || !paths.contains(&lib) {
             paths.push(lib);
+        }
+    }
+    paths
+}
+
+fn environment_paths(variable: &str, dialect: LeanDialect) -> Vec<PathBuf> {
+    let Some(value) = std::env::var_os(variable) else {
+        return Vec::new();
+    };
+    // Unix environment values cross the same Lean String boundary as argv.
+    #[cfg(unix)]
+    let value = if dialect == LeanDialect::V4_36_0 {
+        use std::os::unix::ffi::OsStringExt;
+        std::ffi::OsString::from(super::stable_source_text(value.into_vec()))
+    } else {
+        value
+    };
+    #[cfg(not(unix))]
+    let _ = dialect;
+    std::env::split_paths(&value).collect()
+}
+
+fn selected_library(
+    dialect: LeanDialect,
+    decision: Option<&SourceWorldDecision>,
+) -> Option<PathBuf> {
+    match decision.map(SourceWorldDecision::imports) {
+        Some(Ok(ImportWorld::Explicit { lib, .. })) => Some(lib.clone()),
+        Some(_) => None,
+        None => {
+            let toolchain = format!("leanprover/lean4:v{}", dialect.version());
+            clean_olean::installed_lean_lib_path(&toolchain)
+        }
+    }
+}
+
+/// Resolve Lean's SDK prefix through the physical executable.
+pub(super) fn sdk_prefix_from_executable(prefix: &Path) -> Option<PathBuf> {
+    let executable = prefix.join("bin/lean").canonicalize().ok()?;
+    Some(executable.parent()?.parent()?.to_owned())
+}
+
+/// Modern Lean uses separate environment search paths for the two listings.
+fn modern_dependency_paths(
+    dialect: LeanDialect,
+    decision: Option<&SourceWorldDecision>,
+    sources: bool,
+) -> Vec<PathBuf> {
+    let variable = if sources {
+        "LEAN_SRC_PATH"
+    } else {
+        "LEAN_PATH"
+    };
+    let mut paths = environment_paths(variable, dialect);
+    if let Some(lib) = selected_library(dialect, decision) {
+        if let Some(prefix) = lib.parent().and_then(Path::parent) {
+            let prefix = sdk_prefix_from_executable(prefix).unwrap_or_else(|| {
+                if dialect == LeanDialect::V4_36_0 {
+                    prefix.canonicalize().unwrap_or_else(|_| prefix.to_owned())
+                } else {
+                    prefix.to_owned()
+                }
+            });
+            if sources {
+                let src = prefix.join("bin/../src/lean");
+                paths.push(src.join("lake"));
+                paths.push(src);
+            } else {
+                paths.push(prefix.join("lib/lean"));
+            }
         }
     }
     paths
@@ -176,88 +247,58 @@ fn module_components(module: &SurfaceName) -> Vec<String> {
     parts
 }
 
-fn module_path(
-    dialect: LeanDialect,
-    root: &Path,
-    module: &SurfaceName,
-    ext: &str,
-) -> Option<PathBuf> {
-    let mut parts = module_components(module);
-    if !dialect.is_modern() {
-        // Preserve the old word scanner's path behavior, including partial names.
-        let relative: PathBuf = parts.into_iter().collect();
-        return Some(root.join(relative).with_extension(ext));
-    }
-    // An incomplete import is anonymous, not a request for `<root>.olean`.
-    let last = parts.last_mut()?;
-    last.push('.');
-    last.push_str(ext);
-    let relative: PathBuf = parts.into_iter().collect();
-    Some(root.join(relative))
-}
-
-/// The file `module` resolves to with extension `ext` on `paths`.
-fn resolve(
-    dialect: LeanDialect,
-    paths: &[PathBuf],
-    module: &SurfaceName,
-    ext: &str,
-) -> Option<PathBuf> {
-    paths
-        .iter()
-        .filter_map(|root| module_path(dialect, root, module, ext))
-        .find(|candidate| candidate.is_file())
-}
-
-/// The source of a module found in `lib` (`<prefix>/lib/lean`): Lean's
-/// `<prefix>/src/lean`, else the `.lean` beside the root on `LEAN_SRC_PATH`.
-fn resolve_source(
-    dialect: LeanDialect,
-    paths: &[PathBuf],
-    module: &SurfaceName,
-) -> Option<PathBuf> {
-    let src_roots = std::env::var_os("LEAN_SRC_PATH")
-        .map(|value| std::env::split_paths(&value).collect::<Vec<_>>())
-        .unwrap_or_default();
-    let toolchain_src = paths
-        .iter()
-        // Spelled as Lean spells it, from its binary: `<prefix>/bin/../src/lean`.
-        .filter_map(|lib| {
-            lib.parent()?
-                .parent()
-                .map(|prefix| prefix.join("bin/../src/lean"))
-        });
-    src_roots
-        .into_iter()
-        .chain(toolchain_src)
-        .filter_map(|root| module_path(dialect, &root, module, "lean"))
-        .find(|candidate| candidate.is_file())
+/// Preserve the 4.8 scanner's path behavior, including partial names.
+fn legacy_module_path(root: &Path, module: &SurfaceName, extension: &str) -> PathBuf {
+    let relative: PathBuf = module_components(module).into_iter().collect();
+    root.join(relative).with_extension(extension)
 }
 
 /// `--deps` / `--src-deps`: the lines to print, and the error that ends the
 /// listing, if any.
 pub(crate) fn dependency_lines(
     dialect: LeanDialect,
+    decision: Option<&SourceWorldDecision>,
     source: &str,
     sources: bool,
 ) -> (Vec<String>, Option<String>) {
-    let paths = search_path(dialect);
+    let modern = dialect.is_modern();
+    let paths = if modern {
+        modern_dependency_paths(dialect, decision, sources)
+    } else {
+        search_path(dialect, decision)
+    };
+    let extension = if modern && sources { "lean" } else { "olean" };
     let mut lines = Vec::new();
     for module in header_imports(dialect, source) {
-        let found = if sources {
-            resolve_source(dialect, &paths, &module)
+        let found = if modern {
+            clean_olean::lean_package_module_path(module.name(), &paths, extension)
+                .ok()
+                .flatten()
         } else {
-            resolve(dialect, &paths, &module, "olean")
+            paths
+                .iter()
+                .map(|root| legacy_module_path(root, &module, "olean"))
+                .find(|candidate| candidate.is_file())
         };
         match found {
             Some(path) => lines.push(path.display().to_string()),
-            None => return (lines, Some(unknown_module(dialect, &module, &paths))),
+            None => {
+                return (
+                    lines,
+                    Some(unknown_module(dialect, &module, &paths, extension)),
+                )
+            }
         }
     }
     (lines, None)
 }
 
-fn unknown_module(dialect: LeanDialect, module: &SurfaceName, paths: &[PathBuf]) -> String {
+fn unknown_module(
+    dialect: LeanDialect,
+    module: &SurfaceName,
+    paths: &[PathBuf],
+    extension: &str,
+) -> String {
     let parts = module_components(module);
     // Lean's path errors render the root with `escape := false`.
     let prefix = parts.first().map_or("[anonymous]", String::as_str);
@@ -266,7 +307,7 @@ fn unknown_module(dialect: LeanDialect, module: &SurfaceName, paths: &[PathBuf])
     }
     let entries: Vec<String> = paths.iter().map(|p| p.display().to_string()).collect();
     format!(
-        "unknown module prefix '{prefix}'\n\nNo directory '{prefix}' or file '{prefix}.olean' in \
+        "unknown module prefix '{prefix}'\n\nNo directory '{prefix}' or file '{prefix}.{extension}' in \
          the search path entries:\n{}",
         entries.join("\n")
     )
@@ -346,13 +387,7 @@ mod tests {
         let imports = header_imports(LeanDialect::V4_30_0Rc2, malformed);
         assert_eq!(imports.len(), 2);
         assert!(imports[1].name().is_anon());
-        assert!(module_path(
-            LeanDialect::V4_30_0Rc2,
-            Path::new("lib"),
-            &imports[1],
-            "olean"
-        )
-        .is_none());
+        assert!(clean_olean::lean_package_module_path(imports[1].name(), &[], "olean").is_err());
     }
 
     #[test]
@@ -362,20 +397,25 @@ mod tests {
             "module\nprelude\nimport «A B».«C.D»\n",
         );
         assert_eq!(imports.len(), 1);
-        assert_eq!(module_components(&imports[0]), vec!["A B", "C.D"]);
-        assert_eq!(
-            module_path(LeanDialect::V4_30_0Rc2, Path::new(""), &imports[0], "olean"),
-            Some(PathBuf::from("A B").join("C.D.olean"))
+        let root = tempfile::tempdir().unwrap();
+        std::fs::create_dir(root.path().join("A B")).unwrap();
+        for extension in ["olean", "lean"] {
+            let paths = [root.path().to_path_buf()];
+            let found = clean_olean::lean_package_module_path(imports[0].name(), &paths, extension);
+            assert_eq!(
+                found.unwrap(),
+                Some(root.path().join("A B").join(format!("C.D.{extension}")))
+            );
+        }
+        assert!(
+            unknown_module(LeanDialect::V4_30_0Rc2, &imports[0], &[], "olean")
+                .starts_with("unknown module prefix 'A B'")
         );
-        assert_eq!(
-            module_path(LeanDialect::V4_30_0Rc2, Path::new(""), &imports[0], "lean"),
-            Some(PathBuf::from("A B").join("C.D.lean"))
-        );
-        assert!(unknown_module(LeanDialect::V4_30_0Rc2, &imports[0], &[])
-            .starts_with("unknown module prefix 'A B'"));
         let dotted = header_imports(LeanDialect::V4_30_0Rc2, "prelude\nimport «A.B».C\n");
-        assert!(unknown_module(LeanDialect::V4_30_0Rc2, &dotted[0], &[])
-            .starts_with("unknown module prefix 'A.B'"));
+        assert!(
+            unknown_module(LeanDialect::V4_30_0Rc2, &dotted[0], &[], "olean")
+                .starts_with("unknown module prefix 'A.B'")
+        );
     }
 
     #[test]
@@ -383,19 +423,19 @@ mod tests {
         let imports = header_imports(LeanDialect::V4_8_0, "prelude\nimport A.01\n");
         assert_eq!(module_components(&imports[0]), vec!["A", "01"]);
         assert_eq!(
-            module_path(LeanDialect::V4_8_0, Path::new("lib"), &imports[0], "olean"),
-            Some(PathBuf::from("lib/A/01.olean"))
+            legacy_module_path(Path::new("lib"), &imports[0], "olean"),
+            PathBuf::from("lib/A/01.olean")
         );
         let partial = header_imports(LeanDialect::V4_8_0, "prelude\nimport A.\n");
         assert_eq!(
-            module_path(LeanDialect::V4_8_0, Path::new("lib"), &partial[0], "olean"),
-            Some(PathBuf::from("lib/A.olean"))
+            legacy_module_path(Path::new("lib"), &partial[0], "olean"),
+            PathBuf::from("lib/A.olean")
         );
         for source in ["prelude\nimport .\n", "prelude\nimport ..\n"] {
             let dots = header_imports(LeanDialect::V4_8_0, source);
             assert_eq!(
-                module_path(LeanDialect::V4_8_0, Path::new("lib"), &dots[0], "olean"),
-                Some(PathBuf::from("lib.olean"))
+                legacy_module_path(Path::new("lib"), &dots[0], "olean"),
+                PathBuf::from("lib.olean")
             );
         }
     }

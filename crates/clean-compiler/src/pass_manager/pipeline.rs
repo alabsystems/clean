@@ -333,7 +333,7 @@ pub(crate) fn compile_lcnf_decls_recording(
         warnings,
         rc_unmanaged,
         ..
-    } = to_ir_with_env(&rc_decls, env)?;
+    } = crate::to_ir::decl::to_ir_with_bindings(&rc_decls, env, closure)?;
     if let Some(closure) = closure {
         closure.ir_declarations(env, &ir_decls)?;
     }
@@ -350,11 +350,19 @@ pub(crate) fn compile_lcnf_decls_recording(
     }
     let boxed_ir_decls =
         crate::boxing::explicit_boxing_with_kernel_env(&ir_decls, env, &config.boxing);
-    let boxed_ir_decls = match rc_repair {
+    let mut boxed_ir_decls = match rc_repair {
         RcRepairMode::Enabled => rc_repair_boxed(&ir_decls, boxed_ir_decls, &rc_unmanaged),
         #[cfg(test)]
         RcRepairMode::Disabled => boxed_ir_decls,
     };
+    // A self tail call becomes a jump back to the top of its function, as
+    // Lean's `goto _start` (X4 R2, `tail_loop`); the linearity verifier
+    // below re-checks the loops.
+    crate::tail_loop::loop_self_tail_calls(&mut boxed_ir_decls);
+
+    if crate::world_token::has_checked_void_layout(env) {
+        crate::boxing::erase_void::erase_void_parameters(&mut boxed_ir_decls)?;
+    }
 
     if let Some(closure) = closure {
         closure.ir_declarations(env, &boxed_ir_decls)?;
@@ -432,7 +440,10 @@ pub(crate) fn compile_lcnf_decls_at_rust_abi(
         &signatures,
         &BoxingConfig::minimal(),
     );
-    let boxed_ir_decls = rc_repair_boxed(&ir_decls, boxed_ir_decls, &rc_unmanaged);
+    let mut boxed_ir_decls = rc_repair_boxed(&ir_decls, boxed_ir_decls, &rc_unmanaged);
+    if crate::world_token::has_checked_void_layout(env) {
+        crate::boxing::erase_void::erase_void_parameters(&mut boxed_ir_decls)?;
+    }
     verify_recursor_calls_certifiable(&boxed_ir_decls, env)?;
     verify_rc_linearity(&boxed_ir_decls)?;
     Ok(PipelineArtifacts {

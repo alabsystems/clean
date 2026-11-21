@@ -355,6 +355,7 @@ impl Parser {
         Ok(ParseReport {
             decls,
             diagnostics: parser.recovery_diagnostics,
+            has_doc_comments: !parser.doc_comments.is_empty() || !parser.module_docs.is_empty(),
             header: parser.file_header,
         })
     }
@@ -435,13 +436,52 @@ impl Parser {
         seed: &crate::notation_seed::NotationSeed,
         world: clean_kernel::lean_world::LeanWorld,
     ) -> Result<ParseReport, ParseError> {
+        Self::parse_file_seeded_in_world_with_imported_terms(input, patterns, seed, world, None)
+    }
+
+    pub(crate) fn parse_file_seeded_in_world_with_imported_terms(
+        input: &str,
+        patterns: &TacticPatterns,
+        seed: &crate::notation_seed::NotationSeed,
+        world: clean_kernel::lean_world::LeanWorld,
+        imported_terms: Option<&crate::ImportedTermPrefixes>,
+    ) -> Result<ParseReport, ParseError> {
         let mut parser = Parser::new_with_tactics(input, patterns).with_lean_world(world);
         parser.seed_notation(seed);
+        if let Some(imported_terms) = imported_terms {
+            parser.imported_term_prefixes.clone_from(imported_terms);
+        }
         let decls = parser.file()?;
         Ok(ParseReport {
             decls,
             diagnostics: parser.recovery_diagnostics,
+            has_doc_comments: !parser.doc_comments.is_empty() || !parser.module_docs.is_empty(),
             header: parser.file_header,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn report_distinguishes_documentation_from_ordinary_comments_and_strings() {
+        for (source, expected) in [
+            ("/-- Documented declaration. -/\naxiom x : Prop", true),
+            ("/-! Module documentation. -/\naxiom x : Prop", true),
+            ("/- Ordinary comment. -/\naxiom x : Prop", false),
+            ("#check \"/-- text -/ /-! text -/\"", false),
+        ] {
+            let report = Parser::parse_file_with_diagnostics(source).expect("parse fixture");
+            assert_eq!(report.has_doc_comments, expected, "{source}");
+            let seeded = Parser::parse_file_seeded(
+                source,
+                &crate::TacticPatterns::default(),
+                &crate::NotationSeed::default(),
+            )
+            .expect("parse fixture with seed");
+            assert_eq!(seeded.has_doc_comments, expected, "{source}");
+        }
     }
 }

@@ -247,6 +247,9 @@ impl Environment {
         self.init_nat_div_mod_lemmas()?; // Nat.div_add_mod, Nat.divmodAux.sub_zero_le
                                          // `instHAdd` / `instHMul` / `instHDiv` / `instHMod`, `Nat.instDiv`,
                                          // `Nat.instMod` — the constants Lean's statements name.
+                                         // LeanNat statements use the homogeneous Nat instances behind these bridges.
+        self.init_nat_add_inst()?;
+        self.init_nat_mul_inst()?;
         self.init_lean_arith_bridges()?;
 
         let c = FloorConsts::new();

@@ -543,7 +543,7 @@ impl MacroCtx {
     pub(crate) fn register_syntax(
         &mut self,
         name: Option<&SurfaceName>,
-        precedence: Option<u32>,
+        priority: Option<&clean_kernel::BigNat>,
         pattern: &[SyntaxPatternItem],
         category: &str,
     ) -> Result<(), MacroRegistrationError> {
@@ -564,10 +564,8 @@ impl MacroCtx {
             ToString::to_string,
         );
 
-        let mut def = MacroDef::new(macro_name, target_kind, pattern_syntax, expansion);
-        if let Some(prec) = precedence {
-            def = def.with_priority(prec as i32);
-        }
+        let def = MacroDef::new(macro_name, target_kind, pattern_syntax, expansion)
+            .with_syntax_priority(priority.unwrap_or(&clean_kernel::BigNat::Small(1000)));
         self.registry.register(def);
 
         self.rebuild_effective_registry();

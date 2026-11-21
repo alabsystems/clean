@@ -743,7 +743,7 @@ fn literal_type(lit: &IRLiteral) -> IRType {
         IRLiteral::UInt32(_) => IRType::UInt32,
         IRLiteral::UInt64(_) => IRType::UInt64,
         IRLiteral::USize(_) => IRType::USize,
-        IRLiteral::NatBig(_) => IRType::Object,
+        IRLiteral::NatBig(_) | IRLiteral::NatLimbs(_) => IRType::Object,
         IRLiteral::Float32(_) => IRType::Float32,
         IRLiteral::Float64(_) => IRType::Float64,
     }

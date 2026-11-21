@@ -155,13 +155,8 @@ pub enum SurfaceExpr {
     /// Hole/placeholder: `_`
     Hole(Span),
 
-    /// Named synthetic hole: `?name` (an adjacent identifier follows `?`).
-    ///
-    /// Anonymous synthetic holes (`?`, `?_`) parse as [`SurfaceExpr::Hole`];
-    /// only a `?<ident>` carries a name. In `refine` position the name tags the
-    /// generated goal so `case name => …` / `next` can select it (Lean 4
-    /// `syntheticHole`). In ordinary term position a named hole elaborates
-    /// identically to an anonymous hole (a fresh metavariable).
+    /// Synthetic hole: `?name` carries its tag; `?_` and `?` carry the anonymous Name.
+    /// An unsolved synthetic hole can be lifted into a tactic goal.
     NamedHole(Span, SurfaceName),
 
     /// Type ascription: `(e : T)`
@@ -170,6 +165,9 @@ pub enum SurfaceExpr {
     /// Out-parameter marker: `outParam T`
     /// Used in type class parameters to indicate output parameters
     OutParam(Span, Box<SurfaceExpr>),
+
+    /// Explicit borrowed type annotation: `@& T` (retained as kernel MData).
+    Borrowed(Span, Box<SurfaceExpr>),
 
     /// Semi-out-parameter marker: `semiOutParam T`
     /// Like outParam but allows unification in both directions during instance resolution.
@@ -609,6 +607,7 @@ impl SurfaceExpr {
             SurfaceExpr::Hole(s) => *s,
             SurfaceExpr::NamedHole(s, _) => *s,
             SurfaceExpr::Ascription(s, _, _) => *s,
+            SurfaceExpr::Borrowed(s, _) => *s,
             SurfaceExpr::OutParam(s, _) => *s,
             SurfaceExpr::SemiOutParam(s, _) => *s,
             SurfaceExpr::If(s, _, _, _) => *s,

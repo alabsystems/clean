@@ -154,12 +154,65 @@ fn test_simp_budget_size_trip_leaves_the_goal_untouched() {
         matches!(err, TacticError::BudgetExceeded { .. }),
         "expected BudgetExceeded, got: {err}"
     );
+    assert!(
+        err.to_string()
+            .contains("while reducing a βζ redex, an expression reached the 1-node limit"),
+        "the refusal must identify the operation and its materialized result: {err}"
+    );
     assert_eq!(state.goals().len(), goals_before);
     assert_eq!(
         state.goals()[0].target,
         eq,
         "the target must be untouched after a refusal"
     );
+}
+
+#[test]
+fn test_simp_estimates_zeta_growth_before_reducing_a_small_goal() {
+    let mut env = Environment::with_prelude();
+    let name = Name::from_string("NestedAnd");
+    let and = Expr::const_(Name::from_string("And"), vec![]);
+    let twice = Expr::app(Expr::app(and, Expr::bvar(0)), Expr::bvar(0));
+    let mut value = Expr::const_(Name::from_string("True"), vec![]);
+    // Thirteen shared lets occupy 92 expression nodes. Substituting their
+    // values into both arguments of And yields 32765 nodes.
+    for _ in 0..13 {
+        value = Expr::let_named(
+            Name::from_string("p"),
+            Expr::prop(),
+            value,
+            twice.clone(),
+            false,
+        );
+    }
+    env.add_decl(Declaration::Definition {
+        name: name.clone(),
+        level_params: vec![],
+        type_: Expr::prop(),
+        value: value.clone(),
+        is_reducible: false,
+    })
+    .expect("the shared proposition must kernel check");
+
+    let target = Expr::const_(name.clone(), vec![]);
+    let mut state = ProofState::new(env, target.clone());
+    let mut config = SimpConfig::new();
+    config.unfold_defs.insert(
+        name,
+        UnfoldDef {
+            level_params: vec![],
+            value,
+        },
+    );
+    let err = simp_with_budget(&mut state, config, SimpBudget::with_limits(u64::MAX, 128))
+        .expect_err("the unfolding fits but its estimated normal form reaches the guard");
+    assert!(
+        matches!(&err, TacticError::BudgetExceeded { detail, .. }
+        if detail.contains("estimated βζ-normal form reached the 8192-node guard before reduction")),
+        "the size estimate must have caused the refusal: {err}"
+    );
+    assert_eq!(state.goals().len(), 1);
+    assert_eq!(state.goals()[0].target, target);
 }
 
 #[test]

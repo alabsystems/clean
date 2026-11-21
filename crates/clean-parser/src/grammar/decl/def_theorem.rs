@@ -152,36 +152,35 @@ impl Parser {
         let mut first_positions: Option<Vec<SurfacePattern>> = None;
 
         let arm_col = self.current().col;
-        while self.check(&TokenKind::Pipe)
-            && !(boundary == EquationArmBoundary::LetValue
-                && self.current().preceded_by_newline
-                && self.current().col < arm_col)
-        {
+        while self.starts_def_match_arm(boundary, arm_col) {
             let pipe_col = self.current().col;
-            self.advance();
-            // Parse comma-separated patterns for this arm
-            let mut patterns = vec![self.def_match_pattern()?];
-            while self.eat(&TokenKind::Comma) {
-                patterns.push(self.def_match_pattern()?);
-            }
-            if arms.is_empty() {
-                first_positions = Some(patterns.clone());
-            }
-
-            // Enforce consistent arity across arms
-            match arity {
-                None => arity = Some(patterns.len()),
-                Some(n) if n != patterns.len() => {
+            let mut alternatives = Vec::new();
+            // A bar before the arrow starts another complete pattern row
+            // in the same matchAlt. Parenthesized commas stay in their pattern.
+            loop {
+                self.advance();
+                let mut patterns = vec![self.pattern_with_cons()?];
+                while self.eat(&TokenKind::Comma) {
+                    patterns.push(self.pattern_with_cons()?);
+                }
+                let expected = *arity.get_or_insert(patterns.len());
+                if patterns.len() != expected {
                     return Err(ParseError::UnexpectedToken {
                         line: self.current_line(),
                         col: self.current().col as usize,
                         message: format!(
-                            "definition equation arity mismatch: expected {n} pattern(s), found {}",
+                            "definition equation arity mismatch: expected {expected} pattern(s), found {}",
                             patterns.len()
                         ),
                     });
                 }
-                _ => {}
+                if arms.is_empty() && alternatives.is_empty() {
+                    first_positions = Some(patterns.clone());
+                }
+                alternatives.push(Self::combine_patterns_as_tuple(patterns));
+                if !self.starts_def_match_arm(boundary, arm_col) {
+                    break;
+                }
             }
 
             self.expect(&TokenKind::FatArrow)?;
@@ -195,15 +194,32 @@ impl Parser {
                 });
             }
             let body = self.def_match_arm_body(boundary)?;
-            // Combine multiple patterns into a tuple pattern (a last position
-            // that is itself a tuple is kept apart from the spine; see
-            // `combine_patterns_as_tuple`).
-            let pattern = Self::combine_patterns_as_tuple(patterns);
-            arms.push(SurfaceMatchArm {
-                span: pattern.span(),
-                pattern,
-                body,
-            });
+            if let Some(last_pattern) = alternatives.pop() {
+                let pattern = if arity == Some(1) {
+                    // Keep the existing single-column Or representation.
+                    // In particular, a tuple here is just one argument.
+                    alternatives
+                        .into_iter()
+                        .rev()
+                        .fold(last_pattern, |right, left| {
+                            SurfacePattern::Or(Box::new(left), Box::new(right))
+                        })
+                } else {
+                    // The elaborator reads multi-column arity from each tuple
+                    // spine, so give it one arm per row in source order.
+                    arms.extend(alternatives.into_iter().map(|pattern| SurfaceMatchArm {
+                        span: pattern.span(),
+                        pattern,
+                        body: body.clone(),
+                    }));
+                    last_pattern
+                };
+                arms.push(SurfaceMatchArm {
+                    span: pattern.span(),
+                    pattern,
+                    body,
+                });
+            }
         }
 
         debug_assert!(!arms.is_empty(), "leading equation pipe creates an arm");
@@ -270,10 +286,13 @@ impl Parser {
         ))
     }
 
-    /// Parse a single pattern in a def-match arm.
-    /// Uses the full pattern parser with or-pattern and cons support.
-    fn def_match_pattern(&mut self) -> Result<SurfacePattern, ParseError> {
-        self.pattern_with_or()
+    /// A dedented bar in a local value belongs to the enclosing syntax,
+    /// even when the current equation is still waiting for its arrow.
+    fn starts_def_match_arm(&self, boundary: EquationArmBoundary, arm_col: u32) -> bool {
+        self.check(&TokenKind::Pipe)
+            && !(boundary == EquationArmBoundary::LetValue
+                && self.current().preceded_by_newline
+                && self.current().col < arm_col)
     }
 
     /// The value of a definition given by ONE equation over several
@@ -609,6 +628,22 @@ impl Parser {
         let saved_in_where = self.in_where_block;
         self.in_where_block = true;
 
+        // Lean's `whereDecls` is `"where" >> sepByIndent (ppGroup letRecDecl)
+        // "; " …` (`Lean/Parser/Term.lean:701-702`, v4.30.0-rc2), and
+        // `sepByIndent` is `withPosition` around its item loop: the first
+        // declaration's column is the saved position. `checkColGt` on the
+        // `Type` / `Sort` level then refuses the next declaration's name, so
+        // `T := Type` ⏎ `k := 3` is two declarations, not `Type k` followed
+        // by a recovered `:= 3`.
+        let defs = self.with_position("where declarations", Self::where_local_defs_in_position);
+
+        self.in_where_block = saved_in_where;
+        defs
+    }
+
+    /// The declarations of a `where` block, under the position
+    /// [`Self::parse_where_local_defs`] saved.
+    fn where_local_defs_in_position(&mut self) -> Vec<WhereLocalDef> {
         let mut defs = Vec::new();
 
         // Parse local definitions until we hit a declaration boundary,
@@ -624,8 +659,6 @@ impl Parser {
                 Err(_) => break,
             }
         }
-
-        self.in_where_block = saved_in_where;
         defs
     }
 

@@ -66,7 +66,12 @@ impl Parser {
         }
 
         // Try: `name <- expr` (bare bind without `let`) or `name := expr` (reassignment)
-        if let TokenKind::Ident(_) = self.current_kind() {
+        if matches!(self.current_kind(), TokenKind::Ident(_))
+            && matches!(
+                self.peek_kind(1),
+                Some(TokenKind::LeftArrow | TokenKind::ColonEq)
+            )
+        {
             let name = self.ident()?;
             if self.eat(&TokenKind::LeftArrow) {
                 let val = self.parse_do_elem_expr()?;
@@ -74,14 +79,10 @@ impl Parser {
                 let binder = SurfaceBinder::new_typed(name, None, SurfaceBinderInfo::Explicit);
                 return Ok(DoElem::Bind(span, binder, Box::new(val)));
             }
-            if self.eat(&TokenKind::ColonEq) {
-                // `name := expr` — mutable variable reassignment
-                let val = self.parse_do_elem_expr()?;
-                let span = start_span.merge(val.span());
-                return Ok(DoElem::Reassign(span, name, Box::new(val)));
-            }
-            // Not a bind or reassign — restore position and parse as expression
-            self.pos = saved_pos;
+            self.expect(&TokenKind::ColonEq)?;
+            let val = self.parse_do_elem_expr()?;
+            let span = start_span.merge(val.span());
+            return Ok(DoElem::Reassign(span, name, Box::new(val)));
         }
 
         let expr = self.parse_do_elem_expr()?;
@@ -357,23 +358,29 @@ impl Parser {
     /// Called when `parse_do_let` detects that the binding target is a pattern
     /// (not a simple identifier) followed by a fallback clause.
     ///
-    /// Desugars in elaboration to:
-    /// 1. `let __x <- action`
-    /// 2. `match __x with | pat => rest | _ => fallback`
+    /// A pure scrutinee is matched directly. An arrow bind matches the
+    /// result of the monadic action.
     pub(super) fn parse_do_let_else(
         &mut self,
         start_span: Span,
         pat: SurfacePattern,
         action: SurfaceExpr,
+        is_monadic: bool,
     ) -> Result<DoElem, ParseError> {
         let fallback = self.parse_do_seq()?;
         let end_span = fallback.last().map_or(start_span, |e: &DoElem| e.span());
-        Ok(DoElem::LetElse(
-            start_span.merge(end_span),
-            pat,
-            Box::new(action),
-            fallback,
-        ))
+        let span = start_span.merge(end_span);
+        Ok(if is_monadic {
+            DoElem::LetElse(span, pat, Box::new(action), fallback)
+        } else {
+            DoElem::LetExpr(
+                span,
+                pat,
+                Box::new(action),
+                DoLetExprKind::PurePattern,
+                fallback,
+            )
+        })
     }
 
     /// Try to parse a refutable pattern let:
@@ -396,7 +403,9 @@ impl Parser {
                 let action = self.parse_do_elem_expr()?;
                 // Check for `|` fallback
                 if self.eat(&TokenKind::Pipe) {
-                    return self.parse_do_let_else(start_span, pat, action).map(Some);
+                    return self
+                        .parse_do_let_else(start_span, pat, action, true)
+                        .map(Some);
                 }
                 // No `|` — treat as regular bind if pattern is a simple variable
                 if let SurfacePattern::Var(name) = pat {
@@ -414,7 +423,9 @@ impl Parser {
             if self.eat(&TokenKind::ColonEq) {
                 let value = self.parse_do_elem_expr()?;
                 if self.eat(&TokenKind::Pipe) {
-                    return self.parse_do_let_else(start_span, pat, value).map(Some);
+                    return self
+                        .parse_do_let_else(start_span, pat, value, false)
+                        .map(Some);
                 }
                 return Err(ParseError::UnexpectedToken {
                     line: self.current_line(),

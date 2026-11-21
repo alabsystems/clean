@@ -6,7 +6,7 @@
 //! and typed Proj emission (verifying W2-139 emitter output).
 
 use crate::emit_c::*;
-use crate::ir::{CtorInfo, IRArg, IRBody, IRDecl, IRExpr, IRType, VarId};
+use crate::ir::{CtorInfo, FnId, IRArg, IRBody, IRDecl, IRExpr, IRType, VarId};
 use clean_kernel::Name;
 
 fn var(n: u32) -> VarId {
@@ -15,6 +15,69 @@ fn var(n: u32) -> VarId {
 
 fn name(s: &str) -> Name {
     Name::from_string(s)
+}
+
+#[test]
+fn boxing_through_an_erased_slot_uses_canonical_unit_and_keeps_the_release() {
+    let declaration = IRDecl {
+        name: name("throughUnit"),
+        params: vec![(var(0), IRType::Object)],
+        return_type: IRType::Object,
+        body: IRBody::VDecl {
+            var: var(1),
+            ty: IRType::Erased,
+            value: IRExpr::Box {
+                ty: IRType::Object,
+                arg: IRArg::Var(var(0)),
+            },
+            rest: Box::new(IRBody::Dec {
+                var: var(0),
+                rest: Box::new(IRBody::VDecl {
+                    var: var(2),
+                    ty: IRType::Object,
+                    value: IRExpr::Box {
+                        ty: IRType::Erased,
+                        arg: IRArg::Var(var(1)),
+                    },
+                    rest: Box::new(IRBody::Ret(IRArg::Var(var(2)))),
+                }),
+            }),
+        },
+    };
+    let code = emit_c(&[declaration]).expect("emit the checked boxing operations");
+    for statement in [
+        "clean_obj* _x1 = clean_box(0);",
+        "clean_dec(_x0);",
+        "clean_obj* _x2 = clean_box(0);",
+    ] {
+        assert!(code.contains(statement), "missing {statement} in {code}");
+    }
+}
+
+#[test]
+fn a_call_returning_an_erased_value_is_still_emitted() {
+    let producer = IRDecl {
+        name: name("produceUnit"),
+        params: vec![],
+        return_type: IRType::Erased,
+        body: IRBody::Ret(IRArg::Erased),
+    };
+    let caller = IRDecl {
+        name: name("runProducer"),
+        params: vec![],
+        return_type: IRType::Erased,
+        body: IRBody::VDecl {
+            var: var(0),
+            ty: IRType::Erased,
+            value: IRExpr::Apply {
+                fn_id: FnId(producer.name.clone()),
+                args: vec![],
+            },
+            rest: Box::new(IRBody::Ret(IRArg::Var(var(0)))),
+        },
+    };
+    let code = emit_c(&[producer, caller]).expect("emit the erased-producing call");
+    assert!(code.contains("clean_obj* _x0 = l_produceUnit();"), "{code}");
 }
 
 // ── UProj / SProj / IsShared expression emission ─────────────────

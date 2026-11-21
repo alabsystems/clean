@@ -52,7 +52,12 @@ pub struct CapturedModuleBytes<'a> {
     /// Actual optional `.ir` contents. Absence is frozen too: late-binding
     /// metadata never discovers a file that appeared after this capture.
     pub ir: Option<&'a [u8]>,
+    /// Actual optional `.ir.sig` contents, with absence frozen like `.ir`.
+    pub ir_signature: Option<&'a [u8]>,
 }
+
+mod visible_syntax;
+use visible_syntax::{LinkedSyntaxVisitor, SyntaxRequest, SyntaxVisitor};
 
 type PathGuard<'a> = dyn FnMut(&Name, &Path, usize) -> Result<(), ImportError> + 'a;
 type BytesGuard<'a> =
@@ -87,12 +92,14 @@ pub fn load_modules_with_deps_checked(
     load_captured_graph(
         env,
         &modules,
+        None,
         search_paths,
         &ModuleCache::new(),
         false,
         Some(before_read),
         Some(check_captured),
         true,
+        None,
         None,
     )
 }
@@ -118,9 +125,37 @@ pub fn load_modules_with_deps_checked_with_limits(
         .iter()
         .map(|module| legacy_module_name(module))
         .collect::<Result<Vec<_>, _>>()?;
-    load_captured_graph(
+    load_typed_modules_with_deps_checked_with_limits(
         env,
         &modules,
+        search_paths,
+        limits,
+        before_read,
+        check_captured,
+    )
+}
+
+/// Checked, budgeted loading from exact typed module roots.
+///
+/// Accepts structural Names from a parsed source header without interpreting
+/// their display text. The graph, path and byte guards are shared with
+/// [`load_modules_with_deps_checked_with_limits`].
+///
+/// # Errors
+/// Returns the same limit, resolution, artifact and callback errors as
+/// [`load_modules_with_deps_checked_with_limits`].
+pub fn load_typed_modules_with_deps_checked_with_limits(
+    env: &mut Environment,
+    modules: &[Name],
+    search_paths: &[PathBuf],
+    limits: ModuleCaptureLimits,
+    before_read: &mut PathGuard<'_>,
+    check_captured: &mut BytesGuard<'_>,
+) -> Result<Vec<LoadSummary>, ImportError> {
+    load_captured_graph(
+        env,
+        modules,
+        None,
         search_paths,
         &ModuleCache::new(),
         false,
@@ -128,6 +163,103 @@ pub fn load_modules_with_deps_checked_with_limits(
         Some(check_captured),
         true,
         Some(limits),
+        None,
+    )
+}
+
+/// Load a stable source header and visit its visible exported numeral syntax before
+/// registering declarations. Each root records its typed name and `import all` flag.
+/// The byte guard observes every captured dependency, including private imports.
+///
+/// # Errors
+/// Propagates the checked graph loader's errors and refusals from either visitor.
+pub fn load_modules_with_visible_term_syntax(
+    env: &mut Environment,
+    roots: &[(Name, bool)],
+    module_system: bool,
+    search_paths: &[PathBuf],
+    limits: ModuleCaptureLimits,
+    check_captured: &mut BytesGuard<'_>,
+    visit: &mut SyntaxVisitor<'_>,
+) -> Result<Vec<LoadSummary>, ImportError> {
+    load_modules_with_visible_term_syntax_after_bootstrap(
+        env,
+        None,
+        roots,
+        module_system,
+        search_paths,
+        limits,
+        check_captured,
+        visit,
+    )
+}
+
+/// Replay implicit Init and the authored header over one captured graph. The
+/// explicit closure retains the same byte limits, byte visitor and syntax
+/// visibility. Bootstrap-only dependencies retain the ordinary Init policy.
+/// Bootstrap declarations and metadata are installed before the authored roots.
+///
+/// # Errors
+/// Propagates errors from either import closure and either visitor.
+#[allow(clippy::too_many_arguments)]
+pub fn load_modules_with_visible_term_syntax_after_bootstrap(
+    env: &mut Environment,
+    bootstrap: Option<&Name>,
+    roots: &[(Name, bool)],
+    module_system: bool,
+    search_paths: &[PathBuf],
+    limits: ModuleCaptureLimits,
+    check_captured: &mut BytesGuard<'_>,
+    visit: &mut SyntaxVisitor<'_>,
+) -> Result<Vec<LoadSummary>, ImportError> {
+    load_modules_with_term_providers(
+        env,
+        bootstrap,
+        false,
+        roots,
+        module_system,
+        search_paths,
+        limits,
+        check_captured,
+        &mut |name, bytes, prefixes, _| visit(name, bytes, prefixes),
+    )
+}
+
+/// Visit visible numeral syntax with the exact public meta dependencies of its declaring module.
+/// Native callers can also visit Init-only runtime bytes using the capture limits.
+///
+/// # Errors
+/// Propagates the checked loader's and the visitors' errors.
+#[allow(clippy::too_many_arguments)]
+pub fn load_modules_with_term_providers(
+    env: &mut Environment,
+    bootstrap: Option<&Name>,
+    capture_bootstrap_runtime: bool,
+    roots: &[(Name, bool)],
+    module_system: bool,
+    search_paths: &[PathBuf],
+    limits: ModuleCaptureLimits,
+    check_captured: &mut BytesGuard<'_>,
+    visit: &mut LinkedSyntaxVisitor<'_>,
+) -> Result<Vec<LoadSummary>, ImportError> {
+    let modules: Vec<_> = roots.iter().map(|(name, _)| name.clone()).collect();
+    load_captured_graph(
+        env,
+        &modules,
+        bootstrap,
+        search_paths,
+        &ModuleCache::new(),
+        false,
+        None,
+        Some(check_captured),
+        true,
+        Some(limits),
+        Some(SyntaxRequest {
+            capture_bootstrap_runtime,
+            roots,
+            module_system,
+            visit,
+        }),
     )
 }
 
@@ -215,12 +347,14 @@ fn load_cached_graph(
     load_captured_graph(
         env,
         std::slice::from_ref(module),
+        None,
         search_paths,
         cache,
         parallel,
         guard,
         None,
         false,
+        None,
         None,
     )
 }
@@ -229,6 +363,7 @@ fn load_cached_graph(
 fn load_captured_graph(
     env: &mut Environment,
     modules: &[Name],
+    bootstrap: Option<&Name>,
     search_paths: &[PathBuf],
     cache: &ModuleCache,
     parallel: bool,
@@ -236,7 +371,15 @@ fn load_captured_graph(
     mut check_captured: Option<&mut BytesGuard<'_>>,
     full_metadata_fixups: bool,
     limits: Option<ModuleCaptureLimits>,
+    mut syntax: Option<SyntaxRequest<'_, '_>>,
 ) -> Result<Vec<LoadSummary>, ImportError> {
+    // An ordinary source file requires Init even if its authored roots are
+    // also absent. Retain the originally selected directory for the capture.
+    let world = crate::environment_world(env);
+    let mut bootstrap_file = bootstrap
+        .map(|name| resolve_typed_module_file(name, search_paths, world).map(|file| (name, file)))
+        .transpose()
+        .map_err(bootstrap_error(true))?;
     let mut budget = CaptureBudget::new(limits);
     budget.check_roots(modules.len())?;
     let mut pending = Vec::new();
@@ -250,20 +393,60 @@ fn load_captured_graph(
     let mut discovered = HashSet::new();
     let mut graph: HashMap<Name, Arc<DirectModule>> = HashMap::new();
     let mut cold = Vec::new();
-    while let Some(name) = pending.pop() {
+    // Retain only names from headers already visited. An intrinsic artifact
+    // error can then recover its known bootstrap provenance even when the
+    // authored walk reached that artifact first.
+    let mut headers = HashMap::<Name, Vec<Name>>::new();
+    // Capture authored roots first so their full closure keeps its original
+    // per-part, module and import-row budgets, even when Init also reaches it.
+    // Registration below traverses the same frozen graph in bootstrap order.
+    let mut bootstrap_to_capture = bootstrap;
+    let mut capturing_bootstrap = false;
+    let capture_bootstrap_runtime = syntax
+        .as_ref()
+        .is_some_and(|request| request.capture_bootstrap_runtime);
+    loop {
+        let name = if let Some(name) = pending.pop() {
+            name
+        } else if let Some(root) = bootstrap_to_capture.take() {
+            if !capture_bootstrap_runtime {
+                budget = CaptureBudget::new(None);
+                guard = None;
+                check_captured = None;
+            }
+            capturing_bootstrap = true;
+            root.clone()
+        } else {
+            break;
+        };
         if discovered.contains(&name) {
             continue;
         }
-        budget.module()?;
+        let at_capture = |source| {
+            if !capturing_bootstrap && matches!(source, ImportError::ResourceLimit { .. }) {
+                return source;
+            }
+            bootstrap_error(capturing_bootstrap || in_bootstrap(bootstrap, &name, &headers))(source)
+        };
+        budget.module().map_err(&at_capture)?;
         discovered.insert(name.clone());
-        deadline::check()?;
-        let (found_in, path) = resolve_typed_module_file(&name, search_paths)?;
+        deadline::check().map_err(&at_capture)?;
+        let (found_in, path) = match bootstrap_file.take_if(|(root, _)| *root == &name) {
+            Some((_, file)) => file,
+            None => resolve_typed_module_file(&name, search_paths, world).map_err(&at_capture)?,
+        };
         // Every module file, the root's and each import's, before it is read
         // (`load_module_with_deps_cached_guarded`).
         if let Some(guard) = &mut guard {
             guard(&name, &path, found_in)?;
         }
-        let captured = CapturedModule::read_with_budget(&path, &mut budget)?;
+        let mut captured =
+            CapturedModule::read_with_budget(&path, &mut budget).map_err(&at_capture)?;
+        if capturing_bootstrap && !capture_bootstrap_runtime {
+            // Unfrozen bootstrap-only IR resolves beside the lexical .olean
+            // chosen by the search path, including a symlink to a shared base.
+            captured.path.clone_from(&path);
+        }
         let captured = if check_captured.is_some() {
             captured.capture_ir_with_budget(&path, &mut budget)?
         } else {
@@ -280,7 +463,14 @@ fn load_captured_graph(
                     base: &captured.base,
                     server: captured.server.as_deref(),
                     private: captured.private.as_deref(),
-                    ir: captured.captured_ir.as_ref().and_then(|ir| ir.as_deref()),
+                    ir: captured
+                        .captured_ir
+                        .as_ref()
+                        .and_then(|parts| parts.body.as_deref()),
+                    ir_signature: captured
+                        .captured_ir
+                        .as_ref()
+                        .and_then(|parts| parts.signature.as_deref()),
                 },
             )?;
         }
@@ -294,32 +484,42 @@ fn load_captured_graph(
             (captured.private.as_ref(), "._private"),
         ] {
             if let Some(bytes) = bytes {
-                world_gate::check_part_bytes(env, &format!("{label}{suffix}"), bytes)?;
+                world_gate::check_part_bytes(env, &format!("{label}{suffix}"), bytes)
+                    .map_err(&at_capture)?;
             }
         }
         // Charge the validated base AND companion root envelopes before
         // allocating/decoding import rows or touching cache entries. Keep the
         // existing refused-world diagnostic priority, and ordinary APIs'
         // parser/error ordering when no extra policy was requested.
-        if limits.is_some() {
-            captured.charge_import_rows(&mut budget)?;
+        if (!capturing_bootstrap || capture_bootstrap_runtime) && limits.is_some() {
+            captured
+                .charge_import_rows(&mut budget)
+                .map_err(&at_capture)?;
         }
         let cached = cache.get_direct(&captured);
         let imports = match &cached {
             Some(bundle) => bundle.base.typed_imports.clone(),
-            None => {
-                parse_typed_imports(&captured.base).map_err(|source| ImportError::FileParse {
+            None => parse_typed_imports(&captured.base)
+                .map_err(|source| ImportError::FileParse {
                     path: captured.path.clone(),
                     source,
-                })?
-            }
+                })
+                .map_err(&at_capture)?,
         };
         pending
             .try_reserve(imports.len())
             .map_err(|error| ImportError::ResourceLimit {
                 operation: "capturing the module graph".into(),
                 reason: format!("cannot allocate pending imports: {error}"),
-            })?;
+            })
+            .map_err(&at_capture)?;
+        if bootstrap.is_some() {
+            headers.insert(
+                name.clone(),
+                imports.iter().map(|row| row.module_name.clone()).collect(),
+            );
+        }
         for import in imports {
             if !discovered.contains(&import.module_name) {
                 pending.push(import.module_name);
@@ -328,7 +528,7 @@ fn load_captured_graph(
         if let Some(bundle) = cached {
             graph.insert(name, bundle);
         } else {
-            cold.push((name, captured));
+            cold.push((name, captured, capturing_bootstrap));
         }
     }
 
@@ -345,11 +545,13 @@ fn load_captured_graph(
     // decode that comes to reach a tick site, which a latch fired during it
     // could cut short. (A rayon thread of the parallel load has no deadline:
     // its checks pass.)
-    let parse = |(name, captured): (Name, CapturedModule)| {
-        deadline::check()?;
+    let parse = |(name, captured, boot): (Name, CapturedModule, bool)| {
+        let at_decode =
+            |source| bootstrap_error(boot || in_bootstrap(bootstrap, &name, &headers))(source);
+        deadline::check().map_err(&at_decode)?;
         let path = captured.path.clone();
-        let bundle = captured.parse()?;
-        deadline::check()?;
+        let bundle = captured.parse().map_err(&at_decode)?;
+        deadline::check().map_err(at_decode)?;
         Ok((name, cache.insert_direct(path, bundle)))
     };
     let parsed: Vec<Result<(Name, Arc<DirectModule>), ImportError>> = if parallel {
@@ -362,9 +564,137 @@ fn load_captured_graph(
         graph.insert(name, bundle);
     }
 
-    // Explicit post-order traversal rejects cycles before Environment mutation.
-    // Structural import identities remain graph keys through the entire walk.
-    // String summaries/origin labels are a separate compatibility surface.
+    // The parser only sees the original authored closure, in its original
+    // dependency order. Implicit Init cannot supply a missing private syntax edge.
+    let mut order = dependency_order(&graph, modules)?;
+    let mut first = if let Some(root) = bootstrap {
+        dependency_order(&graph, std::slice::from_ref(root)).map_err(bootstrap_error(true))?
+    } else {
+        Vec::new()
+    };
+    let bootstrap_len = first.len();
+    let bootstrap_names: HashSet<_> = first.iter().cloned().collect();
+    // Cache identity cannot grant permission in a different environment.
+    // Validate the complete captured/parsed graph before registration starts.
+    if super::super::clean_payload_requirement::clean_payload_imports_required(env) {
+        for (name, bundle) in &graph {
+            super::super::clean_payload_requirement::check_artifact_parts(
+                env,
+                &name.to_string(),
+                &bundle.base,
+                bundle.server.as_ref(),
+                bundle.private.as_ref(),
+            )
+            .map_err(bootstrap_error(bootstrap_names.contains(name)))?;
+        }
+    }
+
+    if let Some(request) = &mut syntax {
+        let ambiguous = visible_syntax::ambiguous_labels(graph.keys());
+        if bootstrap.is_some() {
+            let authored = order
+                .iter()
+                .map(|name| (name.clone(), Arc::clone(&graph[name])))
+                .collect();
+            request.apply(&authored, &order, &ambiguous)?;
+        } else {
+            request.apply(&graph, &order, &ambiguous)?;
+        }
+    }
+    if bootstrap.is_some() {
+        first.extend(
+            order
+                .into_iter()
+                .filter(|name| !bootstrap_names.contains(name)),
+        );
+        order = first;
+    }
+
+    env.ensure_native_reducers();
+    let estimated = modules
+        .iter()
+        .chain(bootstrap)
+        .map(|module| estimate_module_graph_size(&module.to_string()))
+        .max()
+        .unwrap_or(0);
+    if estimated > 0 {
+        env.reserve_capacity(estimated);
+    }
+    let mut intern_cache = ExprInternCache::with_capacity(65536);
+    let mut summaries = Vec::new();
+    let policy = OleanImportPolicy::default();
+    for (index, name) in order.into_iter().enumerate() {
+        let at_registration = bootstrap_error(index < bootstrap_len);
+        deadline::check().map_err(&at_registration)?;
+        let bundle = graph
+            .get(&name)
+            .ok_or_else(|| ImportError::UnsupportedModule {
+                module: format!("{name:?}"),
+                reason: "captured module graph changed during loading".into(),
+            })
+            .map_err(&at_registration)?;
+        // Every part is of the one artifact `name`.
+        load_artifact_parts(
+            env,
+            &name.to_string(),
+            &bundle.base,
+            bundle.server.as_ref(),
+            bundle.private.as_ref(),
+            &mut summaries,
+            &mut intern_cache,
+            policy,
+        )
+        .map_err(&at_registration)?;
+        if Some(&name) == bootstrap {
+            finish_registration(env, true).map_err(at_registration)?;
+        }
+    }
+    finish_registration(env, full_metadata_fixups)?;
+    deadline::check()?;
+    Ok(summaries)
+}
+
+fn in_bootstrap<'a>(
+    root: Option<&'a Name>,
+    target: &Name,
+    headers: &'a HashMap<Name, Vec<Name>>,
+) -> bool {
+    let Some(root) = root else { return false };
+    let mut pending = vec![root];
+    let mut visited = HashSet::new();
+    while let Some(name) = pending.pop() {
+        if name == target {
+            return true;
+        }
+        if visited.insert(name) {
+            if let Some(imports) = headers.get(name) {
+                pending.extend(imports);
+            }
+        }
+    }
+    false
+}
+
+fn bootstrap_error(active: bool) -> impl Fn(ImportError) -> ImportError {
+    move |source| {
+        if active {
+            // The ordinary Init loader propagates native format errors directly.
+            // The captured path remains part of authored diagnostics.
+            let source = match source {
+                ImportError::FileParse { source, .. } => ImportError::Parse(source),
+                other => other,
+            };
+            ImportError::Bootstrap(Box::new(source))
+        } else {
+            source
+        }
+    }
+}
+
+fn dependency_order(
+    graph: &HashMap<Name, Arc<DirectModule>>,
+    modules: &[Name],
+) -> Result<Vec<Name>, ImportError> {
     let mut stack: Vec<_> = modules
         .iter()
         .rev()
@@ -402,52 +732,13 @@ fn load_captured_graph(
         }
     }
 
-    // Cache identity cannot grant permission in a different environment.
-    // Validate the complete captured/parsed graph before registration starts.
-    if super::super::clean_payload_requirement::clean_payload_imports_required(env) {
-        for (name, bundle) in &graph {
-            super::super::clean_payload_requirement::check_artifact_parts(
-                env,
-                &name.to_string(),
-                &bundle.base,
-                bundle.server.as_ref(),
-                bundle.private.as_ref(),
-            )?;
-        }
-    }
+    Ok(order)
+}
 
-    env.ensure_native_reducers();
-    let estimated = modules
-        .iter()
-        .map(|module| estimate_module_graph_size(&module.to_string()))
-        .max()
-        .unwrap_or(0);
-    if estimated > 0 {
-        env.reserve_capacity(estimated);
-    }
-    let mut intern_cache = ExprInternCache::with_capacity(65536);
-    let mut summaries = Vec::new();
-    let policy = OleanImportPolicy::default();
-    for name in order {
-        deadline::check()?;
-        let bundle = graph
-            .get(&name)
-            .ok_or_else(|| ImportError::UnsupportedModule {
-                module: format!("{name:?}"),
-                reason: "captured module graph changed during loading".into(),
-            })?;
-        // Every part is of the one artifact `name`.
-        load_artifact_parts(
-            env,
-            &name.to_string(),
-            &bundle.base,
-            bundle.server.as_ref(),
-            bundle.private.as_ref(),
-            &mut summaries,
-            &mut intern_cache,
-            policy,
-        )?;
-    }
+fn finish_registration(
+    env: &mut Environment,
+    full_metadata_fixups: bool,
+) -> Result<(), ImportError> {
     env.regenerate_missing_no_confusion();
     env.ensure_native_reducers();
     if full_metadata_fixups {
@@ -456,9 +747,7 @@ fn load_captured_graph(
         super::super::load_register::flush_pending_structure_metadata(env)?;
     }
     super::super::load_register::register_structure_fields_from_projections(env);
-    // `Ok` only for a load the deadline never cut.
-    deadline::check()?;
-    Ok(summaries)
+    Ok(())
 }
 
 #[cfg(test)]

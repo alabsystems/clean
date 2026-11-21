@@ -216,6 +216,9 @@ impl Ext2Printer {
             IRLiteral::UInt64(n) => format!("{n}u64"),
             IRLiteral::USize(n) => format!("{n}usize"),
             IRLiteral::NatBig(n) => format!("{n}nat"),
+            IRLiteral::NatLimbs(limbs) => {
+                format!("{}nat", clean_kernel::BigNat::from_limbs(limbs.clone()))
+            }
             IRLiteral::Float32(f) => format!("{f:.1}f32"),
             IRLiteral::Float64(f) => format!("{f:.1}f64"),
         })

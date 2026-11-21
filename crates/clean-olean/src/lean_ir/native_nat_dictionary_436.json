@@ -1,0 +1,290 @@
+{
+  "owners": {
+    "Init.Data.List.Basic": "4892beee0b8f8abedf9e85017e81f1f429d405fbc28f2270a17b2e2a14024336",
+    "Init.Data.Repr": "9df2eda637ab39c12ba0cb70f9b13e8e39546cbfc47ed7dda4e1d46b8618b05c",
+    "Init.Data.ToString.Basic": "92b402bb8b2e87c67e3a979fcd455c2bbe415d449bbf6d442f4ac9292c01db95",
+    "Init.Data.UInt.BasicAux": "49e895689382d70b0ac25730327a07faa0dc2ce1f27e06d560043c35a9fb56d8",
+    "Init.Prelude": "77a62754c6a9e7637e00559fcc005aeec712e686f9a8c425bfa948a1002c49ea"
+  },
+  "declarations": [
+    {
+      "name": [
+        "instToStringNat"
+      ],
+      "owner": "Init.Data.ToString.Basic"
+    },
+    {
+      "name": [
+        "instToStringNat",
+        "_closed_0"
+      ],
+      "owner": "Init.Data.ToString.Basic"
+    },
+    {
+      "name": [
+        "Nat",
+        "reprFast"
+      ],
+      "owner": "Init.Data.Repr"
+    },
+    {
+      "name": [
+        "_private",
+        "Init",
+        "Data",
+        "Repr",
+        0,
+        "Nat",
+        "reprArray"
+      ],
+      "owner": "Init.Data.Repr"
+    },
+    {
+      "name": [
+        "Nat",
+        "reprFast",
+        "_closed_0"
+      ],
+      "owner": "Init.Data.Repr"
+    },
+    {
+      "name": [
+        "Nat",
+        "decLt"
+      ],
+      "owner": "Init.Prelude"
+    },
+    {
+      "name": [
+        "Nat",
+        "reprFast",
+        "_closed_1"
+      ],
+      "owner": "Init.Data.Repr"
+    },
+    {
+      "name": [
+        "Nat",
+        "toDigits"
+      ],
+      "owner": "Init.Data.Repr"
+    },
+    {
+      "name": [
+        "String",
+        "ofList"
+      ],
+      "owner": "Init.Prelude"
+    },
+    {
+      "name": [
+        "USize",
+        "ofNatLT"
+      ],
+      "owner": "Init.Prelude"
+    },
+    {
+      "name": [
+        "USize",
+        "repr"
+      ],
+      "owner": "Init.Data.Repr"
+    },
+    {
+      "name": [
+        "Array",
+        "getInternalBorrowed"
+      ],
+      "owner": "Init.Prelude"
+    },
+    {
+      "name": [
+        "_private",
+        "Init",
+        "Data",
+        "Repr",
+        0,
+        "Nat",
+        "reprArray",
+        "_closed_2"
+      ],
+      "owner": "Init.Data.Repr"
+    },
+    {
+      "name": [
+        "Array",
+        "size"
+      ],
+      "owner": "Init.Prelude"
+    },
+    {
+      "name": [
+        "System",
+        "Platform",
+        "numBits"
+      ],
+      "owner": "Init.Prelude"
+    },
+    {
+      "name": [
+        "Nat",
+        "pow"
+      ],
+      "owner": "Init.Prelude"
+    },
+    {
+      "name": [
+        "Nat",
+        "add"
+      ],
+      "owner": "Init.Prelude"
+    },
+    {
+      "name": [
+        "Nat",
+        "toDigitsCore"
+      ],
+      "owner": "Init.Data.Repr"
+    },
+    {
+      "name": [
+        "_private",
+        "Init",
+        "Data",
+        "Repr",
+        0,
+        "Nat",
+        "reprArray",
+        "_closed_1"
+      ],
+      "owner": "Init.Data.Repr"
+    },
+    {
+      "name": [
+        "Array",
+        "mk"
+      ],
+      "owner": "Init.Prelude"
+    },
+    {
+      "name": [
+        "System",
+        "Platform",
+        "numBits",
+        "_closed_0"
+      ],
+      "owner": "Init.Prelude"
+    },
+    {
+      "name": [
+        "Nat",
+        "decEq"
+      ],
+      "owner": "Init.Prelude"
+    },
+    {
+      "name": [
+        "Nat",
+        "mod"
+      ],
+      "owner": "Init.Prelude"
+    },
+    {
+      "name": [
+        "Nat",
+        "digitChar"
+      ],
+      "owner": "Init.Data.Repr"
+    },
+    {
+      "name": [
+        "Nat",
+        "div"
+      ],
+      "owner": "Init.Prelude"
+    },
+    {
+      "name": [
+        "Nat",
+        "sub"
+      ],
+      "owner": "Init.Prelude"
+    },
+    {
+      "name": [
+        "_private",
+        "Init",
+        "Data",
+        "Repr",
+        0,
+        "Nat",
+        "reprArray",
+        "_closed_0"
+      ],
+      "owner": "Init.Data.Repr"
+    },
+    {
+      "name": [
+        "List",
+        "mapTR",
+        "loop",
+        "_at_",
+        "_private",
+        "Init",
+        "Data",
+        "Repr",
+        0,
+        "Nat",
+        "reprArray",
+        "spec_0"
+      ],
+      "owner": "Init.Data.Repr"
+    },
+    {
+      "name": [
+        "System",
+        "Platform",
+        "getNumBits"
+      ],
+      "owner": "Init.Prelude"
+    },
+    {
+      "name": [
+        "List",
+        "range"
+      ],
+      "owner": "Init.Data.List.Basic"
+    },
+    {
+      "name": [
+        "List",
+        "reverse",
+        "_redArg"
+      ],
+      "owner": "Init.Data.List.Basic"
+    },
+    {
+      "name": [
+        "USize",
+        "ofNat"
+      ],
+      "owner": "Init.Data.UInt.BasicAux"
+    },
+    {
+      "name": [
+        "List",
+        "range",
+        "loop"
+      ],
+      "owner": "Init.Data.List.Basic"
+    },
+    {
+      "name": [
+        "List",
+        "reverseAux",
+        "_redArg"
+      ],
+      "owner": "Init.Data.List.Basic"
+    }
+  ]
+}

@@ -424,7 +424,7 @@ pub(super) fn ty_val_step_pia() -> String {
     "forall (D : Nat -> Sk) (A : KExpr) (A2 : KExpr) (B : KExpr) (sA : Sk) (sB : Sk) (hA : WK D A sA) (hA2 : WK D A2 sA) (hB : WK (skcons (domSk sA) D) B sB) (r : VEnvD D), @Eq (VD sA) (sval D A2 sA hA2 r) (sval D A sA hA r) -> @Eq (VD (piShape sA sB)) (sval D (KExpr.pi A2 B) (piShape sA sB) (WK.pi D A2 B sA sB hA2 hB) r) (sval D (KExpr.pi A B) (piShape sA sB) (WK.pi D A B sA sB hA hB) r)".to_string()
 }
 pub(super) fn val_val_step_pia() -> String {
-    format!("fun (D : Nat -> Sk) (A : KExpr) (A2 : KExpr) (B : KExpr) (sA : Sk) (sB : Sk) (hA : WK D A sA) (hA2 : WK D A2 sA) (hB : WK (skcons (domSk sA) D) B sB) (r : VEnvD D) (hv : @Eq (VD sA) (sval D A2 sA hA2 r) (sval D A sA hA r)) => r14_sval_pi_congr sA sB (sval D A2 sA hA2 r) (sval D A sA hA r) {VB_JUNK} {VB_JUNK} hv (@Eq.refl (VD sB) {VB_JUNK}))")
+    format!("fun (D : Nat -> Sk) (A : KExpr) (A2 : KExpr) (B : KExpr) (sA : Sk) (sB : Sk) (hA : WK D A sA) (hA2 : WK D A2 sA) (hB : WK (skcons (domSk sA) D) B sB) (r : VEnvD D) (hv : @Eq (VD sA) (sval D A2 sA hA2 r) (sval D A sA hA r)) => r14_sval_pi_congr sA sB (sval D A2 sA hA2 r) (sval D A sA hA r) {VB_JUNK} {VB_JUNK} hv (@Eq.refl (VD sB) {VB_JUNK})")
 }
 
 pub(super) fn ty_val_step_pib() -> String {
@@ -434,7 +434,7 @@ pub(super) fn val_val_step_pib() -> String {
     let jenv = "(vconsD (domSk sA) D (junkD (domSk sA)) r)";
     let vb2 = format!("(sval (skcons (domSk sA) D) B2 sB hB2 {jenv})");
     let va = "(sval D A sA hA r)";
-    format!("fun (D : Nat -> Sk) (A : KExpr) (B : KExpr) (B2 : KExpr) (sA : Sk) (sB : Sk) (hA : WK D A sA) (hB : WK (skcons (domSk sA) D) B sB) (hB2 : WK (skcons (domSk sA) D) B2 sB) (r : VEnvD D) (hv : forall (zr : VEnvD (skcons (domSk sA) D)), @Eq (VD sB) (sval (skcons (domSk sA) D) B2 sB hB2 zr) (sval (skcons (domSk sA) D) B sB hB zr)) => r14_sval_pi_congr sA sB {va} {va} {vb2} {VB_JUNK} (@Eq.refl (VD sA) {va}) (hv {jenv}))")
+    format!("fun (D : Nat -> Sk) (A : KExpr) (B : KExpr) (B2 : KExpr) (sA : Sk) (sB : Sk) (hA : WK D A sA) (hB : WK (skcons (domSk sA) D) B sB) (hB2 : WK (skcons (domSk sA) D) B2 sB) (r : VEnvD D) (hv : forall (zr : VEnvD (skcons (domSk sA) D)), @Eq (VD sB) (sval (skcons (domSk sA) D) B2 sB hB2 zr) (sval (skcons (domSk sA) D) B sB hB zr)) => r14_sval_pi_congr sA sB {va} {va} {vb2} {VB_JUNK} (@Eq.refl (VD sA) {va}) (hv {jenv})")
 }
 
 /// **THE ANNOTATION IS SEMANTICALLY INERT.** The `lam` clause of `sval` never
@@ -454,7 +454,7 @@ pub(super) fn ty_val_step_lamb() -> String {
 pub(super) fn val_val_step_lamb() -> String {
     let f = "(sval D (KExpr.lam A b2) (Sk.arr (domSk sA) c) (WK.lam D A b2 sA c hA hb2) r)";
     let g = "(sval D (KExpr.lam A b) (Sk.arr (domSk sA) c) (WK.lam D A b sA c hA hb) r)";
-    format!("fun (D : Nat -> Sk) (A : KExpr) (b : KExpr) (b2 : KExpr) (sA : Sk) (c : Sk) (hA : WK D A sA) (hb : WK (skcons (domSk sA) D) b c) (hb2 : WK (skcons (domSk sA) D) b2 c) (r : VEnvD D) (hv : forall (zr : VEnvD (skcons (domSk sA) D)), @Eq (VD c) (sval (skcons (domSk sA) D) b2 c hb2 zr) (sval (skcons (domSk sA) D) b c hb zr)) => r13_vd_arr_funext (domSk sA) c {f} {g} (fun (zx : VD (domSk sA)) => hv (vconsD (domSk sA) D zx r)))")
+    format!("fun (D : Nat -> Sk) (A : KExpr) (b : KExpr) (b2 : KExpr) (sA : Sk) (c : Sk) (hA : WK D A sA) (hb : WK (skcons (domSk sA) D) b c) (hb2 : WK (skcons (domSk sA) D) b2 c) (r : VEnvD D) (hv : forall (zr : VEnvD (skcons (domSk sA) D)), @Eq (VD c) (sval (skcons (domSk sA) D) b2 c hb2 zr) (sval (skcons (domSk sA) D) b c hb zr)) => r13_vd_arr_funext (domSk sA) c {f} {g} (fun (zx : VD (domSk sA)) => hv (vconsD (domSk sA) D zx r))")
 }
 
 pub(super) fn ty_val_step_appl() -> String {
@@ -462,7 +462,7 @@ pub(super) fn ty_val_step_appl() -> String {
 }
 pub(super) fn val_val_step_appl() -> String {
     let x = "(sval D a d ha r)";
-    format!("fun (D : Nat -> Sk) (f : KExpr) (f2 : KExpr) (a : KExpr) (d : Sk) (c : Sk) (hf : WK D f (Sk.arr d c)) (hf2 : WK D f2 (Sk.arr d c)) (ha : WK D a d) (r : VEnvD D) (hv : @Eq (VD (Sk.arr d c)) (sval D f2 (Sk.arr d c) hf2 r) (sval D f (Sk.arr d c) hf r)) => r14_vapply_congr d c (sval D f2 (Sk.arr d c) hf2 r) (sval D f (Sk.arr d c) hf r) {x} {x} hv (@Eq.refl (VD d) {x}))")
+    format!("fun (D : Nat -> Sk) (f : KExpr) (f2 : KExpr) (a : KExpr) (d : Sk) (c : Sk) (hf : WK D f (Sk.arr d c)) (hf2 : WK D f2 (Sk.arr d c)) (ha : WK D a d) (r : VEnvD D) (hv : @Eq (VD (Sk.arr d c)) (sval D f2 (Sk.arr d c) hf2 r) (sval D f (Sk.arr d c) hf r)) => r14_vapply_congr d c (sval D f2 (Sk.arr d c) hf2 r) (sval D f (Sk.arr d c) hf r) {x} {x} hv (@Eq.refl (VD d) {x})")
 }
 
 pub(super) fn ty_val_step_appr() -> String {
@@ -470,7 +470,7 @@ pub(super) fn ty_val_step_appr() -> String {
 }
 pub(super) fn val_val_step_appr() -> String {
     let ff = "(sval D f (Sk.arr d c) hf r)";
-    format!("fun (D : Nat -> Sk) (f : KExpr) (a : KExpr) (a2 : KExpr) (d : Sk) (c : Sk) (hf : WK D f (Sk.arr d c)) (ha : WK D a d) (ha2 : WK D a2 d) (r : VEnvD D) (hv : @Eq (VD d) (sval D a2 d ha2 r) (sval D a d ha r)) => r14_vapply_congr d c {ff} {ff} (sval D a2 d ha2 r) (sval D a d ha r) (@Eq.refl (VD (Sk.arr d c)) {ff}) hv)")
+    format!("fun (D : Nat -> Sk) (f : KExpr) (a : KExpr) (a2 : KExpr) (d : Sk) (c : Sk) (hf : WK D f (Sk.arr d c)) (ha : WK D a d) (ha2 : WK D a2 d) (r : VEnvD D) (hv : @Eq (VD d) (sval D a2 d ha2 r) (sval D a d ha r)) => r14_vapply_congr d c {ff} {ff} (sval D a2 d ha2 r) (sval D a d ha r) (@Eq.refl (VD (Sk.arr d c)) {ff}) hv")
 }
 
 // ================================================================

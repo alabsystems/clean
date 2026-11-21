@@ -466,39 +466,72 @@ theorem Mix.posTwo (E : Type) (Ans : E → Type) (n : Nat) (e : E) :
     );
 }
 
-/// n = 1 reproduces the RECORD lane exactly (design §3). A record codata
-/// with k observations and m recursive fields and the one-constructor
-/// variant `| step : T₁ → … → T_k → C → … → C → C` must build the same
-/// container: the same `PProd` label, the same `Sum`-of-units positions,
-/// the same constant target family.
-///
-/// MEASURED, and the reason only the VALUES are compared below: a container
-/// definition's TYPE names the ones before it (`posF`'s type mentions
-/// `<C>.shapeF`, `tgtF`'s mentions both), so two differently-named families
-/// can never have equal container types. The values of `shapeF`, `posF` and
-/// `tgtF` mention no name from their own family, and those are equal.
+/// n = 1 reproduces the record container: the same label, positions and
+/// target family. Expected-directed lambdas retain their declared domain
+/// aliases, as actual Lean 4.30/4.35/4.36 does. Compare strict expression
+/// equality after WHNF of leading lambda domains only; leave the computation
+/// bodies untouched. Also require full kernel type checks and definitional
+/// equality. A one-child container must remain observably different.
 #[test]
 fn test_single_constructor_variant_reproduces_the_record_encoding() {
+    use clean_kernel::{Expr, ExprKind, TypeChecker};
+
+    fn binder_domains_whnf(tc: &TypeChecker<'_>, value: &Expr) -> Expr {
+        match value.kind() {
+            ExprKind::Lam(binder, domain, body) => {
+                Expr::lam(*binder, tc.whnf(domain), binder_domains_whnf(tc, body))
+            }
+            _ => value.clone(),
+        }
+    }
+
     let env = elab_all(
         "codata Pair (A : Type) (B : Type) where\n  \
            fst : A\n  snd : B\n  left : Pair A B\n  right : Pair A B\n\
          codata VPair (A : Type) (B : Type) where\n  \
-           | step : A → B → VPair A B → VPair A B → VPair A B\n",
+           | step : A → B → VPair A B → VPair A B → VPair A B\n\
+         codata OneChild (A : Type) (B : Type) where\n  \
+           | step : A → B → OneChild A B → OneChild A B\n",
     );
+    let tc = TypeChecker::new(&env);
+    tc.set_honor_reducibility(true);
     for (record, variant) in [
         ("Pair.shapeF", "VPair.shapeF"),
         ("Pair.posF", "VPair.posF"),
         ("Pair.tgtF", "VPair.tgtF"),
     ] {
+        let record_info = get(&env, record);
+        let variant_info = get(&env, variant);
+        let record_value = record_info.value.as_ref().expect("record body");
+        let variant_value = variant_info.value.as_ref().expect("variant body");
+        tc.check_type(record_value, &record_info.type_)
+            .expect("record container body fully kernel-checks");
+        tc.check_type(variant_value, &variant_info.type_)
+            .expect("variant container body fully kernel-checks");
+        assert!(tc.is_def_eq(&record_info.type_, &variant_info.type_));
+        assert!(tc.is_def_eq(record_value, variant_value));
         assert_eq!(
-            get(&env, record).value,
-            get(&env, variant).value,
-            "{variant} must be the same container definition as {record}"
+            binder_domains_whnf(&tc, record_value),
+            binder_domains_whnf(&tc, variant_value),
+            "{variant} must have exactly the same container computation as {record}"
         );
     }
-    // `shapeF` is the one whose type is also name-free, so it can be
-    // compared whole — the label type `PProd A B` really is the same object
-    // in both lanes, not merely a term that happens to reduce the same way.
+    // The source negative is independently elaborated and kernel-checked. Its
+    // label/domain is equivalent, but PUnit positions lose the second child.
+    let pair = get(&env, "Pair.posF");
+    let one_child = get(&env, "OneChild.posF");
+    let pair_value = pair.value.as_ref().expect("pair positions body");
+    let one_value = one_child.value.as_ref().expect("one-child positions body");
+    tc.check_type(one_value, &one_child.type_)
+        .expect("negative container body is well typed");
+    assert!(tc.is_def_eq(&pair.type_, &one_child.type_));
+    assert!(!tc.is_def_eq(pair_value, one_value));
+    assert_ne!(
+        binder_domains_whnf(&tc, pair_value),
+        binder_domains_whnf(&tc, one_value),
+        "domain normalization must not hide a degenerate position family"
+    );
+    // shapeF has no family aliases in its type; retain this raw comparison.
     assert_eq!(
         get(&env, "Pair.shapeF").type_,
         get(&env, "VPair.shapeF").type_,

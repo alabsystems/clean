@@ -64,6 +64,10 @@ pub struct ToIRState {
     arities: HashMap<Name, u16>,
     /// Affirmed only by environment-aware lowering of the exact source layout.
     byte_array_string: bool,
+    checked_void_layout: bool,
+    /// State-token binders erased at value level.
+    world_tokens: HashSet<FVarId>,
+    pub(super) external_constructors: std::sync::Arc<HashSet<Name>>,
     /// Constructor metadata for correct CtorInfo generation (Part of #1953).
     /// Maps constructor names to their tag and field layout info. When present,
     /// `LetValue::Ctor`, `LetValue::Reuse`, and `Alt::Ctor` use real tag/field
@@ -120,6 +124,9 @@ impl ToIRState {
             warnings: RefCell::new(Vec::new()),
             arities: HashMap::new(),
             byte_array_string: false,
+            checked_void_layout: false,
+            world_tokens: HashSet::new(),
+            external_constructors: Default::default(),
             ctor_env: HashMap::new(),
             inductive_env: HashMap::new(),
             var_types: HashMap::new(),
@@ -143,6 +150,9 @@ impl ToIRState {
             warnings: RefCell::new(Vec::new()),
             arities,
             byte_array_string: false,
+            checked_void_layout: false,
+            world_tokens: HashSet::new(),
+            external_constructors: Default::default(),
             ctor_env: HashMap::new(),
             inductive_env: HashMap::new(),
             var_types: HashMap::new(),
@@ -169,6 +179,9 @@ impl ToIRState {
             warnings: RefCell::new(Vec::new()),
             arities,
             byte_array_string: false,
+            checked_void_layout: false,
+            world_tokens: HashSet::new(),
+            external_constructors: Default::default(),
             ctor_env,
             inductive_env,
             var_types: HashMap::new(),
@@ -191,11 +204,11 @@ impl ToIRState {
         self.byte_array_string && *name == Name::from_string("String.ofByteArray")
     }
 
-    /// Look up the full constructor metadata for a projection's inductive type.
-    ///
-    /// Returns `None` if the type isn't in `inductive_env`. Part of #1982.
+    /// Look up the source field layout for a structure or a case constructor.
     pub(super) fn lookup_proj_meta(&self, type_name: &Name) -> Option<&CtorMeta> {
-        self.inductive_env.get(type_name)
+        self.inductive_env
+            .get(type_name)
+            .or_else(|| self.ctor_env.get(type_name))
     }
 
     /// Look up full constructor metadata by constructor name.
@@ -214,6 +227,23 @@ impl ToIRState {
     /// Bind an FVarId to erased.
     pub(super) fn bind_erased(&mut self, fvar: FVarId) {
         self.vars.insert(fvar, IRArg::Erased);
+    }
+
+    pub(super) fn set_checked_void_layout(&mut self, checked: bool) {
+        self.checked_void_layout = checked;
+    }
+
+    pub(super) fn is_checked_void_type(&self, ty: &clean_kernel::Expr) -> bool {
+        self.checked_void_layout && crate::world_token::is_void_type(ty)
+    }
+
+    pub(super) fn bind_world_token(&mut self, fvar: FVarId) {
+        self.bind_erased(fvar);
+        self.world_tokens.insert(fvar);
+    }
+
+    pub(super) fn is_world_token(&self, fvar: FVarId) -> bool {
+        self.world_tokens.contains(&fvar)
     }
 
     /// Bind an FVarId as an ALIAS of an already-lowered IR value, emitting no
@@ -317,7 +347,12 @@ impl ToIRState {
                 tag: meta.tag,
                 num_scalars: meta.num_scalars,
                 num_objects: meta.num_objects,
-                field_types: meta.field_types.clone(),
+                field_types: meta
+                    .field_types
+                    .iter()
+                    .filter(|ty| !ty.is_void())
+                    .cloned()
+                    .collect(),
             }
         } else {
             if !self.ctor_env.is_empty() {

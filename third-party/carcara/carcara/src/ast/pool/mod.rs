@@ -1,3 +1,4 @@
+// Modified in Clean: typed array-lambda dialect and explicit lambda export refusal.
 //! This module implements `TermPool`, a structure that stores terms and implements hash consing.
 
 pub mod advanced;
@@ -435,6 +436,16 @@ impl PrimitivePool {
             }
             Term::Binder(Binder::Forall | Binder::Exists, _, _) => self.sorts.add(Sort::Bool),
             Term::Binder(Binder::Choice, v, _) => v[0].1.clone(),
+            Term::Binder(Binder::ArrayLambda, bindings, body) => {
+                match bindings.as_slice() {
+                    [(_, domain)] => {
+                        let range = self.compute_sort(body).clone();
+                        self.sorts.add(Sort::Array(domain.clone(), range))
+                    }
+                    // Malformed raw AST is not an array of any domain/range.
+                    _ => self.sorts.add(Sort::Type),
+                }
+            }
             Term::Binder(Binder::Lambda, bindings, body) => {
                 let mut result: Vec<_> =
                     bindings.iter().map(|(_name, sort)| sort.clone()).collect();

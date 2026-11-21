@@ -1,3 +1,4 @@
+// Modified in Clean: typed array-lambda dialect and explicit lambda export refusal.
 //! A lexer for the SMT-LIB and Alethe formats.
 
 use crate::{
@@ -166,8 +167,10 @@ impl_str_conversion_traits!(Reserved {
 pub type Position = (usize, usize);
 
 /// A lexer for the SMT-LIB, Alethe and Rare lexicons.
+#[derive(Clone)]
 pub struct Lexer<'s> {
     chars: Chars<'s>,
+    token_input: &'s str,
     line_start: usize,
     lines_read: usize,
     input_len: usize,
@@ -181,6 +184,7 @@ impl<'s> Lexer<'s> {
         let input_len = input.len();
         Self {
             chars: input.chars(),
+            token_input: input,
             line_start: 0,
             lines_read: 0,
             input_len,
@@ -287,9 +291,16 @@ impl<'s> Lexer<'s> {
         }
     }
 
+    /// Immutable source beginning at the last token, used by the same parser's
+    /// lexical role pass to read actual sort syntax with the native sort owner.
+    pub(super) fn token_input(&self) -> &'s str {
+        self.token_input
+    }
+
     /// Reads a token from the input source.
     pub fn next_token(&mut self) -> CarcaraResult<(Token, Position)> {
         self.consume_whitespace();
+        self.token_input = self.chars.as_str();
         // Modified in Clean: see `take_number_symbol_reading`.
         self.number_symbol_reading = None;
         let start_position = self.position();

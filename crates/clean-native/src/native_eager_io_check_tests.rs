@@ -46,6 +46,75 @@ fn test_eager_io_check_action_parameter_is_refused() {
     assert!(msg.contains("native-eager-io"), "{msg}");
 }
 
+/// A projected or let-bound function can ignore its second argument. The
+/// eager call would still print, so the diagnostic must locate the action.
+#[test]
+fn test_eager_io_check_locates_an_action_passed_to_an_applied_term() {
+    use clean_kernel::{BinderInfo, Environment, Expr, Level, Name, TypeChecker};
+
+    let mut env = Environment::with_prelude();
+    env.init_io_ops().expect("IO ops");
+    let constant = |name| Expr::const_(Name::from_string(name), vec![]);
+    let nat = constant("Nat");
+    let io_unit = Expr::app(constant("IO"), constant("Unit"));
+    let consumer = Expr::arrow(nat.clone(), Expr::arrow(io_unit.clone(), nat.clone()));
+    let prod = Name::from_string("Prod");
+    let pair = Expr::apps(
+        Expr::const_(prod.clone(), vec![Level::zero(), Level::zero()]),
+        [nat.clone(), consumer.clone()],
+    );
+    let projected = Expr::proj(prod, 1, Expr::bvar(0));
+    let ignore = Expr::lam(
+        BinderInfo::Default,
+        nat.clone(),
+        Expr::lam(BinderInfo::Default, io_unit, Expr::nat_lit(0)),
+    );
+    let local = Expr::let_named(
+        Name::from_string("selected"),
+        consumer,
+        ignore,
+        Expr::bvar(0),
+        false,
+    );
+    let action = Expr::app(constant("IO.println"), Expr::str_lit("early"));
+    let outer = Expr::let_named(
+        Name::from_string("outer"),
+        Expr::arrow(nat.clone(), nat.clone()),
+        Expr::lam(BinderInfo::Default, nat, Expr::bvar(0)),
+        Expr::bvar(0),
+        false,
+    );
+    for (head, description) in [
+        (projected, "projection `Prod` field 1 (zero-based)"),
+        (local, "let binding `selected`"),
+    ] {
+        let value = Expr::lam(
+            BinderInfo::Default,
+            pair.clone(),
+            Expr::app(
+                outer.clone(),
+                Expr::apps(head, [Expr::nat_lit(7), action.clone()]),
+            ),
+        );
+        let checker = TypeChecker::new(&env);
+        let inferred = checker.infer_type(&value).expect("typed call");
+        assert!(checker.is_def_eq(&inferred, &Expr::arrow(pair.clone(), constant("Nat"))));
+        let error = super::check_eager_io(&env, &Name::from_string("call"), &value)
+            .expect_err("an argument that runs early");
+        let message = error.to_string();
+        assert!(
+            message.contains("an action is passed as an argument to `an applied term`"),
+            "{message}"
+        );
+        assert!(
+            message.contains(&format!("while checking argument 2 of {description}")),
+            "{message}"
+        );
+        assert!(message.contains("native-eager-io"), "{message}");
+        assert!(!message.contains("outer"), "{message}");
+    }
+}
+
 /// `["a", "b"].map IO.println`: `List.map` applies the function where nothing
 /// sequences the action. Pinned Lean prints only `done`.
 #[test]

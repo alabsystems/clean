@@ -90,6 +90,18 @@ class ExecPolicyOwnerTests(unittest.TestCase):
         self.assertEqual(owner.locked_identity(rows, REV, "0.28.0"),
                          (owner.NAME, owner.VERSION, SOURCE))
 
+    def test_patch_owner_keeps_exact_policy_source_version_and_incoming_route(self):
+        rows = packages()
+        rows[0]["version"] = "0.28.3"
+        self.assertEqual(owner.locked_identity(rows, REV, "0.28.3"),
+                         (owner.NAME, owner.VERSION, SOURCE))
+        for version in ("0.28.2", "0.29.0", "0.28.03", "0.28.3-beta"):
+            with self.subTest(version=version), self.assertRaises(owner.OwnerError):
+                owner.locked_identity(rows, REV, version)
+        rows[1]["version"] = "0.28.3"
+        with self.assertRaises(owner.OwnerError):
+            owner.locked_identity(rows, REV, "0.28.3")
+
     def test_missing_foreign_stale_duplicate_or_aliased_owner_rows_refuse(self):
         mutations = [
             lambda d: d[0].update(version="0.27.0"),

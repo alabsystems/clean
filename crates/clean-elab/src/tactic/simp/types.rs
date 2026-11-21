@@ -18,6 +18,8 @@ use crate::tactic::discr_tree::{
 };
 use crate::tactic::{Goal, ProofState};
 
+use super::match_target::MatchTarget;
+
 /// Result of a simplification step.
 ///
 /// Invariant: if `proof` is `Some(p)`, then `p : original = expr` where
@@ -534,12 +536,23 @@ impl SimpLemmaSet {
         set
     }
 
+    #[cfg(test)]
     pub(crate) fn candidates<'a>(
         &'a self,
         state: &ProofState,
         goal: &Goal,
         expr: &Expr,
     ) -> Vec<&'a SimpLemma> {
+        self.candidates_for_target(state, goal, &MatchTarget::new(state, goal, expr))
+    }
+
+    pub(crate) fn candidates_for_target<'a>(
+        &'a self,
+        state: &ProofState,
+        goal: &Goal,
+        target: &MatchTarget,
+    ) -> Vec<&'a SimpLemma> {
+        let expr = target.source();
         if self.ordered.is_empty() || self.index.is_empty() {
             return self.ordered.iter().collect();
         }
@@ -555,6 +568,14 @@ impl SimpLemmaSet {
             .into_iter()
             .map(|matched| matched.value)
             .collect();
+        if let Some(contracted) = target.eta_index_target() {
+            matched_indices.extend(
+                self.index
+                    .get_match_with_extra(state, goal, contracted)
+                    .into_iter()
+                    .map(|matched| matched.value),
+            );
+        }
 
         if matched_indices.is_empty() {
             matched_indices = self.index.get_match_liberal(state, goal, expr);

@@ -276,6 +276,7 @@ fn collect_free_idents_inner(
         }
 
         SurfaceExpr::Paren(_, inner)
+        | SurfaceExpr::Borrowed(_, inner)
         | SurfaceExpr::OutParam(_, inner)
         | SurfaceExpr::SemiOutParam(_, inner) => {
             collect_free_idents_inner(inner, free, bound, complete);

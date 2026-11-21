@@ -30,7 +30,7 @@
 //!   one of the 41 builtins, so its goal can only close if the DECODED
 //!   registry entry fired; the closing proof must reference the lemma.
 //!
-//! All lanes skip when the pinned toolchain is absent.
+//! Real-import lanes require the exact workspace-pinned toolchain; absence fails.
 //!
 //! Goals are built by instantiating the imported lemma's OWN environment
 //! statement (universe params at 0, `α := Nat`, the list binder at a fresh
@@ -43,28 +43,21 @@ use clean_kernel::name::Name;
 use clean_olean::load_module_with_deps;
 use std::path::PathBuf;
 
-/// The pinned toolchain whose `SimpTheorem` layout the decoder targets.
-const PINNED_TOOLCHAIN: &str = "leanprover--lean4---v4.30.0-rc2";
-
 const IMPORT_ROOT: &str = "Init";
 
-fn v4_30_lib_path() -> Option<PathBuf> {
-    let home = std::env::var("HOME").ok()?;
-    let lib = PathBuf::from(home)
-        .join(".elan/toolchains")
-        .join(PINNED_TOOLCHAIN)
-        .join("lib/lean");
-    lib.join("Init.olean").is_file().then_some(lib)
+fn pinned_lib_path() -> PathBuf {
+    clean_olean::require_pinned_lean_lib_path()
+        .expect("real import probe requires the exact repository-pinned Lean standard library")
 }
 
 /// A prelude environment with a real `import Init` on top — the configuration
 /// where the decoded `@[simp]` registry actually feeds bare `simp`.
-fn imported_env() -> Option<Environment> {
-    let lib = v4_30_lib_path()?;
+fn imported_env() -> Environment {
+    let lib = pinned_lib_path();
     let mut env = Environment::with_prelude();
     load_module_with_deps(&mut env, IMPORT_ROOT, &[lib])
         .unwrap_or_else(|e| panic!("importing {IMPORT_ROOT} must succeed: {e}"));
-    Some(env)
+    env
 }
 
 /// TEETH: after a real `import Init`, the kernel simp registry must hold
@@ -74,10 +67,7 @@ fn imported_env() -> Option<Environment> {
 /// collapses to the prelude's handful and this fails.
 #[test]
 fn imported_simp_registry_has_thousands_of_lemmas() {
-    let Some(env) = imported_env() else {
-        eprintln!("Skipping: {PINNED_TOOLCHAIN} not installed");
-        return;
-    };
+    let env = imported_env();
     let count = env.get_simp_lemmas().count();
     assert!(
         count >= 1000,

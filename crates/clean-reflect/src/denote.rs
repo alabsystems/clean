@@ -1379,6 +1379,7 @@ fn is_f5_vocab_name(name: &str) -> bool {
             | "clean_box_uint64"
             | "clean_nat_of_u64"
             | "clean_nat_big"
+            | "clean_nat_limb_step"
             | "clean_unbox"
             | "clean_unbox_uint32"
             | "clean_unbox_uint64"
@@ -1472,6 +1473,16 @@ fn f5_vocab_row(
             let [lo, hi] = args else {
                 return Err(ReflectError::unsupported(format!(
                     "`clean_nat_big` called with {} argument(s) (expected 2, fail-closed)",
+                    args.len()
+                )));
+            };
+            let hi_scaled = nat_app2("Nat.mul", hi.0.clone(), Expr::nat_lit_u128(1u128 << 64));
+            Ok((nat_app2("Nat.add", lo.0.clone(), hi_scaled), None))
+        }
+        "clean_nat_limb_step" => {
+            let [hi, lo] = args else {
+                return Err(ReflectError::unsupported(format!(
+                    "`clean_nat_limb_step` called with {} argument(s) (expected 2, fail-closed)",
                     args.len()
                 )));
             };

@@ -7,7 +7,7 @@
 //! Separated from the main emitter to keep file sizes under limits.
 
 use super::{c_byte_offset, c_scalar_setter_name, CEmitter};
-use crate::ir::{IRAlt, IRBody};
+use crate::ir::{IRAlt, IRArg, IRBody, VarId};
 use crate::ir_checker::IRError;
 
 impl CEmitter {
@@ -26,7 +26,7 @@ impl CEmitter {
                 self.record_var_type(*var, ty);
                 let ty_str = self.emit_type(ty);
                 let var_str = self.emit_var(*var);
-                let value_str = self.emit_expr(value)?;
+                let value_str = self.emit_expr(value, ty)?;
                 self.writeln(&format!("{} {} = {};", ty_str, var_str, value_str));
                 self.emit_body(rest)?;
             }
@@ -162,7 +162,7 @@ impl CEmitter {
     /// Emit case analysis as a C `switch` on constructor tag.
     fn emit_case(
         &mut self,
-        scrutinee: crate::ir::VarId,
+        scrutinee: VarId,
         alts: &[IRAlt],
         default: Option<&IRBody>,
     ) -> Result<(), IRError> {
@@ -202,13 +202,53 @@ impl CEmitter {
     }
 
     /// Emit a join point jump: assign args to parameter VarIds, then goto.
-    fn emit_jmp(&mut self, jp: crate::ir::JoinPointId, args: &[crate::ir::IRArg]) {
+    ///
+    /// The assignment is PARALLEL, as Lean's `EmitC.emitTailCall` makes it:
+    /// a back edge of a loop (`tail_loop`) may pass a parameter of the join
+    /// point it jumps to, and assigning in order would read a parameter the
+    /// same jump already overwrote (`loop(q1, q0)` swapping two). An identity
+    /// pair (`q := q`) is skipped, and when some later argument names an
+    /// earlier parameter (Lean's `overwriteParam`) every other argument goes
+    /// through a `_tmp_<i>` first. A forward jump (from the join point's
+    /// continuation) cannot name the join point's own parameters, so neither
+    /// case changes its bytes.
+    fn emit_jmp(&mut self, jp: crate::ir::JoinPointId, args: &[IRArg]) {
         // Part of #2040: use actual VarId names (not _jpN_argI).
-        if let Some(param_vars) = self.jp_params.get(&jp) {
-            for (var, arg) in param_vars.clone().iter().zip(args.iter()) {
-                let var_str = self.emit_var(*var);
-                let arg_str = self.emit_arg(arg);
-                self.writeln(&format!("{} = {};", var_str, arg_str));
+        if let Some(param_vars) = self.jp_params.get(&jp).cloned() {
+            let pairs: Vec<(VarId, &IRArg)> = param_vars
+                .iter()
+                .copied()
+                .zip(args.iter())
+                .filter(|(var, arg)| **arg != IRArg::Var(*var))
+                .collect();
+            let overwrites = param_vars
+                .iter()
+                .enumerate()
+                .any(|(i, var)| args.iter().skip(i + 1).any(|arg| *arg == IRArg::Var(*var)));
+            if overwrites {
+                self.writeln("{");
+                self.indent();
+                for (var, arg) in &pairs {
+                    let ty = self
+                        .var_types
+                        .get(var)
+                        .map(|ty| self.emit_type(ty))
+                        .unwrap_or_else(|| "clean_obj*".to_string());
+                    let arg_str = self.emit_arg(arg);
+                    self.writeln(&format!("{ty} _tmp_{} = {arg_str};", var.0));
+                }
+                for (var, _) in &pairs {
+                    let var_str = self.emit_var(*var);
+                    self.writeln(&format!("{var_str} = _tmp_{};", var.0));
+                }
+                self.dedent();
+                self.writeln("}");
+            } else {
+                for (var, arg) in pairs {
+                    let var_str = self.emit_var(var);
+                    let arg_str = self.emit_arg(arg);
+                    self.writeln(&format!("{} = {};", var_str, arg_str));
+                }
             }
         } else {
             // Fallback: no JDecl seen (shouldn't happen in well-formed IR).

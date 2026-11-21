@@ -117,6 +117,20 @@ pub(crate) fn row_of_source_world(
     row_of_world(table, world.tag())
 }
 
+impl crate::ndjson::ExportWriteMeta {
+    /// The selected source world's header, with the release identity measured
+    /// from its Lean artifacts. A reader selects its own rules for this world.
+    #[must_use]
+    pub fn for_source_world(world: clean_kernel::LeanWorld) -> Option<Self> {
+        let row = row_of_source_world(lean_worlds(), world)?;
+        let version = world.tag().strip_prefix('v')?;
+        Some(Self {
+            lean_version: version.to_owned(),
+            lean_githash: std::str::from_utf8(&row.identity.githash).ok()?.to_owned(),
+        })
+    }
+}
+
 /// Who wrote one `.olean` part.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum PartWriter {

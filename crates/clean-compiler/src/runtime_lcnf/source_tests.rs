@@ -151,6 +151,27 @@ fn every_eager_environment_role_and_generated_identity_stays_in_capture() {
         after.recursors().count()
     );
     assert!(captured.after.iter().any(|r| r.recursor.is_some()));
+    let limits = RuntimeSourceCaptureLimits::default();
+    let mut remaining = limits.total_bytes;
+    let mut errors = Vec::new();
+    let mut failures = Vec::new();
+    let (_, bindings) = source::snapshot_names(
+        &after,
+        expected,
+        limits,
+        "after",
+        &mut remaining,
+        &mut errors,
+        &mut failures,
+    );
+    assert!(errors.is_empty() && failures.is_empty());
+    for row in &captured.after {
+        let (digest, bytes) = source::bounded_hash(row, limits.row_bytes).unwrap();
+        // The borrowed pre-clone binding must match the fully retained row,
+        // including specialized registry mirrors and the three status flags.
+        assert_eq!(bindings[&row.name].digest, digest);
+        assert_eq!(bindings[&row.name].encoded_bytes, bytes);
+    }
 }
 
 #[test]
@@ -533,4 +554,56 @@ fn absent_definition_theorem_and_opaque_values_are_not_axiom_stubs() {
         axiom.catalog(&all).body,
         RuntimeBody::NoStoredValueForKind
     ));
+}
+
+#[test]
+fn source_row_refusal_identifies_the_tighter_budget_without_consuming_it() {
+    let (_, after) = elaborate(SOURCE);
+    let name = Name::from_string("twice");
+    let defaults = RuntimeSourceCaptureLimits::default();
+    for (row_bytes, total_bytes) in [(1, 1024), (1024, 1), (1, 1)] {
+        let limits = RuntimeSourceCaptureLimits {
+            row_bytes,
+            total_bytes,
+            ..defaults
+        };
+        let mut remaining = total_bytes;
+        let mut errors = Vec::new();
+        let mut failures = Vec::new();
+        let (rows, bindings) = source::snapshot_names(
+            &after,
+            [name.clone()].into_iter().collect(),
+            limits,
+            "after",
+            &mut remaining,
+            &mut errors,
+            &mut failures,
+        );
+        assert!(rows.is_empty() && bindings.is_empty());
+        assert_eq!(remaining, total_bytes);
+        assert_eq!(failures.len(), 1);
+        let failure = &failures[0];
+        assert_eq!(failure.name, name);
+        assert!(failure
+            .reason
+            .contains("limit=1, encoded_prefix=0, next_write=4"));
+        assert!(failure.reason.contains(&format!(
+            "row_limit={row_bytes}, remaining_total={total_bytes}"
+        )));
+    }
+}
+
+#[test]
+fn bounded_hash_stops_at_the_first_over_budget_write() {
+    struct Unvisited;
+    impl serde::Serialize for Unvisited {
+        fn serialize<S: serde::Serializer>(&self, _: S) -> Result<S::Ok, S::Error> {
+            panic!("tail reached after the first budget refusal")
+        }
+    }
+    let error = source::bounded_hash(&("a".repeat(4096), Unvisited), 8).unwrap_err();
+    assert_eq!(
+        error,
+        "io error: source observation byte limit exceeded: limit=8, encoded_prefix=8, next_write=4096"
+    );
 }

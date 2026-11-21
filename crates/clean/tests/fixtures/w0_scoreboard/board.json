@@ -1,0 +1,47 @@
+{
+  "headline": {
+    "decided_by_compiled_kcheck": {
+      "real_declarations_decided": 0,
+      "reason": "no site consults the run; steps K4b and K5 of the interim thread owe the first one",
+      "source": "data/kcheck_coverage.json"
+    },
+    "planted_false_mints_clean": {
+      "measured_commit": "synthetic",
+      "minted_under_mutant": 1,
+      "sites": 2,
+      "source": "reports/self-proof-p3-2026-11-12/patched_kernel_control.json"
+    },
+    "planted_false_mints_trust": {
+      "absent": "reports/self-proof-p3-2026-11-12/patched_kernel_control_trust.json does not exist"
+    }
+  },
+  "route": {
+    "accepted_by_kcheck_no_site": {
+      "accepted": 1,
+      "export": "crates/clean-olean/tests/fixtures/lean/v4.30.0-rc2/lean4export_minted/prelude_roots.ndjson.gz",
+      "inside_fragment": 2,
+      "labels": {
+        "checker": "kcheck_labelled, KCheck.kcheckBytes (by definition KCheck.checker's kcheck from Advice.start of the frame); this run claims NO soundness: whether a theorem of KCheckSpec.C3Owes KCheck.checker is in source is the scoreboard's checker-soundness line, and nothing shown ties the executable upstream Lean compiled to the term that theorem is about",
+        "compiled_by": "upstream Lean (lake build under the pinned toolchain); not Clean, not Trust",
+        "loader": "interim, unproved; an inductive record's recursor and rules are compared with the base family by the loader, never checked by kcheck",
+        "site": "none: no acceptance of clean or Trust consults this run"
+      },
+      "ordinary_declarations": 3,
+      "source": "data/kcheck_coverage.json"
+    },
+    "checker_soundness": {
+      "absent": "theories/kcheck_labelled does not exist"
+    },
+    "clean_elaborates_theories": {
+      "absent": "reports/self-proof-elab/baseline.json does not exist"
+    },
+    "island_gaps": {
+      "absent": "data/kcheck_island_gaps.json does not exist"
+    },
+    "lean_kernel_rule_families": {
+      "absent": "data/cic_l_rule_inventory.json does not exist"
+    }
+  },
+  "schema": "clean.self_proof_scoreboard.v1",
+  "what_this_is": "Unit W0 of docs/plans/SELF_PROOF_EXECUTION_PLAN_2026-11-12.md: the route's headline figures, each read from the artifact that mints it by scripts/self_proof_scoreboard.py. Every figure is as old as its source; this file measures nothing."
+}

@@ -284,3 +284,33 @@ fn test_lean_key_in_reserved_namespace_is_refused() {
     refuse_reserved_lean_key(&Name::anon().str("a").str(RESERVED_KEY_ROOT))
         .expect("the reserved component is reserved only as the ROOT");
 }
+
+/// The production eager importer must retain the actual annotation, not only
+/// the diagnostic ParsedExpr. This uses the same pinned SDK as the existing
+/// parsed-type control above; it never executes Lean.
+#[test]
+fn imported_borrowed_domain_survives_environment_and_owned_dag_carriers() {
+    let lib = crate::pinned_lean_lib_path().expect(crate::test_support::PINNED_LEAN_REQUIRED);
+    let mut env = clean_kernel::Environment::default();
+    crate::load_module_with_deps(&mut env, "Init.Data.UInt.BasicAux", &[lib])
+        .expect("actual pinned module imports");
+    let subject = Name::from_string("Nat.toUInt8");
+    let target = env.get_const(&subject).expect("actual imported target");
+    let clean_kernel::ExprKind::Pi(_, domain, _) = target.type_.kind() else {
+        panic!("target telescope")
+    };
+    assert!(
+        matches!(domain.kind(), clean_kernel::ExprKind::MData(map, inner)
+        if map == &vec![(key("borrowed"), MDataValue::Bool(true))]
+            && inner.as_ref() == &clean_kernel::Expr::const_str("Nat"))
+    );
+    let original = target.type_.clone();
+    let restored = clean_kernel::Environment::from_dag_bincode(
+        &env.to_dag_bincode().expect("encode exact environment"),
+    )
+    .expect("restore environment");
+    assert_eq!(
+        restored.get_const(&subject).expect("restored target").type_,
+        original
+    );
+}

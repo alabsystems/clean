@@ -646,6 +646,18 @@ fn emit_c_literal(lit: &IRLiteral) -> String {
             *v as u64,
             (*v >> 64) as u64
         ),
+        IRLiteral::NatLimbs(limbs) => {
+            let n = limbs.len();
+            let mut acc = format!(
+                "clean_nat_big(UINT64_C({}), UINT64_C({}))",
+                limbs.get(n.wrapping_sub(2)).copied().unwrap_or(0),
+                limbs.get(n.wrapping_sub(1)).copied().unwrap_or(0),
+            );
+            for &w in limbs.iter().take(n.saturating_sub(2)).rev() {
+                acc = format!("clean_nat_limb_step({acc}, UINT64_C({w}))");
+            }
+            acc
+        }
         IRLiteral::Float32(f) => format!("{}f", f),
         IRLiteral::Float64(f) => format!("{}", f),
     }

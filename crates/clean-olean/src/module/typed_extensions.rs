@@ -39,6 +39,11 @@ use clean_kernel::name::Name;
 
 mod decode;
 
+pub use decode::exported_term_syntax::{
+    read_exported_term_syntax, ExportedTermSyntax, LeadingIdentBehavior, ParserRegistration,
+    ScopedSyntaxEntry, TermElaboratorRegistration,
+};
+
 #[derive(Clone, Debug)]
 pub(crate) struct TypedExtension {
     pub extension_name: Name,
@@ -98,14 +103,14 @@ pub(crate) enum TypedExtensionEntry {
         namespace: Option<Name>,
     },
     /// One `Lean.externAttr` row (`Name × ExternAttrData`): compiled code
-    /// calls the external implementation, never `decl`'s value. `symbol` is
-    /// the function of the row's first `standard` entry (`lean_nat_add`), or,
-    /// with none, every entry as Lean spells it (`adhoc all`, `inline all
-    /// <pattern>`, `opaque`), for the native refusal to name; no shim is bound
-    /// from it. Read by `register_real_compiler_attr_entries`.
+    /// calls the external implementation, never `decl`'s value. `symbol`
+    /// remains the existing refusal label; `metadata` retains every ordered
+    /// entry, backend, kind and represented legacy arity. Neither admits a
+    /// native implementation. Read by `register_real_compiler_attr_entries`.
     Extern {
         decl: Name,
         symbol: String,
+        metadata: clean_kernel::env::CompilerExternMetadata,
     },
     /// The original position remains visible, even when no identity is
     /// readable; `ExtensionLoadAccounting::undecoded_reasons` reports both.

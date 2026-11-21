@@ -8,6 +8,7 @@
 //! `ConstructorVal`, and `RecursorVal` kernel types for environment registration.
 
 use super::convert_expr::{convert_expr, convert_level_params};
+use super::export_fields::ExportFields;
 use super::{ExprInternCache, ExprSharingStats, ImportError};
 use crate::module::{ConstantKind, ParsedConstant, ReducibilityHintsData};
 use clean_kernel::env::{ConstantKind as KernelConstantKind, Declaration, ProofValueElision};
@@ -89,7 +90,7 @@ pub(crate) enum ConvertedConstant {
     ),
     Other(
         String,
-        Result<(Declaration, Option<ReducibilityHintsData>), ImportError>,
+        Result<(Declaration, ExportFields), ImportError>,
         ExprSharingStats,
     ),
 }
@@ -403,9 +404,15 @@ pub(super) fn convert_parsed_constant(
             ConvertedConstant::Recursor(name, result, stats)
         }
         _ => {
-            let hints = constant.hints;
             let (result, stats) = convert_constant(constant, intern, elide);
-            ConvertedConstant::Other(name, result.map(|d| (d, hints)), stats)
+            let result = result.map(|decl| {
+                let fields = ExportFields {
+                    hints: constant.hints,
+                    all: constant.mutual_declarations.clone(),
+                };
+                (decl, fields)
+            });
+            ConvertedConstant::Other(name, result, stats)
         }
     }
 }

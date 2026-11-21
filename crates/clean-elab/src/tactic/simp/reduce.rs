@@ -97,6 +97,18 @@ pub(crate) fn shift_expr(expr: &Expr, amount: i64) -> Expr {
     lift_bvar(expr, amount, 0)
 }
 
+/// Contract the outer lambda when its body is an eta-expansion.
+pub(super) fn eta_contract_body(body: &Expr) -> Option<Expr> {
+    let ExprKind::App(function, argument) = body.kind() else {
+        return None;
+    };
+    if matches!(argument.kind(), ExprKind::BVar(0)) && !contains_bvar(function, 0) {
+        Some(shift_expr(function, -1))
+    } else {
+        None
+    }
+}
+
 /// Perform eta reduction: λ x => f x → f (when x not free in f)
 ///
 /// ONE contraction per `Lam` node, NOT a fixpoint. `fold_lam` rebuilds the
@@ -120,14 +132,8 @@ pub(crate) fn eta_reduce(expr: &Expr) -> Expr {
 
     impl ExprFolder for EtaReducer {
         fn fold_lam(&mut self, bi: clean_kernel::BinderData, ty: &Expr, body: &Expr) -> Expr {
-            if let ExprKind::App(f, arg) = body.kind() {
-                // Check if arg is bvar(0) and f doesn't contain bvar(0)
-                if let ExprKind::BVar(0) = arg.kind() {
-                    if !contains_bvar(f, 0) {
-                        // Eta reduce: λ x => f x → f (with shifted indices)
-                        return shift_expr(f, -1);
-                    }
-                }
+            if let Some(contracted) = eta_contract_body(body) {
+                return contracted;
             }
             Expr::lam(bi, self.fold_expr(ty), self.fold_binder_body(body))
         }

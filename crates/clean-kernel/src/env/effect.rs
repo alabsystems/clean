@@ -191,8 +191,22 @@ where
     K: Eq + Hash + Display,
     V: PartialEq,
 {
+    map_disagreement_by(field, own, shared, |key, value| {
+        shared_after.get(key) == value
+    })
+}
+
+fn map_disagreement_by<K, V>(
+    field: &str,
+    own: &MapEffect<K, V>,
+    shared: &MapEffect<K, V>,
+    agrees: impl Fn(&K, Option<&V>) -> bool,
+) -> Option<String>
+where
+    K: Eq + Hash + Display,
+{
     for (key, value) in &own.changed {
-        if shared_after.get(key) != value.as_ref() {
+        if !agrees(key, value.as_ref()) {
             return Some(format!("{field} entry `{key}` differs"));
         }
     }
@@ -388,6 +402,8 @@ pub struct EnvEffect {
     codata_carriers: SetEffect<Name>,
     value_forall_binder_names: MapEffect<Name, super::ValueForallBinderNames>,
     persistent_extensions: MapEffect<Name, super::PersistentEnvExtensionState>,
+    matcher_rows: MapEffect<Name, Vec<(usize, super::EnvExtensionEntryData)>>,
+    matcher_header_changed: bool,
     extension_entries: AccEffect<Name, super::EnvExtensionEntry>,
     inductives: MapEffect<Name, crate::inductive::InductiveVal>,
     constructors: MapEffect<Name, crate::inductive::ConstructorVal>,
@@ -454,6 +470,37 @@ fn hint_sets(env: &Environment) -> [(&'static str, &HashSet<Name>); 23] {
     ]
 }
 
+fn same_matcher_header(
+    expected: Option<&super::PersistentEnvExtensionState>,
+    actual: Option<&super::PersistentEnvExtensionState>,
+) -> bool {
+    match (expected, actual) {
+        (Some(left), Some(right)) => {
+            left.state == right.state && left.imported_entries.len() == right.imported_entries.len()
+        }
+        (None, None) => true,
+        _ => false,
+    }
+}
+
+/// Matcher lookup reads each name independently. Keep the original bucket, bytes,
+/// and multiplicity for that name, including malformed or conflicting rows.
+fn matcher_rows(
+    state: Option<&super::PersistentEnvExtensionState>,
+) -> HashMap<Name, Vec<(usize, super::EnvExtensionEntryData)>> {
+    let mut rows = HashMap::<Name, Vec<_>>::new();
+    if let Some(state) = state {
+        for (module, entries) in state.imported_entries.iter().enumerate() {
+            for entry in entries {
+                rows.entry(entry.name.clone())
+                    .or_default()
+                    .push((module, entry.data.clone()));
+            }
+        }
+    }
+    rows
+}
+
 fn extension_entry_map(env: &Environment) -> HashMap<Name, Vec<super::EnvExtensionEntry>> {
     env.export_extension_states()
         .into_iter()
@@ -496,6 +543,24 @@ impl Environment {
             .zip(before_hints.iter())
             .map(|((field, now), (_, was))| (*field, set_effect(was, now)))
             .collect();
+        let persistent_extensions = map_effect(
+            before.persistent_extensions.states(),
+            self.persistent_extensions.states(),
+        );
+        let matcher_key = super::matcher::matcher_storage_key();
+        let matcher_before = before.persistent_extensions.get(&matcher_key);
+        let matcher_after = self.persistent_extensions.get(&matcher_key);
+        let matcher_rows = if persistent_extensions
+            .changed
+            .iter()
+            .any(|(key, _)| key == &matcher_key)
+        {
+            map_effect(&matcher_rows(matcher_before), &matcher_rows(matcher_after))
+        } else {
+            MapEffect {
+                changed: Vec::new(),
+            }
+        };
         EnvEffect {
             constants: map_effect(&before.constants, &self.constants),
             constant_origins: map_effect(&before.constant_origins, &self.constant_origins),
@@ -509,10 +574,9 @@ impl Environment {
                 before.value_binder_table(),
                 self.value_binder_table(),
             ),
-            persistent_extensions: map_effect(
-                before.persistent_extensions.states(),
-                self.persistent_extensions.states(),
-            ),
+            persistent_extensions,
+            matcher_rows,
+            matcher_header_changed: !same_matcher_header(matcher_before, matcher_after),
             extension_entries: acc_effect(&extension_entry_map(before), &extension_entry_map(self)),
             inductives: map_effect(&before.inductives, &self.inductives),
             constructors: map_effect(&before.constructors, &self.constructors),
@@ -571,6 +635,39 @@ impl Environment {
 }
 
 impl EnvEffect {
+    fn persistent_disagreement(&self, shared: &Self, env: &Environment) -> Option<String> {
+        let matcher_key = super::matcher::matcher_storage_key();
+        if shared.matcher_header_changed && !self.matcher_header_changed {
+            return Some(format!("persistent extension `{matcher_key}` header changed only next to modules it does not import"));
+        }
+        let opaque = map_disagreement_by(
+            "persistent extension",
+            &self.persistent_extensions,
+            &shared.persistent_extensions,
+            |key, expected| {
+                let actual = env.persistent_extensions.get(key);
+                if key == &matcher_key {
+                    // A row change still requires the isolated table's final
+                    // presence, opaque bytes and bucket count, even on deletion.
+                    same_matcher_header(expected, actual)
+                } else {
+                    expected == actual
+                }
+            },
+        );
+        if opaque.is_some()
+            || (self.matcher_rows.changed.is_empty() && shared.matcher_rows.changed.is_empty())
+        {
+            return opaque;
+        }
+        map_disagreement(
+            "matcher metadata",
+            &self.matcher_rows,
+            &shared.matcher_rows,
+            &matcher_rows(env.persistent_extensions.get(&matcher_key)),
+        )
+    }
+
     /// Names of the constants this effect added or changed.
     pub fn changed_constant_names(&self) -> impl Iterator<Item = &Name> {
         self.constants
@@ -614,6 +711,7 @@ impl EnvEffect {
             set("codata_carriers", &self.codata_carriers),
             map("value_forall_binder_names", &self.value_forall_binder_names),
             map("persistent_extensions", &self.persistent_extensions),
+            map("matcher metadata", &self.matcher_rows),
             acc("extension_states", &self.extension_entries),
             map("inductives", &self.inductives),
             map("constructors", &self.constructors),
@@ -708,12 +806,7 @@ impl EnvEffect {
                 &shared.value_forall_binder_names,
                 env.value_binder_table(),
             ),
-            map_disagreement(
-                "persistent extension",
-                &self.persistent_extensions,
-                &shared.persistent_extensions,
-                env.persistent_extensions.states(),
-            ),
+            self.persistent_disagreement(shared, env),
             acc_disagreement(
                 "extension entries",
                 &self.extension_entries,

@@ -85,6 +85,7 @@ fn class_module_named(name: &str) -> ParsedModule {
         recursor_val: None,
         hints: None,
         definition_safety: None,
+        mutual_declarations: None,
         quot_kind: None,
     };
     ParsedModule {
@@ -113,6 +114,7 @@ fn axiom_module_named(name: &str) -> ParsedModule {
             recursor_val: None,
             hints: None,
             definition_safety: None,
+            mutual_declarations: None,
             quot_kind: None,
         }],
         extra_const_names: Vec::new(),
@@ -215,6 +217,7 @@ fn test_consumer_axiom_deps_excludes_membership_after_import() {
             recursor_val: None,
             hints: None,
             definition_safety: None,
+            mutual_declarations: None,
             quot_kind: None,
         }],
         extra_const_names: Vec::new(),

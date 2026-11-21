@@ -67,6 +67,181 @@ fn register(env: &mut Environment, source: &str) -> Result<(), String> {
     Ok(())
 }
 
+#[test]
+fn namespace_recursive_receiver_uses_the_structural_child_and_updated_parameters() {
+    let mut env = Environment::with_prelude();
+    let source = r#"
+namespace Probe
+inductive T where
+  | lit (n : Nat)
+  | child (sub : T)
+  | throughName (sub : T)
+namespace T
+def scan (depth under : Nat) : T → Nat
+  | .lit n => under + n + depth
+  | .child sub => sub.scan depth (under + 1)
+  | .throughName sub => T.scan depth (under + 2) sub
+end T
+end Probe
+theorem methodSteps : Probe.T.scan 3 4 (.child (.throughName (.lit 1))) = 11 := rfl
+"#;
+    register(&mut env, source).expect("both self-call spellings must compute");
+    let dependencies = env
+        .axiom_deps(&Name::from_string("methodSteps"))
+        .expect("registered method-step equation");
+    assert!(dependencies.is_empty(), "{dependencies:?}");
+
+    let wrong =
+        "theorem badMethodSteps : Probe.T.scan 3 4 (.child (.throughName (.lit 1))) = 10 := rfl";
+    let error = register(&mut env, wrong).expect_err("wrong accumulator result must fail");
+    assert!(error.contains("Type mismatch"), "{error}");
+    assert!(env
+        .get_const(&Name::from_string("badMethodSteps"))
+        .is_none());
+
+    let nondecreasing = r#"
+namespace Probe.T
+def nondecreasing (depth under : Nat) : Probe.T → Nat
+  | .lit n => under + n + depth
+  | .child sub =>
+      let whole := Probe.T.child sub
+      whole.nondecreasing depth (under + 1)
+  | .throughName sub => nondecreasing depth under sub
+end Probe.T
+"#;
+    let error = register(&mut env, nondecreasing).expect_err("rebuilt receiver must fail");
+    assert!(
+        error.contains("nondecreasing") && error.contains("recurs"),
+        "{error}"
+    );
+    assert!(env
+        .get_const(&Name::from_string("Probe.T.nondecreasing"))
+        .is_none());
+}
+
+#[test]
+fn nested_list_suffix_checks_the_original_sha_words_equations() {
+    let mut env = Environment::with_prelude();
+    let source = include_str!("recursion_scope_and_pattern_names/sha_words.lean");
+    register(&mut env, source).expect(
+        "the generated function must satisfy its equations and equal the explicit recursor",
+    );
+    for law in [
+        "law_nil",
+        "law_one",
+        "law_two",
+        "law_three",
+        "law_chunk",
+        "actual_compiler_window",
+    ] {
+        let dependencies = env
+            .axiom_deps(&Name::from_string(law))
+            .expect("registered source equation");
+        assert!(
+            dependencies.is_empty(),
+            "{law} unexpectedly uses {dependencies:?}"
+        );
+    }
+    let wrong_suffix = source.replace(":: previous.2.2.2", ":: previous.2.2.1");
+    let mut changed_env = Environment::with_prelude();
+    let error = register(&mut changed_env, &wrong_suffix)
+        .expect_err("the altered recursor must fail the same universal equality");
+    assert!(changed_env
+        .get_const(&Name::from_string("law_chunk"))
+        .is_some());
+    assert!(changed_env
+        .get_const(&Name::from_string("Scratch.result"))
+        .is_some());
+    assert!(changed_env
+        .get_const(&Name::from_string("actual_compiler_window"))
+        .is_none());
+    assert!(
+        error.contains("SemR.shaWords") && error.contains("Scratch.result"),
+        "{error}"
+    );
+    assert!(error.contains("Type mismatch"), "{error}");
+    register(
+        &mut env,
+        "theorem nested_sha_correct : SemR.shaWords [0,0,0,0,1,0,0,0] = [0,16777216] := rfl",
+    )
+    .expect("recursion must use the suffix after four heads");
+    assert!(register(
+        &mut env,
+        "theorem nested_sha_incorrect : SemR.shaWords [0,0,0,0,1,0,0,0] = [0,65536] := rfl"
+    )
+    .is_err());
+    assert!(env
+        .get_const(&Name::from_string("nested_sha_incorrect"))
+        .is_none());
+}
+
+#[test]
+fn nested_list_suffix_respects_scopes_and_the_decrease() {
+    let mut env = Environment::with_prelude();
+    register(
+        &mut env,
+        r#"
+namespace Suffix
+def a : Nat := 7
+def f : List Nat → Nat
+  | a :: b :: rest => a + b + f rest
+  | _ => a
+end Suffix
+"#,
+    )
+    .expect("fallback names are resolved in their original scope");
+    computation(&mut env, "nested_fallback", "Suffix.f [9]", 7, 9);
+    computation(&mut env, "nested_two_heads", "Suffix.f [1, 2, 3]", 10, 6);
+    for source in [
+        "def sameList : List Nat → Nat | a :: b :: rest => sameList (a :: b :: rest) | _ => 0",
+        "def duplicates : List Nat → Nat | a :: a :: rest => a + duplicates rest | _ => 0",
+    ] {
+        assert!(register(&mut env, source).is_err());
+    }
+}
+
+#[test]
+fn a_structurally_smaller_call_can_be_a_callback_or_fully_applied() {
+    let mut env = Environment::with_prelude();
+    register(
+        &mut env,
+        r#"
+namespace Weighted
+def apply2 (f : Bool → Bool → Nat) (a b : Bool) : Nat := f a b
+def result (m : Nat) : Nat → Bool → Bool → Nat
+  | 0, a, _ => if a then m + 2 else m + 5
+  | fuel + 1, true, b => 1 + apply2 (result m fuel) false b
+  | fuel + 1, false, b => 3 + result m fuel true b
+theorem partial_equation (m fuel : Nat) (b : Bool) :
+    result m (fuel + 1) true b = 1 + result m fuel false b := rfl
+theorem direct_equation (m fuel : Nat) (b : Bool) :
+    result m (fuel + 1) false b = 3 + result m fuel true b := rfl
+end Weighted
+"#,
+    )
+    .expect("the resulting kernel term must satisfy both equations for every smaller fuel");
+    computation(
+        &mut env,
+        "mixed_saturation_callback",
+        "Weighted.result 4 1 true false",
+        10,
+        9,
+    );
+    computation(
+        &mut env,
+        "mixed_saturation_direct",
+        "Weighted.result 4 1 false false",
+        9,
+        10,
+    );
+    for source in [
+        "def bad (m : Nat) : Nat → Bool → Bool → Nat | 0, _, _ => m | n + 1, true, b => Weighted.apply2 (bad m (n + 1)) false b | n + 1, false, b => bad m n true b",
+        "def escapes (m : Nat) : Nat → Bool → Bool → Nat | 0, _, _ => m | n + 1, a, b => (fun k => k (n + 1) a b) (escapes m)",
+    ] {
+        assert!(register(&mut env, source).is_err());
+    }
+}
+
 /// `call = expected` must register axiom-free; `call = wrong` must be refused.
 fn computation(env: &mut Environment, tag: &str, call: &str, expected: u64, wrong: u64) {
     assert_ne!(
@@ -828,5 +1003,23 @@ fn class_89_first_match_values(env: &mut Environment, name: &str, rows: &[Row]) 
                 truth + 1,
             );
         }
+    }
+}
+
+#[test]
+fn reconstructed_list_suffix_checks_every_adjacent_blob_digest() {
+    let mut env = Environment::with_prelude();
+    register(
+        &mut env,
+        include_str!("recursion_scope_and_pattern_names/blobs_ascending.lean"),
+    )
+    .expect("original ordered-blob check must recurse on the immediate suffix");
+    for wrong in [
+        "theorem duplicates_pass : SemR.blobsAscending [([0],[]),([1],[7]),([1],[])] = true := rfl",
+        "theorem distinct_refused : SemR.blobsAscending [([0],[5]),([1],[]),([2],[])] = false := rfl",
+        "def reordered : List Nat → Bool | a :: b :: c :: rest => reordered (c :: b :: rest) | _ => true",
+        "def unchanged : List Nat → Bool | a :: b :: rest => unchanged (a :: b :: rest) | _ => true",
+    ] {
+        assert!(register(&mut env, wrong).is_err(), "accepted {wrong}");
     }
 }

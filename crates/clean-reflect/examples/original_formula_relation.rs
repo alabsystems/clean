@@ -121,7 +121,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             private: bytes.private.map(hash),
             ir: bytes.ir.map(hash),
         };
-        if manifest.modules.get(&text) != Some(&actual) || !seen.insert(text) {
+        if bytes.ir_signature.is_some()
+            || manifest.modules.get(&text) != Some(&actual)
+            || !seen.insert(text)
+        {
             return Err(refused(
                 name,
                 "captured Formula module bytes differ or repeat",

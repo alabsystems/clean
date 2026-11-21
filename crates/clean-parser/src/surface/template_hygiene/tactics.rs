@@ -293,10 +293,16 @@ impl Walker<'_> {
                 let name = self.implicit_this(name.as_ref())?;
                 SurfaceTactic::Have(*span, name, ty, Box::new(proof))
             }
-            SurfaceTactic::Let(span, name, ty, value) => {
+            SurfaceTactic::Let(span, name, ty, value)
+            | SurfaceTactic::LetI(span, name, ty, value) => {
                 let ty = ty.as_deref().map(|ty| self.boxed(ty)).transpose()?;
                 let value = self.boxed(value)?;
-                SurfaceTactic::Let(*span, self.bind(name)?, ty, value)
+                let name = self.bind(name)?;
+                if matches!(tactic, SurfaceTactic::LetI(..)) {
+                    SurfaceTactic::LetI(*span, name, ty, value)
+                } else {
+                    SurfaceTactic::Let(*span, name, ty, value)
+                }
             }
             SurfaceTactic::Replace(span, decl) => {
                 SurfaceTactic::Replace(*span, Box::new(self.tactic(decl)?))
@@ -347,6 +353,9 @@ impl Walker<'_> {
             SurfaceTactic::Repeat(span, tactics) => {
                 SurfaceTactic::Repeat(*span, self.tactic_seq(tactics)?)
             }
+            SurfaceTactic::RepeatAll(span, tactics) => {
+                SurfaceTactic::RepeatAll(*span, self.tactic_seq(tactics)?)
+            }
             SurfaceTactic::SeqFocus(span, first, then) => {
                 let first = self.tactic(first)?;
                 SurfaceTactic::SeqFocus(*span, Box::new(first), Box::new(self.tactic(then)?))
@@ -377,6 +386,9 @@ impl Walker<'_> {
                     })
                     .collect::<Walked<Vec<_>>>()?,
             ),
+            SurfaceTactic::IntroPattern(span, pattern) => {
+                SurfaceTactic::IntroPattern(*span, self.pattern_in_scope(pattern)?)
+            }
             SurfaceTactic::Calc(span, steps) => SurfaceTactic::Calc(*span, self.calc(steps)?),
             // `match d with | p => tacs`: each arm's pattern variables are
             // hypotheses of its own goal, bound in its tactics only.
@@ -560,7 +572,10 @@ impl Walker<'_> {
                 let hyp = self.expr(first)?;
                 let binders = rest
                     .iter()
-                    .map(|arg| self.tactic_binder_arg(name, arg))
+                    .map(|arg| match arg {
+                        SurfaceExpr::Hole(_) if name == "injection" => Ok(arg.clone()),
+                        _ => self.tactic_binder_arg(name, arg),
+                    })
                     .collect::<Walked<Vec<_>>>()?;
                 Ok(std::iter::once(hyp).chain(binders).collect())
             }
@@ -745,7 +760,7 @@ fn named_tactic_role(name: &str) -> Option<NamedTacticRole> {
         }
         "by_cases" | "wlog" => NamedTacticRole::BinderThenTerms,
         "generalize" => NamedTacticRole::Generalize,
-        "choose" | "obtain" => NamedTacticRole::ReferenceThenBinders,
+        "choose" | "obtain" | "injection" => NamedTacticRole::ReferenceThenBinders,
         // Every other tactic of the registry: its arguments are terms, lemma
         // or constant names, or hypotheses it acts on — references all.
         "exact" | "apply" | "refine" | "refine'" | "change" | "show" | "use" | "exists"
@@ -754,16 +769,16 @@ fn named_tactic_role(name: &str) -> Option<NamedTacticRole> {
         | "omega" | "simp_arith" | "simp_all" | "norm_num" | "linarith" | "nlinarith"
         | "positivity" | "ring" | "ring_nf" | "field_simp" | "norm_cast" | "push_cast"
         | "exact_mod_cast" | "apply_mod_cast" | "symm" | "congr" | "split" | "subst" | "revert"
-        | "clear" | "specialize" | "injection" | "unfold" | "push_neg" | "dsimp" | "skip"
-        | "done" | "exact?" | "apply?" | "aesop" | "tauto" | "infer_instance" | "grind"
-        | "bv_decide" | "abel" | "and_intros" | "auto_cascade" | "blast" | "cc"
-        | "cert_mathverse" | "cert_simp" | "classical" | "continuity" | "contrapose" | "delta"
-        | "discriminate" | "fin_cases" | "gcongr" | "group" | "interval_cases" | "itauto"
-        | "lhs" | "library_search" | "lift" | "mathverse_apply" | "mathverse_suggest"
-        | "mathverse_use" | "measurability" | "mono" | "monad_pres" | "nontriviality" | "peel"
-        | "polyrith" | "qify" | "reduce" | "reduce_eq" | "rhs" | "rotate_left" | "rotate_right"
-        | "rw?" | "solve_by_elim" | "split_ifs" | "subst_eqs" | "trace_state" | "trans"
-        | "whnf" | "zify" | "inhabit" | "convert" | "rcases" => NamedTacticRole::Terms,
+        | "clear" | "specialize" | "unfold" | "push_neg" | "dsimp" | "skip" | "done" | "exact?"
+        | "apply?" | "aesop" | "tauto" | "infer_instance" | "grind" | "bv_decide" | "abel"
+        | "and_intros" | "auto_cascade" | "blast" | "cc" | "cert_mathverse" | "cert_simp"
+        | "classical" | "continuity" | "contrapose" | "delta" | "discriminate" | "fin_cases"
+        | "gcongr" | "group" | "interval_cases" | "itauto" | "lhs" | "library_search" | "lift"
+        | "mathverse_apply" | "mathverse_suggest" | "mathverse_use" | "measurability" | "mono"
+        | "monad_pres" | "nontriviality" | "peel" | "polyrith" | "qify" | "reduce"
+        | "reduce_eq" | "rhs" | "rotate_left" | "rotate_right" | "rw?" | "solve_by_elim"
+        | "split_ifs" | "subst_eqs" | "trace_state" | "trans" | "whnf" | "zify" | "inhabit"
+        | "convert" | "rcases" => NamedTacticRole::Terms,
         _ => return None,
     })
 }

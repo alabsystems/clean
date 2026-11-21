@@ -4,7 +4,7 @@
 
 //! Undo trail and scope management for MetaState backtracking (Part of #383).
 
-use super::super::meta_id::UndoRecord;
+use super::super::meta_id::{MetaId, UndoRecord};
 use super::{MetaScopeMarker, MetaState, OwnedMetaScopeCloseError, OwnedMetaScopeToken};
 
 impl MetaState {
@@ -214,6 +214,25 @@ impl MetaState {
         self.scope_markers.len()
     }
 
+    /// Metavariables assigned since the current scope marker, including
+    /// committed inner scopes. Rolled-back inner work has left the trail.
+    ///
+    /// This reads only the incremental undo suffix, never the complete meta
+    /// map. `None` distinguishes a missing scope from a valid empty suffix.
+    pub(crate) fn current_scope_assignments(&self) -> Option<Vec<MetaId>> {
+        let marker = self.scope_markers.last()?;
+        let mut ids: Vec<_> = self.undo_trail[marker.undo_len..]
+            .iter()
+            .filter_map(|record| match record {
+                UndoRecord::MetaAssign { id, .. } => Some(*id),
+                _ => None,
+            })
+            .collect();
+        ids.sort_unstable();
+        ids.dedup();
+        Some(ids)
+    }
+
     /// Apply an undo record, reversing its effect on the state.
     fn apply_undo(&mut self, record: UndoRecord) {
         match record {
@@ -284,5 +303,54 @@ impl MetaState {
     #[cfg(test)]
     pub(crate) fn undo_trail_len_for_tests(&self) -> usize {
         self.undo_trail.len()
+    }
+}
+
+#[cfg(test)]
+mod scope_assignment_tests {
+    use super::*;
+    use clean_kernel::Expr;
+
+    #[test]
+    fn current_scope_assignments_track_nested_commit_and_rollback() {
+        let mut metas = MetaState::new();
+        let previous = metas.fresh(Expr::type_());
+        let first = metas.fresh(Expr::type_());
+        let second = metas.fresh(Expr::type_());
+        assert!(metas.assign(previous, Expr::prop()));
+        assert_eq!(metas.current_scope_assignments(), None);
+
+        metas.push_scope();
+        assert!(metas.assign(first, Expr::prop()));
+        metas.push_scope();
+        assert!(metas.assign(second, Expr::prop()));
+        assert!(metas.commit());
+        metas.push_scope();
+        let temporary = metas.fresh(Expr::type_());
+        assert!(metas.assign(temporary, Expr::prop()));
+        assert!(metas.pop_scope());
+        assert_eq!(metas.current_scope_assignments(), Some(vec![first, second]));
+        assert!(metas.get(temporary).is_none());
+
+        assert!(metas.pop_scope());
+        assert!(!metas.is_assigned(first));
+        assert!(!metas.is_assigned(second));
+        assert!(metas.is_assigned(previous));
+        assert_eq!(metas.current_scope_assignments(), None);
+    }
+
+    #[test]
+    fn current_scope_assignments_exclude_outer_and_unassigned_metas() {
+        let mut metas = MetaState::new();
+        let outer = metas.fresh(Expr::type_());
+        metas.push_scope();
+        assert!(metas.assign(outer, Expr::prop()));
+        metas.push_scope();
+        let _unassigned = metas.fresh(Expr::type_());
+        assert_eq!(metas.current_scope_assignments(), Some(Vec::new()));
+        assert!(metas.commit());
+        assert_eq!(metas.current_scope_assignments(), Some(vec![outer]));
+        assert!(metas.commit());
+        assert_eq!(metas.current_scope_assignments(), None);
     }
 }

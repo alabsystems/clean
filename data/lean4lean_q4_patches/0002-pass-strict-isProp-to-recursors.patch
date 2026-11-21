@@ -1,0 +1,20 @@
+# Q4 corrected-reference repair.
+# Base: digama0/lean4lean bce3448115f7819fc12d647fadd3bb090666637e.
+# Reference: official Lean v4.34.0 293d5d0c0c3f3dded4688b3ccd6a33939ac5102b,
+# strict type_checker::is_prop and to_cnstr_when_structure (PR14807/PR14843).
+# Original control fa498cf880a5390e65c3990e8361829a5012de4fae133dbfcd6a81af26f74ca8
+# is parsed and rejected by that genuine local reference with typeExpected.
+
+diff --git a/Lean4Lean/TypeChecker.lean b/Lean4Lean/TypeChecker.lean
+index d2c0c6b85565efbc17a3e13e8084c41405867ae6..f833283ef2b222f7c8843b6e5864909c9344ce81 100644
+--- a/Lean4Lean/TypeChecker.lean
++++ b/Lean4Lean/TypeChecker.lean
+@@ -328,7 +328,7 @@ def reduceRecursor (e : Expr) : RecM (Option Expr) := do
+   if env.quotInit then
+     if let some r ← quotReduceRec e whnf then
+       return r
+-  if let some r ← inductiveReduceRec env e whnf inferType isDefEq then
++  if let some r ← inductiveReduceRec env e whnf inferType isProp isDefEq then
+     return r
+   return none
+ 

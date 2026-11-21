@@ -275,8 +275,8 @@ fn compile_cg(bytes: &[u8]) {
         .compile_object(&module, host_trust_cg_target().expect("host"), dir.path())
         .expect("actual CG object with normal refusal policy");
     let driver = format!("#define CLEAN_BRIDGE_CG\n{DRIVER}");
-    let sources =
-        link::materialize(dir.path(), &driver).expect("production runtime and shim inputs");
+    let sources = link::materialize(dir.path(), &driver, &checked)
+        .expect("production runtime and shim inputs");
     let binary = dir.path().join("program");
     let output = crate::native_c_toolchain::command("cc")
         .expect("host C compiler")

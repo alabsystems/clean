@@ -1,5 +1,14 @@
 // Copyright 2026 Andrew Yates | SPDX-License-Identifier: Apache-2.0
 //! Static raw-check completeness with exact proof/meaning pins; no full C7 or authority claim.
+//!
+//! The statement, meaning and native foundational-closure pins are compared in
+//! full; a mismatch fails and names the changed keys. Re-pin with the pinned
+//! Lean's environment and
+//! `CLEAN_REPIN_STATEMENT_PINS=1 scripts/heavy_gate.sh run 34 kcheck-static-complete-repin --
+//! "$(rustup run trust rustc --print sysroot)/bin/targo" --unverified test -p
+//! clean-olean --locked --test kcheck_static_complete`: the run rewrites each
+//! differing pin file and still fails, and the next run without the variable
+//! confirms it (`support/meaning_digest.rs`, "Re-pinning").
 #[path = "support/subject_export.rs"]
 mod subject_export;
 use clean_kernel::env::{Declaration, Environment};
@@ -193,7 +202,7 @@ fn actual_raw_static_check_and_init_id_have_exact_proofs_and_meanings() {
     }
     assert_eq!(
         statements.len(),
-        127,
+        129,
         "exact theorem denominator; review every added/private theorem"
     );
     eprintln!(
@@ -227,21 +236,64 @@ fn actual_raw_static_check_and_init_id_have_exact_proofs_and_meanings() {
             .expect("reviewed meaning pins are required"),
     )
     .expect("meaning JSON");
-    assert_eq!(
-        statements, expected,
-        "canonical full-package statement meaning closures"
-    );
-    assert_eq!(
-        meanings, expected_meanings,
-        "canonical full-package non-theorem meaning closures"
-    );
     let expected_closures: BTreeMap<String, BTreeSet<String>> = serde_json::from_str(
         &std::fs::read_to_string(package.join("native_foundational_closures.json"))
             .expect("reviewed exact native foundational closures"),
     )
     .expect("closure JSON");
-    assert_eq!(
-        closures, expected_closures,
-        "no unreviewed axiom-closure growth"
-    );
+    // Every map is compared before any failure is raised, so one re-pin run
+    // rewrites each differing file.
+    let failures: Vec<String> = [
+        meaning_digest::check_pins(
+            &statements,
+            &expected,
+            "theories/kcheck_static_complete/statement_pins.json",
+        )
+        .err(),
+        meaning_digest::check_pins(
+            &meanings,
+            &expected_meanings,
+            "theories/kcheck_static_complete/meaning_pins.json",
+        )
+        .err(),
+        closure_mismatch(
+            &closures,
+            &expected_closures,
+            "theories/kcheck_static_complete/native_foundational_closures.json",
+        ),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+/// The native foundational closures differ from the committed map: name every
+/// changed, unpinned and unmeasured theorem and where the measurement went.
+fn closure_mismatch(
+    measured: &BTreeMap<String, BTreeSet<String>>,
+    committed: &BTreeMap<String, BTreeSet<String>>,
+    pin_file: &str,
+) -> Option<String> {
+    if measured == committed {
+        return None;
+    }
+    let changed: Vec<&String> = measured
+        .iter()
+        .filter(|(name, closure)| committed.get(*name).is_some_and(|c| c != *closure))
+        .map(|(name, _)| name)
+        .collect();
+    let unpinned: Vec<&String> = measured
+        .keys()
+        .filter(|name| !committed.contains_key(*name))
+        .collect();
+    let unmeasured: Vec<&String> = committed
+        .keys()
+        .filter(|name| !measured.contains_key(*name))
+        .collect();
+    Some(format!(
+        "no unreviewed axiom-closure change: closure changed {changed:?}; measured with no pin \
+         {unpinned:?}; pinned and not measured {unmeasured:?}\n{}",
+        meaning_digest::record_measured(measured, pin_file)
+    ))
 }

@@ -240,6 +240,7 @@ impl Walker<'_> {
             SurfaceExpr::Ascription(span, inner, ty) => {
                 SurfaceExpr::Ascription(*span, self.boxed(inner)?, self.boxed(ty)?)
             }
+            SurfaceExpr::Borrowed(span, inner) => SurfaceExpr::Borrowed(*span, self.boxed(inner)?),
             SurfaceExpr::OutParam(span, inner) => SurfaceExpr::OutParam(*span, self.boxed(inner)?),
             SurfaceExpr::SemiOutParam(span, inner) => {
                 SurfaceExpr::SemiOutParam(*span, self.boxed(inner)?)

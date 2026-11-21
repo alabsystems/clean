@@ -115,9 +115,11 @@ pub(crate) fn evidence_contract_for(path: &str) -> Option<EvidenceContract> {
     let json = |schema_version| Some(EvidenceContract::JsonReport { schema_version });
     match path {
         "reports/kernel-soundness-launch-evidence.json" => {
-            json("clean-kernel-soundness-launch-evidence-v1")
+            json(KERNEL_SOUNDNESS_LAUNCH_EVIDENCE_SCHEMA_VERSION)
         }
-        "reports/deny-sorry-launch-evidence.json" => json("clean-deny-sorry-launch-evidence-v1"),
+        "reports/deny-sorry-launch-evidence.json" => {
+            json(DENY_SORRY_LAUNCH_EVIDENCE_SCHEMA_VERSION)
+        }
         "reports/axiom-audit-launch-evidence.json" => json("clean-axiom-audit-launch-evidence-v1"),
         "reports/tactic-parity-counts.json" => Some(TACTIC_PARITY_COUNTS_VACUOUS),
         "reports/strict-solver-fragment-dashboard.json" => {

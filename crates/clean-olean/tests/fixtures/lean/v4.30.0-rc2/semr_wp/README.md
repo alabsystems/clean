@@ -23,6 +23,15 @@ Boolean and text codecs import that common vocabulary without importing the WP
 calculus or a program model. `NativeContractSyntaxAudit` rejects any such
 transitive dependency. Native place/type/value extraction remains in
 `SemRScalarClaim`; program-bound claims import that owner explicitly.
+The same three pure files are the roots of the `nativeContractCodec` Lake
+package in this directory. `lake build` builds `NativeContractCodec`, and
+`lake test` checks their exact Init-only import chain with Lean's own header
+parser, including forbidden program imports and malformed-header controls.
+An immutable Clean Git revision and this package subdirectory can therefore
+be used as a normal Lake dependency without importing the program fixtures.
+The package owns no copy of the codec and leaves the fixture ORDER unchanged.
+Its toolchain and import-header contract are pinned to Lean 4.30.0-rc2; this
+does not change or qualify the separate Lean 4.8 canonical/bridge inputs.
 `originalContractHolds` derives name sorts from the original native binding
 inventory and retains both halves of `contractTypedEnv`; `d != 0` therefore
 uses the original unsigned parameter after its native type/range check.

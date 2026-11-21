@@ -9,8 +9,8 @@
 use crate::error::ElabError;
 use crate::structure_extend::flatten_parents;
 use clean_kernel::{
-    BinderInfo, Constructor, Declaration, Environment, Expr, InductiveDecl, InductiveType, Level,
-    Name, TypeChecker,
+    BinderInfo, Constructor, Declaration, Environment, Expr, ExprKind, InductiveDecl,
+    InductiveType, Level, Name, TypeChecker,
 };
 use std::collections::HashSet;
 
@@ -75,6 +75,86 @@ fn mk_projection_name(struct_name: &Name, field_name: &Name) -> Name {
         Some(component) => Name::append(struct_name, &component),
         None => Name::append(struct_name, &field_name.to_string()),
     }
+}
+
+/// Recognize the generated accessor from its registered field, lambda domain,
+/// and projection of the same receiver. Both elaboration and simp rely on it.
+pub(crate) fn direct_field_accessor<'a>(
+    env: &'a Environment,
+    owner: &Name,
+    index: u32,
+) -> Option<(&'a clean_kernel::env::ConstantInfo, u32, BinderInfo)> {
+    let field = env.get_structure_field_names(owner)?.get(index as usize)?;
+    let name = crate::namespace::append_names(owner, field);
+    let info = env.get_const(&name)?;
+    let param_count = env.get_inductive(owner)?.num_params;
+    let mut body = info.value.as_ref()?;
+    for _ in 0..param_count {
+        let ExprKind::Lam(_, _, rest) = body.strip_mdata().kind() else {
+            return None;
+        };
+        body = rest;
+    }
+    let ExprKind::Lam(binder, self_type, result) = body.strip_mdata().kind() else {
+        return None;
+    };
+    let ExprKind::Proj(proj_owner, field_index, target) = result.strip_mdata().kind() else {
+        return None;
+    };
+    if proj_owner != owner || *field_index != index || target.strip_mdata() != &Expr::bvar(0) {
+        return None;
+    }
+    let self_domain =
+        mk_struct_const_with_params(owner, &info.level_params, param_count as usize, 0);
+    if self_type.strip_mdata() != &self_domain {
+        return None;
+    }
+    Some((info, param_count, binder.info))
+}
+
+/// Identify a named, reducible field accessor at its declared universe arity.
+/// The registered body must project this exact field from its own receiver.
+pub(crate) fn named_field_accessor<'a>(
+    env: &Environment,
+    expr: &'a Expr,
+) -> Option<(&'a Name, u32, usize, BinderInfo)> {
+    let ExprKind::Const(name, levels) = expr.get_app_fn().kind() else {
+        return None;
+    };
+    let clean_kernel::name::NameInner::Str(owner, field) = name.inner() else {
+        return None;
+    };
+    let field = Name::anon().str(field.as_ref());
+    let fields = env.get_structure_field_names(owner)?;
+    let index = u32::try_from(fields.iter().position(|f| f == &field)?).ok()?;
+    let (accessor, params, binder) = direct_field_accessor(env, owner, index)?;
+    (accessor.name == *name && accessor.level_params.len() == levels.len() && accessor.is_reducible)
+        .then_some((owner, index, params as usize, binder))
+}
+
+/// Apply the registered accessor at this receiver's actual levels and parameters.
+pub(crate) fn field_accessor_application(
+    env: &Environment,
+    owner: &Name,
+    receiver_type: &Expr,
+    index: u32,
+    receiver: &Expr,
+) -> Option<Expr> {
+    let (accessor, param_count, _) = direct_field_accessor(env, owner, index)?;
+    let ExprKind::Const(head, levels) = receiver_type.get_app_fn().kind() else {
+        return None;
+    };
+    let params = receiver_type.get_app_args();
+    if head != owner
+        || accessor.level_params.len() != levels.len()
+        || params.len() != param_count as usize
+    {
+        return None;
+    }
+    Some(Expr::apps(
+        Expr::const_(accessor.name.clone(), levels.clone()),
+        params.into_iter().chain(std::iter::once(receiver)).cloned(),
+    ))
 }
 
 fn mk_struct_const_with_params(
@@ -207,7 +287,7 @@ fn expand_parent_fields(def: &StructDef, env: &Environment) -> Result<Vec<Struct
 
 fn field_sort_level_syntax(field_type: &Expr) -> Option<Level> {
     match field_type.kind() {
-        clean_kernel::ExprKind::Sort(level) => Some(Level::succ(level.clone())),
+        ExprKind::Sort(level) => Some(Level::succ(level.clone())),
         _ => None,
     }
 }

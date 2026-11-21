@@ -102,7 +102,7 @@ impl ElabCtx<'_> {
             }
         }
         self.collect_attributes(&name, &alias_attrs);
-        let mut modifiers = *modifiers;
+        let mut modifiers = modifiers.clone();
         modifiers.is_noncomputable |= self.env.is_noncomputable(&info.name);
         modifiers.is_unsafe |= self.env.is_unsafe(&info.name);
         if theorem {

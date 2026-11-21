@@ -555,6 +555,7 @@ mod tests {
     fn axiom_constant(name: &str) -> ParsedConstant {
         ParsedConstant {
             definition_safety: None,
+            mutual_declarations: None,
             quot_kind: None,
             name: name.to_string(),
             kind: ConstantKind::Axiom,
@@ -578,6 +579,7 @@ mod tests {
         }
         ParsedConstant {
             definition_safety: None,
+            mutual_declarations: None,
             quot_kind: None,
             name: name.to_string(),
             kind,

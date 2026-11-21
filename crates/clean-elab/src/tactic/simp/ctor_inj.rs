@@ -29,11 +29,15 @@
 //! direction is a `congrArg`/`congr` chain; simp's result is re-checked by the
 //! kernel at `close_goal`.
 
+use std::collections::HashSet;
+
+use clean_kernel::expr::UsedConstants;
 use clean_kernel::name::Name;
-use clean_kernel::{BinderInfo, Expr, ExprKind, Level};
+use clean_kernel::{BinderInfo, Declaration, Environment, Expr, ExprKind, FVarId, Level};
+use clean_parser::SurfaceName;
 
 use super::types::SimpResult;
-use crate::tactic::core::{Goal, ProofState};
+use crate::tactic::core::{Goal, LocalDecl, ProofState};
 
 fn c(name: &str, levels: Vec<Level>) -> Expr {
     Expr::const_(Name::from_string(name), levels)
@@ -59,6 +63,16 @@ struct Inj {
 /// `expr = (a₁ = b₁ ∧ … ∧ aₙ = bₙ)` when `expr` equates two applications of
 /// one constructor with fields, else `None`.
 pub(super) fn simp_ctor_inj(state: &ProofState, goal: &Goal, expr: &Expr) -> Option<SimpResult> {
+    let inj = constructor_injectivity(state, goal, expr)?;
+    let forward = forward_direction(state, goal, expr, &inj)?;
+    let proof = injectivity_equation(state, goal, expr, &inj, forward)?;
+    Some(SimpResult {
+        expr: inj.conj,
+        proof: Some(proof),
+    })
+}
+
+fn constructor_injectivity(state: &ProofState, goal: &Goal, expr: &Expr) -> Option<Inj> {
     let ExprKind::Const(head, _) = expr.get_app_fn().kind() else {
         return None;
     };
@@ -126,7 +140,7 @@ pub(super) fn simp_ctor_inj(state: &ProofState, goal: &Goal, expr: &Expr) -> Opt
         })
         .collect();
     let conj = conjunction(&eqs);
-    let inj = Inj {
+    Some(Inj {
         lhs: lhs.clone(),
         rhs: rhs.clone(),
         np,
@@ -134,18 +148,147 @@ pub(super) fn simp_ctor_inj(state: &ProofState, goal: &Goal, expr: &Expr) -> Opt
         result_ty: ty,
         eqs,
         conj,
-    };
-    let forward = forward_direction(state, goal, expr, &inj)?;
-    let backward = backward_direction(state, goal, &inj)?;
+    })
+}
+
+fn injectivity_equation(
+    state: &ProofState,
+    goal: &Goal,
+    expr: &Expr,
+    inj: &Inj,
+    forward: Expr,
+) -> Option<Expr> {
+    let backward = backward_direction(state, goal, inj)?;
     let iff = Expr::apps(
         c("Iff.intro", vec![]),
         [expr.clone(), inj.conj.clone(), forward, backward],
     );
-    let proof = Expr::apps(c("propext", vec![]), [expr.clone(), inj.conj.clone(), iff]);
-    Some(SimpResult {
-        expr: inj.conj,
-        proof: Some(proof),
-    })
+    Some(Expr::apps(
+        c("propext", vec![]),
+        [expr.clone(), inj.conj.clone(), iff],
+    ))
+}
+
+/// Generate the ordinary injectivity declarations for a constructor of a
+/// monomorphic, non-indexed inductive. Callers type-check both proofs before
+/// registering either name. The tactic covers additional shapes on demand.
+pub(crate) fn simple_constructor_injectivity(
+    env: &Environment,
+    name: &Name,
+) -> Option<[Declaration; 2]> {
+    let constructor = env.get_constructor(name)?;
+    let inductive = env.get_inductive(&constructor.inductive_name)?;
+    let ExprKind::Sort(level) = inductive.type_.kind() else {
+        return None;
+    };
+    if constructor.num_fields == 0
+        || constructor.num_params != 0
+        || !constructor.level_params.is_empty()
+        || inductive.num_indices != 0
+        || level == &Level::zero()
+    {
+        return None;
+    }
+    let inj_name = name.clone().str("inj");
+    let eq_name = name.clone().str("injEq");
+    if env.get_const(&inj_name).is_some() || env.get_const(&eq_name).is_some() {
+        return None;
+    }
+    let mut fields = Vec::with_capacity(constructor.num_fields as usize);
+    let mut telescope = &constructor.type_;
+    for _ in 0..constructor.num_fields {
+        let ExprKind::Pi(binder, domain, body) = telescope.kind() else {
+            return None;
+        };
+        if *binder != BinderInfo::Default.into()
+            || domain.has_loose_bvars()
+            || body.has_loose_bvars()
+        {
+            return None;
+        }
+        fields.push(domain.as_ref().clone());
+        telescope = body;
+    }
+    let context: Vec<_> = fields
+        .iter()
+        .chain(&fields)
+        .enumerate()
+        .map(|(index, ty)| LocalDecl {
+            binder_info: BinderInfo::Default.into(),
+            fvar: FVarId::new(index as u64),
+            name: SurfaceName::from_name(Name::anon().str(format!("a{index}"))),
+            ty: ty.clone(),
+            value: None,
+        })
+        .collect();
+    let application = |locals: &[LocalDecl]| {
+        Expr::apps(
+            Expr::const_(name.clone(), vec![]),
+            locals.iter().map(|local| Expr::fvar(local.fvar)),
+        )
+    };
+    let (left, right) = context.split_at(fields.len());
+    let equality = Expr::apps(
+        c("Eq", vec![level.clone()]),
+        [telescope.clone(), application(left), application(right)],
+    );
+    let state = ProofState::with_context(env.clone(), equality.clone(), context);
+    let goal = state.current_goal()?;
+    let inj = constructor_injectivity(&state, goal, &equality)?;
+    let proof = forward_direction(&state, goal, &equality, &inj)?;
+    let eq_proof = injectivity_equation(&state, goal, &equality, &inj, proof.clone())?;
+    let mut dependencies = HashSet::new();
+    for body in [&proof, &eq_proof] {
+        body.used_constants_dag(UsedConstants::WithProjectionStructures, &mut dependencies);
+    }
+    // A prelude module can declare an inductive before importing the proof
+    // combinators. Leave the generated names absent in that environment.
+    if dependencies
+        .iter()
+        .any(|name| env.get_const(name).is_none())
+    {
+        return None;
+    }
+    let inj_type = Expr::arrow(equality.clone(), inj.conj.clone());
+    let eq_type = Expr::apps(
+        c("Eq", vec![Level::succ(Level::zero())]),
+        [Expr::sort(Level::zero()), equality, inj.conj],
+    );
+    Some([
+        close_injectivity(
+            inj_name,
+            BinderInfo::Implicit,
+            &goal.local_ctx,
+            inj_type,
+            proof,
+        ),
+        close_injectivity(
+            eq_name,
+            BinderInfo::Default,
+            &goal.local_ctx,
+            eq_type,
+            eq_proof,
+        ),
+    ])
+}
+
+fn close_injectivity(
+    name: Name,
+    binder: BinderInfo,
+    context: &[LocalDecl],
+    mut type_: Expr,
+    mut value: Expr,
+) -> Declaration {
+    for local in context.iter().rev() {
+        type_ = Expr::pi(binder, local.ty.clone(), type_.abstract_fvar(local.fvar));
+        value = Expr::lam(binder, local.ty.clone(), value.abstract_fvar(local.fvar));
+    }
+    Declaration::Theorem {
+        name,
+        level_params: vec![],
+        type_,
+        value,
+    }
 }
 
 /// `side`, or its weak-head normal form at instance transparency, when that

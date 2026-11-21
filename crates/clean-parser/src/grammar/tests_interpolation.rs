@@ -128,13 +128,13 @@ fn test_parse_s_interpolation_hello_no_braces() {
     }
 }
 
-/// s!"literal \{braces\}" parses with escaped braces as literal text
+/// The opening brace is escaped and the closing brace is ordinary text.
 #[test]
 fn test_parse_s_interpolation_escaped_braces() {
     use crate::interpolation::InterpolationPart;
     use crate::lexer::InterpolatedStringKind;
 
-    let expr = Parser::parse_expr(r#"s!"literal \{braces\}""#).unwrap();
+    let expr = Parser::parse_expr(r#"s!"literal \{braces}""#).unwrap();
     match &expr {
         SurfaceExpr::InterpolatedStr { kind, parts, .. } => {
             assert_eq!(*kind, InterpolatedStringKind::String);

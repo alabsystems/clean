@@ -30,8 +30,23 @@
 //! ```
 
 pub mod codata_recognize;
+mod decision_layout;
+pub use decision_layout::decidable_projects_bool;
+#[cfg(test)]
+mod generic_cases_minor_tests;
 mod lower;
 pub(crate) mod mentions;
+mod mutual_rec;
+mod rec_commute;
+mod rec_ih;
+#[cfg(test)]
+mod rec_ih_tests;
+mod rec_select;
+#[cfg(test)]
+mod rec_select_tests;
+mod rec_wf;
+#[cfg(test)]
+mod rec_wf_tests;
 mod scoped_application_type;
 #[cfg(test)]
 mod scoped_application_type_tests;
@@ -45,12 +60,15 @@ mod uint_decision;
 use crate::implemented_by::CodeMeaning;
 use crate::lcnf::{Code, FunDecl, LetDecl, LetValue};
 use clean_kernel::{Environment, Expr, FVarId, Name};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+
+pub(crate) use rec_ih::syntactic_action;
 
 pub use lower::{
     constant_to_decl, constant_to_decl_in_runtime_closure, constant_to_decl_with_meaning,
     expr_to_code, is_erasable,
 };
+pub use mentions::code_called_constant_names;
 
 /// Counter for generating fresh FVarIds.
 #[derive(Debug, Default)]
@@ -86,6 +104,8 @@ pub struct LcnfContext<'a> {
     pub(crate) bvar_stack: Vec<FVarId>,
     /// Local types with enclosing de Bruijn variables resolved to stable ids.
     local_types: HashMap<FVarId, Expr>,
+    /// Local functions added via `add_fun` in this lowering context.
+    local_funs: HashSet<FVarId>,
     /// Accumulated local declarations in source order.
     pending: Vec<PendingLocal>,
     /// What the lowered code means: which body a reference to an
@@ -93,6 +113,22 @@ pub struct LcnfContext<'a> {
     pub(crate) meaning: CodeMeaning,
     /// Rules at this body's compilation point, before later source attributes.
     pub(crate) csimp_rules: Vec<clean_kernel::env::csimp::Rule>,
+    /// Induction-hypothesis placeholders of the recursors being lowered
+    /// (`rec_ih`): each stands for a call of its synthesized `go`.
+    ih_refs: HashMap<FVarId, rec_ih::IhRef>,
+    /// The IH applications already bound on the current path, scoped like
+    /// `pending` (`rec_ih::ih_value`).
+    ih_memo: HashMap<rec_ih::MemoKey, FVarId>,
+    /// `ih_memo`'s keys in insertion order, so a scope can drop its own.
+    ih_memo_log: Vec<rec_ih::MemoKey>,
+}
+
+/// The pending locals of an enclosing scope, set aside by
+/// [`LcnfContext::take_pending`] while a nested scope (a branch, a local
+/// function body) is lowered, with the point its IH memo must return to.
+struct PendingScope {
+    locals: Vec<PendingLocal>,
+    memo_mark: usize,
 }
 
 enum PendingLocal {
@@ -121,9 +157,13 @@ impl<'a> LcnfContext<'a> {
             fvar_gen: FVarIdGen::new(),
             bvar_stack: Vec::new(),
             local_types: HashMap::new(),
+            local_funs: HashSet::new(),
             pending: Vec::new(),
             meaning,
             csimp_rules: clean_kernel::env::csimp::rules_for(env, None),
+            ih_refs: HashMap::new(),
+            ih_memo: HashMap::new(),
+            ih_memo_log: Vec::new(),
         }
     }
 
@@ -159,7 +199,7 @@ impl<'a> LcnfContext<'a> {
         fvar
     }
 
-    fn resolve_local_type(&self, ty: &Expr) -> Expr {
+    pub(crate) fn resolve_local_type(&self, ty: &Expr) -> Expr {
         let locals: Vec<_> = self
             .bvar_stack
             .iter()
@@ -169,8 +209,17 @@ impl<'a> LcnfContext<'a> {
         ty.instantiate_rev(&locals)
     }
 
+    pub(crate) fn record_local_type(&mut self, fvar: FVarId, ty: &Expr) {
+        let local_ty = self.resolve_local_type(ty);
+        self.local_types.insert(fvar, local_ty);
+    }
+
     pub(crate) fn local_type(&self, fvar: FVarId) -> Option<&Expr> {
         self.local_types.get(&fvar)
+    }
+
+    pub(crate) fn is_local_fun(&self, fvar: FVarId) -> bool {
+        self.local_funs.contains(&fvar)
     }
 
     /// Pop a binder from the stack.
@@ -190,16 +239,23 @@ impl<'a> LcnfContext<'a> {
 
     /// Add a local function declaration.
     pub(crate) fn add_fun(&mut self, decl: FunDecl) {
+        self.local_funs.insert(decl.fvar_id);
         self.pending.push(PendingLocal::Fun(decl));
     }
 
-    fn take_pending(&mut self) -> Vec<PendingLocal> {
-        std::mem::take(&mut self.pending)
+    /// Open a nested scope: its lets are emitted inside it, and the IH
+    /// applications it binds are visible only inside it.
+    fn take_pending(&mut self) -> PendingScope {
+        PendingScope {
+            locals: std::mem::take(&mut self.pending),
+            memo_mark: self.ih_memo_log.len(),
+        }
     }
 
-    fn restore_pending(&mut self, pending: Vec<PendingLocal>) {
+    fn restore_pending(&mut self, outer: PendingScope) {
         debug_assert!(self.pending.is_empty());
-        self.pending = pending;
+        self.pending = outer.locals;
+        self.forget_ih_memo(outer.memo_mark);
     }
 
     /// Restore an outer pending scope after a *failed* lowering attempt,
@@ -210,14 +266,21 @@ impl<'a> LcnfContext<'a> {
     /// On an error path the partial locals belong to the branch that just
     /// failed to lower, so discarding them is the correct (and panic-free)
     /// cleanup: the lowering error still propagates to the caller.
-    fn abandon_pending(&mut self, outer: Vec<PendingLocal>) {
-        self.pending = outer;
+    fn abandon_pending(&mut self, outer: PendingScope) {
+        self.pending = outer.locals;
+        self.forget_ih_memo(outer.memo_mark);
+    }
+
+    fn forget_ih_memo(&mut self, mark: usize) {
+        for key in self.ih_memo_log.drain(mark..) {
+            self.ih_memo.remove(&key);
+        }
     }
 
     /// Take accumulated let-bindings.
     #[cfg(test)]
     pub(crate) fn take_lets(&mut self) -> Vec<LetDecl> {
-        self.take_pending()
+        std::mem::take(&mut self.pending)
             .into_iter()
             .filter_map(|local| match local {
                 PendingLocal::Let(decl) => Some(decl),
@@ -228,7 +291,7 @@ impl<'a> LcnfContext<'a> {
 
     /// Wrap a terminal with accumulated local declarations.
     pub(crate) fn wrap_lets(&mut self, terminal: Code) -> Code {
-        let pending = self.take_pending();
+        let pending = std::mem::take(&mut self.pending);
         pending
             .into_iter()
             .rev()

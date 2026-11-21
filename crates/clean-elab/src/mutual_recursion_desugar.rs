@@ -165,7 +165,11 @@ pub(crate) fn desugar_mutual_structural(decls: &[SurfaceDecl]) -> Option<Vec<Sur
             pack_arms,
         )),
     );
-    let pack_decl = make_def(&pack_name, Some(pack_ty), pack_val, &members[0].modifiers);
+    let mut pack_modifiers = members[0].modifiers.clone();
+    // This is a synthesized implementation, not another attachment of the
+    // first member's documentation. The real wrapper keeps its source doc.
+    pack_modifiers.documentation = None;
+    let pack_decl = make_def(&pack_name, Some(pack_ty), pack_val, &pack_modifiers);
 
     let mut out = Vec::with_capacity(n + 1);
     out.push(pack_decl);
@@ -281,7 +285,7 @@ fn extract_member(decl: &SurfaceDecl) -> Option<Member> {
         ind_name: ind_name.clone(),
         ret_ty: ret.as_ref().clone(),
         arms: arms.clone(),
-        modifiers: *modifiers,
+        modifiers: modifiers.clone(),
     })
 }
 
@@ -442,7 +446,7 @@ fn make_def(
         val: Box::new(val),
         attrs: Vec::new(),
         termination: Default::default(),
-        modifiers: *modifiers,
+        modifiers: modifiers.clone(),
         where_decls: Vec::new(),
     }
 }
@@ -494,6 +498,7 @@ fn mentions_member(e: &SurfaceExpr, names: &[&SurfaceName]) -> bool {
         SurfaceExpr::Paren(_, inner)
         | SurfaceExpr::Ascription(_, inner, _)
         | SurfaceExpr::Explicit(_, inner)
+        | SurfaceExpr::Borrowed(_, inner)
         | SurfaceExpr::OutParam(_, inner)
         | SurfaceExpr::SemiOutParam(_, inner) => mentions_member(inner, names),
         SurfaceExpr::Lambda(_, _, body)

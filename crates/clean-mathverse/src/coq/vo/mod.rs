@@ -22,15 +22,11 @@
 //! SerAPI corpus dumps. The Marshal layer is OCaml-version-independent;
 //! only the `Constr` tag layout needs revisiting for Rocq 9.x.
 
-pub mod constr;
-pub mod constr_decode;
-pub mod constr_sexp;
+pub use clean_olean::coq_vo::{
+    constr, constr_decode, constr_sexp, library, marshal_parser, vo_parser,
+};
 pub mod export;
-pub mod library;
-pub mod marshal_parser;
-pub(crate) mod marshal_reader;
 pub mod pipeline;
-pub mod vo_parser;
 
 #[cfg(test)]
 mod tests;

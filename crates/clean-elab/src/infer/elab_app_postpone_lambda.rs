@@ -19,10 +19,10 @@
 //! 1. the argument is an un-annotated `fun` (at least one binder without a
 //!    type) whose slot type still carries metavariables;
 //! 2. it was elaborated EAGERLY first, exactly as before, and that failed;
-//! 3. while it was being elaborated, field notation (`x.f` or `x.1`) met a
-//!    receiver whose type's head was an unassigned metavariable — Lean's
-//!    `tryPostponeIfMVar` condition, recorded by
-//!    [`ElabCtx::note_field_notation_receiver`] (`elab_proj.rs`).
+//! 3. either field notation needs an unknown receiver type or a relative
+//!    constructor pattern needs an unknown scrutinee type. The head must
+//!    still be an unassigned metavariable. A miss in a known type does not
+//!    trigger a retry.
 //!
 //! Then the whole application is re-elaborated with that argument deferred:
 //! a placeholder metavariable stands in its slot, the remaining arguments and
@@ -109,7 +109,17 @@ impl ElabCtx<'_> {
         let Ok(ty) = self.infer_type(receiver) else {
             return;
         };
-        let ty = self.whnf(&self.metas.instantiate(&ty));
+        self.note_unassigned_expected_type(&ty);
+    }
+
+    /// Both a projection receiver and a relative constructor are resolved
+    /// from the type of their subject. A later application argument can
+    /// determine that type after eager elaboration of the lambda has failed.
+    pub(in crate::infer) fn note_unassigned_expected_type(&mut self, ty: &Expr) {
+        if self.lambda_postpone.watch == 0 || self.lambda_postpone.stuck {
+            return;
+        }
+        let ty = self.whnf(&self.metas.instantiate(ty));
         let head_is_open_meta = matches!(ty.get_app_fn().kind(),
             ExprKind::FVar(id) if MetaState::from_fvar(*id)
                 .is_some_and(|m| self.metas.get_assignment(m).is_none()));

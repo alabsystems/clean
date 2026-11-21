@@ -25,6 +25,7 @@ fn mock_module_ap(constants: Vec<ParsedConstant>) -> ParsedModule {
 fn mock_constant_ap(name: &str, kind: ConstantKind, has_val: bool) -> ParsedConstant {
     ParsedConstant {
         definition_safety: None,
+        mutual_declarations: None,
         quot_kind: None,
         name: name.to_string(),
         kind,
@@ -53,6 +54,7 @@ fn constant_with_deps_ap(name: &str, kind: ConstantKind, dep_names: &[&str]) -> 
     }
     ParsedConstant {
         definition_safety: None,
+        mutual_declarations: None,
         quot_kind: None,
         name: name.to_string(),
         kind,
@@ -173,6 +175,7 @@ fn test_extract_deps_from_value_expr() {
     );
     let c = ParsedConstant {
         definition_safety: None,
+        mutual_declarations: None,
         quot_kind: None,
         name: "uses_choice".to_string(),
         kind: ConstantKind::Theorem,
@@ -196,6 +199,7 @@ fn test_extract_deps_deduplicates() {
     );
     let c = ParsedConstant {
         definition_safety: None,
+        mutual_declarations: None,
         quot_kind: None,
         name: "x".to_string(),
         kind: ConstantKind::Definition,
@@ -235,6 +239,7 @@ fn test_extract_deps_nested_lam_forall_let() {
     );
     let c = ParsedConstant {
         definition_safety: None,
+        mutual_declarations: None,
         quot_kind: None,
         name: "complex".to_string(),
         kind: ConstantKind::Definition,
@@ -259,6 +264,7 @@ fn test_extract_deps_mdata_proj_transparent() {
     let proj = ParsedExpr::Proj("Prod".to_string(), 0, Box::new(mdata));
     let c = ParsedConstant {
         definition_safety: None,
+        mutual_declarations: None,
         quot_kind: None,
         name: "x".to_string(),
         kind: ConstantKind::Definition,

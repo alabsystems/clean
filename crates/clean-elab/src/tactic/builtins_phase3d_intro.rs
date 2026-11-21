@@ -55,22 +55,16 @@ fn compound_cases() -> CompoundTacticEntry {
                 surface_expr_to_hyp_name(target).filter(|name| goal_has_hypothesis(ps, name))
             {
                 let carried = revert_case_dependents(ps, &hyp_name)?;
-                super::cases(ps, &hyp_name)?;
-                if !carried.is_empty() {
-                    return eval_induction_alts_generalizing(
-                        "cases", eval, ps, alts, &carried, &behind,
-                    );
-                }
-            } else {
-                // Lean elaborates a `cases`/`induction` target with NO
-                // expected type (`Lean/Elab/Tactic/Induction.lean`:895
-                // `elabTerm view.term none`). Leaving the enclosing TERM
-                // elaboration's expected type armed fixed the discriminant's
-                // own implicit arguments from the wrong type.
-                let scrutinee = eval.elaborate_no_expected(target)?;
-                super::proof_manipulation::cases_expr(ps, scrutinee)?;
+                let named =
+                    super::proof_manipulation::cases_with_alternatives(ps, &hyp_name, alts)?;
+                return eval_induction_alts_generalizing(
+                    "cases", eval, ps, alts, &carried, &behind, named,
+                );
             }
-            eval_induction_alts("cases", eval, ps, alts, &behind)
+            // Lean elaborates a cases scrutinee with no expected type.
+            let scrutinee = eval.elaborate_no_expected(target)?;
+            let named = super::proof_manipulation::cases_expr(ps, scrutinee, alts)?;
+            eval_induction_alts_generalizing("cases", eval, ps, alts, &[], &behind, named)
         }),
     }
 }
@@ -103,7 +97,7 @@ fn cases_with_equation(
     super::pattern::names::require_binding_name(eq_name, "cases")?;
     let scrutinee = eval.elaborate_no_expected(target)?;
     let var = super::target_equation::generalize_annotated_target(ps, scrutinee, "cases")?;
-    super::cases(ps, &var)?;
+    let named = super::proof_manipulation::cases_with_alternatives(ps, &var, alts)?;
     eval_induction_alts_generalizing(
         "cases",
         eval,
@@ -111,6 +105,7 @@ fn cases_with_equation(
         alts,
         std::slice::from_ref(eq_name),
         behind,
+        named,
     )
 }
 
@@ -290,8 +285,12 @@ fn compound_induction() -> CompoundTacticEntry {
             // target (G22): reverted into the goal in context order so the
             // recursor generalizes over them, and re-introduced per case
             // after induction (Lean's `generalizeVars`).
-            let reverted =
-                super::major_dependents::generalize_for_induction(ps, &hyp_name, generalizing)?;
+            let reverted = super::major_dependents::generalize_for_induction(
+                ps,
+                &hyp_name,
+                generalizing,
+                rec_override.as_ref(),
+            )?;
 
             // `with`-block alternative names, in source order. Only the custom
             // (non-recursor) eliminator path reads them: Clean's kernel `Pi`
@@ -302,11 +301,11 @@ fn compound_induction() -> CompoundTacticEntry {
             super::induction_using_alts(ps, &hyp_name, rec_override.as_ref(), &alt_names)?;
 
             // The generalized variables are re-introduced per branch (inside
-            // `eval_induction_alts`, after that branch's `next_fvar` reset) so
+            // `eval_induction_alts_generalizing`, after that branch's `next_fvar` reset) so
             // their fresh FVar IDs stay contiguous within the branch's proof
             // subtree — the invariant `close_fvars` relies on. See the re-intro
             // block in `eval_induction_alts`.
-            eval_induction_alts_generalizing("induction", eval, ps, alts, &reverted, &behind)
+            eval_induction_alts_generalizing("induction", eval, ps, alts, &reverted, &behind, false)
         }),
     }
 }
@@ -353,19 +352,8 @@ fn surface_expr_to_recursor_name(
 /// REQUIRES: Alternative names correspond to goal tags when the caller expects those goals to be consumed.
 /// ENSURES: On Ok, each matched goal is evaluated in a focused state with user names applied positionally.
 /// ENSURES: On Ok, every case goal was covered by an alternative and every named alternative covered a case.
-fn eval_induction_alts(
-    tactic_name: &str,
-    eval: &mut dyn TacticEval,
-    ps: &mut ProofState,
-    alts: &[SurfaceInductionAlt],
-    behind: &HashSet<MetaId>,
-) -> Result<(), TacticError> {
-    eval_induction_alts_generalizing(tactic_name, eval, ps, alts, &[], behind)
-}
-
-/// Like [`eval_induction_alts`], but re-introduces the `generalizing` variables
-/// (`reverted`, in revert order — outermost Pi last) at the start of each branch.
 ///
+/// Re-introduces the generalizing variables in each branch (outermost Pi last).
 /// The re-intro runs *after* the branch's `next_fvar` reset and *before* the
 /// alternative's tactics, so the re-introduced FVar IDs are contiguous within
 /// the branch's proof subtree — the ordering `close_fvars` requires to convert
@@ -381,6 +369,7 @@ fn eval_induction_alts_generalizing(
     alts: &[SurfaceInductionAlt],
     reverted: &[SurfaceName],
     behind: &HashSet<MetaId>,
+    fields_already_named: bool,
 ) -> Result<(), TacticError> {
     // The elimination replaced the main goal with its cases; they go to the
     // front, and the `behind` goals after them are not cases of it (Lean's
@@ -422,27 +411,8 @@ fn eval_induction_alts_generalizing(
         if let Some(alt) = matched_alt {
             // The eliminator records exact case fields followed by IH FVars.
             // Names and successor goal MetaIds cannot confer that ownership.
-            if !alt.args.is_empty() {
-                let auto_hyp_indices =
-                    super::builtins_compound::alternative_binder_indices(&goal, alt.explicit);
-                // Ordinary alternatives skip implicit fields; `@constructor`
-                // alternatives include them. Both reject surplus names.
-                if alt.args.len() > auto_hyp_indices.len() {
-                    return Err(TacticError::InvalidTarget {
-                        tactic: tactic_name.into(),
-                        detail: format!(
-                            "Alternative `{}` supplies {} names for {} case binders",
-                            alt.name,
-                            alt.args.len(),
-                            auto_hyp_indices.len()
-                        ),
-                    });
-                }
-                super::builtins_compound::rename_alternative_binders(
-                    &mut goal,
-                    &alt.args,
-                    alt.explicit,
-                );
+            if !fields_already_named {
+                super::builtins_compound::name_alternative_fields(tactic_name, &mut goal, alt)?;
             }
             // #3528: Reset next_fvar to this branch goal's binder base so
             // the branch's tactics allocate IDs that fit its binder depth.

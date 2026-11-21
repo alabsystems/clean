@@ -14,6 +14,7 @@ use super::{
     desugar_nat_numeral_add_pattern, desugar_nonzero_nat_lit, ensure_supported_literal_pattern,
     numeral_add_pattern_binder_name, NestedPatternFieldPlan, NestedPatternPlan,
 };
+use std::borrow::Cow;
 
 impl<'a> ElabCtx<'a> {
     fn inaccessible_expr_ctor_name(&self, expr: &SurfaceExpr) -> Option<SurfaceName> {
@@ -87,13 +88,13 @@ impl<'a> ElabCtx<'a> {
         Ok(pattern)
     }
 
-    fn resolve_nested_ctor_pattern(
+    fn resolve_nested_ctor_pattern<'p>(
         &self,
         context: &str,
         field_ty: &Expr,
         ctor_name: &SurfaceName,
-        sub_pats: &[SurfacePattern],
-    ) -> Result<(SurfaceName, Vec<Expr>, Vec<SurfacePattern>), ElabError> {
+        sub_pats: &'p [SurfacePattern],
+    ) -> Result<(SurfaceName, Vec<Expr>, Cow<'p, [SurfacePattern]>), ElabError> {
         let type_name = self.get_type_name(field_ty)?;
         let expected_inductive = type_name.name().clone();
         // Another module's private structure in a nested position (G21 B3).
@@ -161,6 +162,16 @@ impl<'a> ElabCtx<'a> {
     }
 
     fn bind_nested_pattern_plan_inner(
+        &mut self,
+        context: &str,
+        pat: &SurfacePattern,
+        field_expr: Expr,
+        field_ty: &Expr,
+    ) -> Result<NestedPatternPlan, ElabError> {
+        stack_safe(|| self.bind_nested_pattern_plan_step(context, pat, field_expr, field_ty))
+    }
+
+    fn bind_nested_pattern_plan_step(
         &mut self,
         context: &str,
         pat: &SurfacePattern,
@@ -467,6 +478,16 @@ impl<'a> ElabCtx<'a> {
     }
 
     fn apply_nested_pattern_plan_inner(
+        &mut self,
+        body: Expr,
+        plan: &NestedPatternPlan,
+        branch_ty: &Expr,
+        fallback_body: Option<&Expr>,
+    ) -> Result<Expr, ElabError> {
+        stack_safe(|| self.apply_nested_pattern_plan_step(body, plan, branch_ty, fallback_body))
+    }
+
+    fn apply_nested_pattern_plan_step(
         &mut self,
         mut body: Expr,
         plan: &NestedPatternPlan,
@@ -935,6 +956,13 @@ impl<'a> ElabCtx<'a> {
                 });
             };
             let motive = self.constant_over_telescope(expected_motive, branch_ty.clone());
+            let motive = Expr::mdata(
+                vec![(
+                    Name::from_string(NESTED_PATTERN_MOTIVE),
+                    clean_kernel::MDataValue::Bool(true),
+                )],
+                motive,
+            );
             cases_result = Expr::app(cases_result, motive);
         }
 

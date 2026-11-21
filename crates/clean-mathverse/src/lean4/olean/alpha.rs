@@ -1016,6 +1016,7 @@ mod tests {
     fn mock_constant(name: &str, kind: ConstantKind, has_val: bool) -> ParsedConstant {
         ParsedConstant {
             definition_safety: None,
+            mutual_declarations: None,
             quot_kind: None,
             name: name.to_string(),
             kind,
@@ -1746,6 +1747,7 @@ mod tests {
         );
         let constant = ParsedConstant {
             definition_safety: None,
+            mutual_declarations: None,
             quot_kind: None,
             name: "Nat.id".to_string(),
             kind: ConstantKind::Definition,
@@ -1788,6 +1790,7 @@ mod tests {
         let type_expr = ParsedExpr::Sort(ParsedLevel::Succ(Box::new(ParsedLevel::Zero)));
         let constant = ParsedConstant {
             definition_safety: None,
+            mutual_declarations: None,
             quot_kind: None,
             name: "MySort".to_string(),
             kind: ConstantKind::Definition,
@@ -1963,6 +1966,7 @@ mod tests {
     ) -> ParsedConstant {
         ParsedConstant {
             definition_safety: None,
+            mutual_declarations: None,
             quot_kind: None,
             name: name.to_string(),
             kind,
@@ -2582,6 +2586,7 @@ mod tests {
         );
         let c = ParsedConstant {
             definition_safety: None,
+            mutual_declarations: None,
             quot_kind: None,
             name: "bad_thm".to_string(),
             kind: ConstantKind::Theorem,
@@ -2604,6 +2609,7 @@ mod tests {
         let classical_expr = ParsedExpr::Const("Classical.choice".to_string(), vec![]);
         let c = ParsedConstant {
             definition_safety: None,
+            mutual_declarations: None,
             quot_kind: None,
             name: "classical_thm".to_string(),
             kind: ConstantKind::Theorem,
@@ -2625,6 +2631,7 @@ mod tests {
         let quot_expr = ParsedExpr::Const("Quot.lift".to_string(), vec![]);
         let c = ParsedConstant {
             definition_safety: None,
+            mutual_declarations: None,
             quot_kind: None,
             name: "quot_thm".to_string(),
             kind: ConstantKind::Theorem,
@@ -2655,6 +2662,7 @@ mod tests {
         );
         let c = ParsedConstant {
             definition_safety: None,
+            mutual_declarations: None,
             quot_kind: None,
             name: "nested".to_string(),
             kind: ConstantKind::Definition,
@@ -2779,6 +2787,7 @@ mod tests {
         let constants = vec![
             ParsedConstant {
                 definition_safety: None,
+                mutual_declarations: None,
                 quot_kind: None,
                 name: "bad".to_string(),
                 kind: ConstantKind::Theorem,
@@ -2831,6 +2840,7 @@ mod tests {
         }
         let constants = vec![ParsedConstant {
             definition_safety: None,
+            mutual_declarations: None,
             quot_kind: None,
             name: "deep_const".to_string(),
             kind: ConstantKind::Definition,

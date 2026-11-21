@@ -166,12 +166,14 @@ fn checked_graph_checks_real_unchecked_cache_hits_in_a_fresh_environment() {
     load_captured_graph(
         &mut authenticated,
         &[Name::from_string("Root")],
+        None,
         &paths,
         &cache,
         false,
         Some(&mut |_, _, _| Ok(())),
         Some(&mut |_, _, _| Ok(())),
         true,
+        None,
         None,
     )
     .unwrap();
@@ -191,6 +193,7 @@ fn checked_graph_checks_real_unchecked_cache_hits_in_a_fresh_environment() {
     let result = load_captured_graph(
         &mut fresh,
         &[Name::from_string("Root")],
+        None,
         &paths,
         &cache,
         false,
@@ -203,6 +206,7 @@ fn checked_graph_checks_real_unchecked_cache_hits_in_a_fresh_environment() {
             Ok(())
         }),
         true,
+        None,
         None,
     );
     assert!(

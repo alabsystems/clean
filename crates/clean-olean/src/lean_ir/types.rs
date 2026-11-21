@@ -4,7 +4,7 @@
 
 //! The data model of Lean 4's compiled IR (λRC), constructor for constructor.
 //!
-//! Every type here mirrors one in `Lean/Compiler/IR/Basic.lean` (v4.30.0-rc2)
+//! Every type here mirrors one in `Lean/Compiler/IR/Basic.lean`
 //! and keeps every field Lean keeps — borrow annotations, the `c`/`persistent`
 //! flags of `inc`/`dec`, `case`'s type id and scrutinee type, `reuse`'s header
 //! flag, the `Option Name` of a `struct` type, a `Nat` literal of any size.
@@ -360,6 +360,14 @@ pub(crate) enum Alt {
 pub(crate) struct DeclInfo {
     /// `sorryDep?`: the declaration this one depends on that uses `sorry`.
     pub(crate) sorry_dep: Option<Name>,
+    /// Persisted local index bounds in Lean 4.36.
+    pub(crate) index_bounds: Option<LocalIndexBounds>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct LocalIndexBounds {
+    pub(crate) max_jp: u64,
+    pub(crate) max_var: u64,
 }
 
 /// `Lean.ExternEntry` (`Lean/Compiler/ExternAttr.lean`).

@@ -7,6 +7,17 @@
 The source retains its original copyright/license and all declarations,
 imports, comments, proof terms and theorem statements.
 
+`trust_cg_sentinel_decide_68fca455.lean` separately preserves the complete
+production unit at TrustCG `68fca4550d244fd96a6f892fdab2e4667725748e`.
+SHA-256: `1d52fa63b5fc789e36d5eafb778b1baa31b2c301a1e61e0fd5217f6c9770f712`.
+The installed Trust 16387 package refused this unit at the explicit
+`@Nat.mul_le_mul` value in `div_lt_product`. The older fixture contains that
+expression but does not cover all later production declarations. Keep both
+fixtures: the current-source positive requires the final XOR/FNV theorem to
+survive strict parsing, and a malformed suffix must still be rejected through
+the served-notation fallback. This is a syntax regression, not proof replay or
+evidence that the installed compiler has adopted this parser.
+
 `trust_temporal_notation_add81bfd.lean` is the exact output of
 `trust-temporal-prelude::notation()` at Trust
 `add81bfd24b1c66a7e959aad280aa69cef5ed3bf`. The owner's implementation visits

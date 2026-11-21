@@ -19,7 +19,7 @@ use super::load_register::{
 };
 use super::module_cache_direct::read_optional;
 use super::path::{
-    legacy_module_name, module_name_from_path, module_visit_key, resolve_typed_module_path,
+    legacy_module_name, module_name_from_path, module_visit_key, resolve_typed_module_path_in_world,
 };
 use super::{
     estimate_module_graph_size, ExprInternCache, ImportError, LoadSummary, OleanImportPolicy,
@@ -36,8 +36,10 @@ mod deferred_recursors_tests;
 pub use cached::{
     load_module_with_deps_cached, load_module_with_deps_cached_guarded,
     load_module_with_deps_parallel, load_modules_with_deps_checked,
-    load_modules_with_deps_checked_with_limits, load_typed_module_with_deps_cached,
-    load_typed_module_with_deps_parallel, CapturedModuleBytes, ModuleCaptureLimits,
+    load_modules_with_deps_checked_with_limits, load_modules_with_term_providers,
+    load_modules_with_visible_term_syntax, load_modules_with_visible_term_syntax_after_bootstrap,
+    load_typed_module_with_deps_cached, load_typed_module_with_deps_parallel,
+    load_typed_modules_with_deps_checked_with_limits, CapturedModuleBytes, ModuleCaptureLimits,
 };
 
 #[cfg(test)]
@@ -878,6 +880,13 @@ fn load_artifact_parts(
         }
     }
     let completion = super::artifact_ledger::finish_artifact_load(env, &artifact)?;
+    super::artifact_ledger::observe_authoritative_axioms(
+        env,
+        module,
+        authoritative,
+        &record_roles.payload_names,
+        intern_cache,
+    );
     let authoritative = if base.is_module {
         private.map(|part| (part, 1 + usize::from(server.is_some())))
     } else {
@@ -943,7 +952,11 @@ fn load_typed_module_recursive(
     let result = (|| {
         // A load past its caller's deadline stops before each module.
         super::deadline::check()?;
-        let path = resolve_typed_module_path(module, search_paths)?;
+        let path = resolve_typed_module_path_in_world(
+            module,
+            search_paths,
+            crate::environment_world(env),
+        )?;
         let bytes = std::fs::read(&path)?;
         let label = module.to_string();
         // A module of a refused world is refused by name before its imports

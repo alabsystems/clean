@@ -451,7 +451,7 @@ impl ElabCtx<'_> {
                     universe_params: levels.to_vec(),
                     ty,
                     val: Some(aux_val),
-                    modifiers,
+                    modifiers: modifiers.clone(),
                 });
                 continue;
             }
@@ -467,7 +467,7 @@ impl ElabCtx<'_> {
                     universe_params: levels.to_vec(),
                     ty,
                     proof: aux_val,
-                    modifiers,
+                    modifiers: modifiers.clone(),
                 }
             } else {
                 ElabResult::Definition {
@@ -475,7 +475,7 @@ impl ElabCtx<'_> {
                     universe_params: levels.to_vec(),
                     ty,
                     val: aux_val,
-                    modifiers,
+                    modifiers: modifiers.clone(),
                 }
             });
         }

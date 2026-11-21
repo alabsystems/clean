@@ -20,6 +20,10 @@
     "EqHeaderContracts.erased_equality_bound"
   ],
   [
+    "KCheckEqHeaders.Slot.member_endpoints",
+    "EqHeaderContracts.member_endpoints"
+  ],
+  [
     "KCheckEqHeaders.Slot.entry_endpoints",
     "EqHeaderContracts.entry_endpoints"
   ],

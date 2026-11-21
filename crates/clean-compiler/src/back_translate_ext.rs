@@ -153,6 +153,9 @@ impl BackTranslator {
             IRLiteral::UInt64(v) => Expr::nat_lit(*v),
             IRLiteral::USize(v) => Expr::nat_lit(*v as u64),
             IRLiteral::NatBig(v) => Expr::nat_lit_u128(*v),
+            IRLiteral::NatLimbs(limbs) => Expr::from_kind(ExprKind::Lit(
+                clean_kernel::Literal::Nat(clean_kernel::BigNat::from_limbs(limbs.clone())),
+            )),
             IRLiteral::Float32(_) | IRLiteral::Float64(_) => {
                 self.stats.partial_reconstructions += 1;
                 Expr::const_str("_float_literal")

@@ -65,6 +65,30 @@ fn test_auto_bound_universe_autoimplicit_false_accepts_declared_names() {
 }
 
 #[test]
+fn section_variable_levels_are_rigid_and_end_with_their_scope() {
+    use crate::test_support::file_verdicts::{run_named_file_messages, verdict_of};
+
+    let results = run_named_file_messages(
+        "set_option autoImplicit false\n\
+        universe u\n\
+        section Scoped\n\
+        universe v\n\
+        variable {A : Type (max u v)}\n\
+        theorem selfEq (x : A) : x = x := rfl\n\
+        end Scoped\n\
+        variable {B : Type u}\n\
+        variable {Escaped : Type v}\n",
+        "ScopedLevels",
+    );
+    assert!(verdict_of(&results, "selfEq").is_ok());
+    let errors: Vec<_> = results
+        .iter()
+        .filter_map(|(_, row)| row.as_ref().err())
+        .collect();
+    assert_eq!(errors, ["unknown universe level `v`"]);
+}
+
+#[test]
 fn test_auto_bound_universe_strict_names_refuse_greek_and_long() {
     let results = run("set_option relaxedAutoImplicit false\n\
          def g3 {α : Type β} (a : α) : α := a\n\

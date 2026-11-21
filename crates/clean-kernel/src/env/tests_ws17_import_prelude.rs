@@ -1305,6 +1305,8 @@ fn test_ws_list_recursion_cluster_suppressed_in_import_mode() {
         // Dependent-init closure: seeds whose values/statements reference the
         // gated constants above.
         "List.reverse",
+        "List.flatten",
+        "List.flatMap",
         "List.append_nil",
         "List.length_nil",
         "List.length_cons",
@@ -1322,6 +1324,21 @@ fn test_ws_list_recursion_cluster_suppressed_in_import_mode() {
             import_env.get_const(&Name::from_string(c)).is_none(),
             "import lane must NOT pre-seed `{c}` — the direct-rec seed blocks \
              the genuine v4.30 brecOn definition at the value-defeq dedup"
+        );
+    }
+    for (constant, universe_count) in [("List.flatten", 1), ("List.flatMap", 2)] {
+        let name = Name::from_string(constant);
+        let declaration = default_env
+            .get_const(&name)
+            .expect("checked List definition");
+        assert_eq!(declaration.level_params.len(), universe_count, "{constant}");
+        assert!(declaration.value.is_some(), "{constant}");
+        assert!(
+            default_env
+                .axiom_deps(&name)
+                .expect("List axiom closure")
+                .is_empty(),
+            "{constant}"
         );
     }
     // The List substrate and the NON-divergent neighbours stay in both lanes:

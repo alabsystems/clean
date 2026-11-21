@@ -62,6 +62,9 @@ path = "src/bin/soundness_gate/main.rs"
 
 [dev-dependencies]
 clean-kernel = { workspace = true, features = ["math-overlays", "test-utils", "test-fixtures"] }
+# The one Rust source scanner; `src/test_support/source_scan.rs` re-exports it
+# instead of keeping a copy (design unit EV0).
+clean-evidence.workspace = true
 proptest.workspace = true
 serial_test.workspace = true
 syn = { workspace = true, features = ["full", "visit"] }

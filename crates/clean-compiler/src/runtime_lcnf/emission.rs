@@ -8,7 +8,7 @@
 use super::typing::Budget;
 use super::{RuntimeIrOutput, RuntimeIrStatus, RuntimeLimits, RuntimeLowerError, RuntimeRowOrigin};
 use crate::emit_trust_ir::{
-    emit_trust_ir_with_config, names::wire_name, RuntimeLowering, TrustIrConfig,
+    emit_trust_ir_with_runtime_imports, names::wire_name, RuntimeLowering, TrustIrConfig,
 };
 use crate::ir::{IRArg, IRBody, IRDecl, IRExpr, IRType, VarId};
 use clean_kernel::Name;
@@ -139,9 +139,10 @@ pub(super) fn emit(
         certify_translation: false,
         ..TrustIrConfig::default()
     };
-    let module =
-        emit_trust_ir_with_config(&owned_ir, &config).map_err(|e| Error::Backend(e.to_string()))?;
-    let runtime_imports = postflight(&module, &owned_ir, mode)?;
+    let (emitted, requested) = emit_trust_ir_with_runtime_imports(&owned_ir, &config, &[])
+        .map_err(|e| Error::Backend(e.to_string()))?;
+    let module = emitted.module;
+    let runtime_imports = postflight(&module, &owned_ir, mode, &requested)?;
     Ok(RuntimeEmission {
         mode,
         before_rc,
@@ -158,23 +159,50 @@ fn postflight(
     module: &trust_ir::Module,
     owned_ir: &[IRDecl],
     mode: RuntimeLowering,
+    requested: &[crate::emit_trust_ir_runtime::RuntimeImport],
 ) -> Result<Vec<RuntimeImport>, Error> {
     // Reconstruct the existing ABI declaration roster, not a string-prefix
     // allowlist. Any dropped-callee fallback, primitive removal/wrapper or
     // symbol collision changes this exact population and is refused.
     let mut abi_builder = trust_ir_build::ModuleBuilder::new("runtime_abi_observation");
     if mode == RuntimeLowering::ExternCalls {
-        crate::emit_trust_ir_runtime::RuntimeAbi::declare(&mut abi_builder);
+        crate::emit_trust_ir_runtime::RuntimeAbi::declare_arc(&mut abi_builder);
+    } else if !requested.is_empty() {
+        return Err(Error::Unsupported(
+            "dialect emission requested runtime imports",
+        ));
     }
+    let first_user = abi_builder
+        .peek_next_func_id()
+        .map_err(|e| Error::Backend(e.to_string()))?
+        .index() as usize;
+    // Reconstruct every expected slot from the original source declarations
+    // and the ordered roles actually requested by this invocation. No names or
+    // signatures from the module under inspection construct this population.
+    let code_pointer = abi_builder.add_func_type(vec![], vec![]);
+    for decl in owned_ir {
+        let ty = abi_builder.add_func_type(
+            vec![trust_ir::Ty::Ptr; decl.params.len()],
+            vec![trust_ir::Ty::Ptr],
+        );
+        abi_builder.declare_function(wire_name(&decl.name), ty);
+    }
+    for role in requested {
+        role.declare(&mut abi_builder, code_pointer);
+    }
+    let users = first_user..first_user + owned_ir.len();
     let abi = abi_builder.build().map_err(|fault| {
         Error::Backend(format!("the runtime ABI roster did not build: {fault}"))
     })?;
-    if module.functions.len() != abi.functions.len() + owned_ir.len() {
+    if module.functions.len() != abi.functions.len() {
         return Err(Error::Unsupported("emitter changed declaration population"));
     }
     let mut runtime_imports = Vec::new();
     let mut labels = BTreeSet::new();
     for (index, expected) in abi.functions.iter().enumerate() {
+        if users.contains(&index) {
+            continue;
+        }
         let actual = &module.functions[index];
         if actual.name != expected.name
             || actual.id != expected.id
@@ -203,7 +231,7 @@ fn postflight(
         });
     }
     for (index, decl) in owned_ir.iter().enumerate() {
-        let actual = &module.functions[abi.functions.len() + index];
+        let actual = &module.functions[first_user + index];
         let label = wire_name(&decl.name);
         let expected_ty = trust_ir::ty::FuncTy {
             params: vec![trust_ir::ty::Ty::Ptr; decl.params.len()],
@@ -214,7 +242,7 @@ fn postflight(
         if actual.name != label
             || actual.blocks.is_empty()
             || !labels.insert(label)
-            || actual.id.0 as usize != abi.functions.len() + index
+            || actual.id.0 as usize != first_user + index
             || actual.calling_conv != trust_ir::CallingConv::C
             || actual.linkage != trust_ir::Linkage::External
             || module.func_type(actual.ty) != Some(&expected_ty)

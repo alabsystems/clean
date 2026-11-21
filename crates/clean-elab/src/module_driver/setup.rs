@@ -10,7 +10,8 @@ use crate::notation_imports::{seed_from_imports, HarvestStats};
 use crate::FileContext;
 use clean_kernel::Environment;
 use clean_parser::{ParseError, ParseReport, SurfaceDecl};
-use std::path::Path;
+use std::borrow::Cow;
+use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard, OnceLock, PoisonError};
 
 /// Elaborate a leading `prelude` before resolving source imports.
@@ -54,6 +55,23 @@ pub enum PreludeFlavor {
     /// The same prelude with no `List` monad instances and the strict monad
     /// gate on (`--prelude lean4-core`).
     Lean4Core,
+    /// Genuine pinned Lean `Init` loaded from verified `.olean` artifacts over
+    /// [`Environment::for_lean_replay`], shared by `clean check --lean-world
+    /// v4.30.0-rc2` and Trust's island constructor (Ph3 I.2 / Clean F5).
+    PinnedInit,
+    /// [`Self::PinnedInit`] armed with the island prelude registration fence
+    /// ([`crate::source_prelude::mark_island_prelude`]), refusing axioms,
+    /// body-less opaques, `unsafe`/`partial` items, trust markers, and
+    /// non-foundational value-less constants across single-file and
+    /// [`super::source_graph::CapturedSourceGraph`] elaboration (Ph3 I.2 / Clean F5).
+    IslandPinnedInit,
+}
+
+impl PreludeFlavor {
+    #[must_use]
+    pub(crate) const fn is_pinned_init(self) -> bool {
+        matches!(self, Self::PinnedInit | Self::IslandPinnedInit)
+    }
 }
 
 /// Where a module's imports are expected to come from.
@@ -77,9 +95,24 @@ pub struct EnvironmentSetup {
     pub imports: ImportArtifacts,
 }
 
+impl EnvironmentSetup {
+    /// Shared pinned-`Init` setup (Ph3 I.2 / Clean F5).
+    pub const PINNED_INIT: Self = Self {
+        prelude: PreludeFlavor::PinnedInit,
+        imports: ImportArtifacts::PreferOlean,
+    };
+
+    /// Shared pinned-`Init` setup armed with the island registration fence
+    /// (Ph3 I.2 / Clean F5).
+    pub const ISLAND_PINNED_INIT: Self = Self {
+        prelude: PreludeFlavor::IslandPinnedInit,
+        imports: ImportArtifacts::PreferOlean,
+    };
+}
+
 /// A failure standing up the environment, before any declaration of the module
 /// is looked at. The messages are the ones `clean check` has always printed.
-#[derive(Debug, thiserror::Error)]
+#[derive(Clone, Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum ModuleSetupError {
     /// A selected world must stand up its own genuine Init, never the
@@ -133,6 +166,15 @@ pub enum ModuleSetupError {
 /// genuine `Init` `.olean`s supply those names. IO signatures are an explicit
 /// optional stub fragment, requested by source terms or execution backends.
 pub fn module_environment(setup: EnvironmentSetup) -> Result<Environment, ModuleSetupError> {
+    if setup.prelude.is_pinned_init() {
+        let decision = clean_olean::source_world_for_snapshot().map_err(|reason| {
+            ModuleSetupError::LeanWorld {
+                world: clean_kernel::lean_world::LeanWorld::ORACLE,
+                reason: reason.to_string(),
+            }
+        })?;
+        return module_environment_in_world(setup, &decision);
+    }
     let prefer_olean = setup.imports == ImportArtifacts::PreferOlean;
     let mut env = if prefer_olean {
         Environment::try_with_prelude_for_import()
@@ -148,6 +190,7 @@ pub fn module_environment(setup: EnvironmentSetup) -> Result<Environment, Module
             }
         }
         PreludeFlavor::Lean4Core => env.set_lean4_core_strict_monads(true),
+        PreludeFlavor::PinnedInit | PreludeFlavor::IslandPinnedInit => {}
     }
     if !prefer_olean {
         env.init_ulift()
@@ -178,8 +221,15 @@ pub fn module_environment_with_import_base_in_world(
     setup: EnvironmentSetup,
     decision: &clean_olean::SourceWorldDecision,
 ) -> Result<(Environment, Environment), ModuleSetupError> {
-    use clean_kernel::lean_world::LeanWorld;
-    if !matches!(decision.world(), LeanWorld::Lean435 | LeanWorld::Lean436Rc2) {
+    module_environment_with_import_base_in_paths(setup, decision, None)
+}
+
+fn module_environment_with_import_base_in_paths(
+    setup: EnvironmentSetup,
+    decision: &clean_olean::SourceWorldDecision,
+    paths: Option<&[PathBuf]>,
+) -> Result<(Environment, Environment), ModuleSetupError> {
+    if !setup.prelude.is_pinned_init() && !decision.world().requires_genuine_init() {
         let mut env = module_environment(setup)?;
         if let Some(world) = decision.declared_world() {
             clean_olean::declare_environment_world(&mut env, world).map_err(|error| {
@@ -195,24 +245,33 @@ pub fn module_environment_with_import_base_in_world(
         world: decision.world(),
         reason,
     };
+    let env = genuine_replay_environment(setup, decision)?;
+    let paths = selected_import_paths(decision, paths).map_err(|error| fail(error.to_string()))?;
+    with_import_base(env, |env| {
+        clean_olean::load_module_with_deps(env, "Init", &paths)
+            .map(|_| ())
+            .map_err(|error| fail(error.to_string()))
+    })
+}
+
+pub(super) fn genuine_replay_environment(
+    setup: EnvironmentSetup,
+    decision: &clean_olean::SourceWorldDecision,
+) -> Result<Environment, ModuleSetupError> {
+    let fail = |reason| ModuleSetupError::LeanWorld {
+        world: decision.world(),
+        reason,
+    };
     let mut env = Environment::for_lean_replay();
     clean_olean::declare_environment_world(&mut env, decision.world().tag())
         .map_err(|error| fail(error.to_string()))?;
     if setup.prelude == PreludeFlavor::Lean4Core {
         env.set_lean4_core_strict_monads(true);
     }
-    let imports = decision
-        .imports()
-        .map_err(|refusal| fail(refusal.to_string()))?;
-    with_import_base(env, |env| {
-        clean_olean::load_module_with_deps(
-            env,
-            "Init",
-            &clean_olean::search_paths_in_world(imports),
-        )
-        .map(|_| ())
-        .map_err(|error| fail(error.to_string()))
-    })
+    if setup.prelude == PreludeFlavor::IslandPinnedInit {
+        crate::source_prelude::mark_island_prelude(&mut env);
+    }
+    Ok(env)
 }
 
 /// Select a genuinely empty starting environment for an explicit prelude header.
@@ -221,14 +280,58 @@ pub fn module_environment_for_header_in_world(
     decision: &clean_olean::SourceWorldDecision,
     header: &clean_parser::FileHeader,
 ) -> Result<(Environment, clean_olean::ImportedConeGate), ModuleSetupError> {
+    module_environment_for_header_in_paths(setup, decision, header, None)
+}
+
+/// Build the module environment and file context using exactly `paths` for
+/// implicit Init, foundation replay and explicit imports. Explicit imports
+/// require their compiled artifacts.
+///
+/// # Errors
+/// The selected world's prelude or foundation artifacts could not be loaded
+/// or validated.
+pub fn module_environment_and_context_with_import_paths(
+    setup: EnvironmentSetup,
+    decision: &clean_olean::SourceWorldDecision,
+    header: &clean_parser::FileHeader,
+    paths: Vec<PathBuf>,
+) -> Result<(Environment, FileContext), ModuleSetupError> {
+    let (env, _) = module_environment_for_header_in_paths(setup, decision, header, Some(&paths))?;
+    let mut context = FileContext::new();
+    context.set_artifact_source_world(decision, paths);
+    Ok((env, context))
+}
+
+fn module_environment_for_header_in_paths(
+    setup: EnvironmentSetup,
+    decision: &clean_olean::SourceWorldDecision,
+    header: &clean_parser::FileHeader,
+    paths: Option<&[PathBuf]>,
+) -> Result<(Environment, clean_olean::ImportedConeGate), ModuleSetupError> {
     if !header.is_prelude {
-        let (env, base) = module_environment_with_import_base_in_world(setup, decision)?;
-        return Ok((env, clean_olean::ImportedConeGate::new(&base)));
+        let (env, base) = module_environment_with_import_base_in_paths(setup, decision, paths)?;
+        let gate = if setup.prelude.is_pinned_init() {
+            foundation_import_base_in_paths(decision, paths)?
+        } else {
+            clean_olean::ImportedConeGate::new(&base)
+        };
+        return Ok((env, gate));
+    }
+    if setup.prelude.is_pinned_init() {
+        selected_import_paths(decision, paths).map_err(|reason| ModuleSetupError::LeanWorld {
+            world: decision.world(),
+            reason: reason.to_string(),
+        })?;
     }
     // `new()` seeds trust-marker declarations; a prelude header permits none.
     let mut env = Environment::default();
     env.ensure_native_reducers();
-    if let Some(world) = decision.declared_world() {
+    let declared = if setup.prelude.is_pinned_init() {
+        Some(decision.world().tag())
+    } else {
+        decision.declared_world()
+    };
+    if let Some(world) = declared {
         clean_olean::declare_environment_world(&mut env, world).map_err(|error| {
             ModuleSetupError::LeanWorld {
                 world: decision.world(),
@@ -239,11 +342,14 @@ pub fn module_environment_for_header_in_world(
     if setup.prelude == PreludeFlavor::Lean4Core {
         env.set_lean4_core_strict_monads(true);
     }
+    if setup.prelude == PreludeFlavor::IslandPinnedInit {
+        crate::source_prelude::mark_island_prelude(&mut env);
+    }
     crate::source_prelude::mark_bare_module(&mut env);
     let import_base = if header.imports.is_empty() {
         clean_olean::ImportedConeGate::new(&Environment::default())
     } else {
-        foundation_import_base(decision)?
+        foundation_import_base_in_paths(decision, paths)?
     };
     Ok((env, import_base))
 }
@@ -258,6 +364,13 @@ pub fn module_environment_for_header_in_world(
 pub fn foundation_import_base(
     decision: &clean_olean::SourceWorldDecision,
 ) -> Result<clean_olean::ImportedConeGate, ModuleSetupError> {
+    foundation_import_base_in_paths(decision, None)
+}
+
+fn foundation_import_base_in_paths(
+    decision: &clean_olean::SourceWorldDecision,
+    paths: Option<&[PathBuf]>,
+) -> Result<clean_olean::ImportedConeGate, ModuleSetupError> {
     use clean_kernel::Name;
     use std::collections::BTreeSet;
 
@@ -267,15 +380,9 @@ pub fn foundation_import_base(
         clean_olean::declare_environment_world(&mut imported, world)
             .map_err(|error| fail(error.to_string()))?;
     }
-    let imports = decision
-        .imports()
-        .map_err(|refusal| fail(refusal.to_string()))?;
-    clean_olean::load_module_with_deps(
-        &mut imported,
-        "Init.Core",
-        &clean_olean::search_paths_in_world(imports),
-    )
-    .map_err(|error| fail(error.to_string()))?;
+    let paths = selected_import_paths(decision, paths).map_err(|error| fail(error.to_string()))?;
+    clean_olean::load_module_with_deps(&mut imported, "Init.Core", &paths)
+        .map_err(|error| fail(error.to_string()))?;
     let targets: BTreeSet<Name> = [
         "propext",
         "Classical.choice",
@@ -292,6 +399,17 @@ pub fn foundation_import_base(
     // regenerates inductive families and refuses any incomplete replay. Never
     // trust the imported Init snapshot or a foundational name on its own.
     clean_olean::ImportedConeGate::from_reference_cone(&imported, &targets).map_err(fail)
+}
+
+fn selected_import_paths<'decision, 'paths>(
+    decision: &'decision clean_olean::SourceWorldDecision,
+    paths: Option<&'paths [PathBuf]>,
+) -> Result<Cow<'paths, [PathBuf]>, &'decision clean_olean::ImportWorldRefusal> {
+    let imports = decision.imports()?;
+    Ok(match paths {
+        Some(paths) => Cow::Borrowed(paths),
+        None => Cow::Owned(clean_olean::search_paths_in_world(imports)),
+    })
 }
 
 fn with_import_base(

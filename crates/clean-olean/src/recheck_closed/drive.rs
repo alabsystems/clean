@@ -29,6 +29,13 @@ use super::{
 /// these three admissions, so the two cannot differ in what reaches the
 /// kernel.
 pub(super) trait ReplayTarget {
+    /// Source elaboration can store a native reduction table beside an
+    /// ordinary eliminator definition. Only the source comparison requests
+    /// both checks of this representation.
+    fn check_source_eliminator_definitions(&self) -> bool {
+        false
+    }
+
     /// The environment admissions so far have built.
     fn env(&self) -> &Environment;
     /// Admit an ordinary declaration (`add_decl`).

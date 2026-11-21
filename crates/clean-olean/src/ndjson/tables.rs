@@ -37,9 +37,10 @@
 mod expr;
 
 use expr::unknown;
+use std::cell::RefCell;
 use std::sync::Arc;
 
-use clean_kernel::expr::{BinderInfo, Expr, ExprKind};
+use clean_kernel::expr::{BinderInfo, Expr, ExprFolderOpt, ExprKind, LevelVec};
 use clean_kernel::level::Level;
 use clean_kernel::name::Name;
 use hashbrown::{HashMap, HashSet};
@@ -88,8 +89,8 @@ fn addr(e: &Arc<Expr>) -> usize {
 /// How a `max`/`imax` level record is built.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum LevelBuild {
-    /// Through the kernel's simplifying constructors, with every rewrite
-    /// Lean could tell marked (`levels.rs`, R125): the front door.
+    /// Audit the kernel's simplifying constructors (R125). Keep a written,
+    /// imax-free level when the audit finds the same normal form.
     Constructors,
     /// Node for node, as the record states it and as the `.olean` loader
     /// builds a stored level since R150 (`import/convert_expr.rs`,
@@ -108,6 +109,9 @@ pub(crate) struct Tables {
     /// Each stored name's name as written, for every name bound.
     written_names: HashMap<Name, Name>,
     levels: HashMap<u64, Level>,
+    /// Simplified levels used by the R125 audit when the terms kept the
+    /// written shape. Keep that audit and its work accounting unchanged.
+    simplified_levels: HashMap<Level, Level>,
     /// Each level's tree size (an upper bound, saturating).
     level_sizes: HashMap<u64, u64>,
     /// Each level's `imax` nodes as written, every shared subterm unfolded
@@ -117,7 +121,7 @@ pub(crate) struct Tables {
     level_work: u64,
     /// Each level as written, as the decline rules read it.
     written_levels: HashMap<u64, Written>,
-    /// The levels whose record the kernel's level constructors rewrote
+    /// The levels whose record the kernel's level constructors would rewrite
     /// (`max u u` built as `u`), or that are built on one.
     rewritten_levels: HashSet<u64>,
     /// The level records Lean could tell from the built level.
@@ -125,6 +129,9 @@ pub(crate) struct Tables {
     /// Each level that is, or is built on, one of those: which.
     problem_levels: HashMap<u64, u64>,
     exprs: HashMap<u64, Arc<Expr>>,
+    /// Simplified expressions shared across inductive records. Their original
+    /// nodes remain owned by `exprs` for the table's lifetime.
+    simplified_exprs: RefCell<HashMap<usize, Option<Arc<Expr>>>>,
     /// The expressions that mention a rewritten level.
     rewritten_exprs: HashSet<u64>,
     /// The expressions that mention a level of `problem_levels`: which.
@@ -151,6 +158,7 @@ impl Tables {
             names,
             written_names,
             levels,
+            simplified_levels: HashMap::new(),
             level_sizes,
             level_imaxes,
             level_work: 0,
@@ -159,6 +167,7 @@ impl Tables {
             level_problems: HashMap::new(),
             problem_levels: HashMap::new(),
             exprs: HashMap::new(),
+            simplified_exprs: RefCell::new(HashMap::new()),
             rewritten_exprs: HashSet::new(),
             problem_exprs: HashMap::new(),
             interned: HashMap::new(),
@@ -231,11 +240,31 @@ impl Tables {
             .ok_or(NdjsonError::UnboundLevel { line, index })
     }
 
+    fn simplified_level(&self, line: u64, index: u64) -> Result<Level, NdjsonError> {
+        let level = self.level(line, index)?;
+        Ok(self.simplified_levels.get(&level).cloned().unwrap_or(level))
+    }
+
     pub(crate) fn expr(&self, line: u64, index: u64) -> Result<Arc<Expr>, NdjsonError> {
         self.exprs
             .get(&index)
             .cloned()
             .ok_or(NdjsonError::UnboundExpr { line, index })
+    }
+
+    /// R125 checks an inductive block with the reader's simplified levels
+    /// and separately records that such a block cannot be accepted.
+    pub(crate) fn inductive_expr(&self, line: u64, index: u64) -> Result<Expr, NdjsonError> {
+        let expr = self.expr(line, index)?;
+        if self.simplified_levels.is_empty() || !self.mentions_rewritten_level(index) {
+            return Ok((*expr).clone());
+        }
+        let mut memo = self.simplified_exprs.borrow_mut();
+        let mut folder = InductiveLevels {
+            levels: &self.simplified_levels,
+            memo: &mut memo,
+        };
+        Ok((*folder.fold_expr_arc_opt(&expr).unwrap_or(expr)).clone())
     }
 
     pub(crate) fn names_of(&self, line: u64, indices: &[u64]) -> Result<Vec<Name>, NdjsonError> {
@@ -300,17 +329,11 @@ impl Tables {
 
     /// A level record (`{"il": i, "succ"|"max"|"imax"|"param": ...}`).
     ///
-    /// Built with the kernel's level constructors, exactly as the `.olean`
-    /// loader builds them (`import::convert_expr::convert_level`), so a
-    /// declaration reads the same through either front door: the content
-    /// digests native-fold authority keys `Nat.add`'s reductions on
-    /// (`env/native_fold_canon.tsv`) are taken over `.olean`-loaded terms.
-    /// A rewrite Lean could tell from the level as written is recorded as a
-    /// [`LevelProblem`], and every rewritten level is recorded, so a
-    /// declaration over the one and an inductive block over the other keep the
-    /// export from being accepted ([`super::levels`]). The tree's size and its
-    /// composite `max` arguments are bounded before anything is built, and
-    /// decline.
+    /// Keep the written shape of an imax-free level when the simplifying
+    /// constructors leave its Lean normal form intact. The `.olean` loader
+    /// preserves that shape, which the native-fold closure digests read.
+    /// Record the same [`LevelProblem`], inductive-block rewrites and bounds
+    /// from the simplified levels ([`super::levels`]).
     pub(crate) fn bind_level(
         &mut self,
         line: u64,
@@ -324,7 +347,7 @@ impl Tables {
                 let size = self.level_size(line, child)?.saturating_add(1);
                 self.check_level_size(line, size)?;
                 (
-                    Level::succ(self.level(line, child)?),
+                    Level::succ(self.simplified_level(line, child)?),
                     size,
                     self.level_imax_count(line, child)?,
                     self.written_level(line, child)?.succ(),
@@ -375,8 +398,8 @@ impl Tables {
                     .saturating_add(self.level_size(line, rhs_index)?)
                     .saturating_add(1);
                 self.check_level_size(line, size)?;
-                let lhs = self.level(line, lhs_index)?;
-                let rhs = self.level(line, rhs_index)?;
+                let lhs = self.simplified_level(line, lhs_index)?;
+                let rhs = self.simplified_level(line, rhs_index)?;
                 let args = composite_args(&lhs).saturating_add(composite_args(&rhs));
                 if args > MAX_LEVEL_COMPOSITE_ARGS {
                     return Err(NdjsonError::LevelArgsBudget {
@@ -468,6 +491,29 @@ impl Tables {
         {
             self.problem_levels.insert(index, source);
         }
+        let written_level = if self.level_build == LevelBuild::Constructors
+            && rewritten
+            && imaxes == 0
+            && !self.problem_levels.contains_key(&index)
+        {
+            match children.as_slice() {
+                [child] => Some(Level::succ(self.level(line, *child)?)),
+                [lhs, rhs] => Some(Level::Max(
+                    self.level(line, *lhs)?.into(),
+                    self.level(line, *rhs)?.into(),
+                )),
+                _ => None,
+            }
+        } else {
+            None
+        };
+        let level = match written_level {
+            Some(written) => {
+                self.simplified_levels.insert(written.clone(), level);
+                written
+            }
+            None => level,
+        };
         self.levels.insert(index, level);
         self.level_sizes.insert(index, size);
         self.level_imaxes.insert(index, imaxes);
@@ -487,5 +533,133 @@ impl Tables {
             });
         }
         Ok(())
+    }
+}
+
+struct InductiveLevels<'a> {
+    levels: &'a HashMap<Level, Level>,
+    memo: &'a mut HashMap<usize, Option<Arc<Expr>>>,
+}
+
+impl ExprFolderOpt for InductiveLevels<'_> {
+    fn fold_expr_arc_opt(&mut self, expr: &Arc<Expr>) -> Option<Arc<Expr>> {
+        let key = addr(expr);
+        if let Some(cached) = self.memo.get(&key) {
+            return cached.clone();
+        }
+        let folded = self.fold_expr_opt(expr).map(Arc::new);
+        self.memo.insert(key, folded.clone());
+        folded
+    }
+
+    fn fold_binder_body_arc_opt(&mut self, expr: &Arc<Expr>) -> Option<Arc<Expr>> {
+        self.fold_expr_arc_opt(expr)
+    }
+
+    fn fold_sort_opt(&mut self, level: &Level) -> Option<Expr> {
+        self.levels.get(level).cloned().map(Expr::sort)
+    }
+
+    fn fold_const_opt(&mut self, name: &Name, levels: &LevelVec) -> Option<Expr> {
+        if !levels.iter().any(|level| self.levels.contains_key(level)) {
+            return None;
+        }
+        let mapped: LevelVec = levels
+            .iter()
+            .map(|level| self.levels.get(level).unwrap_or(level).clone())
+            .collect();
+        Some(Expr::const_(name.clone(), mapped))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ndjson::json::parse_line;
+
+    fn levels(build: LevelBuild) -> Tables {
+        let mut tables = Tables::new(build);
+        for (index, data) in [
+            (1, r#"{"pre":0,"str":"u"}"#),
+            (2, r#"{"pre":0,"str":"u_1"}"#),
+        ] {
+            tables
+                .bind_name(1, index, "str", parse_line(data.as_bytes()).unwrap())
+                .unwrap();
+        }
+        for (index, kind, data) in [
+            (1, "param", "1"),
+            (2, "param", "2"),
+            (3, "succ", "0"),
+            (4, "succ", "1"),
+            (5, "max", "[3,2]"),
+            (6, "max", "[4,2]"),
+            (7, "max", "[5,6]"),
+            (8, "succ", "7"),
+            (9, "imax", "[0,2]"),
+            (10, "succ", "9"),
+            (11, "max", "[0,0]"),
+        ] {
+            tables
+                .bind_level(1, index, kind, parse_line(data.as_bytes()).unwrap())
+                .unwrap();
+        }
+        tables
+    }
+
+    #[test]
+    fn replay_keeps_the_written_level_of_list_brec_on_go() {
+        let ordinary = levels(LevelBuild::Constructors);
+        let reference = levels(LevelBuild::AsWritten);
+        // Pinned Init's List.brecOn.go contains
+        // max (max 1 u_1) (max (u+1) u_1). Its left operand is subsumed.
+        for (preserved, simplified) in [(7, 6), (8, 8)] {
+            let actual = ordinary.level(1, preserved).unwrap();
+            assert_eq!(actual, reference.level(1, preserved).unwrap());
+            let normalized = ordinary.simplified_level(1, simplified).unwrap();
+            assert_ne!(actual, normalized);
+            assert!(ordinary.rewritten_levels.contains(&preserved));
+            assert!(!ordinary.problem_levels.contains_key(&preserved));
+        }
+        assert_eq!(
+            ordinary.simplified_level(1, 7).unwrap(),
+            reference.level(1, 6).unwrap()
+        );
+    }
+
+    #[test]
+    fn inductive_replay_reads_the_simplified_view_of_the_same_expression() {
+        let mut tables = levels(LevelBuild::Constructors);
+        tables
+            .bind_expr(1, 0, "sort", parse_line(b"7").unwrap())
+            .unwrap();
+        tables
+            .bind_expr(1, 1, "app", parse_line(br#"{"fn":0,"arg":0}"#).unwrap())
+            .unwrap();
+        let written = Expr::sort(tables.level(1, 7).unwrap());
+        let simplified = Expr::sort(tables.simplified_level(1, 7).unwrap());
+        assert_ne!(written, simplified);
+        assert_eq!(
+            *tables.expr(1, 1).unwrap(),
+            Expr::app(written.clone(), written)
+        );
+        assert_eq!(
+            tables.inductive_expr(1, 1).unwrap(),
+            Expr::app(simplified.clone(), simplified)
+        );
+        assert!(tables.mentions_rewritten_level(1));
+    }
+
+    #[test]
+    fn replay_retains_refusal_accounting_for_imax_and_zero_rewrites() {
+        let ordinary = levels(LevelBuild::Constructors);
+        assert_eq!(ordinary.level(1, 9).unwrap(), ordinary.level(1, 2).unwrap());
+        assert_eq!(ordinary.problem_levels.get(&9), Some(&9));
+        assert_eq!(ordinary.problem_levels.get(&10), Some(&10));
+        assert!(ordinary.level(1, 11).unwrap().is_zero());
+        assert!(matches!(
+            ordinary.level_problems.get(&11),
+            Some(LevelProblem::ToZero { .. })
+        ));
     }
 }

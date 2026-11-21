@@ -102,10 +102,7 @@ pub(super) fn synthesize(env: &Environment, name: &Name) -> Option<Vec<SimpLemma
         };
         result_type = inner;
     }
-    let sort = match result_type.kind() {
-        ExprKind::Sort(level) => Level::succ(level.clone()),
-        _ => super::sort_level_of_result_type(env, result_type, &decl.level_params)?,
-    };
+    let sort = super::sort_level_of_result_type(env, result_type, &decl.level_params)?;
     let mut f_app = Expr::const_(name.clone(), definition_levels.clone());
     for i in (0..n).rev() {
         f_app = Expr::app(f_app, Expr::bvar(i as u32));

@@ -357,6 +357,7 @@ pub(super) struct CustomOperator {
     /// `open scoped`. `None` for plain and `local` notation (always active,
     /// preserving the pre-existing `local` behavior).
     pub(super) scope_ns: Option<SurfaceName>,
+    pub(super) local: bool,
 }
 
 /// One element of a registered closed mixfix `notation` pattern.
@@ -389,6 +390,7 @@ pub(super) struct CustomMixfix {
     /// For `scoped` notation: the FULL declaring namespace path (see
     /// [`CustomOperator::scope_ns`]). `None` = always active.
     pub(super) scope_ns: Option<SurfaceName>,
+    pub(super) local: bool,
 }
 
 impl Parser {
@@ -436,7 +438,15 @@ impl Parser {
         } else {
             Ok(expansion.clone())
         };
-        self.register_custom_operator_ns(kind, precedence, pattern, expansion, scope_ns, hygienic);
+        self.register_custom_operator_ns(
+            kind,
+            precedence,
+            pattern,
+            expansion,
+            scope_ns,
+            scope == DeclScope::Local,
+            hygienic,
+        );
     }
 
     /// Register a notation whose declaring namespace is already resolved.
@@ -461,6 +471,7 @@ impl Parser {
         pattern: &[NotationItem],
         expansion: Result<SurfaceExpr, TemplateRefusal>,
         scope_ns: Option<SurfaceName>,
+        local: bool,
         hygienic: bool,
     ) {
         // `infixl`/`infixr`/`prefix`/`postfix` name no operands in their pattern
@@ -481,7 +492,9 @@ impl Parser {
                 // Not a simple fixed-arity shape — try the closed multi-hole
                 // mixfix form (`"⟪" a ", " b "⟫"`); anything else stays
                 // parse-only.
-                self.register_custom_mixfix(precedence, pattern, expansion, scope_ns, hygienic);
+                self.register_custom_mixfix(
+                    precedence, pattern, expansion, scope_ns, local, hygienic,
+                );
                 return;
             };
             let expansion = match expansion {
@@ -534,12 +547,16 @@ impl Parser {
             return;
         }
 
+        let precedence = precedence.unwrap_or(65);
+        self.has_low_postfix |=
+            matches!(effective_kind, NotationKind::Postfix) && precedence < CUSTOM_ARITHMETIC_FLOOR;
         self.custom_operators.push(CustomOperator {
             symbol_tokens,
             kind: effective_kind,
-            precedence: precedence.unwrap_or(65),
+            precedence,
             expansion: effective_expansion,
             scope_ns,
+            local,
         });
     }
 
@@ -564,6 +581,7 @@ impl Parser {
         pattern: &[NotationItem],
         expansion: Result<SurfaceExpr, TemplateRefusal>,
         scope_ns: Option<SurfaceName>,
+        local: bool,
         hygienic: bool,
     ) {
         if !matches!(pattern.first(), Some(NotationItem::Literal(_)))
@@ -596,20 +614,13 @@ impl Parser {
                 }
             }
         }
-        // The LEADING literal announces the notation at operand position, so it
-        // must be a token the general grammar does not own: the unknown-symbol
-        // class (`⌞`, …, lexed as `Error(UnexpectedChar)`) or `⟪` (`LDAngle`,
-        // whose only builtin meaning is the two-element inner-product atom —
-        // a registered user notation shadows it, matched BEFORE the atom
-        // layer). A keyword-/ident-/delimiter-leading notation
-        // (`notation "foo" x`, `notation "(" a ")"`) would shadow real atoms
-        // and stays parse-only.
-        let leads_with_free_symbol = matches!(
-            items.first(),
-            Some(MixfixItem::Literal(toks))
-                if matches!(toks.first(), Some(TokenKind::Error(_) | TokenKind::LDAngle))
-        );
-        if !leads_with_free_symbol {
+        // A compound atom such as `{{` is one registered Lean token. Clean's
+        // lexer supplies two braces, and their source spans distinguish that
+        // atom from ordinary braces separated by whitespace or a comment.
+        let leading_atom = matches!(items.first(), Some(MixfixItem::Literal(tokens)) if
+            matches!(tokens.first(), Some(TokenKind::Error(_) | TokenKind::LDAngle))
+            || (tokens.len() > 1 && matches!(tokens.first(), Some(TokenKind::LBrace | TokenKind::LParen | TokenKind::LBracket))));
+        if !leading_atom {
             return;
         }
         // A zero-hole notation is instantiated with no operands: its binders
@@ -627,6 +638,7 @@ impl Parser {
             precedence: precedence.unwrap_or(1024),
             expansion: template,
             scope_ns,
+            local,
         });
     }
 
@@ -635,6 +647,125 @@ impl Parser {
     /// otherwise.
     pub(super) fn has_custom_operators(&self) -> bool {
         !self.custom_operators.is_empty() || !self.custom_mixfixes.is_empty()
+    }
+
+    /// A postfix declaration at level n consumes a left operand at level n.
+    /// A second trailing operator can only use the result if its left slot admits n.
+    fn low_postfix_tail(
+        &mut self,
+        mut operand: SurfaceExpr,
+        min: u32,
+        max: u32,
+    ) -> Result<SurfaceExpr, ParseError> {
+        if min >= CUSTOM_ARITHMETIC_FLOOR || !self.has_low_postfix {
+            return Ok(operand);
+        }
+        while let Some(op) = self.match_custom_operator(NotationKind::Postfix) {
+            if op.precedence < min || op.precedence > max {
+                break;
+            }
+            self.consume_custom_operator(&op);
+            operand = self.expand_notation(&op.expansion, self.prev_span(), &[operand])?;
+            if self
+                .next_trailing_lhs_level()
+                .is_some_and(|level| level > op.precedence)
+            {
+                return Err(ParseError::UnexpectedToken {
+                    line: self.current_line(),
+                    col: self.current().col as usize,
+                    message: "trailing operator requires a tighter left operand; parenthesize the postfix expression".into(),
+                });
+            }
+        }
+        Ok(operand)
+    }
+
+    fn next_trailing_lhs_level(&self) -> Option<u32> {
+        use NotationKind::{Infix, Infixl, Infixr, Postfix};
+        for kind in [Postfix, Infixl, Infixr, Infix] {
+            if let Some(op) = self.match_custom_operator(kind) {
+                return Some(
+                    op.precedence
+                        .saturating_add(u32::from(matches!(kind, Infix | Infixr))),
+                );
+            }
+        }
+        if self.comparison_op_spelling().is_some() {
+            return Some(51);
+        }
+        // The postfix caller only handles levels below 60. All arithmetic
+        // operators above that ceiling demand a tighter operand.
+        Some(match self.current_kind() {
+            TokenKind::HomArrow => 11,
+            TokenKind::Iff | TokenKind::OrElse => 21,
+            TokenKind::PipePipe => 30,
+            TokenKind::Or | TokenKind::Oplus => 31,
+            TokenKind::AmpAmp => 35,
+            TokenKind::And | TokenKind::Times | TokenKind::TimesPrime => 36,
+            TokenKind::BitOr | TokenKind::Bind => 55,
+            TokenKind::BindLeft | TokenKind::KleisliL | TokenKind::KleisliR => 56,
+            TokenKind::BitXor => 59,
+            TokenKind::Plus
+            | TokenKind::Minus
+            | TokenKind::Star
+            | TokenKind::PlusPlus
+            | TokenKind::Slash
+            | TokenKind::Percent
+            | TokenKind::Caret
+            | TokenKind::ShiftL
+            | TokenKind::ShiftR
+            | TokenKind::BitAnd => 60,
+            _ => return None,
+        })
+    }
+
+    /// A builtin can have a left slot weaker than the position at which this
+    /// recursive-descent layer runs. Inspect the following token before taking
+    /// a postfix here, so an enclosing operand keeps its own precedence.
+    pub(super) fn postfix_before_builtin(
+        &mut self,
+        operand: SurfaceExpr,
+        follows: &[TokenKind],
+    ) -> Result<SurfaceExpr, ParseError> {
+        if !self.has_low_postfix {
+            return Ok(operand);
+        }
+        let mut offset = 0;
+        while let Some(op) = self.custom_operator_at(NotationKind::Postfix, offset) {
+            if op.precedence < self.custom_min_prec || op.precedence >= CUSTOM_ARITHMETIC_FLOOR {
+                return Ok(operand);
+            }
+            offset += op.symbol_tokens.len();
+        }
+        if offset > 0
+            && self
+                .peek_kind(offset)
+                .is_some_and(|kind| follows.contains(kind))
+        {
+            return self.low_postfix_tail(
+                operand,
+                self.custom_min_prec,
+                CUSTOM_ARITHMETIC_FLOOR - 1,
+            );
+        }
+        Ok(operand)
+    }
+
+    pub(super) fn low_postfix_operand(
+        &mut self,
+        level: u32,
+        parse: fn(&mut Self) -> Result<SurfaceExpr, ParseError>,
+    ) -> Result<SurfaceExpr, ParseError> {
+        if !self.has_low_postfix {
+            return parse(self);
+        }
+        let level = self.custom_min_prec.max(level);
+        let operand = self.with_custom_min_prec(level, parse)?;
+        self.low_postfix_tail(
+            operand,
+            self.custom_min_prec.max(level),
+            CUSTOM_ARITHMETIC_FLOOR - 1,
+        )
     }
 
     /// Run `f` with `custom_min_prec` set to `level` — the Lean precedence of
@@ -790,8 +921,8 @@ impl Parser {
     ///
     /// Comparisons and arithmetic bind at least as tightly as a level-50 custom
     /// relation, while `∧`/`&&` (35) bind looser. This is the band that owns
-    /// the relation boundary, so it also carries the low-precedence postfix
-    /// rejection and the level-50 non-chaining check.
+    /// the relation boundary, so it also carries the level-50
+    /// non-chaining check.
     pub(super) fn low_custom_infix_expr(&mut self) -> Result<SurfaceExpr, ParseError> {
         self.custom_infix_band(
             CUSTOM_LOW_INFIX_FLOOR,
@@ -834,31 +965,11 @@ impl Parser {
         if !self.has_custom_operators() {
             return Ok(left);
         }
-        // The band that owns the 50 relation boundary is the one that has to
-        // police the postfix floor and comparison non-chaining; it is on the
-        // descent path of every expression, so nothing is skipped by keeping
-        // the checks in one place.
-        let owns_relation_boundary = ceiling == CUSTOM_LOW_INFIX_CEILING;
         let min = self.custom_min_prec.max(floor);
         let mut saw_level_50_custom = false;
 
         loop {
-            if owns_relation_boundary {
-                if let Some(op) = self.match_custom_operator(NotationKind::Postfix) {
-                    if op.precedence < CUSTOM_ARITHMETIC_FLOOR {
-                        return Err(ParseError::UnexpectedToken {
-                            line: self.current_line(),
-                            col: self.current().col as usize,
-                            message: format!(
-                                "custom postfix operator precedence {} is outside the modeled \
-                                 postfix band (60+); use a supported precedence",
-                                op.precedence
-                            ),
-                        });
-                    }
-                }
-            }
-
+            left = self.low_postfix_tail(left, min, ceiling)?;
             let Some(op) = self
                 .match_custom_operator(NotationKind::Infixl)
                 .or_else(|| self.match_custom_operator(NotationKind::Infixr))
@@ -962,6 +1073,14 @@ impl Parser {
         if !self.has_custom_operators() {
             return self.app_expr();
         }
+        if self.imported_term_prefix_kind().is_some()
+            && (self.match_custom_operator(NotationKind::Prefix).is_some()
+                || !self.matching_custom_mixfixes().is_empty())
+        {
+            return Err(self.imported_prefix_error(
+                "imported term prefix conflicts with active notation".into(),
+            ));
+        }
         // Low infix operators are intentionally left for
         // `low_custom_infix_expr`; consuming one beside applications here would
         // silently give it arithmetic/application precedence.
@@ -1009,9 +1128,8 @@ impl Parser {
         // Closed mixfix notation announced by its leading literal: `⟪a, b, c⟫`.
         // Several notations may share that literal (`‖e‖` / `‖e‖₊` / `‖e‖ₑ`),
         // so every match is tried, most specific first, with backtracking.
-        let mixfix_candidates = self.matching_custom_mixfixes();
-        if !mixfix_candidates.is_empty() {
-            return self.parse_custom_mixfix_alternatives(&mixfix_candidates, min);
+        if let Some(parsed) = self.try_custom_mixfix(min) {
+            return self.app_expr_with_head(parsed?);
         }
 
         let mut left = self.app_expr()?;
@@ -1178,7 +1296,7 @@ impl Parser {
             .filter(|mf| {
                 self.custom_scope_active(mf.scope_ns.as_ref())
                     && match mf.items.first() {
-                        Some(MixfixItem::Literal(toks)) => self.tokens_match_at_cursor(toks),
+                        Some(MixfixItem::Literal(toks)) => self.notation_atom_matches(toks, 0),
                         _ => false,
                     }
             })
@@ -1188,6 +1306,70 @@ impl Parser {
         // registration order.
         matches.sort_by_key(|mf| std::cmp::Reverse(mixfix_literal_tokens(mf)));
         matches
+    }
+
+    pub(super) fn try_custom_mixfix(
+        &mut self,
+        min: u32,
+    ) -> Option<Result<SurfaceExpr, ParseError>> {
+        if self.custom_mixfixes.is_empty() {
+            return None;
+        }
+        let candidates = self.matching_custom_mixfixes();
+        (!candidates.is_empty()).then(|| self.parse_custom_mixfix_alternatives(&candidates, min))
+    }
+
+    // Lean tokenizes the longest registered atom before choosing a grammar
+    // production. A failed continuation of "(((" cannot retry the same bytes
+    // as "((" followed by a parenthesized operand.
+    fn notation_atom_matches(&self, kinds: &[TokenKind], offset: usize) -> bool {
+        self.joined_tokens_match(kinds, offset)
+            && !self.longer_notation_atom_at(kinds.len(), offset)
+    }
+
+    /// Lean recognizes a complete notation token before Pratt precedence or
+    /// associativity can select a shorter operator that prefixes it.
+    pub(super) fn longer_notation_atom_at(&self, length: usize, offset: usize) -> bool {
+        if length == 0 || (self.custom_operators.is_empty() && self.custom_mixfixes.is_empty()) {
+            return false;
+        }
+        let split = self.pos + offset + length;
+        let Some(next) = self.tokens.get(split) else {
+            return false;
+        };
+        if self.tokens[split - 1].span.end != next.span.start {
+            return false;
+        }
+        let longer =
+            |other: &[TokenKind]| other.len() > length && self.joined_tokens_match(other, offset);
+        self.custom_operators
+            .iter()
+            .any(|op| longer(&op.symbol_tokens) && self.custom_scope_active(op.scope_ns.as_ref()))
+            || self.custom_mixfixes.iter().any(|mf| {
+                self.custom_scope_active(mf.scope_ns.as_ref())
+                    && mf
+                        .items
+                        .iter()
+                        .any(|item| matches!(item, MixfixItem::Literal(tokens) if longer(tokens)))
+            })
+    }
+
+    pub(super) fn at_mixfix_operand_end(&self, offset: usize) -> bool {
+        self.mixfix_operand_ends
+            .iter()
+            .rev()
+            .any(|end| self.notation_atom_matches(end, offset))
+    }
+
+    fn joined_tokens_match(&self, kinds: &[TokenKind], offset: usize) -> bool {
+        let Some(tokens) = self
+            .tokens
+            .get(self.pos + offset..self.pos + offset + kinds.len())
+        else {
+            return false;
+        };
+        tokens.iter().map(|t| &t.kind).eq(kinds)
+            && tokens.windows(2).all(|w| w[0].span.end == w[1].span.start)
     }
 
     /// Try each candidate in order, restoring the cursor between attempts, and
@@ -1257,35 +1439,40 @@ impl Parser {
     fn parse_custom_mixfix(&mut self, mf: &CustomMixfix) -> Result<SurfaceExpr, ParseError> {
         let start = self.current_span();
         let mut operands: Vec<SurfaceExpr> = Vec::new();
-        let mut is_leading = true;
-        for item in &mf.items {
+        for (index, item) in mf.items.iter().enumerate() {
             match item {
                 MixfixItem::Literal(toks) => {
-                    if is_leading {
-                        // Already matched at the cursor by `match_custom_mixfix`.
-                        for _ in toks {
-                            self.advance();
-                        }
-                        is_leading = false;
-                    } else {
-                        for tok in toks {
-                            if self.current_kind() == tok {
-                                self.advance();
-                            } else {
-                                return Err(ParseError::UnexpectedToken {
-                                    line: self.current_line(),
-                                    col: self.current_span().start,
-                                    message: format!(
-                                        "expected {tok:?} to continue custom notation, \
-                                         got {:?}",
-                                        self.current_kind()
-                                    ),
-                                });
-                            }
-                        }
+                    if !self.notation_atom_matches(toks, 0) {
+                        return Err(ParseError::UnexpectedToken {
+                            line: self.current_line(),
+                            col: self.current_span().start,
+                            message: format!(
+                                "expected {toks:?} to continue custom notation, got {:?}",
+                                self.current_kind()
+                            ),
+                        });
+                    }
+                    for _ in toks {
+                        self.advance();
                     }
                 }
-                MixfixItem::Hole => operands.push(self.expr()?),
+                MixfixItem::Hole => {
+                    // A registered atom such as "!)" is one token in Lean.
+                    // Keep the expression grammar from taking its first token
+                    // as postfix ! (or as part of another built-in operator).
+                    let end = mf.items.get(index + 1).and_then(|item| match item {
+                        MixfixItem::Literal(tokens) if tokens.len() > 1 => Some(tokens),
+                        _ => None,
+                    });
+                    if let Some(tokens) = end {
+                        self.mixfix_operand_ends.push(tokens.clone());
+                    }
+                    let operand = self.expr();
+                    if end.is_some() {
+                        self.mixfix_operand_ends.pop();
+                    }
+                    operands.push(operand?);
+                }
             }
         }
         self.expand_notation(&mf.expansion, start, &operands)
@@ -1295,28 +1482,18 @@ impl Parser {
     /// tokens at the current position, if any. Longest match wins so a
     /// multi-token symbol is preferred over any shorter overlap.
     pub(super) fn match_custom_operator(&self, kind: NotationKind) -> Option<CustomOperator> {
+        self.custom_operator_at(kind, 0).cloned()
+    }
+
+    fn custom_operator_at(&self, kind: NotationKind, offset: usize) -> Option<&CustomOperator> {
         self.custom_operators
             .iter()
             .filter(|op| {
                 op.kind == kind
                     && self.custom_scope_active(op.scope_ns.as_ref())
-                    && self.tokens_match_at_cursor(&op.symbol_tokens)
+                    && self.notation_atom_matches(&op.symbol_tokens, offset)
             })
             .max_by_key(|op| op.symbol_tokens.len())
-            .cloned()
-    }
-
-    /// Whether the token-kind sequence matches the upcoming tokens by value.
-    fn tokens_match_at_cursor(&self, symbol_tokens: &[TokenKind]) -> bool {
-        self.tokens_match_at_offset(symbol_tokens, 0)
-    }
-
-    /// Whether `symbol_tokens` matches the tokens starting at `peek_kind(offset)`.
-    fn tokens_match_at_offset(&self, symbol_tokens: &[TokenKind], offset: usize) -> bool {
-        symbol_tokens
-            .iter()
-            .enumerate()
-            .all(|(i, tok)| self.peek_kind(offset + i) == Some(tok))
     }
 
     /// Whether the tokens at `offset` begin a registered *infix* or *postfix*
@@ -1338,12 +1515,12 @@ impl Parser {
                     | NotationKind::Infix
                     | NotationKind::Postfix
             ) && self.custom_scope_active(op.scope_ns.as_ref())
-                && self.tokens_match_at_offset(&op.symbol_tokens, offset)
+                && self.notation_atom_matches(&op.symbol_tokens, offset)
         }) || self.custom_mixfixes.iter().any(|mf| {
             self.custom_scope_active(mf.scope_ns.as_ref())
                 && mf.items.iter().skip(1).any(|item| {
                     matches!(item, MixfixItem::Literal(toks)
-                        if self.tokens_match_at_offset(toks, offset))
+                        if self.notation_atom_matches(toks, offset))
                 })
         })
     }

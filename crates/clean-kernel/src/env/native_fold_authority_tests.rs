@@ -679,3 +679,6 @@ fn test_prelude_int_div_mod_are_lean_definitions_that_compute() {
         int_lit(-4)
     ));
 }
+
+#[path = "native_fold_bitvec_refusal_tests.rs"]
+mod bitvec_refusals;

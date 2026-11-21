@@ -376,6 +376,7 @@ pub(super) fn expr_may_mention_ident(e: &SurfaceExpr, name: &SurfaceName) -> boo
         | SurfaceExpr::Proj(_, i, _)
         | SurfaceExpr::Explicit(_, i)
         | SurfaceExpr::NamedArg(_, _, i)
+        | SurfaceExpr::Borrowed(_, i)
         | SurfaceExpr::OutParam(_, i)
         | SurfaceExpr::SemiOutParam(_, i)
         | SurfaceExpr::UniverseInst(_, i, _) => expr_may_mention_ident(i, name),
@@ -474,6 +475,7 @@ fn try_rename_free_ident(
         SurfaceExpr::Explicit(sp, i) => SurfaceExpr::Explicit(*sp, Box::new(r(i)?)),
         SurfaceExpr::Proj(sp, i, p) => SurfaceExpr::Proj(*sp, Box::new(r(i)?), p.clone()),
         SurfaceExpr::NamedArg(sp, n, i) => SurfaceExpr::NamedArg(*sp, n.clone(), Box::new(r(i)?)),
+        SurfaceExpr::Borrowed(sp, i) => SurfaceExpr::Borrowed(*sp, Box::new(r(i)?)),
         SurfaceExpr::OutParam(sp, i) => SurfaceExpr::OutParam(*sp, Box::new(r(i)?)),
         SurfaceExpr::SemiOutParam(sp, i) => SurfaceExpr::SemiOutParam(*sp, Box::new(r(i)?)),
         SurfaceExpr::UniverseInst(sp, i, ls) => {
@@ -669,6 +671,14 @@ fn normalize_equation_def_multiarg(
             is_recursive,
         ) {
             return Some(lifted);
+        }
+        // Keep the checked, dependent Pi telescope available for the curried
+        // pattern compiler. Lifting both columns here would match the second
+        // argument at F b before the constructor of b specializes it.
+        if !is_recursive
+            && super::equation_dep_family::has_dependent_enum_patterns(env, &domains, &arm_leaves)
+        {
+            return None;
         }
     }
     if !undetermined_ctor_columns.is_empty() {
@@ -3041,15 +3051,25 @@ impl<'a> ElabCtx<'a> {
         val: &SurfaceExpr,
         attrs: &[Attribute],
         modifiers: &DeclModifiers,
+        list_structural: bool,
     ) -> Result<Option<ElabResult>, ElabError> {
-        let Some(plan) = super::course_of_values::try_pair_thread(name, binders, ty, val) else {
-            return Ok(None);
-        };
+        let plan =
+            if let Some(plan) = super::course_of_values::try_pair_thread(name, binders, ty, val) {
+                plan
+            } else if list_structural && binders.is_empty() {
+                let Some(plan) = self.lower_list_tail_equations(name, ty, val) else {
+                    return Ok(None);
+                };
+                for arm in whole_body_match_arms(val) {
+                    self.check_pattern_linear(&arm.pattern)?;
+                }
+                plan
+            } else {
+                return Ok(None);
+            };
 
-        // ---- Elaborate the auxiliary def `f.cov : Nat → R × R` ----
-        // Route it through the ordinary definition path: `normalize_equation_def`
-        // lifts its `_x` lambda to a binder, `setup_recursion` installs the
-        // single-step IH, and `Nat.rec` lowering fires — the working k==1 path.
+        // The ordinary definition path lifts the equation binder and installs
+        // the single-step induction hypothesis for the structural auxiliary.
         self.set_decl_universe_params(universe_params);
         let aux_result = self.elab_definition_inner(
             &plan.aux_name,
@@ -3080,18 +3100,9 @@ impl<'a> ElabCtx<'a> {
         let aux_qualified =
             self.kernel_decl_name(&plan.aux_name, modifiers, PrivateNameKind::Definition);
 
-        // The wrapper value is `fun (n : Nat) => Prod.fst (f.cov n)`; it already
-        // carries its own binder, so elaborate it with an empty binder list and
-        // the signature `Nat → R` reconstructed as an arrow.
-        let wrapper_ty = SurfaceExpr::Arrow(
-            clean_parser::Span::dummy(),
-            Box::new(SurfaceExpr::Ident(
-                clean_parser::Span::dummy(),
-                SurfaceName::global_path("Nat"),
-            )),
-            Box::new(plan.wrapper_ret_ty.clone()),
-        );
-        let wrapper_outcome = self.elab_def_body(&[], Some(&wrapper_ty), &plan.wrapper_val);
+        // The wrapper already contains its own binder and uses the original
+        // public signature when selecting the first auxiliary result.
+        let wrapper_outcome = self.elab_def_body(&[], Some(&plan.wrapper_ty), &plan.wrapper_val);
         self.pop_local();
         let (wrapper_ty_expr, wrapper_val_expr) = wrapper_outcome?;
 
@@ -3125,7 +3136,7 @@ impl<'a> ElabCtx<'a> {
             universe_params: surviving_universe_params,
             ty: wrapper_ty_expr,
             val: wrapper_val_expr,
-            modifiers: *modifiers,
+            modifiers: modifiers.clone(),
         };
 
         Ok(Some(ElabResult::Multiple(vec![aux_result, wrapper_result])))
@@ -3251,8 +3262,17 @@ impl<'a> ElabCtx<'a> {
             .map(|&i| binders[i].name.clone())
             .collect();
         let receiver_pos = self.method_dot_receiver_pos(name, binders);
+        // A bare `def f` inside `namespace T` has the same detector
+        // spelling as `def T.f`. Keep that suffix when placing the
+        // receiver so `r.f` is distinct from a qualified self-reference.
+        let receiver_name = (receiver_pos.is_some() && name.parent().is_anonymous()).then(|| {
+            self.qualify_name(name)
+                .parent()
+                .last_component()
+                .append(name)
+        });
         let mut recursion_info = super::structural::detect_recursion_with_receiver(
-            name,
+            receiver_name.as_ref().unwrap_or(name),
             val,
             &param_names,
             receiver_pos,
@@ -3596,6 +3616,9 @@ impl<'a> ElabCtx<'a> {
             val,
             attrs,
             modifiers,
+            termination.termination_by.is_none()
+                && termination.decreasing_by.is_none()
+                && where_decls.is_empty(),
         )? {
             return Ok(result);
         }
@@ -3608,6 +3631,7 @@ impl<'a> ElabCtx<'a> {
             self.check_pattern_linear(&arm.pattern)?;
         }
         let idents = self.pattern_idents(val);
+        let public_binders = binders;
         let normalized = normalize_equation_def(self.env, &idents, name, binders, ty, val)?;
         let written_binders = binders;
         let (binders, ty, val): (&[SurfaceBinder], Option<&SurfaceExpr>, &SurfaceExpr) =
@@ -3688,7 +3712,7 @@ impl<'a> ElabCtx<'a> {
         {
             // Wrap with auto-implicit binders.
             let auto_implicits = self.take_auto_implicits();
-            let (ty_expr, val_expr, _) = self.wrap_decl_auto_implicits(
+            let (ty_expr, val_expr, section_auto_count) = self.wrap_decl_auto_implicits(
                 Self::section_binder_count(binders),
                 ty_expr,
                 val_expr,
@@ -3697,6 +3721,12 @@ impl<'a> ElabCtx<'a> {
             )?;
 
             let decl_name = self.kernel_decl_name(name, modifiers, PrivateNameKind::Definition);
+            self.note_public_param_infos(
+                &decl_name,
+                public_binders,
+                &auto_implicits,
+                section_auto_count,
+            );
             self.ensure_known_attributes(attrs)?;
             self.collect_attributes(&decl_name, attrs);
 
@@ -3709,7 +3739,7 @@ impl<'a> ElabCtx<'a> {
                 universe_params: surviving_universe_params,
                 ty: ty_expr,
                 val: val_expr,
-                modifiers: *modifiers,
+                modifiers: modifiers.clone(),
             });
         }
 
@@ -3723,7 +3753,17 @@ impl<'a> ElabCtx<'a> {
             self.kernel_decl_name(name, modifiers, PrivateNameKind::Definition),
             modifiers.is_partial,
         );
+        // A `noncomputable def` is never compiled, so Lean's code generator
+        // cannot refuse a recursor in its body (`elab_dot_elim.rs`).
+        let saved_codegen = self.dot_elim.enter_uncompiled(modifiers.is_noncomputable);
+        let structurally_recursive = self.recursive_def_ctx.is_some();
+        let ordinary_definition = !structurally_recursive
+            && self.nested_mutual_aux_arms.is_none()
+            && normalized.is_none()
+            && !modifiers.is_unsafe
+            && !modifiers.is_partial;
         let result = self.elab_decl_body(binders, ty, val);
+        self.dot_elim.restore_uncompiled(saved_codegen);
         let lift_scope = self.end_let_rec_lift(saved_lift);
 
         // Clear recursive context after elaboration (must happen even on error)
@@ -3765,6 +3805,12 @@ impl<'a> ElabCtx<'a> {
             ty_expr,
             val_expr,
         );
+        self.note_public_param_infos(
+            &decl_name,
+            public_binders,
+            &auto_implicits,
+            section_auto_count,
+        );
         // B21: reject unknown attributes loudly before honoring the rest.
         self.ensure_known_attributes(attrs)?;
         self.collect_attributes(&decl_name, attrs);
@@ -3788,19 +3834,51 @@ impl<'a> ElabCtx<'a> {
         let (surviving_universe_params, ty_expr, val_expr) =
             self.finalize_level_params(ty_expr, val_expr)?;
 
-        let (auxiliaries, val_expr) =
+        let (mut auxiliaries, mut val_expr) =
             self.finish_let_rec_lifts(lift_scope, &surviving_universe_params, modifiers, val_expr)?;
 
+        let mut equations = Vec::new();
+        if structurally_recursive
+            && auxiliaries.is_empty()
+            && surviving_universe_params.is_empty()
+            && modifiers.is_default()
+            && attrs.is_empty()
+        {
+            if let Some(lowered) = super::structural::named_brec_on(
+                self.env,
+                &self.namespace_state,
+                &decl_name,
+                &ty_expr,
+                &val_expr,
+            ) {
+                auxiliaries = lowered.dependencies;
+                equations = lowered.equations;
+                val_expr = lowered.value;
+                self.collected_matchers.extend(lowered.matchers);
+                self.collected_reducibility.extend(lowered.reducibilities);
+            }
+        }
+
         self.ensure_no_residual_fvars("def", name, &ty_expr, Some(&val_expr))?;
+
+        if ordinary_definition && auxiliaries.is_empty() {
+            self.simple_equation_sources.push(decl_name.clone());
+        }
 
         let definition = ElabResult::Definition {
             name: decl_name,
             universe_params: surviving_universe_params,
             ty: ty_expr,
             val: val_expr,
-            modifiers: *modifiers,
+            modifiers: modifiers.clone(),
         };
-        Ok(Self::with_let_rec_auxiliaries(auxiliaries, definition))
+        if equations.is_empty() {
+            Ok(Self::with_let_rec_auxiliaries(auxiliaries, definition))
+        } else {
+            auxiliaries.push(definition);
+            auxiliaries.extend(equations);
+            Ok(ElabResult::Multiple(auxiliaries))
+        }
     }
 
     /// Elaborate a `theorem` declaration.
@@ -3850,6 +3928,7 @@ impl<'a> ElabCtx<'a> {
             self.check_pattern_linear(&arm.pattern)?;
         }
         let idents = self.pattern_idents(proof);
+        let public_binders = binders;
         let normalized = normalize_equation_def(self.env, &idents, name, binders, Some(ty), proof)?;
         let written_binders = binders;
         let (binders, ty, proof): (&[SurfaceBinder], &SurfaceExpr, &SurfaceExpr) = match &normalized
@@ -3889,7 +3968,7 @@ impl<'a> ElabCtx<'a> {
         {
             // Well-founded lowering early-return path.
             let auto_implicits = self.take_auto_implicits();
-            let (ty_expr, proof_expr, _) = self.wrap_decl_auto_implicits(
+            let (ty_expr, proof_expr, section_auto_count) = self.wrap_decl_auto_implicits(
                 Self::section_binder_count(binders),
                 ty_expr,
                 proof_expr,
@@ -3898,6 +3977,12 @@ impl<'a> ElabCtx<'a> {
             )?;
 
             let decl_name = self.kernel_decl_name(name, modifiers, PrivateNameKind::Theorem);
+            self.note_public_param_infos(
+                &decl_name,
+                public_binders,
+                &auto_implicits,
+                section_auto_count,
+            );
             self.ensure_known_attributes(attrs)?;
             self.collect_attributes(&decl_name, attrs);
 
@@ -3911,7 +3996,7 @@ impl<'a> ElabCtx<'a> {
                 universe_params: surviving_universe_params,
                 ty: ty_expr,
                 proof: proof_expr,
-                modifiers: *modifiers,
+                modifiers: modifiers.clone(),
             });
         }
 
@@ -3938,7 +4023,7 @@ impl<'a> ElabCtx<'a> {
             && termination.termination_by.is_none()
             && termination.decreasing_by.is_none()
         {
-            self.elab_single_equation_theorem(name, binders, ty, proof, modifiers)
+            self.elab_single_equation_theorem(name, binders, public_binders, ty, proof, modifiers)
                 .map(|(ty_expr, proof_expr, auto_count)| {
                     predef_auto_count = Some(auto_count);
                     (ty_expr, proof_expr, Vec::new())
@@ -3982,6 +4067,14 @@ impl<'a> ElabCtx<'a> {
             ty_expr,
             proof_expr,
         );
+        if predef_auto_count.is_none() {
+            self.note_public_param_infos(
+                &decl_name,
+                public_binders,
+                &auto_implicits,
+                section_auto_count,
+            );
+        }
         // B21: reject unknown attributes loudly before honoring the rest.
         self.ensure_known_attributes(attrs)?;
         self.collect_attributes(&decl_name, attrs);
@@ -4006,7 +4099,7 @@ impl<'a> ElabCtx<'a> {
             universe_params: surviving_universe_params,
             ty: ty_expr,
             proof: proof_expr,
-            modifiers: *modifiers,
+            modifiers: modifiers.clone(),
         };
         Ok(Self::with_let_rec_auxiliaries(auxiliaries, theorem))
     }
@@ -4049,6 +4142,7 @@ impl<'a> ElabCtx<'a> {
             section_auto_count,
             ty_expr,
         );
+        self.note_public_param_infos(&decl_name, binders, &auto_implicits, section_auto_count);
         // B21: reject unknown attributes loudly before honoring the rest.
         self.ensure_known_attributes(attrs)?;
         self.collect_attributes(&decl_name, attrs);
@@ -4062,7 +4156,7 @@ impl<'a> ElabCtx<'a> {
             name: decl_name,
             universe_params: surviving_universe_params,
             ty: ty_expr,
-            modifiers: *modifiers,
+            modifiers: modifiers.clone(),
         })
     }
 
@@ -4190,7 +4284,7 @@ impl<'a> ElabCtx<'a> {
             let val_expr = self.metas.instantiate_levels(&val_expr);
 
             let auto_implicits = self.take_auto_implicits();
-            let (ty_expr, val_expr, _) = self.wrap_decl_auto_implicits(
+            let (ty_expr, val_expr, section_auto_count) = self.wrap_decl_auto_implicits(
                 Self::section_binder_count(binders),
                 ty_expr,
                 val_expr,
@@ -4202,12 +4296,13 @@ impl<'a> ElabCtx<'a> {
             let (surviving_universe_params, ty_expr, val_expr) =
                 self.finalize_level_params(ty_expr, val_expr)?;
 
+            self.note_public_param_infos(&decl_name, binders, &auto_implicits, section_auto_count);
             Ok(ElabResult::Opaque {
                 name: decl_name,
                 universe_params: surviving_universe_params,
                 ty: ty_expr,
                 val: Some(val_expr),
-                modifiers: *modifiers,
+                modifiers: modifiers.clone(),
             })
         } else {
             // Body-less opaque: type-only elaboration (like axiom)
@@ -4218,7 +4313,7 @@ impl<'a> ElabCtx<'a> {
 
             let auto_implicits = self.take_auto_implicits();
             let header_binders = auto_implicits.len() + binders.len();
-            let (ty_expr, _) = self.wrap_decl_type_auto_implicits(
+            let (ty_expr, section_auto_count) = self.wrap_decl_type_auto_implicits(
                 Self::section_binder_count(binders),
                 ty_expr,
                 &auto_implicits,
@@ -4249,7 +4344,12 @@ impl<'a> ElabCtx<'a> {
                     // or a `noncomputable section` marks it instead.
                     OpaqueInhabitant::Nonempty => {
                         let compiled_elsewhere = attrs.iter().any(|attr| {
-                            matches!(attr, Attribute::ImplementedBy(_) | Attribute::Extern(_))
+                            matches!(
+                                attr,
+                                Attribute::ImplementedBy(_)
+                                    | Attribute::Extern(_)
+                                    | Attribute::ExternMetadata(_)
+                            )
                         });
                         let erased =
                             crate::lean_compile_checks::declaration_is_erased(self.env, &ty_expr);
@@ -4274,12 +4374,13 @@ impl<'a> ElabCtx<'a> {
             // Filter to surviving params only (#3396, same as Definition).
             let (surviving_universe_params, ty_expr) = self.finalize_level_params_ty(ty_expr)?;
 
+            self.note_public_param_infos(&decl_name, binders, &auto_implicits, section_auto_count);
             Ok(ElabResult::Opaque {
                 name: decl_name,
                 universe_params: surviving_universe_params,
                 ty: ty_expr,
                 val: None,
-                modifiers: *modifiers,
+                modifiers: modifiers.clone(),
             })
         }
     }
@@ -4333,7 +4434,7 @@ impl<'a> ElabCtx<'a> {
         )?;
 
         let auto_implicits = self.take_auto_implicits();
-        let (ty_expr, _) = self.wrap_decl_type_auto_implicits(
+        let (ty_expr, section_auto_count) = self.wrap_decl_type_auto_implicits(
             Self::section_binder_count(binders),
             ty_expr,
             &auto_implicits,
@@ -4342,12 +4443,13 @@ impl<'a> ElabCtx<'a> {
 
         let (surviving_universe_params, ty_expr) = self.finalize_level_params_ty(ty_expr)?;
 
+        self.note_public_param_infos(&decl_name, binders, &auto_implicits, section_auto_count);
         Ok(ElabResult::Opaque {
             name: decl_name,
             universe_params: surviving_universe_params,
             ty: ty_expr,
             val: None,
-            modifiers: *modifiers,
+            modifiers: modifiers.clone(),
         })
     }
 }

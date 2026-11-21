@@ -13025,7 +13025,7 @@
     "meaning_sha256": "49d0ba8a770590aedde6c2ee25a795657c14859e1dad099f0628c11d6142b56a"
   },
   "CICL.levelSubstitution": {
-    "module": "CICL.CoreTyping",
+    "module": "CICL.Declaration",
     "kind": "Definition",
     "meaning_sha256": "c06d33b44acca0c5cbc402b4609de52d730540683e5263bd5bad50cb3aa0655b"
   },
@@ -13644,10 +13644,30 @@
     "kind": "Definition",
     "meaning_sha256": "dccd015524837afa8a6390e80928bf13525ca09a8b0cc3c6547fda03a5db8907"
   },
+  "_private.CICL.CoreTyping.0.CICL.liftEndpointSubst": {
+    "module": "CICL.CoreTyping",
+    "kind": "Definition",
+    "meaning_sha256": "7e690fe427c7f211c6ad013aba72358fe1f9ef460ab6a2833350b014eb8b0ffc"
+  },
+  "_private.CICL.CoreTyping.0.CICL.liftTail": {
+    "module": "CICL.CoreTyping",
+    "kind": "Definition",
+    "meaning_sha256": "9dec806c552cc47e732b4662859618a7f378962b9852cfb02975dd77ab6369be"
+  },
   "_private.CICL.CoreTyping.0.CICL.lookupType.match_1.splitter": {
     "module": "CICL.CoreTyping",
     "kind": "Definition",
     "meaning_sha256": "dfc9110122b9842f05c4943a6c178e24966e5b962a227344086bcbf619e2be4b"
+  },
+  "_private.CICL.CoreTyping.0.CICL.threeLiftArgs": {
+    "module": "CICL.CoreTyping",
+    "kind": "Definition",
+    "meaning_sha256": "b796b2954c080d0b7c53ad1c45cd14ddda68de1548d8bcd5c18c9086555c9ae8"
+  },
+  "_private.CICL.CoreTyping.0.CICL.threeLiftArgs.match_1": {
+    "module": "CICL.CoreTyping",
+    "kind": "Definition",
+    "meaning_sha256": "08f81c488094193231b168afb79cf2e58ba3beec898ed5a26db457d78c673a57"
   },
   "_private.CICL.DeclarationCases.0.CICL.DeclarationCases.ctorDecl": {
     "module": "CICL.DeclarationCases",

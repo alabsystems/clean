@@ -5,6 +5,15 @@
 # Read from trust-cg crates/trust-cg-eqsat/rules/integer_identities.rules
 # (SHA-256):
 #   integer_identities.rules  6e3f959350a33df8c3092ca4261bbe58db545d9f7f779b89cac5c16837b96c0c
+# and from trust-cg crates/trust-cg-eqsat/rules/tier_s_integer.rules
+# (SHA-256), its literals in namespace TierSDefs:
+#   tier_s_integer.rules  51d62eb2554c2cda9c235ddb2863d2b2e9f3c8d41d0ab3a82bff934c6df9bf50
+# A later rule file's rows follow the first's, and the lemma of such a row
+# is stated on that file's literal (`Sound <its namespace>.<rule> ...`). A
+# rule name an earlier file has gets no second row: the generator refuses it
+# unless both files give it one literal, one kind and one domain, so the
+# earlier row's lemma, stated on the earlier file's literal, is a proof of
+# the later file's statement too (the gate asserts the entry accepts it).
 #
 # One `rule scope kind lemma` row per rule and scope of the rule's domain.
 # scope: `int` (the domain has all twelve integer types and the lemma is
@@ -107,3 +116,11 @@ fold_icmp_slt int fold -
 fold_icmp_sle int fold -
 fold_icmp_sgt int fold -
 fold_icmp_sge int fold -
+add_comm int plain EqsatInt.add_comm
+mul_comm int plain EqsatInt.mul_comm
+add_assoc_right int plain EqsatInt.add_assoc_right
+add_assoc_left int plain EqsatInt.add_assoc_left
+mul_assoc_right int plain EqsatInt.mul_assoc_right
+mul_assoc_left int plain EqsatInt.mul_assoc_left
+distribute int plain EqsatInt.distribute
+factor int plain EqsatInt.factor

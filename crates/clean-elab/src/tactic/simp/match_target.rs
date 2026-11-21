@@ -5,19 +5,29 @@
 //! The normalised form a goal subterm is matched against by the simp lemma
 //! matcher, and the two normalisation steps that build it.
 //!
-//! Both steps are pure functions of `(state, goal, expr)` — neither reads the
+//! These steps are pure functions of `(state, goal, expr)` — none reads the
 //! candidate lemma — so a candidate loop computes a [`MatchTarget`] ONCE per
 //! subterm and matches every candidate against it. See [`MatchTarget`] for the
 //! measurement that motivated hoisting them out of the per-candidate path.
 
 use std::sync::LazyLock;
 
+use clean_kernel::expr::Literal;
 use clean_kernel::name::Name;
-use clean_kernel::{Expr, ExprFolder, ExprKind};
+use clean_kernel::{Expr, ExprKind};
 
-use crate::stack_safe;
+mod numerals;
+pub(crate) use numerals::as_nat_ofnat_literal;
+pub(super) use numerals::collapse_nat_ofnat_literals;
+
 use crate::tactic::core::{Goal, ProofState};
 use crate::tactic::op_projection::reduce_op_projection_head;
+
+use super::budget::SimpBudget;
+
+static NAT_ADD: LazyLock<Name> = LazyLock::new(|| Name::from_string("Nat.add"));
+static NAT_SUCC: LazyLock<Name> = LazyLock::new(|| Name::from_string("Nat.succ"));
+static HADD_ADD: LazyLock<Name> = LazyLock::new(|| Name::from_string("HAdd.hAdd"));
 
 /// The expression a simp candidate's LHS pattern is unified against.
 ///
@@ -41,7 +51,7 @@ use crate::tactic::op_projection::reduce_op_projection_head;
 /// cache), so consecutive calls with the same `(state, goal, expr)` are
 /// obliged to produce the same target — this type just stops asking twice.
 ///
-/// # The two steps
+/// # Normalization steps
 ///
 /// 1. **Hetero-operator projection peel.** When `expr` is a typeclass
 ///    projection (`@HMul.hMul Nat … n 0`), bare-head builtin/library lemmas
@@ -61,10 +71,13 @@ use crate::tactic::op_projection::reduce_op_projection_head;
 ///    (`Nat.add ?n 0`, `Nat.mul ?n 1`) carry the bare `Nat.zero`/`Lit 1` leaf,
 ///    and the reducible-transparency unifier cannot bridge the two (the
 ///    `OfNat` instance does not unfold at `withReducible`).
+/// 3. **Lambda argument contraction.** When an argument's body reduces to
+///    `f x` with no `x` in `f`, pass `f` to the alternate index lookup and
+///    to the matcher. Both see the same candidate shape.
 ///
 /// # Soundness
 ///
-/// Both steps are definitional (the instance's own ι/δ-reduction), and nothing
+/// The steps are definitional, and nothing
 /// downstream is restated over the normalised form: the `lhs_inst ≡ expr`
 /// guard is still stated over the ORIGINAL `expr`, the assembled proof still
 /// goes through `proof_matches_rewrite`, and the kernel `add_decl` re-check
@@ -77,9 +90,12 @@ pub(crate) struct MatchTarget {
     /// The subterm this target was built from — the expression every guard in
     /// the matcher is still stated over.
     source: Expr,
-    /// The normalised target. Equal to `source` when neither step fired, which
-    /// is the overwhelmingly common case.
-    target: Expr,
+    /// The target after eta contraction and operator projection peeling.
+    base: Expr,
+    /// Numeral folding can traverse the entire subterm. Candidate selection
+    /// only needs the source and eta forms, so fold after it offers a lemma.
+    collapsed_numerals: std::cell::OnceCell<Option<Expr>>,
+    eta_index_target: Option<Expr>,
     /// The goal universe parameters `source` and `target` mention — rigid for
     /// every universe-polymorphic candidate matched against them — computed
     /// on first use and shared by every candidate, for the reason this type
@@ -93,12 +109,15 @@ impl MatchTarget {
     /// REQUIRES: `expr` is a subterm of `goal`'s target or hypotheses.
     /// ENSURES: `self.expr()` is definitionally equal to `self.source()`.
     pub(crate) fn new(state: &ProofState, goal: &Goal, expr: &Expr) -> Self {
-        let peeled = reduce_op_projection_head(state, goal, expr);
-        let base = peeled.unwrap_or_else(|| expr.clone());
-        let target = collapse_nat_ofnat_literals(&base).unwrap_or(base);
+        let eta_index_target = eta_arguments(state, goal, expr);
+        let eta_shape = eta_index_target.as_ref().unwrap_or(expr);
+        let peeled = reduce_op_projection_head(state, goal, eta_shape);
+        let base = peeled.unwrap_or_else(|| eta_shape.clone());
         MatchTarget {
             source: expr.clone(),
-            target,
+            base,
+            collapsed_numerals: std::cell::OnceCell::new(),
+            eta_index_target,
             level_params: std::cell::OnceCell::new(),
         }
     }
@@ -107,7 +126,7 @@ impl MatchTarget {
     /// may never assign (see `super::lemma_levels::goal_level_params`).
     pub(crate) fn level_params(&self) -> &[Name] {
         self.level_params.get_or_init(|| {
-            let mut out = super::lemma_levels::goal_level_params(&self.target);
+            let mut out = super::lemma_levels::goal_level_params(self.expr());
             for name in super::lemma_levels::goal_level_params(&self.source) {
                 if !out.contains(&name) {
                     out.push(name);
@@ -124,237 +143,205 @@ impl MatchTarget {
 
     /// The expression candidate patterns are unified against.
     pub(crate) fn expr(&self) -> &Expr {
-        &self.target
+        self.collapsed_numerals
+            .get_or_init(|| collapse_nat_ofnat_literals(&self.base))
+            .as_ref()
+            .unwrap_or(&self.base)
+    }
+
+    /// Numeral folding changes the application head only when that head is
+    /// `OfNat.ofNat`. Other heads can reject unrelated lemmas before a fold.
+    pub(super) fn head_guard_target(&self) -> &Expr {
+        if matches!(
+            self.base.get_app_fn().kind(),
+            ExprKind::Const(name, _) if *name == *numerals::OFNAT_NAME
+        ) {
+            self.expr()
+        } else {
+            &self.base
+        }
+    }
+
+    pub(super) fn eta_index_target(&self) -> Option<&Expr> {
+        self.eta_index_target.as_ref()
     }
 }
 
-/// If `e` is exactly the Nat-numeral projection form
-/// `@OfNat.ofNat Nat (Lit k) (instOfNatNat (Lit k))`, return the raw literal
-/// `Lit(Nat k)`; otherwise `None`.
-///
-/// SOUNDNESS: `instOfNatNat k` is the structure literal storing `k`, so the
-/// projection ι/δ-reduces to `k` — the two spellings are definitionally equal
-/// (the kernel's `add_decl` re-check enforces exactly this equivalence).
-pub(crate) fn as_nat_ofnat_literal(e: &Expr) -> Option<Expr> {
-    let head = e.get_app_fn();
-    let ExprKind::Const(head_name, _) = head.kind() else {
-        return None;
-    };
-    if *head_name != *OFNAT_NAME {
+/// A matcher in a lambda may reduce to `f x`, making `f` a usable key and match target.
+/// A successful broad tree hit can otherwise hide a rule keyed by `f`.
+/// The simplifier still checks every candidate against the original target.
+fn eta_arguments(state: &ProofState, goal: &Goal, target: &Expr) -> Option<Expr> {
+    let args = target.get_app_args();
+    if !args
+        .iter()
+        .any(|arg| matches!(arg.kind(), ExprKind::Lam(..)))
+    {
         return None;
     }
-    let args = e.get_app_args();
-    let [ty, lit, inst] = args.as_slice() else {
-        return None;
-    };
-    if !matches!(ty.kind(), ExprKind::Const(n, _) if *n == *NAT_NAME) {
-        return None;
-    }
-    if !matches!(lit.kind(), ExprKind::Lit(clean_kernel::Literal::Nat(_))) {
-        return None;
-    }
-    let inst_head = inst.get_app_fn();
-    if !matches!(inst_head.kind(), ExprKind::Const(n, _) if *n == *INST_OFNAT_NAT_NAME) {
-        return None;
-    }
-    // Read the instance's stored field: that is the value the genuine
-    // `OfNat.ofNat` projection produces. Requiring it to be the same literal
-    // as the class index also makes this helper fail closed on an internally
-    // inconsistent (and therefore ill-typed) wrapper.
-    let inst_args = inst.get_app_args();
-    let [inst_lit] = inst_args.as_slice() else {
-        return None;
-    };
-    let (
-        ExprKind::Lit(clean_kernel::Literal::Nat(k_inst)),
-        ExprKind::Lit(clean_kernel::Literal::Nat(k_idx)),
-    ) = (inst_lit.kind(), lit.kind())
+    let mut changed = false;
+    let adjusted = args.into_iter().map(|argument| {
+        if let ExprKind::Lam(_, _, body) = argument.kind() {
+            let body = state.whnf_indexing(goal, body);
+            if let Some(contracted) = super::reduce::eta_contract_body(&body) {
+                changed = true;
+                return contracted;
+            }
+        }
+        argument.clone()
+    });
+    let contracted = Expr::apps(target.get_app_fn().clone(), adjusted);
+    changed.then_some(contracted)
+}
+
+/// Expose a successor written as addition when a compatible constructor
+/// equation already requires that argument. The existing match guards still
+/// compare the instantiated lemma to the original goal expression.
+pub(super) fn match_successor_arguments(
+    state: &ProofState,
+    goal: &Goal,
+    pattern: &Expr,
+    candidate: &Expr,
+    budget: &SimpBudget,
+) -> Option<Expr> {
+    let (ExprKind::Const(pattern_head, _), ExprKind::Const(candidate_head, _)) =
+        (pattern.get_app_fn().kind(), candidate.get_app_fn().kind())
     else {
         return None;
     };
-    if k_inst != k_idx {
+    if pattern_head != candidate_head {
         return None;
     }
-    Some((*inst_lit).clone())
-}
-
-static OFNAT_NAME: LazyLock<Name> = LazyLock::new(|| Name::from_string("OfNat.ofNat"));
-static NAT_NAME: LazyLock<Name> = LazyLock::new(|| Name::from_string("Nat"));
-static INST_OFNAT_NAT_NAME: LazyLock<Name> = LazyLock::new(|| Name::from_string("instOfNatNat"));
-
-/// Whether any `OfNat.ofNat` constant occurs anywhere in `e`.
-///
-/// [`as_nat_ofnat_literal`] fires only on a node whose application head is
-/// `Const("OfNat.ofNat")`, and a collapse only ever replaces a subtree with a
-/// `Lit` — it can never introduce that head. So a tree without the constant
-/// cannot collapse, at any node, before or after any other collapse, and the
-/// rebuild below can be skipped outright. Read-only: allocates nothing.
-fn mentions_ofnat(e: &Expr) -> bool {
-    stack_safe(|| match e.kind() {
-        ExprKind::Const(name, _) => *name == *OFNAT_NAME,
-        ExprKind::App(f, a) => mentions_ofnat(f) || mentions_ofnat(a),
-        ExprKind::Lam(_, ty, body) | ExprKind::Pi(_, ty, body) => {
-            mentions_ofnat(ty) || mentions_ofnat(body)
-        }
-        ExprKind::Let(_, ty, val, body, _) => {
-            mentions_ofnat(ty) || mentions_ofnat(val) || mentions_ofnat(body)
-        }
-        ExprKind::Proj(_, _, inner) | ExprKind::MData(_, inner) | ExprKind::Squash(inner) => {
-            mentions_ofnat(inner)
-        }
-        _ => false,
-    })
-}
-
-/// Rewrite every `@OfNat.ofNat Nat k (instOfNatNat k)` subterm of `e` to the
-/// raw `Lit(Nat k)`. Returns `None` when nothing collapsed (the common case),
-/// so callers keep the original expression without an extra clone.
-///
-/// The [`mentions_ofnat`] pre-scan makes the no-op case allocation-free: the
-/// fold below rebuilds EVERY node it visits (that is what `ExprFolder` does),
-/// so without the guard a call that collapses nothing still built a complete
-/// copy of the tree and then dropped it. The guard cannot change the result —
-/// see its doc comment.
-pub(super) fn collapse_nat_ofnat_literals(e: &Expr) -> Option<Expr> {
-    if !mentions_ofnat(e) {
+    let patterns = pattern.get_app_args();
+    let arguments = candidate.get_app_args();
+    if patterns.len() != arguments.len() {
         return None;
     }
-
-    struct OfNatCollapser {
-        changed: bool,
-    }
-    impl ExprFolder for OfNatCollapser {
-        fn fold_app(&mut self, f: &Expr, arg: &Expr) -> Expr {
-            let rebuilt = Expr::app(self.fold_expr(f), self.fold_expr(arg));
-            if let Some(lit) = as_nat_ofnat_literal(&rebuilt) {
-                self.changed = true;
-                lit
-            } else {
-                rebuilt
-            }
+    let mut normalized = None;
+    for (index, (pattern, argument)) in patterns.iter().zip(&arguments).enumerate() {
+        if !matches!(pattern.get_app_fn().kind(), ExprKind::Const(name, _) if *name == *NAT_SUCC) {
+            continue;
+        }
+        if let Some(reduced) =
+            successor_from_addition(state, goal, argument, budget, reduce_op_projection_head)
+        {
+            normalized
+                .get_or_insert_with(|| arguments.iter().copied().cloned().collect::<Vec<_>>())
+                [index] = reduced;
         }
     }
-    let mut collapser = OfNatCollapser { changed: false };
-    let folded = collapser.fold_expr(e);
-    collapser.changed.then_some(folded)
+    normalized.map(|arguments| Expr::apps(candidate.get_app_fn().clone(), arguments))
+}
+
+pub(super) fn successor_from_addition(
+    state: &ProofState,
+    goal: &Goal,
+    argument: &Expr,
+    budget: &SimpBudget,
+    peel_projection: fn(&ProofState, &Goal, &Expr) -> Option<Expr>,
+) -> Option<Expr> {
+    let ExprKind::Const(head, _) = argument.get_app_fn().kind() else {
+        return None;
+    };
+    let addition = if *head == *NAT_ADD {
+        argument.clone()
+    } else if *head == *HADD_ADD {
+        peel_projection(state, goal, argument)?
+    } else {
+        return None;
+    };
+    if !matches!(addition.get_app_fn().kind(), ExprKind::Const(name, _) if *name == *NAT_ADD) {
+        return None;
+    }
+    let arguments = addition.get_app_args();
+    let [left, amount] = arguments.as_slice() else {
+        return None;
+    };
+    let literal = as_nat_ofnat_literal(amount);
+    let ExprKind::Lit(Literal::Nat(amount)) = literal.as_ref().unwrap_or(amount).kind() else {
+        return None;
+    };
+    let predecessor = amount.pred()?;
+    if !budget.charge_attempt() {
+        return None;
+    }
+    let inner = if predecessor.is_zero() {
+        (*left).clone()
+    } else {
+        Expr::apps(
+            addition.get_app_fn().clone(),
+            [(*left).clone(), Expr::bignat_lit(predecessor)],
+        )
+    };
+    let reduced = Expr::app(Expr::const_(NAT_SUCC.clone(), vec![]), inner);
+    (budget.admit(&reduced, "matching a successor argument")
+        && state.is_def_eq(goal, argument, &reduced))
+    .then_some(reduced)
 }
 
 #[cfg(test)]
 mod tests {
+    use clean_kernel::{BinderInfo, Environment};
+    use clean_parser::SurfaceName;
+
     use super::*;
-    use clean_kernel::Literal;
+    use crate::tactic::intro;
 
-    /// The fold WITHOUT the [`mentions_ofnat`] pre-scan — the exact body this
-    /// module shipped before the guard was added. Every test below asserts the
-    /// guarded and unguarded forms agree, so the guard is pinned as a pure
-    /// performance change and cannot silently start refusing a collapse.
-    fn collapse_unguarded(e: &Expr) -> Option<Expr> {
-        struct OfNatCollapser {
-            changed: bool,
-        }
-        impl ExprFolder for OfNatCollapser {
-            fn fold_app(&mut self, f: &Expr, arg: &Expr) -> Expr {
-                let rebuilt = Expr::app(self.fold_expr(f), self.fold_expr(arg));
-                if let Some(lit) = as_nat_ofnat_literal(&rebuilt) {
-                    self.changed = true;
-                    lit
-                } else {
-                    rebuilt
-                }
-            }
-        }
-        let mut collapser = OfNatCollapser { changed: false };
-        let folded = collapser.fold_expr(e);
-        collapser.changed.then_some(folded)
+    #[test]
+    fn only_an_attempted_match_needs_the_full_numeral_fold() {
+        let state = ProofState::new(Environment::with_prelude(), Expr::const_str("True"));
+        let goal = state.goals().front().unwrap();
+        let numeral = Expr::nat_lit(7);
+        let wrapper = Expr::apps(
+            Expr::const_str("OfNat.ofNat"),
+            [
+                Expr::const_str("Nat"),
+                numeral.clone(),
+                Expr::app(Expr::const_str("instOfNatNat"), numeral.clone()),
+            ],
+        );
+        let wrapped_argument = Expr::app(Expr::const_str("unrelated"), wrapper.clone());
+        let target = MatchTarget::new(&state, goal, &wrapped_argument);
+        let lemmas = super::super::SimpLemmaSet::without_index(Vec::new());
+        assert!(lemmas
+            .candidates_for_target(&state, goal, &target)
+            .is_empty());
+        assert_eq!(target.head_guard_target(), &wrapped_argument);
+        assert!(target.collapsed_numerals.get().is_none());
+        let collapsed = Expr::app(Expr::const_str("unrelated"), numeral.clone());
+        assert_eq!(target.expr(), &collapsed);
+        assert_eq!(target.collapsed_numerals.get(), Some(&Some(collapsed)));
+
+        let headed = MatchTarget::new(&state, goal, &wrapper);
+        assert_eq!(headed.head_guard_target(), &numeral);
+        assert_eq!(headed.collapsed_numerals.get(), Some(&Some(numeral)));
     }
 
-    fn c(name: &str) -> Expr {
-        Expr::const_(Name::from_string(name), clean_kernel::LevelVec::new())
-    }
-
-    fn nat_lit(k: u64) -> Expr {
-        Expr::from_kind(ExprKind::Lit(Literal::Nat(k.into())))
-    }
-
-    /// `@OfNat.ofNat Nat (Lit k) (instOfNatNat (Lit k))`.
-    fn ofnat(k: u64) -> Expr {
-        Expr::app(
-            Expr::app(Expr::app(c("OfNat.ofNat"), c("Nat")), nat_lit(k)),
-            Expr::app(c("instOfNatNat"), nat_lit(k)),
-        )
-    }
-
-    fn assert_agrees(e: &Expr) -> Option<Expr> {
-        let guarded = collapse_nat_ofnat_literals(e);
-        let unguarded = collapse_unguarded(e);
+    #[test]
+    fn successor_equations_match_compact_open_nat_additions() {
+        let nat = Expr::const_str("Nat");
+        let proposition = Expr::pi(BinderInfo::Default, nat, Expr::const_str("True"));
+        let mut state = ProofState::new(Environment::with_prelude(), proposition);
+        intro(&mut state, &SurfaceName::generated_path("n")).unwrap();
+        let goal = state.goals().front().unwrap();
+        let local = Expr::fvar(goal.local_ctx[0].fvar);
+        let succ = |argument| Expr::app(Expr::const_(NAT_SUCC.clone(), vec![]), argument);
+        let add = |amount| {
+            Expr::apps(
+                Expr::const_(NAT_ADD.clone(), vec![]),
+                [local.clone(), Expr::nat_lit(amount)],
+            )
+        };
+        let pattern = succ(succ(local.clone()));
+        let candidate = succ(add(2));
+        let budget = SimpBudget::for_target(&candidate);
+        let expected = succ(succ(add(1)));
         assert_eq!(
-            guarded, unguarded,
-            "the mentions_ofnat pre-scan changed the result of the collapse"
+            match_successor_arguments(&state, goal, &pattern, &candidate, &budget),
+            Some(expected)
         );
-        guarded
-    }
-
-    #[test]
-    fn test_collapse_no_ofnat_returns_none_and_agrees_with_unguarded() {
-        let e = Expr::app(Expr::app(c("Nat.add"), c("n")), nat_lit(0));
-        assert!(assert_agrees(&e).is_none());
-    }
-
-    #[test]
-    fn test_collapse_ofnat_leaf_becomes_literal() {
-        let e = Expr::app(Expr::app(c("Nat.add"), c("n")), ofnat(7));
-        let got = assert_agrees(&e).expect("the OfNat operand must collapse");
-        assert_eq!(got, Expr::app(Expr::app(c("Nat.add"), c("n")), nat_lit(7)));
-    }
-
-    /// A child collapse can EXPOSE a parent collapse: the outer node's literal
-    /// slot is itself spelled as `OfNat.ofNat`, so it only matches
-    /// [`as_nat_ofnat_literal`] once the inner one has been replaced. This is
-    /// the case that forces the pre-scan to be a superset test ("does the
-    /// constant occur anywhere") rather than a top-node test.
-    #[test]
-    fn test_collapse_is_iterated_through_nested_ofnat() {
-        let nested = Expr::app(
-            Expr::app(Expr::app(c("OfNat.ofNat"), c("Nat")), ofnat(3)),
-            Expr::app(c("instOfNatNat"), nat_lit(3)),
-        );
-        let got = assert_agrees(&nested).expect("the nested OfNat must collapse");
-        assert_eq!(got, nat_lit(3));
-    }
-
-    #[test]
-    fn test_collapse_reaches_under_binders_and_projections() {
-        let under_lam = Expr::lam(
-            clean_kernel::BinderInfo::Default,
-            c("Nat"),
-            Expr::app(Expr::app(c("Nat.add"), Expr::bvar(0)), ofnat(1)),
-        );
-        assert!(assert_agrees(&under_lam).is_some());
-
-        let under_proj = Expr::proj(Name::from_string("S"), 0, ofnat(2));
         assert_eq!(
-            assert_agrees(&under_proj),
-            Some(Expr::proj(Name::from_string("S"), 0, nat_lit(2),))
+            match_successor_arguments(&state, goal, &pattern, &succ(add(0)), &budget),
+            None
         );
-    }
-
-    /// A near-miss must NOT collapse: the instance argument is not
-    /// `instOfNatNat`, so the two spellings are not the same numeral.
-    #[test]
-    fn test_collapse_refuses_foreign_ofnat_instance() {
-        let e = Expr::app(
-            Expr::app(Expr::app(c("OfNat.ofNat"), c("Nat")), nat_lit(5)),
-            c("someOtherInstance"),
-        );
-        assert!(assert_agrees(&e).is_none());
-    }
-
-    #[test]
-    fn test_collapse_refuses_mismatched_ofnat_index_and_instance_value() {
-        let e = Expr::app(
-            Expr::app(Expr::app(c("OfNat.ofNat"), c("Nat")), nat_lit(5)),
-            Expr::app(c("instOfNatNat"), nat_lit(6)),
-        );
-        assert!(assert_agrees(&e).is_none());
     }
 }

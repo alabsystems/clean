@@ -14,35 +14,37 @@ impl ExprKind {
             | Self::Pi(_, a, b)
             | Self::ZFCMem { element: a, set: b }
             | Self::ZFCComprehension { domain: a, pred: b } => {
-                a.fvar_upper_bound.max(b.fvar_upper_bound)
+                a.fvar_upper_bound().max(b.fvar_upper_bound())
             }
             Self::Let(_, ty, value, body, _) => ty
-                .fvar_upper_bound
-                .max(value.fvar_upper_bound)
-                .max(body.fvar_upper_bound),
+                .fvar_upper_bound()
+                .max(value.fvar_upper_bound())
+                .max(body.fvar_upper_bound()),
             Self::Proj(_, _, inner)
             | Self::MData(_, inner)
             | Self::Squash(inner)
-            | Self::CubicalPathLam { body: inner } => inner.fvar_upper_bound,
+            | Self::CubicalPathLam { body: inner } => inner.fvar_upper_bound(),
             Self::CubicalPath { ty, left, right } => ty
-                .fvar_upper_bound
-                .max(left.fvar_upper_bound)
-                .max(right.fvar_upper_bound),
-            Self::CubicalPathApp { path, arg } => path.fvar_upper_bound.max(arg.fvar_upper_bound),
+                .fvar_upper_bound()
+                .max(left.fvar_upper_bound())
+                .max(right.fvar_upper_bound()),
+            Self::CubicalPathApp { path, arg } => {
+                path.fvar_upper_bound().max(arg.fvar_upper_bound())
+            }
             Self::CubicalHComp { ty, phi, u, base } => ty
-                .fvar_upper_bound
-                .max(phi.fvar_upper_bound)
-                .max(u.fvar_upper_bound)
-                .max(base.fvar_upper_bound),
+                .fvar_upper_bound()
+                .max(phi.fvar_upper_bound())
+                .max(u.fvar_upper_bound())
+                .max(base.fvar_upper_bound()),
             Self::CubicalTransp { ty, phi, base } => ty
-                .fvar_upper_bound
-                .max(phi.fvar_upper_bound)
-                .max(base.fvar_upper_bound),
+                .fvar_upper_bound()
+                .max(phi.fvar_upper_bound())
+                .max(base.fvar_upper_bound()),
             Self::CubicalCoe { ty, r, s, base } => ty
-                .fvar_upper_bound
-                .max(r.fvar_upper_bound)
-                .max(s.fvar_upper_bound)
-                .max(base.fvar_upper_bound),
+                .fvar_upper_bound()
+                .max(r.fvar_upper_bound())
+                .max(s.fvar_upper_bound())
+                .max(base.fvar_upper_bound()),
             Self::ZFCSet(_) => u64::MAX,
             Self::BVar(_)
             | Self::Sort(_)
@@ -60,11 +62,18 @@ impl Expr {
     /// False proves target absence, assuming the existing immutable metadata
     /// invariant. True is only a conservative possibility, including MAX IDs.
     pub(crate) fn may_contain_fvar(&self, target: FVarId) -> bool {
+        self.may_contain_fvar_at_or_above(target)
+    }
+
+    /// Whether the expression may contain a free variable with an ID at
+    /// least `lower`. A negative result rules out the entire upper interval.
+    /// Unknown extension payloads retain the conservative upper bound.
+    pub fn may_contain_fvar_at_or_above(&self, lower: FVarId) -> bool {
         #[cfg(test)]
         if UNHINTED.with(std::cell::Cell::get) {
             return self.has_fvar_quick();
         }
-        self.has_fvar_quick() && target.as_u64() <= self.fvar_upper_bound
+        self.has_fvar_quick() && lower.as_u64() <= self.fvar_upper_bound()
     }
 }
 

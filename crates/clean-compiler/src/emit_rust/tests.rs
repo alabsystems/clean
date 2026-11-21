@@ -64,10 +64,19 @@ fn test_emit_var() {
 #[test]
 fn test_emit_literal() {
     let emitter = RustEmitter::new();
-    assert_eq!(emitter.emit_literal(&IRLiteral::Bool(true)), "1u8");
-    assert_eq!(emitter.emit_literal(&IRLiteral::Bool(false)), "0u8");
-    assert_eq!(emitter.emit_literal(&IRLiteral::UInt64(42)), "42u64");
-    assert_eq!(emitter.emit_literal(&IRLiteral::USize(100)), "100usize");
+    assert_eq!(emitter.emit_literal(&IRLiteral::Bool(true)).unwrap(), "1u8");
+    assert_eq!(
+        emitter.emit_literal(&IRLiteral::Bool(false)).unwrap(),
+        "0u8"
+    );
+    assert_eq!(
+        emitter.emit_literal(&IRLiteral::UInt64(42)).unwrap(),
+        "42u64"
+    );
+    assert_eq!(
+        emitter.emit_literal(&IRLiteral::USize(100)).unwrap(),
+        "100usize"
+    );
 }
 
 // ── Default value emission ─────────────────────────────────────────
@@ -930,11 +939,11 @@ fn test_partial_apply_emits_total_arity_not_args_len() {
 fn test_emit_float_nan_produces_valid_rust() {
     let emitter = RustEmitter::new();
     assert_eq!(
-        emitter.emit_literal(&IRLiteral::Float64(f64::NAN)),
+        emitter.emit_literal(&IRLiteral::Float64(f64::NAN)).unwrap(),
         "f64::NAN"
     );
     assert_eq!(
-        emitter.emit_literal(&IRLiteral::Float32(f32::NAN)),
+        emitter.emit_literal(&IRLiteral::Float32(f32::NAN)).unwrap(),
         "f32::NAN"
     );
 }
@@ -943,19 +952,27 @@ fn test_emit_float_nan_produces_valid_rust() {
 fn test_emit_float_infinity_produces_valid_rust() {
     let emitter = RustEmitter::new();
     assert_eq!(
-        emitter.emit_literal(&IRLiteral::Float64(f64::INFINITY)),
+        emitter
+            .emit_literal(&IRLiteral::Float64(f64::INFINITY))
+            .unwrap(),
         "f64::INFINITY"
     );
     assert_eq!(
-        emitter.emit_literal(&IRLiteral::Float64(f64::NEG_INFINITY)),
+        emitter
+            .emit_literal(&IRLiteral::Float64(f64::NEG_INFINITY))
+            .unwrap(),
         "f64::NEG_INFINITY"
     );
     assert_eq!(
-        emitter.emit_literal(&IRLiteral::Float32(f32::INFINITY)),
+        emitter
+            .emit_literal(&IRLiteral::Float32(f32::INFINITY))
+            .unwrap(),
         "f32::INFINITY"
     );
     assert_eq!(
-        emitter.emit_literal(&IRLiteral::Float32(f32::NEG_INFINITY)),
+        emitter
+            .emit_literal(&IRLiteral::Float32(f32::NEG_INFINITY))
+            .unwrap(),
         "f32::NEG_INFINITY"
     );
 }
@@ -963,8 +980,31 @@ fn test_emit_float_infinity_produces_valid_rust() {
 #[test]
 fn test_emit_float_normal_values_unchanged() {
     let emitter = RustEmitter::new();
-    assert_eq!(emitter.emit_literal(&IRLiteral::Float64(1.23)), "1.23f64");
-    assert_eq!(emitter.emit_literal(&IRLiteral::Float32(2.5)), "2.5f32");
+    assert_eq!(
+        emitter.emit_literal(&IRLiteral::Float64(1.23)).unwrap(),
+        "1.23f64"
+    );
+    assert_eq!(
+        emitter.emit_literal(&IRLiteral::Float32(2.5)).unwrap(),
+        "2.5f32"
+    );
 }
 
 // ── Reuse/Ctor emission tests moved to tests/ctor_reuse.rs ──────────
+
+#[test]
+fn wide_nat_literal_helper_preserves_errors_before_expression_emission() {
+    let emitter = RustEmitter::new();
+    assert_eq!(
+        emitter
+            .emit_literal(&IRLiteral::NatLimbs(vec![0, 0, 1]))
+            .unwrap(),
+        "clean_nat_from_limbs(&[0u64, 0u64, 1u64])"
+    );
+    for words in [vec![], vec![1], vec![0, 1], vec![1, 0, 0]] {
+        assert!(matches!(
+            emitter.emit_literal(&IRLiteral::NatLimbs(words)),
+            Err(IRError::NonCanonicalNatLimbs)
+        ));
+    }
+}

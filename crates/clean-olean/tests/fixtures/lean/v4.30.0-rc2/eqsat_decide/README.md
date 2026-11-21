@@ -1,4 +1,4 @@
-# eqsat_decide: decision procedures for trust-cg's rule statements (PKG-U6)
+# eqsat_decide: decision procedures for trust-cg's rule statements (PKG-U6, PKG-U6b)
 
 The `eqsat_rules` family states what a trust-cg e-graph rewrite rule means,
 `EqsatRule.Sound <rule literal> <type>`, and proves the rules of the
@@ -17,6 +17,21 @@ are the `eqsat_rules` family's, taken with `from eqsat_rules` lines in
 closure digest of `EqsatRule.Sound` on its own replayed environment with the
 pin in `crates/clean-olean/tests/eqsat_rules.rs`.
 
+## The four procedures
+
+| Procedure | Types | Rules it can prove | How it decides |
+|---|---|---|---|
+| `exhaust8` | `i8`, `u8`, `bool` | any operator of the rule grammar, side conditions, at most 1,024 assignments (one 8-bit variable) | every assignment, one at a time |
+| `exhaust8p` (PKG-U6b) | `i8`, `u8` | at most two variables of the instance type, no side condition, `add sub and or xor neg not`, variables and integer literals | every assignment, 256 at a time: the 256 values of one variable are the lanes of one natural number |
+| `bitwiseAll` (PKG-U6b) | each of the twelve integer types | at most eight variables of the instance type, no side condition, `and or xor not`, variables, `(const 0)` and `(const -1)` | one truth table: these operators act on each bit by itself, so the table stands at every width |
+| `ringAll` (PKG-U6b) | each of the twelve integer types | any number of variables, each one a side reads of the instance type; no side condition, `add sub mul neg not`, variables and integer literals | both sides normalized as polynomials with integer coefficients; the same polynomial is the same residue at every width |
+
+Each is sound and none is complete: `false` says the rule is not proved by
+that procedure, never that the rule is false. A procedure asked about a rule
+outside its fragment, or at a type it does not cover, answers `false`. The
+sections below are `exhaust8`'s; "The three procedures of PKG-U6b" has the
+other three.
+
 ## Modules
 
 | Module | What it holds |
@@ -24,6 +39,19 @@ pin in `crates/clean-olean/tests/eqsat_rules.rs`.
 | `EqsatResidue` | `Pat.evalR`, a pattern evaluated on bare residues; `evalR_agrees`, what each of its outcomes says of `EqsatRule.Pat.eval`; `checkR`, the test of one assignment, and `checkR_sound` |
 | `EqsatExhaust` | `exhaust8`, which runs `checkR` on every assignment at `bool`, `i8` and `u8` and answers `false` at every other type; `exhaust8_sound : exhaust8 r T = true → Sound r T`; `exhaust8_defined` and `exhaust8_satisfiable`; `rflTrue` |
 | `EqsatDecideControls` | rules proved by `exhaust8_sound _ _ rflTrue`, and rules on which `exhaust8 … = false`, each with the reason (the module's header has the table) |
+| `EqsatPacked` | `exhaust8p` and `exhaust8p_sound : exhaust8p r T = true → Sound r T`; `exhaust8p_defined`, `exhaust8p_satisfiable`; in `EqsatDecide.Packed`, the lane vectors (`pack`, `pack_inj`), the lane evaluator `evalV` and `evalV_lanes`, which says what each of its lanes holds |
+| `EqsatPackedControls` | rules proved by `exhaust8p_sound _ _ rflTrue`, rules on which `exhaust8p … = false`, and the lane evaluator on closed terms |
+| `EqsatBitwise` | `bitwiseAll` and `bitwiseAll_sound : bitwiseAll r T = true → Sound r T`; `bitwise_sound : bitwise r = true → ∀ t, Sound r (.int t)`; `bitwiseAll_defined`, `bitwiseAll_satisfiable`; in `EqsatDecide.Bitwise`, the one-bit evaluator `evalB` and `frag_eval`, which says that bit `j` of a pattern's residue is `evalB` on bit `j` of each variable |
+| `EqsatBitwiseControls` | rules proved by `bitwiseAll_sound _ _ rflTrue` and rules on which `bitwiseAll … = false` |
+| `EqsatRing` | `ringAll` and `ringAll_sound : ringAll r T = true → Sound r T`; `ringAll_defined`, `ringAll_satisfiable`; in `EqsatDecide.RingAll`, the normalizer `ringNorm`, `ringPat_norm` (a pattern's polynomial has the pattern's value modulo `2^w`) and `ringRun_sound : ringRun r = true → ∀ t, Sound r (.int t)` |
+| `EqsatRingControls` | rules proved by `ringAll_sound _ _ rflTrue` and rules on which `ringAll … = false` |
+
+`EqsatPacked`, `EqsatBitwise` and `EqsatRing` each import `EqsatExhaust` (for
+`rflTrue`, `Defined`, `allBelow`, `both` and `guard_true`) and none imports
+another. All nine modules load into one environment, so the parts of each
+PKG-U6b procedure are in a namespace of its own (`EqsatDecide.Packed`,
+`EqsatDecide.Bitwise`, `EqsatDecide.RingAll`); only the procedures and their
+theorems are in `EqsatDecide`.
 
 ## What is proved, and how a rule is proved with it
 
@@ -91,9 +119,11 @@ under every pointer width.
 
 ## What stays unproved
 
+By `exhaust8`:
+
 * **Every type above eight bits.** `i16` to `i128`, `u16` to `u128`, `isize`
   and `usize`: `exhaust8` answers `false`. A rule that holds at every width is
-  proved here at `i8` and `u8` only, and that proof says nothing of another
+  proved by it at `i8` and `u8` only, and that proof says nothing of another
   width: `(and ?x (const 255)) = ?x` is proved at `u8` and is false at `u16`
   (`EqsatDecideControls.and255_not_sound_u16`).
 * **Two or more variables of the instance type at `i8` or `u8`**, and so any
@@ -101,17 +131,40 @@ under every pointer width.
   `false` at once. The budget section says what the enumeration would cost.
   More than two Booleans beside one 8-bit variable, or more than ten Booleans,
   are over the limit too.
-* **Refutations.** No theorem here says a rule is false. `exhaust8 … = false`
-  is not one.
-* **Anything about the search.** Which rules are proposed, and whether a rule
-  the procedure refuses is true, is outside this family.
+
+By the family as a whole, with the three procedures of PKG-U6b:
+
+* **Above eight bits, every rule outside the two all-width fragments.** A
+  rule is proved at `i16` and wider only if it is bitwise (`and or xor not`,
+  0 and -1) or a polynomial identity (`add sub mul neg not`, literals). A
+  rule that mixes the two (`(add (and ?x ?y) (or ?x ?y)) = (add ?x ?y)`), a
+  division, remainder, shift or rotation, a bit count, `bswap`, `bitreverse`,
+  a comparison, a `select`, a Boolean operator, and any rule with a side
+  condition are proved at eight bits or not at all. A rule that holds only
+  modulo one width's modulus is proved only where that width is eight:
+  `(mul ?x (const 256)) = (const 0)` holds at `u8`, `ringAll` answers `false`
+  on it there, and `exhaust8` proves it
+  (`EqsatRingControls.mul256_sound_u8`).
+* **At eight bits, a rule with two variables of the instance type that is
+  outside `exhaust8p`'s fragment and outside the two all-width fragments**
+  (a division or remainder, a shift, a rotation, a bit count, a comparison,
+  a `select`, a side condition, a Boolean variable beside the two, `mul`
+  mixed with a bitwise operator), and **a rule with three variables or
+  more** outside the two all-width fragments.
+* **Refutations.** No theorem here says a rule is false, and no procedure's
+  `false` is one.
+* **Completeness.** No procedure is proved to answer `true` on every sound
+  rule of its fragment. `ringNorm` is not proved to be a normal form.
+* **Anything about the search.** Which rules are proposed, which procedure a
+  rule is offered to, and whether a rule every procedure refuses is true, is
+  outside this family.
 
 ## No axiom and no trusted code
 
 Every declaration of the family replays from the empty environment through
 Clean's reference entry with a closure inside `propext`, `Classical.choice`
-and `Quot.sound`. `exhaust8` is a definition, not a checker anyone trusts: the
-kernel accepts `exhaust8_sound` only as a proof about the unchanged
+and `Quot.sound`. Each procedure is a definition, not a checker anyone trusts:
+the kernel accepts its soundness theorem only as a proof about the unchanged
 `EqsatRule.Sound`, so a procedure that answered `true` on a false rule would
 have no soundness theorem and the family would not compile. Nothing in
 `EqsatRule.lean` or in the `eqsat_rules` family changed, and the gate compares
@@ -208,8 +261,9 @@ limit must name heartbeats). Its run on the build host:
 
 The heartbeat figures are exact and the same on every run; the times are one
 run's. The sixteen checks together cost 250,093 heartbeats. The family
-(768 declarations of the five audited modules, 2,681 with their cone) replays
-from the empty environment under the same 200,000 in about 3.0 s.
+(1,398 declarations of the eleven audited modules, the nine of this family
+and the two taken from `eqsat_rules`; 3,877 with their cone) replays from the
+empty environment under the same 200,000 in about 4.6 s.
 
 Refusals are cheap. The record term for each of six rules over the size limit
 is refused, with `exhaust8 … = false` accepted and `= true` refused beside it,
@@ -286,9 +340,11 @@ the smallest budget for `EqsatRule`, `EqsatBasics` and `EqsatResidue` at 6,964
 whole `eqsat_rules` family at 11,549 (`EqsatInt.mul_255_neg_i8_i8._proof_1_28`).
 It was not measured again with `EqsatExhaust`. The controls module holds
 theorems proved by the procedure, so its replay needs what the dearest of them
-needs, 88,993 or a little more; the gate replays all five modules at 200,000.
-A bundle that takes only the cone of `exhaust8_sound` and `rflTrue` does not
-replay the controls.
+needs, 88,993 or a little more; the gate replays all eleven modules at
+200,000, the three procedures of PKG-U6b and their controls among them. The
+smallest budget at which each of those six modules replays was not measured.
+A bundle that takes only the cone of a soundness theorem and `rflTrue` does
+not replay the controls.
 
 An enumeration is written as one counter of 256 per variable, never one
 counter over all assignments: Clean's kernel leaves a `Nat.rec` with a
@@ -312,13 +368,220 @@ and neither is a passing check of `exhaust8 … = false`: a caller decides
 Written the plain way (`match`, structural recursion), the same evaluator cost
 5.5 times the heartbeats: 29,824 against 5,441 for the one-variable rule.
 
-Two or three integer variables are within reach of a different procedure, not
-of a larger budget. A prototype that packs the 256 values of the innermost
+Two integer variables are within reach of a different procedure, not of a
+larger budget. Step 0 measured a prototype that packs the 256 values of one
 variable into one `Nat` of 256 sixteen-bit lanes, for `add sub and or xor neg
-not`, variables and literals, passes `(and ?x (or ?x ?y)) = ?x` at 2,338
-heartbeats in 12 ms and `(sub (add ?x ?y) ?y) = ?x` at 3,139 in 14 ms. It has
-no soundness theorem; it is a procedure of its own, to be added beside
-`exhaust8` with its own proof.
+not`, variables and literals: `(and ?x (or ?x ?y)) = ?x` at 2,338 heartbeats
+and `(sub (add ?x ?y) ?y) = ?x` at 3,139. That prototype had no soundness
+theorem. `exhaust8p` is the same evaluator with one (next section); the gate
+measures the two rules at 3,386 and 4,189.
+
+## The three procedures of PKG-U6b
+
+Each is used as `exhaust8` is, and each has the same three theorems with no
+other hypothesis:
+
+```lean
+theorem exhaust8p_sound (r : Rule) (T : STy) (h : exhaust8p r T = true) : Sound r T
+theorem bitwiseAll_sound (r : Rule) (T : STy) (h : bitwiseAll r T = true) : Sound r T
+theorem ringAll_sound (r : Rule) (T : STy) (h : ringAll r T = true) : Sound r T
+```
+
+with `exhaust8p_defined`, `bitwiseAll_defined` and `ringAll_defined` for
+`Defined r T`, and `exhaust8p_satisfiable`, `bitwiseAll_satisfiable` and
+`ringAll_satisfiable` for `Satisfiable r T`, from the same `true`. The proof
+of `EqsatRule.Sound <literal> <type>` is `exhaust8`'s term with one constant
+renamed:
+
+```
+EqsatDecide.exhaust8p_sound <literal> <type> EqsatDecide.rflTrue
+EqsatDecide.bitwiseAll_sound <literal> <type> EqsatDecide.rflTrue
+EqsatDecide.ringAll_sound <literal> <type> EqsatDecide.rflTrue
+```
+
+A term names its procedure, its rule and its type, and the kernel accepts it
+only by evaluating that procedure on that literal at that type. Each
+soundness theorem is in the module of its procedure (`EqsatPacked`,
+`EqsatBitwise`, `EqsatRing`) and `rflTrue` is in `EqsatExhaust`, so a bundle
+that proves rules needs no controls module.
+
+No operator of the three fragments is undefined behaviour and no pattern of
+them is `bad`: on every admitted assignment each side is a value. So none of
+the three reads the rule's direction (`equiv` and `refines` ask the same
+thing there, one common value on every assignment), and a rule one of them
+admits says something, which is what the `_defined` theorems state. None of
+the three handles a side condition: a rule with a `where` clause is answered
+`false`, whatever the clause.
+
+### `exhaust8p`: two 8-bit variables, 256 assignments at a time
+
+A lane vector is one natural number of 256 sixteen-bit lanes; lane `i` holds
+a pattern's residue where the variable of rank 0 is `i`. `add` and `sub` of
+two residues below 256 stay inside a lane, one `Nat.land` with 255 in every
+lane reduces every lane modulo 256, `and or xor` act on each lane by
+themselves, and two sides are equal on all 256 assignments exactly when their
+vectors are one number (`Packed.pack_inj`). A second variable is a counter of
+256, so a rule with two variables is 256 comparisons of 4,096-bit numbers and
+not 65,536 evaluations. `exhaust8p r T` answers `true` only when all six
+hold:
+
+| Test | What it requires |
+|---|---|
+| type | `T` is `i8` or `u8`. At every other type, `bool` included, the answer is `false` before the rule is read |
+| sorts | every variable is of sort `t` (`Packed.allT`). A rule with a Boolean variable is `exhaust8`'s |
+| size | at most two variables (`Packed.maxVars`). None and one are accepted; three are answered `false` at once |
+| no side condition | `Packed.noConds` |
+| fragment | both sides are built from variables the rule binds (`?v` and `(const ?v)`), integer literals (read modulo 256), `add sub and or xor`, `neg` and `not` (`Packed.frag`). `mul`, a division or remainder, a shift or rotation, `band bor bxor`, a bit count, `bswap`, `bitreverse`, a comparison, a `select`, `true`, `false` and an unbound variable make the answer `false`, wherever they stand |
+| every assignment | the two sides are one lane vector under each value of the counted variable (`Packed.sweepP`) |
+
+Three variables are refused because nesting a second counter is 65,536
+comparisons: with the limit raised in a copy, two such rules took 11.5 s and
+22.2 s under the pinned Lean's own kernel, against 13 to 22 ms for two
+variables. That was not run through Clean's entry. The soundness proof does
+not read the limit.
+
+The four constants of the evaluator (1, the lane's index, 255 and 256 in
+every lane) are proved to be the vectors they are by having the kernel read
+each lane with a shift and a remainder (`Packed.lanesOk`), not by evaluating
+`pack`: `pack` raises 2 to a lane's offset, and Clean's kernel leaves
+`Nat.pow` unreduced above 1,024 bits.
+
+### `bitwiseAll`: one truth table for every width
+
+At an integer type of width `w`, a pattern built from `and or xor not`,
+variables, 0 and -1 evaluates to a residue whose bit `j`, for each `j < w`,
+is the same Boolean function of bit `j` of each variable
+(`Bitwise.frag_eval`). So two sides with one truth table are one residue at
+every width, and no fact about `w` is used. `bitwiseAll r T` answers `true`
+only when all of these hold:
+
+| Test | What it requires |
+|---|---|
+| type | `T` is an integer type, any of the twelve. At `bool` the answer is `false` before the rule is read. `bitwiseAll r (.int t)` is `bitwise r`, which does not read `t`; `bitwise_sound : bitwise r = true → ∀ t, Sound r (.int t)` states all twelve at once |
+| no side condition | `Bitwise.noConds` |
+| sorts and size | every variable is of sort `t`, and there are at most eight (`maxBitVars`), so at most 256 rows |
+| fragment | both sides are built from variables the rule binds, `(const 0)` written `lit false 0`, `(const -1)` written `lit true 1`, `and`, `or`, `xor` and `not` (`Bitwise.fragB`). Every other literal is refused, `(const 255)` and `lit true 0` among them: 255 is all ones at eight bits only |
+| every row | on each assignment of one bit to each variable the two sides are the same bit (`Bitwise.allBits`) |
+
+### `ringAll`: one polynomial for every width
+
+At an integer type of width `w`, SemR's `add sub mul neg not` on residues
+are, modulo `2^w`, the operations of the integers, with `(not a)` read as
+`-a - 1`. So the residue of a pattern of the fragment is, modulo `2^w`, the
+value of a polynomial with integer coefficients at the assignment's residues
+(`RingAll.ringPat_norm`), and two sides with one polynomial are one residue
+at every width. `ringAll r T` answers `true` only when all four hold:
+
+| Test | What it requires |
+|---|---|
+| type | `T` is an integer type, any of the twelve. At `bool` the answer is `false` (`ringAll_bool`); at an integer type it is `RingAll.ringRun r`, whatever the type (`ringAll_int`), and `RingAll.ringRun_sound : ringRun r = true → ∀ t, Sound r (.int t)` states all twelve at once |
+| no side condition | the rule's conditions are `Conds.nil` |
+| fragment | both sides are built from variables of sort `t` that the rule binds, `(const INT)` for any integer, `add`, `sub`, `mul`, `neg` and `not` (`RingAll.ringPat`). Every other operator, a variable of sort `bool` that a side reads and an unbound variable make the answer `false`. The test is on the variables the sides read (`RingAll.isT`), not on the rule's list: a Boolean variable that neither side reads is accepted (`EqsatRingControls.beside_bool_u8`), where `exhaust8p` and `bitwiseAll` answer `false` on any rule that binds one |
+| one polynomial | the two sides normalize to the same list of terms (`RingAll.ringNorm`, compared by `RingAll.Polyn.beq`) |
+
+The normalizer is this family's own: a monomial is the ascending list of its
+variables' ranks, a polynomial the sorted list of its terms with `Int`
+coefficients. Lean's `Init.Grind` normalizer proves the same theorem and was
+measured beside it under the pinned Lean: three to six times the kernel time
+a check, and 1,275 declarations in the soundness theorem's cone that
+`exhaust8_sound`'s does not have, against 137. It is not in the family.
+
+The procedure has no size limit. A product of polynomials of `k` and `l`
+terms is `k * l` insertions, and a rule whose expansion is too large for the
+budget runs out of it, which admits nothing. It finds identities of
+polynomials over the integers only: a rule that holds modulo one type's
+modulus and not over the integers is answered `false` (`(mul ?x (const 256))
+= (const 0)` at `u8`).
+
+### What the gate measures of the three
+
+As for `exhaust8`: the entry accepts the record term at a budget of 200,000,
+and the gate prints the smallest heartbeat limit the same check passes under.
+The heartbeat figures are exact; the times are one run's.
+
+| Procedure | Rule | Types | Smallest passing limit | Time of the check |
+|---|---|---|---|---|
+| `exhaust8p` | `(and ?x (or ?x ?y)) = ?x` | `i8`, `u8` | 3,386 | 22 ms |
+| `exhaust8p` | `(sub (add ?x ?y) ?y) = ?x` | `i8`, `u8` | 4,189 | 24 to 26 ms |
+| `exhaust8p` | `(xor (xor ?x ?y) ?y) = ?x` | `i8`, `u8` | 3,386 | 22 to 23 ms |
+| `exhaust8p` | `(add (and ?x ?y) (or ?x ?y)) = (add ?x ?y)` | `u8` | 3,666 | 31 ms |
+| `exhaust8p` | `(not (and (not ?x) (not ?y))) = (or ?x ?y)` | `u8` | 3,403 | 31 ms |
+| `exhaust8p` | `(add ?x ?y)` refines to `(add ?y ?x)` | `u8` | 3,150 | 23 ms |
+| `exhaust8p` | `(sub (const -1) ?x) = (not ?x)` (one variable) | `i8` | 124 | 0.4 ms |
+| `exhaust8p` | `(add (const 1) (const 255)) = (const 0)` (no variable) | `u8` | 105 | 0.3 ms |
+| `exhaust8p` | `(and ?x (const 255)) = ?x` (one variable) | `u8` | 93 | 0.3 ms |
+| `bitwiseAll` | `(and ?x (not ?x)) = (const 0)` | each of the twelve | 53 | 0.2 to 0.3 ms |
+| `bitwiseAll` | `(or ?x (and ?x ?y)) = ?x` | `u8`, `u64` | 73 | 0.3 ms |
+| `bitwiseAll` | `(or ?x (not ?x)) = (const -1)` | `u128` | 50 | 0.2 ms |
+| `bitwiseAll` | `(not (and ?x (and ?y ?z)))` refines to `(or (not ?x) (or (not ?y) (not ?z)))` | `i64` | 187 | 1.1 ms |
+| `bitwiseAll` | the `xor` of eight variables = the same in the reverse order (256 rows) | `u64` | 12,745 | 167 ms |
+| `ringAll` | `(sub (add ?x ?y) ?y) = ?x` | each of the twelve | 83 | 0.3 to 0.4 ms |
+| `ringAll` | `(sub (add ?x ?y) ?y)` refines to `?x` | `u64` | 83 | 0.4 ms |
+| `ringAll` | `(add ?x ?x) = (mul ?x (const 2))` | `u8` | 90 | 0.4 ms |
+| `ringAll` | `(neg (not ?x)) = (add ?x (const 1))` | `isize` | 80 | 0.3 ms |
+| `ringAll` | `(mul ?x (add ?y ?z)) = (add (mul ?x ?y) (mul ?x ?z))` | `u16` | 120 | 0.6 ms |
+| `ringAll` | `(mul ?x ?y) = (mul ?y ?x)` | `u8` | 82 | 0.4 ms |
+| `ringAll` | `(mul (add ?x ?y) (add ?x ?y)) = (add (add (mul ?x ?x) (mul (const 2) (mul ?x ?y))) (mul ?y ?y))` | `i128` | 220 | 1.2 ms |
+| `ringAll` | `(mul (sub ?x ?y) (add ?x ?y)) = (sub (mul ?x ?x) (mul ?y ?y))` | `i64` | 207 | 0.9 ms |
+
+That is 12 rule and type pairs by `exhaust8p` (32,463 heartbeats together,
+the dearest 4,189), 17 by `bitwiseAll` (13,764, the dearest 12,745) and 19 by
+`ringAll` (1,878, the dearest 220). `exhaust8`'s enumeration of the first two
+rules was measured in step 0 at about 1,573,000 heartbeats each. A rule with
+one variable costs `exhaust8p` one comparison: `(and ?x (const 255)) = ?x` at
+`u8` is 93 here and 4,682 by `exhaust8`.
+
+At an integer type the answer of `bitwiseAll` and of `ringAll` does not
+depend on the type, and the cost is the same at each. The term still names
+its type, so twelve types are twelve terms and twelve checks.
+
+The gate has the entry refuse 69 terms of `exhaust8p`, 49 of `bitwiseAll` and
+41 of `ringAll`, each for the claim (`TypeMismatch`). For a rule a procedure
+does not admit at a type, the entry accepts `<procedure> <literal> <type> =
+false` and refuses both `= true` and the record term:
+
+* **`(and ?x (const 255)) = ?x` at `u16`**, under each of the three. It is
+  false there (`EqsatBitwiseControls.and255_not_sound_u16`). `exhaust8p`
+  proves it at `u8` and answers `false` at `u16` for the type; `bitwiseAll`
+  refuses it at every type for the literal, and `ringAll` for `and`;
+* **false rules**: under `exhaust8p`, `(sub (add ?x ?y) ?x) = ?x`, trust-cg's
+  `wrong_operand_order`, `(add ?x ?y) = (or ?x ?y)` and four rules that each
+  fail on one assignment of the 65,536 (the four corners); under
+  `bitwiseAll`, `(or ?x ?y) = ?x` (proved not `Sound` at `u8` beside it),
+  `(xor ?x ?x) = ?x`, `(and ?x ?y) = (or ?x ?y)` and `(const 0) = (const -1)`;
+  under `ringAll`, `(add ?x (const 1)) = ?x` (proved not `Sound` at `u8`),
+  `(mul ?x (const 2)) = ?x`, `wrong_operand_order` and
+  `(neg (not ?x)) = (sub ?x (const 1))`;
+* **rules outside each fragment**: an operator of another procedure's
+  fragment (`bitwiseAll` is asked for `ringAll`'s subject, `ringAll` for the
+  subjects of the other two, and each of the three for a `mul` or `and` rule
+  it does not cover), a comparison, a `select`, a Boolean variable (one that
+  no side reads under `exhaust8p` and `bitwiseAll`; one that both sides read
+  under `ringAll`, which accepts a rule beside a Boolean variable it does not
+  read), a side condition, a side that is not a term, a third variable for
+  `exhaust8p`, a ninth for `bitwiseAll`;
+* **`Sound` rules a procedure does not admit**: for seven of the rules
+  refused, the entry accepts a proof of `Sound` beside the refusal (two under
+  `exhaust8p`, by hand; three under `bitwiseAll` and two under `ringAll`, by
+  `exhaust8`, `(mul ?x (const 256)) = (const 0)` at `u8` among them). `false`
+  is not a refutation;
+* **another type**: each procedure at `bool`; `exhaust8p` at each of the ten
+  wider integer types, with its `u8` term offered there; the `u8` term of a
+  rule offered at `u16` and the `u64` term at `bool` under the two all-width
+  procedures, where the rule holds at both integer types and the term still
+  names one;
+* **another rule**: the term of a true rule offered for a false one;
+* **`Defined` and `Satisfiable`** claimed by a procedure's term for a rule
+  it does not admit (accepted beside them for a rule it does).
+
+What was not measured: the smallest budget at which each of the six modules
+replays; any rule that runs out of the budget under one of the three
+(`exhaust8p`'s cost grows with the size of the two sides, `bitwiseAll`'s with
+that size times the rows, `ringAll`'s with the terms of the expansion; none
+of the three bounds the size of the sides, `exhaust8p` and `bitwiseAll` bound
+the number of variables, at two and eight, and `ringAll` bounds nothing);
+three variables under
+`exhaust8p` through Clean's entry.
 
 ## Compiling
 
@@ -329,7 +592,9 @@ in a scratch directory holding `semr/SemR.lean`, `eqsat_rules/EqsatRule.lean`,
 
 ```sh
 L=~/.elan/toolchains/leanprover--lean4---v4.30.0-rc2/bin/lean
-for m in SemR EqsatRule EqsatBasics EqsatResidue EqsatExhaust EqsatDecideControls; do
+for m in SemR EqsatRule EqsatBasics EqsatResidue EqsatExhaust EqsatDecideControls \
+        EqsatPacked EqsatPackedControls EqsatBitwise EqsatBitwiseControls \
+        EqsatRing EqsatRingControls; do
     LEAN_PATH=$PWD $L --root . -o $m.olean $m.lean || break
 done
 ```
@@ -340,7 +605,8 @@ every closure is within `propext`, `Classical.choice` and `Quot.sound`.
 family and of the two modules it takes from `eqsat_rules` from the empty
 environment through Clean's reference entry, compares the closure digest of
 `EqsatRule.Sound` with the `eqsat_rules` gate's pin, requires every theorem of
-the three modules by name with its statement pinned, has the kernel evaluate
+the family's nine modules by name with its statement pinned (447 rows), has
+the kernel evaluate
 the evaluator on closed terms, each accepted outcome beside a forged one that
 is refused (16 outcomes of `checkR` and `Pat.evalR`, and one row per operator
 in `crates/clean-olean/tests/eqsat_decide/operators.rs`, 39 rows: the outcome
@@ -351,8 +617,13 @@ record term accepted for sixteen rule and type pairs, and refused for the
 claim on a false rule, at each of the ten other integer types, for a
 refines-only rule offered as `equiv`, over the size limit, for a rule with
 contradictory side conditions, and for a `refines` rule whose left side is
-undefined on every assignment (72 refused terms). The three counts are
-asserted, so a control removed is an edit of a number:
+undefined on every assignment (72 refused terms). It then runs the controls
+of the three procedures of PKG-U6b
+(`crates/clean-olean/tests/eqsat_decide/three_procedures.rs`; "What the gate
+measures of the three" above): the record term accepted for 12 rule and type
+pairs under `exhaust8p`, 17 under `bitwiseAll` and 19 under `ringAll`, and 69,
+49 and 41 terms refused for the claim. Every count is asserted, so a control
+removed is an edit of a number:
 
 ```sh
 targo --unverified test --locked --profile authority -p clean-olean \
@@ -362,12 +633,14 @@ targo --unverified test --locked --profile authority -p clean-olean \
 A module added to `ORDER` is added to the test's `MODULES` (the test compares
 the two).
 
-`STATEMENTS` holds one `name digest` row per theorem of the three modules, in
+`STATEMENTS` holds one `name digest` row per theorem of the nine modules, in
 the `eqsat_rules` family's format: SHA-256 over the theorem's type as the kernel
 holds it and the closure digest of every constant the type names. It moves
 when a statement is edited and when the meaning of anything it mentions
 changes (an edit to `evalR` moves every row that mentions it), and not when a
 proof does. The row of `EqsatDecide.exhaust8_sound` is the pin of what the
 soundness theorem states: it moves with `exhaust8`, with `EqsatRule.Sound` and
-with anything either reaches. Re-pin a row only with the reason in the commit
+with anything either reaches. The rows of `EqsatDecide.exhaust8p_sound`,
+`EqsatDecide.bitwiseAll_sound` and `EqsatDecide.ringAll_sound` are the same
+pin for the other three. Re-pin a row only with the reason in the commit
 message.

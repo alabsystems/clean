@@ -27,7 +27,7 @@
 
 use std::collections::HashSet;
 
-use clean_kernel::{Expr, ExprKind, FVarId};
+use clean_kernel::{Expr, ExprKind, FVarId, Name};
 use clean_parser::SurfaceName;
 
 use super::core::{Goal, LocalDecl, ProofState, TacticError};
@@ -204,6 +204,46 @@ pub(crate) fn reintroduce(
     Ok(())
 }
 
+/// Local indices abstracted by the standard family motive. The indices must
+/// be distinct local variables independent of the fixed parameters. Computed
+/// indices and custom eliminators use their own target generalization rules.
+fn local_family_indices(
+    state: &ProofState,
+    goal: &Goal,
+    major: &LocalDecl,
+) -> Option<(Name, Vec<FVarId>)> {
+    let ty = state.whnf(goal, &state.metas.instantiate(&major.ty));
+    let ExprKind::Const(name, _) = ty.get_app_fn().kind() else {
+        return None;
+    };
+    let family = state.env.get_inductive(name)?;
+    let arguments = ty.get_app_args();
+    let split = family.num_params as usize;
+    if family.num_indices == 0 || arguments.len() != split + family.num_indices as usize {
+        return None;
+    }
+    let mut seen: HashSet<_> = arguments[..split]
+        .iter()
+        .flat_map(|arg| collect_fvars(arg))
+        .collect();
+    let mut locals = Vec::with_capacity(family.num_indices as usize);
+    for argument in &arguments[split..] {
+        let ExprKind::FVar(index) = argument.kind() else {
+            return None;
+        };
+        if !seen.insert(*index)
+            || !goal
+                .local_ctx
+                .iter()
+                .any(|d| d.fvar == *index && d.value.is_none())
+        {
+            return None;
+        }
+        locals.push(*index);
+    }
+    Some((name.clone(), locals))
+}
+
 /// What `induction x generalizing ys` reverts before it eliminates, Lean
 /// 4.8's `generalizeVars`: every local that mentions `x` (generalized
 /// automatically, gap G22) together with `ys` and their dependents, reverted
@@ -218,23 +258,33 @@ pub(crate) fn generalize_for_induction(
     state: &mut ProofState,
     major_name: &SurfaceName,
     user: &[SurfaceName],
+    recursor: Option<&Name>,
 ) -> Result<Vec<SurfaceName>, TacticError> {
     let named = |decl: &LocalDecl, name: &SurfaceName| {
         crate::tactic::pattern::names::hypothesis_named(&decl.name, name)
     };
     let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
-    let Some(major) = goal
-        .local_ctx
-        .iter()
-        .rev()
-        .find(|d| named(d, major_name))
-        .map(|d| d.fvar)
-    else {
+    let Some(major_decl) = goal.local_ctx.iter().rev().find(|d| named(d, major_name)) else {
         // The eliminator reports the unknown target itself.
         return Ok(Vec::new());
     };
+    let major = major_decl.fvar;
     let forbidden = forbidden_for(&goal, major);
-    let mut set: HashSet<FVarId> = dependents_of(state, &goal, &[major]).into_iter().collect();
+    let mut targets = vec![major];
+    if let Some((family, indices)) = local_family_indices(state, &goal, major_decl) {
+        let chosen = match recursor {
+            Some(name) => Some(name.clone()),
+            None => super::induction::registered_induction_eliminator(state, major_name)?,
+        };
+        if chosen.is_none_or(|name| name == family.str("rec")) {
+            targets.extend(indices);
+        }
+    }
+    let mut set: HashSet<FVarId> = dependents_of(state, &goal, &targets)
+        .into_iter()
+        .filter(|fvar| !forbidden.contains(fvar))
+        .collect();
+
     for name in user {
         let decl = goal
             .local_ctx

@@ -26,6 +26,12 @@ fn is_binder_annotation_update(binder: &SurfaceBinder) -> bool {
     binder.ty.is_none() && binder.default.is_none() && !binder.name.is_unescaped_component("_")
 }
 
+#[derive(Clone)]
+enum FixedImportPaths {
+    Captured(Vec<PathBuf>),
+    ArtifactsOnly(Vec<PathBuf>),
+}
+
 /// File-level context for tracking accumulated `variable` declarations and
 /// namespace state across declarations within a single file.
 ///
@@ -48,6 +54,8 @@ fn is_binder_annotation_update(binder: &SurfaceBinder) -> bool {
 /// ```
 #[derive(Default, Clone)]
 pub struct FileContext {
+    /// Dialect of the legacy Lean CLI's documentation diagnostics.
+    documentation_world: Option<clean_kernel::LeanWorld>,
     /// New module-system header, distinct from the legacy main module name.
     module_system: bool,
     /// Opt-in IDE observations; absent for ordinary compiler/checker callers.
@@ -105,6 +113,10 @@ pub struct FileContext {
     /// next declaration could use it (`UnknownIdent("myone")`). Threaded exactly
     /// like `tactic_registry`.
     user_term_elabs: HashMap<String, UserTermElab>,
+    pub(crate) imported_term_syntax:
+        Option<std::sync::Arc<crate::module_driver::imported_syntax::ImportedTermSyntax>>,
+    pub(crate) imported_runtime:
+        Option<std::sync::Arc<crate::module_driver::imported_runtime::ImportedRuntime>>,
     /// File-level option overrides from `set_option` commands.
     /// Maps option name -> raw string value (None for boolean toggle).
     /// Section-scoped: `section ... end` restores prior option state.
@@ -123,9 +135,9 @@ pub struct FileContext {
     /// Extra .olean search paths associated with this file, such as Lake
     /// project and package build outputs discovered by `clean check`.
     import_search_paths: Vec<PathBuf>,
-    /// Exact artifact roots for a captured-source invocation. Unlike project
-    /// search paths these do not acquire ambient LEAN_PATH/default roots.
-    captured_import_paths: Option<Vec<PathBuf>>,
+    /// Exact artifact roots for captured sources or the raw Lean front door.
+    /// These do not acquire extra project or default search paths.
+    fixed_import_paths: Option<FixedImportPaths>,
     /// The Lean world this file's imports resolve in, or why they cannot
     /// resolve in any (gap G72), set by [`Self::set_import_context_for_file`].
     /// `None` resolves them in the checkout's pin, as for a file outside any
@@ -147,6 +159,11 @@ pub struct FileContext {
     /// Immutable completed-artifact availability from the same initializer as
     /// the environment. No search, stand-in or proof/admission permission.
     preloaded_artifact_imports: Option<clean_olean::CompletedModuleImports>,
+    /// Exact module keys supplied by an independently replayed fixed context.
+    imports_satisfied_from_checked_context: HashSet<Name>,
+    checked_source_context_identity: Option<String>,
+    /// Resolution union only; source and checked-context provenance stay separate.
+    imports_satisfied_without_search: HashSet<Name>,
     /// Source modules this run tried but did not finish successfully. A failed
     /// source import must never fall back to an artifact or a builtin provider.
     imports_refused_from_source: HashMap<Name, String>,
@@ -237,6 +254,46 @@ const _: fn() = || {
 };
 
 impl FileContext {
+    /// Authority from this file's checked private code imports for the stable
+    /// IO error formatter, when its complete original SDK graph was captured.
+    pub fn stable_io_error_imports(&self) -> Option<&clean_olean::StableIoErrorImports> {
+        self.imported_runtime.as_ref()?.io_error_imports.as_ref()
+    }
+
+    /// The selected native character conversion from this file's checked import graph.
+    pub fn stable_char_program(&self) -> Option<&clean_olean::StableCharProgram> {
+        self.imported_runtime.as_ref()?.char_program.as_ref()
+    }
+
+    /// The original executable Nat dictionary in this file's captured import graph.
+    pub fn stable_nat_dictionary(&self) -> Option<&clean_olean::StableNatDictionary> {
+        self.imported_runtime.as_ref()?.nat_dictionary.as_ref()
+    }
+
+    /// Source and executable identity of the process output stream in this file.
+    pub fn stable_stdout_imports(&self) -> Option<&clean_olean::StableStdoutImports> {
+        self.imported_runtime.as_ref()?.stdout_imports.as_ref()
+    }
+
+    /// Find an exact first-order Nat signature in the stable runtime capture.
+    /// The returned input borrows the immutable bytes retained with this file.
+    /// # Errors
+    /// Refuses an ambiguous origin or a malformed matching capture.
+    pub fn prepare_imported_nat_for_native(
+        &self,
+        env: &clean_kernel::Environment,
+        name: &clean_kernel::Name,
+    ) -> Result<Option<clean_olean::ImportedNatFunction<'_>>, crate::ElabError> {
+        let Some(runtime) = &self.imported_runtime else {
+            return Ok(None);
+        };
+        runtime.prepare(
+            env,
+            name,
+            crate::module_driver::imported_runtime::RuntimePhase::Native,
+        )
+    }
+
     /// Observe actual term elaboration without changing checking policy.
     pub fn set_term_info_capture(&mut self, capture: Option<crate::term_info::TermInfoCapture>) {
         self.term_info_capture = capture;
@@ -263,6 +320,21 @@ impl FileContext {
     #[must_use]
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Select the legacy Lean CLI dialect for documentation diagnostics.
+    /// This setting does not select a different artifact library.
+    pub fn set_documentation_world(&mut self, world: clean_kernel::LeanWorld) {
+        self.documentation_world = Some(world);
+    }
+
+    pub(crate) fn documentation_world(
+        &self,
+    ) -> Result<clean_kernel::LeanWorld, clean_olean::SourceWorldRefusal> {
+        match self.documentation_world {
+            Some(world) => Ok(world),
+            None => self.lean_world(),
+        }
     }
 
     /// The LEXICAL state of this context, frozen at the current source

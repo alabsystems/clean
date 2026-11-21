@@ -24,9 +24,7 @@ use std::process::Command;
 
 use super::checks::ModuleSelfChecks;
 use super::{stderr_head, LaneError, LOWERED, RUNTIME};
-use crate::native_build::{
-    prelude_shims_translation_unit, render_entry_driver, EntryArgs, EntryContract,
-};
+use crate::native_build::{render_entry_driver, EntryArgs, EntryContract};
 
 /// The driver's C name when the entry's own link symbol is `main`.
 pub(crate) const DRIVER_ENTRY: &str = "clean_lx0_driver_main";
@@ -96,7 +94,11 @@ fn find_c_compiler() -> Option<String> {
 
 /// Write the runtime header, runtime, `runtime_extern.c`, the shim union and
 /// the driver into `dir`; return the C sources to compile.
-pub(super) fn materialize(dir: &Path, driver: &str) -> Result<Vec<PathBuf>, LaneError> {
+pub(super) fn materialize(
+    dir: &Path,
+    driver: &str,
+    checks: &ModuleSelfChecks,
+) -> Result<Vec<PathBuf>, LaneError> {
     let flat = |src: &str| src.replacen("../include/clean_runtime.h", "clean_runtime.h", 1);
     let write = |name: &str, text: &str| -> Result<PathBuf, LaneError> {
         let path = dir.join(name);
@@ -107,7 +109,7 @@ pub(super) fn materialize(dir: &Path, driver: &str) -> Result<Vec<PathBuf>, Lane
     write("clean_runtime.h", clean_runtime::runtime_header())?;
     Ok(vec![
         write("driver.c", driver)?,
-        write("shims.c", &prelude_shims_translation_unit(&[]))?,
+        write("shims.c", &checks.shim_translation_unit())?,
         write("clean_runtime.c", &flat(clean_runtime::runtime_source()))?,
         write(
             "runtime_extern.c",
@@ -132,7 +134,7 @@ pub(crate) fn link_program(
     }
     let driver_fn = if entry_is_main { DRIVER_ENTRY } else { "main" };
     let driver = render_driver(checks.contract(), checks.entry_symbol(), driver_fn);
-    let sources = materialize(dir, &driver)?;
+    let sources = materialize(dir, &driver, checks)?;
     let cc = find_c_compiler().ok_or_else(|| {
         LaneError::Link(
             "no C compiler found; set CLEAN_CC or CC, or install cc, gcc or clang".to_owned(),

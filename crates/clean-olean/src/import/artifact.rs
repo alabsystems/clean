@@ -51,7 +51,7 @@
 //! (`ReplayStubPlainDep`) — the refusal is stricter than Lean, which is the
 //! safe direction: `writeModule` never writes such an artifact.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 use super::load_parse::{
@@ -67,6 +67,8 @@ use clean_kernel::env::ProofValueElision;
 use clean_kernel::name::Name;
 
 mod inventory;
+#[cfg(test)]
+mod tests;
 pub use inventory::{
     ArtifactDeclaration, ArtifactDeclarationOrigin, ArtifactInventory, ArtifactInventoryError,
     ArtifactInventoryLimits,
@@ -122,9 +124,26 @@ pub fn read_artifact(
     path: &Path,
     depth: ArtifactDepth,
 ) -> Result<ArtifactRead, ImportError> {
+    read_artifact_observing_parts(module, path, depth, |_, _| {})
+}
+
+/// Supply each present part's original bytes to a provenance reader before parsing them.
+pub(crate) fn read_artifact_observing_parts(
+    module: &str,
+    path: &Path,
+    depth: ArtifactDepth,
+    mut observe: impl FnMut(&'static str, &[u8]),
+) -> Result<ArtifactRead, ImportError> {
     let base_bytes = std::fs::read(path)?;
     let server_bytes = read_optional(&path.with_extension("olean.server"))?;
     let private_bytes = read_optional(&path.with_extension("olean.private"))?;
+    observe("olean", &base_bytes);
+    if let Some(bytes) = &server_bytes {
+        observe("olean.server", bytes);
+    }
+    if let Some(bytes) = &private_bytes {
+        observe("olean.private", bytes);
+    }
     let (base, server, private) = match depth {
         ArtifactDepth::Names => (
             parse_header_module(base_bytes.clone())?,
@@ -243,6 +262,13 @@ enum StubRule {
     Restated,
 }
 
+// Membership does not require lexical order. Most comparisons can use the
+// cached hash alone; structurally compare the full names when their hashes
+// coincide, including for distinct names crafted to have the same hash.
+fn name_key(name: &Name) -> (u64, &Name) {
+    (name.lean4_hash(), name)
+}
+
 /// Rule 2 of [`check_artifact_parts`].
 fn check_one_record_per_name(
     module: &str,
@@ -252,10 +278,10 @@ fn check_one_record_per_name(
     let tables = parts
         .iter()
         .map(|part| {
-            let mut table: BTreeMap<&Name, &LoadConstant> = BTreeMap::new();
+            let mut table = BTreeMap::new();
             if let Some(part) = part {
                 for c in &part.constants {
-                    if table.insert(&c.kernel_name, c).is_some() {
+                    if table.insert(name_key(&c.kernel_name), c).is_some() {
                         return Err(ImportError::DuplicateDeclaration {
                             name: c.kernel_name.to_string(),
                             what: "declaration",
@@ -278,12 +304,23 @@ fn check_one_record_per_name(
             let Some(later_part) = later_part else {
                 continue;
             };
-            for (name, earlier) in &tables[i] {
-                let Some(later) = tables[j].get(name) else {
+            let mut to_convert = Vec::new();
+            for (key, &earlier) in &tables[i] {
+                let Some(&later) = tables[j].get(key) else {
                     continue;
                 };
-                if !records_agree(earlier_part, earlier, later_part, later, stubs) {
-                    return Err(disagree(name));
+                if !raw_same(earlier, later)
+                    && !(stubs == StubRule::CompletedByLaterPart && raw_stub_of(earlier, later))
+                {
+                    to_convert.push((earlier, later));
+                }
+            }
+            // Only records whose raw form differs need conversion. Check them
+            // in lexical order so the first refusal is still the same one.
+            to_convert.sort_unstable_by(|(a, _), (b, _)| a.kernel_name.cmp(&b.kernel_name));
+            for (earlier, later) in to_convert {
+                if !converted_records_agree(earlier_part, earlier, later_part, later, stubs) {
+                    return Err(disagree(&earlier.kernel_name));
                 }
             }
         }
@@ -299,7 +336,7 @@ fn check_one_record_per_name(
 /// hold (`PartSubset.lean`: every type and value pointer of 471,516 two-part
 /// pairs), so equal raw records are decided without conversion; anything else
 /// is converted and compared by artifact_ledger rule 4's comparison.
-fn records_agree(
+fn converted_records_agree(
     earlier_part: &LoadModule,
     earlier: &LoadConstant,
     later_part: &LoadModule,
@@ -307,9 +344,6 @@ fn records_agree(
     stubs: StubRule,
 ) -> bool {
     let completable = stubs == StubRule::CompletedByLaterPart;
-    if raw_same(earlier, later) || (completable && raw_stub_of(earlier, later)) {
-        return true;
-    }
     let convert = |part: &LoadModule, c: &LoadConstant| {
         let region = part.region();
         let mut intern = ExprInternCache::with_capacity(64);
@@ -370,18 +404,6 @@ fn raw_stub_of(stub: &LoadConstant, full: &LoadConstant) -> bool {
         )
 }
 
-/// The kernel constant names a part declares — its Lean-format records (or, at
-/// [`ArtifactDepth::Names`], its `constNames`) and its Clean payload's, with
-/// no name-based exclusions. Unsafe auxiliaries are still source records.
-fn part_declared_names(
-    part: &LoadModule,
-    depth: ArtifactDepth,
-) -> std::collections::BTreeSet<Name> {
-    inventory::occurrences(part, depth)
-        .map(|(name, _)| name.clone())
-        .collect()
-}
-
 /// Rule 3 of [`check_artifact_parts`]: refuse a name the authoritative part
 /// lacks, naming the first in sorted order.
 fn refuse_misplaced_declarations(
@@ -411,17 +433,25 @@ fn refuse_misplaced_declarations(
                 ],
             )
         };
-    let authoritative_names = part_declared_names(authoritative, depth);
-    for (part_label, part) in checked.into_iter().flatten() {
-        for name in part_declared_names(part, depth) {
-            if !authoritative_names.contains(&name) {
-                return Err(ImportError::MisplacedDeclaration {
-                    module: module.to_string(),
-                    part: part_label,
-                    authoritative: authoritative_label,
-                    name: name.to_string(),
-                });
-            }
+    let mut checked = checked.into_iter().flatten().peekable();
+    if checked.peek().is_none() {
+        return Ok(());
+    }
+    let authoritative_names: BTreeSet<_> = inventory::occurrences(authoritative, depth)
+        .map(|(name, _)| name_key(name))
+        .collect();
+    for (part_label, part) in checked {
+        let missing = inventory::occurrences(part, depth)
+            .map(|(name, _)| name)
+            .filter(|name| !authoritative_names.contains(&name_key(name)))
+            .min();
+        if let Some(name) = missing {
+            return Err(ImportError::MisplacedDeclaration {
+                module: module.to_string(),
+                part: part_label,
+                authoritative: authoritative_label,
+                name: name.to_string(),
+            });
         }
     }
     Ok(())

@@ -107,7 +107,7 @@ fn test_inc_requires_object() {
         body: IRBody::VDecl {
             var: var(0),
             ty: IRType::UInt64,
-            value: IRExpr::Lit(crate::ir::IRLiteral::UInt64(42)),
+            value: IRExpr::Lit(IRLiteral::UInt64(42)),
             rest: Box::new(IRBody::Inc {
                 var: var(0),
                 n: 1,
@@ -205,11 +205,11 @@ fn test_duplicate_definition() {
         body: IRBody::VDecl {
             var: var(0),
             ty: IRType::UInt64,
-            value: IRExpr::Lit(crate::ir::IRLiteral::UInt64(1)),
+            value: IRExpr::Lit(IRLiteral::UInt64(1)),
             rest: Box::new(IRBody::VDecl {
                 var: var(0), // Duplicate!
                 ty: IRType::UInt64,
-                value: IRExpr::Lit(crate::ir::IRLiteral::UInt64(2)),
+                value: IRExpr::Lit(IRLiteral::UInt64(2)),
                 rest: Box::new(IRBody::Ret(IRArg::Var(var(0)))),
             }),
         },
@@ -658,7 +658,7 @@ fn test_reuse_slot_requires_object_type() {
         body: IRBody::VDecl {
             var: var(0),
             ty: IRType::UInt64, // Scalar type -- invalid for Reuse slot
-            value: IRExpr::Lit(crate::ir::IRLiteral::UInt64(42)),
+            value: IRExpr::Lit(IRLiteral::UInt64(42)),
             rest: Box::new(IRBody::VDecl {
                 var: var(1),
                 ty: IRType::Object,
@@ -703,7 +703,7 @@ fn test_reset_source_requires_object_type() {
         body: IRBody::VDecl {
             var: var(0),
             ty: IRType::UInt64, // Scalar type -- invalid for Reset
-            value: IRExpr::Lit(crate::ir::IRLiteral::UInt64(42)),
+            value: IRExpr::Lit(IRLiteral::UInt64(42)),
             rest: Box::new(IRBody::VDecl {
                 var: var(1),
                 ty: IRType::Object,

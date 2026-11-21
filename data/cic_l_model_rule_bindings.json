@@ -1,0 +1,210 @@
+[
+  {
+    "family": "infer-sort",
+    "constructor": "CICL.CoreJudgmentIn.sort",
+    "constructor_module": "CICL.CoreTyping",
+    "lemma": "CICL.Model.CoreRules.sort",
+    "lemma_module": "CICLModel.RuleMeaning",
+    "contract": "CICL.Model.Contracts.ruleSort",
+    "contract_module": "CICLModel.CoreContracts",
+    "mutation": "CICL.Model.Contracts.sortBoundOffByOne",
+    "mutation_module": "CICLModel.CoreContracts",
+    "upstream_commit": "3dc1a088b6d2d8eafe25a7cd7ec7b58d731bd7cc",
+    "anchors": [
+      {
+        "file": "src/kernel/type_checker.cpp",
+        "function": "type_checker::infer_type_core",
+        "lines": [289, 292],
+        "sha256": "cc8291997cd981d91f196ccb949ae01db4e02863e45099e804f8229c7ecbf9c3"
+      }
+    ]
+  },
+  {
+    "family": "infer-constant",
+    "constructor": "CICL.CoreJudgmentIn.constant",
+    "constructor_module": "CICL.CoreTyping",
+    "lemma": "CICL.Model.CoreRules.constant",
+    "lemma_module": "CICLModel.RuleMeaning",
+    "contract": "CICL.Model.Contracts.ruleConstant",
+    "contract_module": "CICLModel.CoreContracts",
+    "mutation": "CICL.Model.Contracts.constantWithoutLevelSubstitution",
+    "mutation_module": "CICLModel.CoreContracts",
+    "upstream_commit": "3dc1a088b6d2d8eafe25a7cd7ec7b58d731bd7cc",
+    "anchors": [
+      {
+        "file": "src/kernel/type_checker.cpp",
+        "function": "type_checker::infer_constant",
+        "lines": [92, 99],
+        "sha256": "5182d3f61c114061fa9c197ef55984c6c831eab6a0867d192b4858b2a02bd4d4"
+      },
+      {
+        "file": "src/kernel/type_checker.cpp",
+        "function": "type_checker::infer_constant",
+        "lines": [113, 114],
+        "sha256": "028b63e63cf887a233c4a821a23287431b0af3f1dfbb593de75cbc2d6743d2a8"
+      },
+      {
+        "file": "src/kernel/type_checker.cpp",
+        "function": "type_checker::infer_type_core",
+        "lines": [293, 293],
+        "sha256": "f0f733a133398aaa0ac557c451bda7fe8e5124db29657489726c02771d0a5b3e"
+      }
+    ]
+  },
+  {
+    "family": "infer-let",
+    "constructor": "CICL.CoreJudgmentIn.letE",
+    "constructor_module": "CICL.CoreTyping",
+    "lemma": "CICL.Model.CoreRules.letE",
+    "lemma_module": "CICLModel.RuleMeaning",
+    "contract": "CICL.Model.Contracts.ruleLetE",
+    "contract_module": "CICLModel.CoreContracts",
+    "mutation": "CICL.Model.Contracts.letWithoutInstantiation",
+    "mutation_module": "CICLModel.CoreContracts",
+    "upstream_commit": "3dc1a088b6d2d8eafe25a7cd7ec7b58d731bd7cc",
+    "anchors": [
+      {
+        "file": "src/kernel/type_checker.cpp",
+        "function": "type_checker::infer_let",
+        "lines": [198, 219],
+        "sha256": "26d2b1087dade519f1bb192218b9e09bda9a4122af968ed79dcced3fbed7efff"
+      },
+      {
+        "file": "src/kernel/type_checker.cpp",
+        "function": "type_checker::infer_type_core",
+        "lines": [297, 297],
+        "sha256": "7638cad509e9c28db9de50257837a81dd6689c0284974bc9f227b4446782e3b1"
+      }
+    ]
+  },
+  {
+    "family": "infer-lambda",
+    "constructor": "CICL.CoreJudgmentIn.lam",
+    "constructor_module": "CICL.CoreTyping",
+    "lemma": "CICL.Model.CoreRules.lam",
+    "lemma_module": "CICLModel.RuleMeaning",
+    "contract": "CICL.Model.Contracts.ruleLam",
+    "contract_module": "CICLModel.CoreContracts",
+    "mutation": "CICL.Model.Contracts.lambdaWithoutBodyTyping",
+    "mutation_module": "CICLModel.CoreContracts",
+    "upstream_commit": "3dc1a088b6d2d8eafe25a7cd7ec7b58d731bd7cc",
+    "anchors": [
+      {
+        "file": "src/kernel/type_checker.cpp",
+        "function": "type_checker::infer_lambda",
+        "lines": [116, 132],
+        "sha256": "ea37686042ae2d61354eec2a14e6cbe3b9d3309328ee4b5195dd9b508a3b4e99"
+      },
+      {
+        "file": "src/kernel/type_checker.cpp",
+        "function": "type_checker::infer_type_core",
+        "lines": [294, 294],
+        "sha256": "03aab1ebb7a3f6bc5e80d409f92d1c4c4aa2421b1a5bdc9f65c2100018a9b41b"
+      }
+    ]
+  },
+  {
+    "family": "infer-app",
+    "constructor": "CICL.CoreJudgmentIn.app",
+    "constructor_module": "CICL.CoreTyping",
+    "lemma": "CICL.Model.CoreRules.app",
+    "lemma_module": "CICLModel.RuleMeaning",
+    "contract": "CICL.Model.Contracts.ruleApp",
+    "contract_module": "CICLModel.CoreContracts",
+    "mutation": "CICL.Model.Contracts.appWithoutArgumentMembership",
+    "mutation_module": "CICLModel.CoreContracts",
+    "upstream_commit": "3dc1a088b6d2d8eafe25a7cd7ec7b58d731bd7cc",
+    "anchors": [
+      {
+        "file": "src/kernel/type_checker.cpp",
+        "function": "type_checker::infer_app",
+        "lines": [163, 167],
+        "sha256": "299a10309b00786f7027176614c67857e6350a899b2ec1d745620d702953a330"
+      },
+      {
+        "file": "src/kernel/type_checker.cpp",
+        "function": "type_checker::infer_app",
+        "lines": [174, 196],
+        "sha256": "8f1792f4585ccc874fa0940e5edb77c61409e7d80207ee964efd050ca4945208"
+      },
+      {
+        "file": "src/kernel/type_checker.cpp",
+        "function": "type_checker::infer_type_core",
+        "lines": [296, 296],
+        "sha256": "4efe4f750bb02fbba6368ba664b35bb1b57651a4065354bf5bf1031c018b6007"
+      }
+    ]
+  },
+  {
+    "family": "infer-pi",
+    "constructor": "CICL.CoreJudgmentIn.pi",
+    "constructor_module": "CICL.CoreTyping",
+    "lemma": "CICL.Model.CoreRules.pi",
+    "lemma_module": "CICLModel.RuleMeaning",
+    "contract": "CICL.Model.Contracts.rulePi",
+    "contract_module": "CICLModel.CoreContracts",
+    "mutation": "CICL.Model.Contracts.piWithoutPointwiseFamily",
+    "mutation_module": "CICLModel.CoreContracts",
+    "upstream_commit": "3dc1a088b6d2d8eafe25a7cd7ec7b58d731bd7cc",
+    "anchors": [
+      {
+        "file": "src/kernel/type_checker.cpp",
+        "function": "type_checker::infer_pi",
+        "lines": [134, 156],
+        "sha256": "71bd3665a34a4b54c700e4df60a7ea3fa04b55be8e601efefa320377bbf8c2c5"
+      },
+      {
+        "file": "src/kernel/type_checker.cpp",
+        "function": "type_checker::infer_type_core",
+        "lines": [295, 295],
+        "sha256": "4ce1b31ac048578be96066f6f4d0276f99b87d18a7953749b3faa2e02911a512"
+      }
+    ]
+  },
+  {
+    "family": "infer-local-variable",
+    "constructor": "CICL.CoreJudgmentIn.bvar",
+    "constructor_module": "CICL.CoreTyping",
+    "lemma": "CICL.Model.LocalContextSemantics.inferFVar_sound",
+    "lemma_module": "CICLModel.LocalContextSemantics",
+    "contract": "CICL.Model.Contracts.inferFVarSound",
+    "contract_module": "CICLModel.Contracts",
+    "mutation": "CICL.Model.Contracts.inferFVarWithoutLookup",
+    "mutation_module": "CICLModel.Contracts",
+    "upstream_commit": "3dc1a088b6d2d8eafe25a7cd7ec7b58d731bd7cc",
+    "anchors": [
+      {
+        "file": "src/kernel/type_checker.cpp",
+        "function": "type_checker::infer_fvar",
+        "lines": [84, 90],
+        "sha256": "a7a340e8e80c900cf80020f14ea2c20769638f404836809de18c6c20d00c577e"
+      },
+      {
+        "file": "src/kernel/type_checker.cpp",
+        "function": "type_checker::infer_type_core",
+        "lines": [285, 285],
+        "sha256": "81d48f2a7391b8cef87797e6f4c9cb1fd54fc8be4079f5fc266a67d8d669de81"
+      }
+    ]
+  },
+  {
+    "family": "infer-mdata",
+    "constructor": "CICL.CoreJudgmentIn.mdata",
+    "constructor_module": "CICL.CoreTyping",
+    "lemma": "CICL.Model.CoreRules.mdata",
+    "lemma_module": "CICLModel.RuleMeaning",
+    "contract": "CICL.Model.Contracts.ruleMdata",
+    "contract_module": "CICLModel.CoreContracts",
+    "mutation": "CICL.Model.Contracts.mdataWithoutInnerMembership",
+    "mutation_module": "CICLModel.CoreContracts",
+    "upstream_commit": "3dc1a088b6d2d8eafe25a7cd7ec7b58d731bd7cc",
+    "anchors": [
+      {
+        "file": "src/kernel/type_checker.cpp",
+        "function": "type_checker::infer_type_core",
+        "lines": [283, 283],
+        "sha256": "d4378fedd2672abf0a6c35518cef68d4e9f6acd7226923aba990ece9e360ed1e"
+      }
+    ]
+  }
+]

@@ -354,6 +354,18 @@ impl CEmitter {
                 *v as u64,
                 (*v >> 64) as u64
             ),
+            IRLiteral::NatLimbs(limbs) => {
+                let n = limbs.len();
+                let mut acc = format!(
+                    "clean_nat_big(UINT64_C({}), UINT64_C({}))",
+                    limbs.get(n.wrapping_sub(2)).copied().unwrap_or(0),
+                    limbs.get(n.wrapping_sub(1)).copied().unwrap_or(0),
+                );
+                for &w in limbs.iter().take(n.saturating_sub(2)).rev() {
+                    acc = format!("clean_nat_limb_step({acc}, UINT64_C({w}))");
+                }
+                acc
+            }
             IRLiteral::Float32(f) => emit_c_float32(*f),
             IRLiteral::Float64(f) => emit_c_float64(*f),
         }
@@ -481,7 +493,11 @@ impl CEmitter {
     }
 
     /// Emit an IR expression.
-    pub(crate) fn emit_expr(&mut self, expr: &IRExpr) -> Result<String, IRError> {
+    pub(crate) fn emit_expr(
+        &mut self,
+        expr: &IRExpr,
+        result_type: &IRType,
+    ) -> Result<String, IRError> {
         Ok(match expr {
             IRExpr::Ctor { info, args } => {
                 let args_str: Vec<String> = args.iter().map(|a| self.emit_arg(a)).collect();
@@ -556,6 +572,11 @@ impl CEmitter {
                 }
             }
             IRExpr::Tag(arg) => format!("clean_obj_tag({})", self.emit_arg(arg)),
+            // An erased slot carries Unit in either direction. Its placeholder
+            // may itself be a managed pointer, not an integer tag.
+            IRExpr::Box { ty, .. } if ty == &IRType::Erased || result_type == &IRType::Erased => {
+                self.emit_arg(&IRArg::Erased)
+            }
             IRExpr::Box { ty, arg } => match ty {
                 IRType::UInt64 => format!("clean_box_uint64({})", self.emit_arg(arg)),
                 // WS6.1 producer canonicalization, C mirror of
@@ -776,6 +797,7 @@ pub fn emit_c(decls: &[IRDecl]) -> Result<String, IRError> {
 ///
 /// Returns an error if IR validation is enabled and the IR is invalid.
 pub fn emit_c_with_config(decls: &[IRDecl], config: CEmitConfig) -> Result<String, IRError> {
+    crate::ir_checker::validate_nat_literals(decls)?;
     if config.check_ir {
         check_decls(decls)?;
     }

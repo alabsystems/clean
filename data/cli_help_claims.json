@@ -78,14 +78,14 @@
   },
   {
     "id": "descriptor check (description)",
-    "help_sha256": "1605a925fba970cf21c280f6e04b73d3a8a644c53add12ad56d9b85127331271",
+    "help_sha256": "a219c9ca5965f4beba0236dca886a3d16e676a106a2346e9d8c63c30a15e9ab1",
     "triggers": [
       "J/disable"
     ],
     "statement": "The per-declaration budget tick returns true unconditionally at limit 0, so `--decl-budget 0` is genuinely unlimited rather than a zero-operation budget.",
     "evidence": "crates/clean-kernel/src/tc/decl_budget.rs:202",
     "anchor": "if b.limit.get() == 0 {",
-    "verified": "2026-10-16"
+    "verified": "2026-11-17"
   },
   {
     "id": "descriptor kernel verify-constructive-claims (description)",
@@ -165,17 +165,6 @@
     "verified": "2026-09-13"
   },
   {
-    "id": "descriptor mathverse stamp-verified (description)",
-    "help_sha256": "eb1193e49c80a9dda306d7545d2f0daf486c39c66da032f0ff881579a1ad6081",
-    "triggers": [
-      "F/exclusive-trust"
-    ],
-    "statement": "This outcome -- a value-LESS axiom discharged by a synthesized kernel proof -- also enters kernel_verified_names, so 'whose value passed check_type' was too narrow.",
-    "evidence": "crates/clean-mathverse/src/verify/incremental/mod.rs:824",
-    "anchor": "    AxiomDischarged,",
-    "verified": "2026-10-25"
-  },
-  {
     "id": "descriptor mathverse per-constant-verify (description)",
     "help_sha256": "0dacce46f4479754e3c27f10dee4ca6d8144a44596639795ba25cbb0c4c565c5",
     "triggers": [
@@ -210,14 +199,14 @@
   },
   {
     "id": "descriptor mathverse shard (description)",
-    "help_sha256": "2c330452a9e95f7ca07649d83afa3c1a4b95e23cff63b4f60ac1d7021b2ca1c8",
+    "help_sha256": "6706a7ef367d7e4da68f499b278c5ad8a6b9fc64eff425207cebd6e29c39d36d",
     "triggers": [
       "E/inert"
     ],
-    "statement": "Nothing in the clean process spawns this binary; its 11 dispatch arms include the destructive `stamp`, and the caller roster now names coq_refresh.sh, which the first sweep missed.",
-    "evidence": "crates/clean-mathverse/src/bin/mathverse_shard/main.rs:127",
-    "anchor": "\"stamp\" =>",
-    "verified": "2026-09-01"
+    "statement": "The standalone binary dispatches all 11 verbs, including `stamp`. Its handler checks the shard directory and manifest path, and returns the P6 grant refusal. The `--json` refusal reports zero stamped headers.",
+    "evidence": "crates/clean-mathverse/src/bin/mathverse_shard/stamp_command.rs:84",
+    "anchor": "KernelVerifiedManifest::refuse_grant(&opts.manifest",
+    "verified": "2026-11-17"
   },
   {
     "id": "descriptor eval (example 1)",
@@ -226,9 +215,9 @@
       "H/minimal"
     ],
     "statement": "eval_expr builds Environment::new() \u2014 the minimal env registering native ops plus the three Sort-u axioms \u2014 so names beyond it (Nat.succ included) are unknown; the caption now says so.",
-    "evidence": "crates/clean-cli/src/cmd_core.rs:2937",
+    "evidence": "crates/clean-cli/src/cmd_core.rs:2804",
     "anchor": "let env = Environment::new();",
-    "verified": "2026-11-15"
+    "verified": "2026-11-17"
   },
   {
     "id": "descriptor verify tla (description)",
@@ -248,9 +237,9 @@
       "H/minimal"
     ],
     "statement": "The minimal environment `clean eval` elaborates against is `Environment::new()` (built in `eval_expr` in crates/clean-cli/src/cmd_core.rs), and it is NOT empty: the cited line begins three `init_*` calls, run inside `crate::tc::with_deadline_suspended` (which only suspends a caller's deadline while they run), that register `sorry`, `trustedArith` and `trustedAy` through `init_polymorphic_axiom` (crates/clean-kernel/src/env/core/trust.rs \u2014 an implicit binder over `Sort u` returning that variable, i.e. `{a : Sort u} -> a`, an inhabitant of every type), followed by `ensure_native_reducers()`. No prelude is loaded, so any other name is unknown.",
-    "evidence": "crates/clean-kernel/src/env/mod.rs:3633",
+    "evidence": "crates/clean-kernel/src/env/mod.rs:3677",
     "anchor": "env.init_sorry()",
-    "verified": "2026-11-14"
+    "verified": "2026-11-18"
   },
   {
     "id": "descriptor project check (description)",

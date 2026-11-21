@@ -10,6 +10,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest import mock
@@ -202,6 +203,14 @@ class ProvenanceAnchorPathTests(unittest.TestCase):
             status, _, err = self.run_main("--trust-repo", self.clean)
             self.assertEqual(status, 2)
             self.assertIn("not a Git worktree root", err)
+
+    def test_reachability_selftest_at_all_digit_orphan_timestamp(self):
+        # In the original fixture this date yields orphan prefix 048076796.
+        date = "1700000131 +0000"
+        result = subprocess.run([sys.executable, "-B", str(SCRIPT), "--selftest"],
+                                cwd=SCRIPT.parent.parent, capture_output=True, text=True,
+                                env={**self.git_env, "GIT_AUTHOR_DATE": date, "GIT_COMMITTER_DATE": date})
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_git_inventory_is_cleared_without_dropping_global_configuration(self):
         with mock.patch.dict(os.environ, {

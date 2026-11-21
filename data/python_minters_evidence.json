@@ -1,0 +1,48 @@
+{
+  "figure": "tooling.python_minters",
+  "freshness": {
+    "policy": "input-digest",
+    "state": "fresh"
+  },
+  "gate_command": "scripts/local_gate.sh --fast",
+  "labels": [
+    "three Python membership counts with a registry row total"
+  ],
+  "non_claims": [
+    "Read-only observation scoped to path and registry counts.",
+    "Build provenance and the publication verdict require separate qualification."
+  ],
+  "provenance": {
+    "clean_commit": "826b0933aa2945233a743924039deb419bfcf9b6",
+    "finished_at": "2026-11-18T18:55:12Z",
+    "inputs": {
+      "digest": "9adca32c9137d55733d50ee8a5f2e5c5afca53949821a23b1a543c67480c0b10",
+      "files": {
+        "data/gate_registry.json": "a00cb38ffbeda6f237d0fced86c33abe931e99c4aa8594d327600a03783d435a",
+        "git-index:scripts/**/*.py": "b939c32fcd04aae54f87ff094324774087e7cd6af1f19c1d9e877d46de4fc82f"
+      },
+      "scope": "tracked Python paths in the Git index and the working-tree gate registry"
+    },
+    "inputs_moved_during_run": false,
+    "producer": {
+      "argv": [
+        "clean-evidence",
+        "record",
+        "python-minters"
+      ],
+      "id": "clean-evidence/python-minters",
+      "module_digest": "546020de1fedaa88f2d52f86ba814aa4d6b0448d2525f9080dfc4050e777306c"
+    },
+    "sibling_pins": {},
+    "started_at": "2026-11-18T18:55:11Z",
+    "toolchain": {},
+    "tree_state": "dirty"
+  },
+  "schema": "clean.evidence/v1.0",
+  "value": {
+    "registry_implemented_by": 72,
+    "registry_path": 123,
+    "registry_rows": 310,
+    "tracked_scripts": 315
+  }
+}

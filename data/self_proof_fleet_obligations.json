@@ -1,0 +1,272 @@
+[
+  {
+    "id": "C3",
+    "kind": "proof",
+    "goal": "Establish semantic soundness of the adopted checker for every advice string at each supported universe bound.",
+    "prerequisites": [],
+    "closes_with": "Recheck KCheck.CompleteSound.c3Owes at the pinned KCheckSpec.C3Owes KCheck.checker, with seed validity, level-report bounds and transitive Ax0 closure. KCheck.base is PSigmaSeed.seed. Its registered families are Eq, PUnit and Nat, with the PSigma former and constructor added as entries. Retain the exact proof inputs and planted-False controls.",
+    "source": "reports/c3-complete-sound-2026-11-15/README.md",
+    "claim_unit": "C3"
+  },
+  {
+    "id": "Q1",
+    "kind": "evidence",
+    "goal": "Export the soundness theorem and its transitive declarations from Clean with the registered source terms intact.",
+    "prerequisites": [],
+    "closes_with": "Write KCheck.CompleteSound.kcheck_sound as one NDJSON 3.1.0 root. Record the stream digest, check the byte-identical round trip and compare every declaration with the pinned resident Lean module.",
+    "source": "reports/self-proof-root-export-2026-11-17/README.md",
+    "claim_unit": "Q1"
+  },
+  {
+    "id": "self-admission-prefix",
+    "kind": "evidence",
+    "goal": "Locate the first actual adopted-checker refusal on the soundness export.",
+    "prerequisites": [
+      "Q1"
+    ],
+    "closes_with": "Replay complete declaration prefixes through KCheck.kcheckBytes from KCheck.base. Record the stream and prefix digests, the reached declaration, the checker verdict and the malformed-input and accepted-prefix controls. A refusal is a measured blocker.",
+    "source": "reports/self-proof-root-export-2026-11-17/source-fidelity/README.md"
+  },
+  {
+    "id": "C4-C5",
+    "kind": "evidence",
+    "goal": "Cover the specified Init slice with native advice and measure its replay and refusals.",
+    "prerequisites": [],
+    "closes_with": "Retain the 22 in-fragment admissions in the pinned 256-declaration Prelude fixture. Exercise the remaining native advice shapes and the specified Init slice. Record forged-input refusals, per-declaration iota/K use, structure-eta refusals, and separate level-only divergence from pinned Lean. Identify the loader, compiler and consuming site.",
+    "source": "docs/plans/SELF_PROOF_EXECUTION_PLAN_2026-11-12.md",
+    "claim_unit": [
+      "C4",
+      "C5"
+    ]
+  },
+  {
+    "id": "W1",
+    "kind": "wiring",
+    "goal": "Have Clean elaborate and execute the adopted checker from source.",
+    "prerequisites": [],
+    "closes_with": "Run clean run theories/kcheck_labelled/KCheckLabelledMain.lean --decl main through Clean and compare stdout byte for byte with expected_output.txt for the executable import closure.",
+    "source": "docs/plans/SELF_PROOF_EXECUTION_PLAN_2026-11-12.md",
+    "claim_unit": "W1"
+  },
+  {
+    "id": "W2",
+    "kind": "wiring",
+    "goal": "Compile the same executable Lean modules as island units in the Trust build.",
+    "prerequisites": [
+      "W1"
+    ],
+    "closes_with": "Build the island crate with installed Trust. Reject a planted ill-typed definition and close or pin each named row of data/kcheck_island_gaps.json.",
+    "source": "docs/plans/SELF_PROOF_EXECUTION_PLAN_2026-11-12.md",
+    "claim_unit": "W2"
+  },
+  {
+    "id": "W3",
+    "kind": "evidence",
+    "goal": "Grade the mounted proof against the checker definitions the same Trust session compiled.",
+    "prerequisites": [
+      "W2"
+    ],
+    "closes_with": "Report Open or Proved from resident declarations and pinned statements. Reject a changed statement, a changed checker body, or a transitive axiom outside Ax0. A Proved grade requires the actual rechecked proof.",
+    "source": "docs/plans/SELF_PROOF_EXECUTION_PLAN_2026-11-12.md",
+    "claim_unit": "W3"
+  },
+  {
+    "id": "W4",
+    "kind": "wiring",
+    "goal": "Run emitted advice over real Init declarations with the compiled checker.",
+    "prerequisites": [
+      "W3",
+      "C4-C5"
+    ],
+    "closes_with": "On the compiled path, accept a real in-fragment Init declaration using advice from clean-kernel. Mint the coverage count with the checker, compiler, loader and site qualifiers.",
+    "source": "docs/plans/SELF_PROOF_EXECUTION_PLAN_2026-11-12.md",
+    "claim_unit": "W4"
+  },
+  {
+    "id": "W5",
+    "kind": "wiring",
+    "goal": "Require a sealed checker acceptance at the first production site for its in-fragment declarations.",
+    "prerequisites": [
+      "W4"
+    ],
+    "closes_with": "Exercise the production site under the patched kernel. An in-fragment falsehood must yield no accepted kcheck row. Bind the actual real verdicts to their checker and site and identify the fallback for declarations outside the fragment.",
+    "source": "docs/plans/SELF_PROOF_EXECUTION_PLAN_2026-11-12.md",
+    "claim_unit": "W5"
+  },
+  {
+    "id": "C6",
+    "kind": "proof",
+    "goal": "Prove the export loader and round-trip correspondence for the checker inputs.",
+    "prerequisites": [
+      "W5"
+    ],
+    "closes_with": "Recheck the Loader contract and its typed round-trip theorem. Refuse wrong arity and metavariables at the loader boundary and establish correspondence of the parsed bytes with the statement being judged.",
+    "source": "docs/plans/SELF_PROOF_EXECUTION_PLAN_2026-11-12.md",
+    "claim_unit": "C6"
+  },
+  {
+    "id": "S2-S3",
+    "kind": "proof",
+    "goal": "Admit and justify the actual inductive families and recursor reductions required by the proof closure.",
+    "prerequisites": [
+      "W5"
+    ],
+    "closes_with": "Prove the certified-family semantic and admission obligations, including constructor-result indices, checked recursor slots and iota where needed. Preserve C3 for the widened checker. Exercise real blocks such as Iff and List and refuse forged slots and invalid elimination.",
+    "source": "docs/plans/SELF_PROOF_EXECUTION_PLAN_2026-11-12.md",
+    "claim_unit": [
+      "S2",
+      "S3"
+    ]
+  },
+  {
+    "id": "S5",
+    "kind": "proof",
+    "goal": "Give the adopted checker a semantically justified admission and reduction path for the quotient primitives.",
+    "prerequisites": [
+      "W5"
+    ],
+    "closes_with": "Pin the types of Quot, Quot.mk, Quot.lift and Quot.ind. Prove their interpretation and Eq-guarded computation, integrate the actual checker and loader paths, and recheck soundness with malformed primitive controls.",
+    "source": "docs/plans/SELF_PROOF_EXECUTION_PLAN_2026-11-12.md",
+    "claim_unit": "S5"
+  },
+  {
+    "id": "self-admission",
+    "kind": "evidence",
+    "goal": "Have the adopted checker admit its own soundness theorem and its entire transitive input on a single run.",
+    "prerequisites": [
+      "C3",
+      "Q1",
+      "S2-S3",
+      "S5"
+    ],
+    "closes_with": "Run the adopted checker from its documented seed over the complete pinned root with real advice. Account for every dependency and the final theorem receipt under Ax0. Record the loader and compiler in use and reject a planted false proof. A partial run closes only its measured prefix.",
+    "source": "reports/self-proof-root-export-2026-11-17/source-fidelity/README.md"
+  },
+  {
+    "id": "Q4",
+    "kind": "evidence",
+    "goal": "Obtain same-byte agreement from the independent quorum, including on the soundness proof.",
+    "prerequisites": [
+      "Q1"
+    ],
+    "closes_with": "Run the registered kstar_recheck gate for its subjects and retain qualified verdicts from pinned Lean, fenced Clean, stock ck0 and Lean4Lean. Bind each member and its axiom policy to the same root bytes for the self-proof claim. Require real decisions on the forged controls.",
+    "source": "docs/plans/SELF_PROOF_EXECUTION_PLAN_2026-11-12.md",
+    "claim_unit": "Q4"
+  },
+  {
+    "id": "C7",
+    "kind": "proof",
+    "goal": "Prove completeness relative to advice for the adopted fragment.",
+    "prerequisites": [
+      "W5"
+    ],
+    "closes_with": "Define the independent algorithmic derivation judgment without mentioning advice or kcheck. Prove that every such derivation yields advice the adopted checker accepts, recheck the pinned theorem, retain an actual Init witness and reject the non-transitivity control.",
+    "source": "reports/static-check-completeness-2026-11-16/README.md",
+    "claim_unit": "C7"
+  },
+  {
+    "id": "M5",
+    "kind": "proof",
+    "goal": "Prove that the quoted statements Trust actually certifies have their intended meanings.",
+    "prerequisites": [
+      "W5"
+    ],
+    "closes_with": "Extend the qualified quotation grammar to the forms in the Trust producer census. Prove both directions of quote_correct for each supported form in its stated base and verify the coverage against actual Certified rows.",
+    "source": "reports/m5-quotation-2026-11-14/README.md",
+    "claim_unit": "M5"
+  },
+  {
+    "id": "M6",
+    "kind": "evidence",
+    "goal": "Measure and enforce the universe bound on Init and existing Certified rows.",
+    "prerequisites": [
+      "W5"
+    ],
+    "closes_with": "Record N from the checker’s per-derivation level report across the specified corpus and show a row above that bound is refused.",
+    "source": "docs/plans/SELF_PROOF_EXECUTION_PLAN_2026-11-12.md",
+    "claim_unit": "M6"
+  },
+  {
+    "id": "full-fragment",
+    "kind": "proof",
+    "goal": "Extend the specification, model and checker across the remaining Lean rules and the complete Init run.",
+    "prerequisites": [
+      "C3",
+      "W5",
+      "C6",
+      "S2-S3",
+      "S5"
+    ],
+    "closes_with": "Discharge the remaining S1–S7 model and checker obligations, M5 quotation and M6 bounds, and C7 completeness relative to advice. Recheck the semantic proofs and complete the Init run with forged declarations refused.",
+    "source": "docs/plans/SELF_PROOF_COMPLETION_MAP_2026-11-15.md"
+  },
+  {
+    "id": "X3-X5",
+    "kind": "wiring",
+    "goal": "Ship the proved checker through trust-ir and trust-cg with licensed bodies and bound identity.",
+    "prerequisites": [
+      "W2",
+      "W3"
+    ],
+    "closes_with": "Run the checker through Trust with no host C path. Each emitted body carries a license from the proved output validator. Bind proved term, IR and emitted bytes in one record cited by the quorum, and gate the named trusted rows of the runtime and shell.",
+    "source": "docs/plans/SELF_PROOF_EXECUTION_PLAN_2026-11-12.md",
+    "claim_unit": [
+      "X3",
+      "X4",
+      "X5"
+    ]
+  },
+  {
+    "id": "Trust-Ph4",
+    "kind": "external",
+    "goal": "Trust binds the exact trust-ir bytes of a named Clean kernel function to the bytes trust-cg compiles in the same build (KA0).",
+    "prerequisites": [],
+    "closes_with": "Review Trust's Ph4 test-crate receipt for a mounted bytes_of constant of a named clean-kernel function and rust_to_trustir.functions_bound >= 1. The Rust-body edit must change the constant and the build must reject bytes differing from those given to trust-cg. Retain the producer and compiler inputs at the named Trust revision.",
+    "source": "designs/2026-11-16-full-rust-lean-models-combined-trust.md"
+  },
+  {
+    "id": "A0",
+    "kind": "wiring",
+    "goal": "Bind the executing Rust model functions to the function-granular trust-ir bytes given to codegen.",
+    "prerequisites": ["Trust-Ph4"],
+    "closes_with": "At the Trust Ph4 boundary mount the actual bytes as constants, decode them through SemR and reject swapped-constructor representation controls. Record the compiler binding for each named function.",
+    "source": "docs/plans/SELF_PROOF_EXECUTION_PLAN_2026-11-12.md",
+    "claim_unit": "A0"
+  },
+  {
+    "id": "A",
+    "kind": "proof",
+    "goal": "Prove refinement of every Rust model function in the deciding binary against the corresponding Lean model relation.",
+    "prerequisites": [
+      "A0",
+      "W2",
+      "W5"
+    ],
+    "closes_with": "Under the same Trust build, recheck alignment theorems at kernel grade within Ax0 against the SemR-decoded bytes sent to trust-cg. Gate the unaligned inventory and count boundary premises. Each theorem identifies the binary it covers.",
+    "source": "docs/plans/SELF_PROOF_EXECUTION_PLAN_2026-11-12.md",
+    "claim_unit": [
+      "A1",
+      "A1.1",
+      "A2",
+      "A3"
+    ]
+  },
+  {
+    "id": "authority",
+    "kind": "wiring",
+    "goal": "Make the shipped checker authoritative at every Clean and Trust acceptance site.",
+    "prerequisites": [
+      "W5",
+      "self-admission",
+      "full-fragment",
+      "Q4",
+      "X3-X5",
+      "A",
+      "C7",
+      "M5",
+      "M6"
+    ],
+    "closes_with": "Meet all six in-fact conditions in section 2.1. Every authority-bearing acceptance must use the proved, licensed checker bytes. Under the patched kernel the planted False yields zero accepted rows. Recheck inherited Certified rows and gate the runtime, shell, lineage and alignment inventories.",
+    "source": "docs/plans/SELF_PROOF_EXECUTION_PLAN_2026-11-12.md"
+  }
+]

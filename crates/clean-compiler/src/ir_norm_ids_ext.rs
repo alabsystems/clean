@@ -306,6 +306,7 @@ fn hash_lit(h: &mut impl Hasher, l: &IRLiteral) {
         IRLiteral::UInt64(v) => v.hash(h),
         IRLiteral::USize(v) => v.hash(h),
         IRLiteral::NatBig(v) => v.hash(h),
+        IRLiteral::NatLimbs(limbs) => limbs.hash(h),
         IRLiteral::Float32(v) => v.to_bits().hash(h),
         IRLiteral::Float64(v) => v.to_bits().hash(h),
     }

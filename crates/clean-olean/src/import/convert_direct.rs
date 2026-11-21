@@ -9,6 +9,7 @@
 
 use super::convert::{elides_value, proof_value_or_placeholder, ConvertedConstant};
 use super::convert_expr_direct::{read_and_convert_expr_with_memo, RegionPtrCache};
+use super::export_fields::ExportFields;
 use super::load_parse::LoadConstant;
 use super::{ExprInternCache, ExprSharingStats, ImportError};
 use crate::module::{ConstantKind, ReducibilityHintsData};
@@ -43,9 +44,15 @@ pub(super) fn convert_load_constant(
             ConvertedConstant::Recursor(name, result, stats)
         }
         _ => {
-            let hints = constant.hints;
             let (result, stats) = convert_load_other(constant, region, intern, memo, elide);
-            ConvertedConstant::Other(name, result.map(|d| (d, hints)), stats)
+            let result = result.map(|decl| {
+                let fields = ExportFields {
+                    hints: constant.hints,
+                    all: constant.runtime_mutual.clone(),
+                };
+                (decl, fields)
+            });
+            ConvertedConstant::Other(name, result, stats)
         }
     }
 }

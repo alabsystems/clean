@@ -51,7 +51,7 @@ use clean_elab::{
     elaborate_decl_and_register, preprocess_decl_with_context, ElabResult, FileContext,
 };
 use clean_kernel::env::{Declaration, Environment, KernelClassInfo, KernelInstanceInfo};
-use clean_kernel::{BinderInfo, Expr, Level, Name};
+use clean_kernel::{BinderInfo, Expr, Level, Name, Reducibility, TransparencyMode};
 use clean_parser::parse_file;
 
 fn c(name: &str) -> Expr {
@@ -67,7 +67,7 @@ fn c(name: &str) -> Expr {
 ///
 /// The declaration is fully kernel-checked (`add_decl`), so the probe adds no
 /// trust debt; `register_instance` then places it in `instOfNatNat`'s own
-/// priority tier (100), where the within-tier order — the exact subject of
+/// priority tier (1000), where the within-tier order — the exact subject of
 /// this pin — decides who captures an open `OfNat ?α n` goal.
 fn register_late_non_nat_ofnat(env: &mut Environment) {
     // The native prelude registers `instOfNatNat` (and the UInt instances)
@@ -117,7 +117,7 @@ fn register_late_non_nat_ofnat(env: &mut Environment) {
     env.register_instance(KernelInstanceInfo {
         name: Name::from_string("probeInstOfNatUInt8"),
         class_name: Name::from_string("OfNat"),
-        priority: 100,
+        priority: 1000,
         type_: None,
         value: None,
     });
@@ -165,4 +165,35 @@ fn literal_first_eq_int_operand_elaborates() {
 #[test]
 fn ground_carrier_literal_unaffected() {
     expect_pass("def ground_nat : Nat := 2\ndef ground_int : Int := 2\ndef ground_u8 : UInt8 := 2");
+}
+
+#[test]
+fn nat_numeral_instance_has_regular_height_and_reduces_on_an_open_argument() {
+    let source = "def readNat (n : Nat) : Nat := @OfNat.ofNat Nat n (instOfNatNat n)\n\
+                  theorem readNat_eq (n : Nat) : readNat n = n := rfl";
+    let (env, _) = elaborate_file(source).expect("open Nat instance projection must reduce");
+    let instance = Name::from_string("instOfNatNat");
+    assert_eq!(
+        env.get_const(&instance).expect("Nat instance").reducibility,
+        Reducibility::Regular(1)
+    );
+    assert!(env
+        .unfold_with_transparency(&instance, &[], TransparencyMode::Instances)
+        .is_some());
+    assert!(env
+        .unfold_with_transparency(&instance, &[], TransparencyMode::Reducible)
+        .is_none());
+    let reader = env
+        .get_const(&Name::from_string("readNat"))
+        .expect("readNat");
+    assert!(reader
+        .value
+        .as_ref()
+        .expect("body")
+        .collect_constants()
+        .contains(&instance));
+    assert_eq!(reader.reducibility, Reducibility::Regular(2));
+    let false_claim =
+        format!("{source}\ntheorem readNat_wrong (n : Nat) : readNat n = Nat.succ n := rfl");
+    assert!(elaborate_file(&false_claim).is_err());
 }

@@ -25,6 +25,21 @@ fn accepted(verdicts: &Verdicts, names: &[&str]) {
     }
 }
 
+#[test]
+fn dependent_goal_closes_only_for_distinct_constructors() {
+    let source = "
+def probeBit (_ : Nat) : Bool := false
+theorem dependentGoal (n : Nat) (h : probeBit n = true)
+    (P : (probeBit n = true) → Prop) : P h := by
+  cases h
+";
+    accepted(&run_file(source), &["dependentGoal"]);
+    let same_constructor = source.replace(":= false", ":= true");
+    refused(&run_file(&same_constructor), "dependentGoal");
+    let opaque_bit = source.replace("def probeBit", "@[irreducible] def probeBit");
+    refused(&run_file(&opaque_bit), "dependentGoal");
+}
+
 fn refused<'a>(verdicts: &'a Verdicts, name: &str) -> &'a str {
     match verdict_of(verdicts, name) {
         Ok(()) => panic!("`{name}` must be refused (pinned Lean 4.8.0 rejects it)"),

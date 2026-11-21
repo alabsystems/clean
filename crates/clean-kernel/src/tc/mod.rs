@@ -10,6 +10,9 @@ pub mod batch;
 mod beta;
 mod branch_sharing;
 mod branch_sharing_recursor_app;
+mod cache_policy;
+#[cfg(test)]
+mod cache_policy_tests;
 mod cert;
 mod config;
 mod deadline;
@@ -34,6 +37,7 @@ mod local_context;
 mod monad_delta_tests;
 mod reduction;
 pub mod reduction_stats;
+mod scoped_introductions;
 mod sharing_invariance;
 mod sliding_cache;
 mod sliding_equiv_manager;
@@ -75,10 +79,9 @@ pub(crate) use type_former_sort::TypeFormerSort;
 /// Part of #1671: ProofState creates fresh TypeChecker per operation.
 #[derive(Default)]
 pub struct TcCaches {
-    /// Effective theory of every retained answer; `None` only for empty default
+    /// Explicit policies of every retained answer; `None` only for empty default
     /// caches. This is not an environment or local-context authentication token.
-    kernel_theory: Option<crate::env::KernelTheory>,
-    level_profile: Option<crate::level::LeanLevelProfile>,
+    policy: Option<cache_policy::CachePolicy>,
     whnf: SlidingCache<Expr, Expr>,
     whnf_core: SlidingCache<Expr, Expr>,
     def_eq: SlidingCache<DefEqCacheKey, bool>,
@@ -368,10 +371,9 @@ pub struct TypeChecker<'env> {
     honor_reducibility: Cell<bool>,
     /// Kernel theory override (`None` = the environment's; see `env/kernel_theory.rs`).
     kernel_theory: Option<crate::env::KernelTheory>,
-    /// Theory that owns the cached answers, which may differ from the current
-    /// configuration while a caller sets up an imported cache before first use.
-    /// Semantic entry points reconcile it before reading any cached answer.
-    cached_kernel_theory: Cell<crate::env::KernelTheory>,
+    /// Policies owning the cached answers while a caller configures an imported
+    /// bundle. Semantic entry points and export reconcile them before use.
+    cached_policy: RefCell<Option<cache_policy::CachePolicy>>,
     /// Memo of the native-fold admission questions per head
     /// (`tc/fold_admission.rs`): the environment's authority verdict and the
     /// native-reducer admission (kernel theory + authority). Sound to keep for
@@ -705,6 +707,12 @@ pub struct TypeChecker<'env> {
     /// flat iteration with bit-identical extraction. Depth-keyed only —
     /// never value-thresholded. See `reduction/nat.rs`.
     nat_probe_depth: Cell<u32>,
+    /// A syntactic hint derived from the actual shift definition; arithmetic
+    /// still requires destination admission and a checked universal identity.
+    unary_shift_alias: std::cell::OnceCell<Option<Name>>,
+    unary_shift_alias_verified: Cell<bool>,
+    /// A strict, source-rooted universal parity equation in this environment.
+    parity_reconstruction_verified: Cell<bool>,
     /// When true, skip type-checking of application arguments and let-value
     /// types during `infer_type`. This matches Lean 4's `infer_only` parameter
     /// in `infer_type_core(expr, bool infer_only)`.
@@ -844,7 +852,7 @@ impl<'env> TypeChecker<'env> {
             transparency: TransparencyMode::Default,
             honor_reducibility: Cell::new(false),
             kernel_theory: None,
-            cached_kernel_theory: Cell::new(env.kernel_theory()),
+            cached_policy: RefCell::new(None),
             lean_reducer_admission: RefCell::new(std::collections::HashMap::new()),
             whnf_cache: RefCell::new(Default::default()),
             whnf_core_cache: RefCell::new(Default::default()),
@@ -870,6 +878,9 @@ impl<'env> TypeChecker<'env> {
             profiler: None,
             eager_reduce: Cell::new(false),
             nat_probe_depth: Cell::new(0),
+            unary_shift_alias: std::cell::OnceCell::new(),
+            unary_shift_alias_verified: Cell::new(false),
+            parity_reconstruction_verified: Cell::new(false),
             infer_only: Cell::new(true),
             level_params: None,
             allow_unsafe: env.kernel_theory() == crate::env::KernelTheory::Extended,
@@ -884,6 +895,7 @@ impl<'env> TypeChecker<'env> {
             sharing_replay: None,
             expr_loc: RefCell::new(ExprLocation::new()),
         }
+        .establish_empty_cache_policy()
     }
 
     /// Create a type checker with a specific mode
@@ -906,7 +918,7 @@ impl<'env> TypeChecker<'env> {
             transparency: TransparencyMode::Default,
             honor_reducibility: Cell::new(false),
             kernel_theory: None,
-            cached_kernel_theory: Cell::new(env.kernel_theory()),
+            cached_policy: RefCell::new(None),
             lean_reducer_admission: RefCell::new(std::collections::HashMap::new()),
             whnf_cache: RefCell::new(Default::default()),
             whnf_core_cache: RefCell::new(Default::default()),
@@ -932,6 +944,9 @@ impl<'env> TypeChecker<'env> {
             profiler: None,
             eager_reduce: Cell::new(false),
             nat_probe_depth: Cell::new(0),
+            unary_shift_alias: std::cell::OnceCell::new(),
+            unary_shift_alias_verified: Cell::new(false),
+            parity_reconstruction_verified: Cell::new(false),
             infer_only: Cell::new(true),
             level_params: None,
             allow_unsafe: env.kernel_theory() == crate::env::KernelTheory::Extended,
@@ -946,6 +961,7 @@ impl<'env> TypeChecker<'env> {
             sharing_replay: None,
             expr_loc: RefCell::new(ExprLocation::new()),
         }
+        .establish_empty_cache_policy()
     }
 
     /// Create a type checker with an existing local context
@@ -968,7 +984,7 @@ impl<'env> TypeChecker<'env> {
             transparency: TransparencyMode::Default,
             honor_reducibility: Cell::new(false),
             kernel_theory: None,
-            cached_kernel_theory: Cell::new(env.kernel_theory()),
+            cached_policy: RefCell::new(None),
             lean_reducer_admission: RefCell::new(std::collections::HashMap::new()),
             whnf_cache: RefCell::new(Default::default()),
             whnf_core_cache: RefCell::new(Default::default()),
@@ -994,6 +1010,9 @@ impl<'env> TypeChecker<'env> {
             profiler: None,
             eager_reduce: Cell::new(false),
             nat_probe_depth: Cell::new(0),
+            unary_shift_alias: std::cell::OnceCell::new(),
+            unary_shift_alias_verified: Cell::new(false),
+            parity_reconstruction_verified: Cell::new(false),
             infer_only: Cell::new(true),
             level_params: None,
             allow_unsafe: env.kernel_theory() == crate::env::KernelTheory::Extended,
@@ -1008,6 +1027,7 @@ impl<'env> TypeChecker<'env> {
             sharing_replay: None,
             expr_loc: RefCell::new(ExprLocation::new()),
         }
+        .establish_empty_cache_policy()
     }
 
     /// Create a type checker with an existing local context and specific mode
@@ -1035,7 +1055,7 @@ impl<'env> TypeChecker<'env> {
             transparency: TransparencyMode::Default,
             honor_reducibility: Cell::new(false),
             kernel_theory: None,
-            cached_kernel_theory: Cell::new(env.kernel_theory()),
+            cached_policy: RefCell::new(None),
             lean_reducer_admission: RefCell::new(std::collections::HashMap::new()),
             whnf_cache: RefCell::new(Default::default()),
             whnf_core_cache: RefCell::new(Default::default()),
@@ -1061,6 +1081,9 @@ impl<'env> TypeChecker<'env> {
             profiler: None,
             eager_reduce: Cell::new(false),
             nat_probe_depth: Cell::new(0),
+            unary_shift_alias: std::cell::OnceCell::new(),
+            unary_shift_alias_verified: Cell::new(false),
+            parity_reconstruction_verified: Cell::new(false),
             infer_only: Cell::new(true),
             level_params: None,
             allow_unsafe: env.kernel_theory() == crate::env::KernelTheory::Extended,
@@ -1075,6 +1098,7 @@ impl<'env> TypeChecker<'env> {
             sharing_replay: None,
             expr_loc: RefCell::new(ExprLocation::new()),
         }
+        .establish_empty_cache_policy()
     }
 
     /// Try one native reduction step for the given expression.

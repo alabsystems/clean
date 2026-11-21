@@ -507,6 +507,9 @@ pub enum CommandOutput {
     /// `#print axioms c`: Lean 4.8.0's axiom census of each constant `c`
     /// resolved to (`crate::print_axioms`).
     PrintAxioms(crate::print_axioms::PrintAxiomsResult),
+    /// The equation headers emitted by `#print equations`, one message per
+    /// resolved constant.
+    PrintEquations(Vec<String>),
     /// A `#guard_msgs` whose expectation matched and whose command declared
     /// nothing (`crate::guard_msgs`). It is a checked assertion, not an
     /// administrative command: the checkers count it as one passing unit

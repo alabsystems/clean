@@ -378,6 +378,7 @@ pub(crate) fn classify_effect(result: &AttrMacroResult) -> EffectKind {
         | AttrMacroResult::SetInline(_)
         | AttrMacroResult::SetSpecialize(_) => EffectKind::CompilerHint,
         AttrMacroResult::RegisterExtern { .. }
+        | AttrMacroResult::RegisterExternMetadata { .. }
         | AttrMacroResult::RegisterExport { .. }
         | AttrMacroResult::RegisterImplementedBy { .. } => EffectKind::FfiBinding,
         AttrMacroResult::RegisterDeprecated { .. }

@@ -17,7 +17,7 @@
 #     two trust-ir graphs and clean-auto's tests hand a `ProofFormula` from one
 #     to a lowering compiled against the other (measured 2026-09-14, recorded
 #     in crates/clean-auto/Cargo.toml);
-#   * TWO lockfiles: the root `Cargo.lock` and
+#   * TWO lockfiles that record the pin: the root `Cargo.lock` and
 #     `scripts/crystal_a2_project/Cargo.lock`, a separate `[workspace]` that no
 #     `--workspace` command ever refreshes. `3e87b95ba` moved every manifest
 #     and the root lock and left the crystal lock behind; the dep-boundary
@@ -28,10 +28,30 @@
 # half-applied bump is impossible rather than merely detectable. It is modelled
 # on trust-ir's scripts/bump-dep-pin.sh.
 #
+# THE LOCK LEGS (2026-11-19). Phase F ends on the dep-boundary gate, and that
+# gate judges under `--locked` EVERY tracked lock that records a pinned Git
+# source, not the two that record this pin: the standalone runner and harness
+# workspaces (bench-runner, cli-runner, realtelem-harness, telemetry-harness
+# today) reach this workspace's crates by path, so their locks record those
+# crates' versions and dependency edges and go stale whenever one moves. A
+# release's version commit moved all of them and refreshed only the root lock
+# (`00e83f3313`, 0.9.4 -> 0.9.5; scripts/refresh_judged_locks.py is its hook
+# since, over the same selection), and phase E refreshed the two pin locks
+# alone: the release train's re-pin of 2026-11-19T07:00Z moved every leg,
+# refreshed both, was refused in phase F over four runner locks it had no way
+# to refresh, and rolled back. So the lock legs -- what phase C backs up, phase
+# E refreshes, phase F accepts under `--locked` and a rollback restores -- are
+# the leg table's two pin locks AND every lock the gate judges, asked of the
+# gate's own selection (`boundary_judged_locks` below), never listed here: a
+# workspace that starts pinning a Git source is refreshed the day the gate
+# starts judging its lock. Every lock leg is a TRACKED `Cargo.lock`: phase A
+# refuses a selection that would have the refresh write, and the acceptance
+# rest on, a file no commit carries (`untracked_lock_legs` below).
+#
 #   scripts/bump-trust-ir-pin.sh <trust-ir-sha> <trust-cg-sha> [options]
 #
 # Phases: A preconditions (read-only) -> B stage -> C backup -> D install
-#         -> E refresh both locks -> F verify -> G re-derive what the move
+#         -> E refresh every lock leg -> F verify -> G re-derive what the move
 #         left stale. Any failure after D rolls the working tree back to
 #         exactly what was found, including uncommitted work.
 #
@@ -58,8 +78,8 @@
 #
 # SOURCE PUBLICATION. --source-only selects phases A-F's dependency transaction
 # without judging or minting the derived diagnostic artifacts. Revision/alias
-# coherence, immutable CG authority, both lock refreshes, --locked acceptance,
-# dependency-boundary verification and rollback remain mandatory. A source
+# coherence, immutable CG authority, every lock leg's refresh and --locked
+# acceptance, dependency-boundary verification and rollback remain mandatory. A source
 # transaction grants no full-diagnostic verdict; affected consumers still need
 # their own qualification. The default diagnostic transaction is unchanged.
 #
@@ -97,7 +117,7 @@ usage: scripts/bump-trust-ir-pin.sh <trust-ir-sha> <trust-cg-sha> [options]
   <trust-cg-sha>    the immutable trust-cg commit whose Cargo.toml pins
                     exactly that trust-ir commit (40 hex)
 
-  --targo <path>    the Targo frontend used by checks and both lock refreshes.
+  --targo <path>    the Targo frontend used by checks and every lock refresh.
                     Default: $CLEAN_TARGO, then `targo` on PATH, then
                     `trustc --print sysroot`/bin/targo. Never stock cargo.
   --offline         skip the remote-existence probes; the trust-cg authority
@@ -112,16 +132,19 @@ usage: scripts/bump-trust-ir-pin.sh <trust-ir-sha> <trust-cg-sha> [options]
   --repair          a tree whose legs are SPLIT across revisions (a hand-edited
                     leg, a half-applied bump) is otherwise REFUSED with the
                     census naming the leg. With --repair every leg is rewritten
-                    to the target and both locks refreshed. Explicit, because a
-                    split is the failure this script exists to prevent and the
-                    default must never launder one silently. A derived artifact
-                    the split reddened is reported, not refused: phase G
-                    re-derives it over the repaired legs. Manifests already
-                    at the target with a lock that disagrees are a split too:
-                    --repair refreshes both locks there.
+                    to the target and every lock leg refreshed. Explicit,
+                    because a split is the failure this script exists to prevent
+                    and the default must never launder one silently. A derived
+                    artifact the split reddened is reported, not refused: phase
+                    G re-derives it over the repaired legs. Manifests already at
+                    the target with a lock that disagrees, or with a lock leg
+                    `--locked` refuses, are a split too: --repair refreshes
+                    every lock leg there.
   --no-boundary-check
                     skip scripts/check_workspace_dependency_boundary.py in
-                    phase F (the pin coherence check itself still runs)
+                    phase F (the pin coherence check still runs, and so do the
+                    refresh and `--locked` acceptance of every lock leg, whose
+                    selection is still read from that gate)
   --source-only      update the canonical dependency graph for ordinary source
                     publication. Keep phases A-F and rollback, but do not
                     judge/re-mint the full diagnostic's derived artifacts or
@@ -208,6 +231,85 @@ pick_python() {
 PY="$(pick_python)" || die "no python3 with tomllib (3.11+) or tomli on PATH; set CLEAN_GATE_PYTHON"
 pin() { "$PY" -B "$LEGS_PY" "$@"; }
 
+# The locks the dep-boundary leg judges under `--locked`: every tracked
+# *Cargo.lock that records a pinned Git source. The answer is the gate's own --
+# `tracked_lock_paths` and `git_pinned_lock_paths`, the selection its leg runs
+# -- read here as a library, so the refresh and the verdict cannot select
+# different sets and nothing in this script names a lock. Only the gate's
+# VERDICT is phase F.3's: `--no-boundary-check` skips that, never this.
+boundary_judged_locks() {
+    "$PY" -B - "$BOUNDARY_PY" <<'PY'
+import subprocess
+import sys
+from pathlib import Path
+
+gate = Path(sys.argv[1])
+sys.path.insert(0, str(gate.parent))
+boundary = __import__(gate.stem)
+try:
+    locks = {
+        str(path.relative_to(boundary.ROOT)): path.read_text()
+        for path in boundary.tracked_lock_paths()
+    }
+    judged = boundary.git_pinned_lock_paths(locks)
+except (OSError, ValueError, subprocess.CalledProcessError) as error:
+    raise SystemExit(f"REFUSED: {error}")
+print("\n".join(judged))
+PY
+}
+
+# Cargo keeps a workspace's lock beside its root manifest, and that is how the
+# gate's leg asks about one: `--manifest-path <the lock's directory>/Cargo.toml`.
+beside_lock() {
+    case "$1" in
+        */*) printf '%s/%s' "${1%/*}" "$2" ;;
+        *) printf '%s' "$2" ;;
+    esac
+}
+lock_manifest() { beside_lock "$1" Cargo.toml; }
+
+# The locks the lock legs are named from: the leg table's pin locks and every
+# lock the gate judges, as each is tracked.
+selected_locks() {
+    local relative
+    while IFS= read -r relative; do
+        case "$relative" in *Cargo.lock) printf '%s\n' "$relative" ;; esac
+    done <<<"$CONTROLLED_LEGS"
+    printf '%s\n' "$JUDGED_LOCKS"
+}
+
+# THE LOCK LEGS (see the header): each selected lock, named as the `Cargo.lock`
+# beside its manifest -- the file the refresh writes, and so the file a
+# rollback restores.
+lock_legs() {
+    local relative
+    selected_locks | while IFS= read -r relative; do
+        [[ -n "$relative" ]] || continue
+        beside_lock "$relative" Cargo.lock
+        printf '\n'
+    done | LC_ALL=C sort -u
+}
+
+# The gate selects a lock by its CONTENT, under any tracked name that ends in
+# `Cargo.lock`, and asks about it through the manifest beside it -- that is,
+# about that directory's `Cargo.lock`. For a selected lock kept under another
+# name (x/probe-Cargo.lock) with no tracked x/Cargo.lock, the refresh would
+# create x/Cargo.lock untracked, the `--locked` acceptance and the gate would
+# pass on it, and the transaction would report success over a file no commit
+# carries while the tracked lock stayed as it was (the release train then
+# refuses the untracked file; a hand run would simply lose it). Prints one line
+# per such lock leg, naming the tracked lock it was selected for; nothing when
+# every lock leg is tracked.
+untracked_lock_legs() {
+    local relative leg
+    selected_locks | while IFS= read -r relative; do
+        [[ -n "$relative" ]] || continue
+        leg="$(beside_lock "$relative" Cargo.lock)"
+        git -C "$ROOT" --literal-pathspecs ls-files --error-unmatch -- "$leg" >/dev/null 2>&1 \
+            || printf '%s (the lock Cargo keeps for tracked %s)\n' "$leg" "$relative"
+    done | LC_ALL=C sort -u
+}
+
 resolve_targo() {
     if [[ -n "$TARGO" ]]; then
         printf '%s' "$TARGO"
@@ -229,22 +331,34 @@ resolve_targo() {
     return 1
 }
 
-# Shared by an actual move and the source-scope already-coherent path. A
+# F.2 and F.3 are shared by an actual move and the already-at-target path: a
 # no-op must not report success without the same locked/boundary acceptance.
-verify_locked_graph_and_boundary() {
-    # F.2 -- both locks are current: a lock the resolver would rewrite is not a
-    # lock.
-    "$TARGO" metadata --locked --format-version 1 --manifest-path "$ROOT/Cargo.toml" >/dev/null \
-        || die "root Cargo.lock is not current under --locked after the refresh"
-    "$TARGO" metadata --locked --format-version 1 --manifest-path "$ROOT/scripts/crystal_a2_project/Cargo.toml" >/dev/null \
-        || die "scripts/crystal_a2_project/Cargo.lock is not current under --locked after the refresh"
-    printf 'both lockfiles accepted under --locked\n'
 
-    # F.3 -- the push-path gate itself, so the transaction ends exactly where the
-    # hook would judge it.
+# F.2 -- every lock leg is current: a lock the resolver would rewrite is not a
+# lock. Prints the legs `--locked` refuses, one per line (Cargo says why on
+# stderr); nothing when every one is accepted. No command in these loops may
+# read the loop's own input, hence `</dev/null`.
+stale_lock_legs() {
+    local relative
+    while IFS= read -r relative; do
+        [[ -n "$relative" ]] || continue
+        "$TARGO" metadata --locked --format-version 1 \
+            --manifest-path "$ROOT/$(lock_manifest "$relative")" >/dev/null </dev/null \
+            || printf '%s\n' "$relative"
+    done <<<"$LOCK_LEGS"
+}
+indented() { sed 's/^/        /' <<<"$1"; }
+lock_leg_names() { tr '\n' ' ' <<<"$LOCK_LEGS" | sed 's/ *$//'; }
+lock_legs_accepted() {
+    printf 'every lock leg accepted under --locked: %s\n' "$(lock_leg_names)"
+}
+
+# F.3 -- the push-path gate itself, so the transaction ends exactly where the
+# hook would judge it. $1 says when, for the refusal.
+boundary_gate() {
     if [[ $BOUNDARY_CHECK -eq 1 ]]; then
         "$PY" -B "$BOUNDARY_PY" \
-            || die "scripts/check_workspace_dependency_boundary.py FAILED after the bump"
+            || die "scripts/check_workspace_dependency_boundary.py FAILED $1"
     else
         printf 'VERIFY: dependency-boundary gate skipped (--no-boundary-check)\n'
     fi
@@ -373,8 +487,8 @@ if [[ $CENSUS_CODE -ne 0 ]]; then
     if [[ $REPAIR_OK -ne 1 ]]; then
         die "a pin is SPLIT across revisions (the '<>' rows above name the legs).
       A hand-edited leg is refused, never adopted. Restore the edited leg (or
-      re-run with --repair to move EVERY leg to the target and refresh both
-      locks)."
+      re-run with --repair to move EVERY leg to the target and refresh every
+      lock leg)."
     fi
     REPAIR=1
     printf '\nREPAIR MODE (--repair): a pin is currently SPLIT across revisions.\n'
@@ -398,10 +512,30 @@ else
 fi
 
 CONTROLLED_LEGS="$(pin legs --root "$ROOT")" || die "cannot enumerate the controlled legs"
+# What phase E refreshes: the lock legs (see the header).
+JUDGED_LOCKS="$(boundary_judged_locks)" \
+    || die "cannot enumerate the locks $BOUNDARY_PY judges under --locked;
+      no lock is refreshed from a list of this script's own"
+LOCK_LEGS="$(lock_legs)"
+[[ -n "$LOCK_LEGS" ]] || die "no lock leg: neither the leg table nor $BOUNDARY_PY names a lock"
+UNTRACKED_LOCK_LEGS="$(untracked_lock_legs)"
+[[ -z "$UNTRACKED_LOCK_LEGS" ]] || die "a lock leg is not a tracked file:
+$(indented "$UNTRACKED_LOCK_LEGS")
+      A refresh would write it and \`--locked\` would accept it, but no commit
+      carries it, and the tracked lock it stands for would stay as it is. Track
+      the workspace's lock under Cargo's own name (or stop recording a Git
+      source in the other file), then re-run. Nothing was written."
+printf 'lock legs: %s\n' "$(lock_leg_names)"
 # What phase G may write: the derived artifacts downstream of the legs.
 DERIVED_OUTPUTS="$("$PY" -B "$REDERIVE_PY" --outputs)" \
     || die "cannot enumerate the derived artifacts ($REDERIVE_PY --outputs)"
-DIRTY="$(git -C "$ROOT" status --porcelain -- $CONTROLLED_LEGS $DERIVED_OUTPUTS 2>/dev/null)"
+# Everything the transaction can write, once each: what phase C backs up and a
+# rollback restores.
+TRANSACTION_FILES=()
+while IFS= read -r relative; do
+    [[ -n "$relative" ]] && TRANSACTION_FILES+=("$relative")
+done < <(printf '%s\n' "$CONTROLLED_LEGS" "$LOCK_LEGS" "$DERIVED_OUTPUTS" | LC_ALL=C sort -u)
+DIRTY="$(git -C "$ROOT" status --porcelain -- "${TRANSACTION_FILES[@]}" 2>/dev/null)"
 if [[ -n "$DIRTY" ]]; then
     warn "pin legs have uncommitted changes:
 $DIRTY
@@ -454,8 +588,8 @@ fi
 # incomplete rollback left behind) redden those nodes BY THEMSELVES, and the
 # remedy a refusal would name cannot run: the replay's `targo metadata --locked`
 # refuses a stale crystal lock in every arm's baseline. This transaction
-# rewrites every leg and refreshes both locks, then phase G re-derives whatever
-# is stale over them -- so there the check is reported, not refused.
+# rewrites every leg and refreshes every lock leg, then phase G re-derives
+# whatever is stale over them -- so there the check is reported, not refused.
 pin check --root "$ROOT" >"$TMP/legs-before" 2>&1
 LEGS_BEFORE_CODE=$?
 if [[ $LEGS_BEFORE_CODE -ne 0 && $LEGS_BEFORE_CODE -ne 3 ]]; then
@@ -473,40 +607,51 @@ elif ! "$PY" -B "$REDERIVE_PY" --check; then
     warn "the legs disagree before the move:
 $(sed 's/^/        /' "$TMP/legs-before")
       so the derived artifacts that read them are not judged against them: the
-      RED rows above are reported, NOT refused. Every leg is rewritten and both
-      locks refreshed, then phase G re-derives whatever is stale over the moved
-      tree, these rows included whatever caused them. Review its diff."
+      RED rows above are reported, NOT refused. Every leg is rewritten and every
+      lock leg refreshed, then phase G re-derives whatever is stale over the
+      moved tree, these rows included whatever caused them. Review its diff."
 fi
 
 # The deferred no-op return (see PHASE A). Reached only after EVERY
 # precondition above has passed, so "nothing to do" now means the manifests,
-# the trust-cg authority commit, the remotes AND both lockfiles were all
+# the trust-cg authority commit, the remotes AND every lock leg were all
 # confirmed -- not merely that the manifest legs agree with each other.
 if [[ $ALREADY_COHERENT -eq 1 ]]; then
+    STALE_LOCKS=""
     if [[ $LEGS_BEFORE_CODE -eq 0 ]]; then
         cat "$TMP/legs-before"
-        if [[ $SOURCE_ONLY -eq 1 ]]; then
-            verify_locked_graph_and_boundary
-            printf '\nalready at trust-ir %s + trust-cg %s; canonical dependency graph is coherent. Full diagnostic NOT JUDGED.\n' \
-                "$TRUST_IR_REV" "$TRUST_CG_REV"
-        else
-            printf '\nalready at trust-ir %s + trust-cg %s; all legs coherent and every precondition verified -- nothing to do.\n' \
-                "$TRUST_IR_REV" "$TRUST_CG_REV"
+        # Both pin locks record the target and a lock leg can still be one the
+        # resolver would rewrite (a runner lock a version commit left behind).
+        # Asked whenever a frontend was resolved (A.4); a dry run without one
+        # cannot ask.
+        [[ -z "$TARGO" ]] || STALE_LOCKS="$(stale_lock_legs)"
+        if [[ -z "$STALE_LOCKS" ]]; then
+            if [[ $SOURCE_ONLY -eq 1 ]]; then
+                lock_legs_accepted
+                boundary_gate "at the target; nothing was moved"
+                printf '\nalready at trust-ir %s + trust-cg %s; canonical dependency graph is coherent. Full diagnostic NOT JUDGED.\n' \
+                    "$TRUST_IR_REV" "$TRUST_CG_REV"
+            else
+                printf '\nalready at trust-ir %s + trust-cg %s; all legs coherent and every precondition verified -- nothing to do.\n' \
+                    "$TRUST_IR_REV" "$TRUST_CG_REV"
+            fi
+            SUCCESS=1
+            exit 0
         fi
-        SUCCESS=1
-        exit 0
+        printf 'not current under --locked:\n%s\n' "$(indented "$STALE_LOCKS")" >&2
+    else
+        cat "$TMP/legs-before" >&2
     fi
-    cat "$TMP/legs-before" >&2
     # The manifests agree on the target and a lock does not: a split the census
     # (manifests only) cannot see. Refused like any split; --repair refreshes
-    # both locks at the target (phase B stages no manifest).
+    # every lock leg at the target (phase B stages no manifest).
     [[ $REPAIR_OK -eq 1 ]] \
         || die "the manifests already read the target but a lockfile does not (see above).
-      A lock left behind is a split: re-run with --repair to refresh both locks
-      at the target."
+      A lock left behind is a split: re-run with --repair to refresh every lock
+      leg at the target."
     REPAIR=1
     printf '\nREPAIR MODE (--repair): the manifests read the target and a lockfile does not;\n'
-    printf '             both locks are refreshed at trust-ir %s + trust-cg %s.\n' \
+    printf '             every lock leg is refreshed at trust-ir %s + trust-cg %s.\n' \
         "$TRUST_IR_REV" "$TRUST_CG_REV"
 fi
 
@@ -530,17 +675,15 @@ if [[ $DRY_RUN -eq 1 ]]; then
 fi
 
 # --- PHASE C: back up every file the transaction can touch -------------------
-say "PHASE C -- backing up the legs, both lockfiles and the derived artifacts"
+say "PHASE C -- backing up the legs, every lock leg and the derived artifacts"
 while IFS= read -r relative; do
     [[ -n "$relative" ]] || continue
     [[ -f "$ROOT/$relative" ]] || die "controlled leg is missing: $relative"
-    mkdir -p "$BACKUP/$(dirname "$relative")"
-    cp -p "$ROOT/$relative" "$BACKUP/$relative" \
-        || die "cannot back up $relative; refusing to proceed"
-    printf '%s\n' "$relative" >>"$BACKED_UP"
 done <<<"$CONTROLLED_LEGS"
-while IFS= read -r relative; do
-    [[ -n "$relative" ]] || continue
+# A file that is not there yet -- a derived artifact phase G may mint -- is
+# recorded as absent, and a rollback removes it. (Every lock leg is there: phase
+# A read each one the gate selects and refused a lock leg that is not tracked.)
+for relative in "${TRANSACTION_FILES[@]}"; do
     if [[ ! -e "$ROOT/$relative" ]]; then
         printf '%s\n' "$relative" >>"$TMP/absent-before"
         continue
@@ -549,7 +692,7 @@ while IFS= read -r relative; do
     cp -p "$ROOT/$relative" "$BACKUP/$relative" \
         || die "cannot back up $relative; refusing to proceed"
     printf '%s\n' "$relative" >>"$BACKED_UP"
-done <<<"$DERIVED_OUTPUTS"
+done
 
 # --- PHASE D: install ---------------------------------------------------------
 say "PHASE D -- installing the staged legs"
@@ -561,30 +704,44 @@ while IFS= read -r relative; do
     printf 'installed %s\n' "$relative"
 done <<<"$STAGED"
 
-# --- PHASE E: refresh BOTH lockfiles -----------------------------------------
+# --- PHASE E: refresh EVERY lock leg ------------------------------------------
 # `metadata` is a non-compiling subcommand: no `--unverified`, no proof claim.
 # The root lock records the trust-ir and trust-cg graphs; the crystal lock is
 # THE LEG THAT WAS MISSED -- a standalone workspace no `--workspace` command
-# ever refreshes.
+# ever refreshes; the runner and harness locks are the legs that were missed
+# next (see THE LOCK LEGS in the header). A lock the refresh left byte-identical
+# is reported as UNCHANGED, which is all `cmp` establishes: whether it is
+# current is F.2's `--locked` answer, and a resolver that exits 0 without
+# rewriting a stale lock is refused there, so this line must not have called
+# that lock current first.
 say "PHASE E -- refreshing lockfiles"
-"$TARGO" metadata --format-version 1 --manifest-path "$ROOT/Cargo.toml" >/dev/null \
-    || die "root lock refresh failed (Targo metadata)"
-printf 'refreshed Cargo.lock\n'
-"$TARGO" metadata --format-version 1 --manifest-path "$ROOT/scripts/crystal_a2_project/Cargo.toml" >/dev/null \
-    || die "scripts/crystal_a2_project/Cargo.lock refresh failed (Targo metadata)"
-printf 'refreshed scripts/crystal_a2_project/Cargo.lock\n'
+while IFS= read -r relative; do
+    [[ -n "$relative" ]] || continue
+    "$TARGO" metadata --format-version 1 \
+        --manifest-path "$ROOT/$(lock_manifest "$relative")" >/dev/null </dev/null \
+        || die "$relative refresh failed (Targo metadata)"
+    if [[ -e "$BACKUP/$relative" ]] && cmp -s "$BACKUP/$relative" "$ROOT/$relative"; then
+        printf 'refreshed %s (unchanged)\n' "$relative"
+    else
+        printf 'refreshed %s\n' "$relative"
+    fi
+done <<<"$LOCK_LEGS"
 
 # --- PHASE F: verify ----------------------------------------------------------
 say "PHASE F -- verification"
 
-# F.1 (MANDATORY, no Rust toolchain): every manifest leg and both lockfiles
+# F.1 (MANDATORY, no Rust toolchain): every manifest leg and both pin locks
 # agree on the new revisions, the root lock records exactly one trust-cg graph,
 # and trust-ir's clean.git pin resolved into THIS workspace (one clean-kernel
 # row, no source) rather than dropping the root [patch].
 pin check --root "$ROOT" \
     || die "post-bump pin coherence FAILED -- see above"
 
-verify_locked_graph_and_boundary
+STALE_LOCKS="$(stale_lock_legs)"
+[[ -z "$STALE_LOCKS" ]] || die "not current under --locked after the refresh:
+$(indented "$STALE_LOCKS")"
+lock_legs_accepted
+boundary_gate "after the bump"
 
 if [[ $REPAIR -eq 0 ]]; then
     for OLD_NEW in "$CURRENT_TRUST_IR $TRUST_IR_REV" "$CURRENT_TRUST_CG $TRUST_CG_REV"; do
@@ -602,7 +759,7 @@ $(printf '        %s\n' $STALE)
 fi
 
 if [[ $SOURCE_ONLY -eq 1 ]]; then
-    say "SOURCE TRANSACTION COMPLETE -- canonical legs and both lockfiles verified"
+    say "SOURCE TRANSACTION COMPLETE -- canonical legs and every lock leg verified"
     printf 'Full diagnostic and its derived artifacts: NOT JUDGED (phase G not run).\n'
     printf 'Qualify affected consumers before ordinary source publication; this dependency transaction makes no compiler or proof claim.\n'
     printf 'A full diagnostic still requires scripts/rederive_chain.py and its complete recorded replay.\n'
@@ -619,7 +776,7 @@ REDERIVE_ARGS=()
 "$PY" -B "$REDERIVE_PY" "${REDERIVE_ARGS[@]+"${REDERIVE_ARGS[@]}"}" \
     || die "re-deriving the artifacts the move left stale FAILED (above) -- the bump is not done"
 
-say "DONE -- trust-ir pinned at $TRUST_IR_REV and trust-cg at $TRUST_CG_REV across every leg and both lockfiles"
+say "DONE -- trust-ir pinned at $TRUST_IR_REV and trust-cg at $TRUST_CG_REV across every leg, with every lock leg current"
 printf 'Review with: git diff --stat\n'
 printf 'The derived artifacts were re-derived over the new pin. Build and test the consumers before pushing.\n'
 SUCCESS=1

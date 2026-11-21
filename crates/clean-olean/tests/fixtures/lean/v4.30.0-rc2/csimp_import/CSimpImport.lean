@@ -15,3 +15,6 @@ def fast : Nat := 3
 theorem slow_eq_fast : Eq slow fast := Eq.refl slow
 attribute [local csimp] slow_eq_fast
 end Local
+
+-- InlineAttrs must be decoded even without any implementedBy entries.
+@[macro_inline] def macroIgnore (_ : Nat) : Nat := 0

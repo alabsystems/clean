@@ -6,6 +6,7 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
+use clean_kernel::env::CompilerExternMetadata;
 use clean_kernel::expr::UsedConstants;
 use clean_kernel::{ConstantInfo, Environment, Expr, ExprKind, Name};
 
@@ -18,6 +19,8 @@ pub(crate) struct Attributes {
     implementation: Option<Name>,
     csimp_rules: Vec<clean_kernel::env::csimp::Rule>,
     external: Option<String>,
+    // Equal diagnostic labels do not imply equal represented compiler inputs.
+    external_metadata: Option<CompilerExternMetadata>,
     noncomputable: bool,
     unsafe_: bool,
     partial: bool,
@@ -32,6 +35,16 @@ pub struct RuntimeBindingClosure {
     roots: BTreeSet<Name>,
     digests: BTreeMap<Name, [u8; 32]>,
     attributes: BTreeMap<Name, Attributes>,
+    reach: BindingReach,
+    // The source annotation fence is separate from the callable set. A
+    // type-only name must never authorize an executable LCNF or IR reference.
+    annotation_members: BTreeSet<Name>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BindingReach {
+    Logical,
+    Executable,
 }
 
 /// An opaque discovery of the actual runtime binding dependencies and their
@@ -57,7 +70,7 @@ impl RuntimeBindingPlan {
         roots: &[Name],
         max_members: usize,
     ) -> Result<Self, CompilerError> {
-        discover(env, roots, max_members, |_| Ok(()))
+        discover(env, roots, max_members, BindingReach::Logical, |_| Ok(()))
     }
 
     /// Exact requested roots, independent of their diagnostic display names.
@@ -115,6 +128,7 @@ fn discover(
     env: &Environment,
     requested_roots: &[Name],
     max_members: usize,
+    reach: BindingReach,
     mut visit_closure: impl FnMut(&Name) -> Result<(), CompilerError>,
 ) -> Result<RuntimeBindingPlan, CompilerError> {
     let mut roots = BTreeSet::new();
@@ -134,9 +148,11 @@ fn discover(
         if visited_roots.contains(&root) {
             continue;
         }
-        let closure = env
-            .dependency_closure(&root)
-            .map_err(|e| refusal(e.to_string()))?;
+        let closure = match reach {
+            BindingReach::Logical => env.dependency_closure(&root),
+            BindingReach::Executable => env.execution_value_closure(&root),
+        }
+        .map_err(|e| refusal(e.to_string()))?;
         visit_closure(&root)?;
         visited_roots.insert(root);
         for name in closure {
@@ -147,9 +163,19 @@ fn discover(
                 return Err(refusal("runtime binding member population bound exceeded"));
             }
             let csimp_rules = clean_kernel::env::csimp::rules_for(env, Some(&name));
-            if let Some(value) = env.get_const(&name).and_then(|c| c.value.as_ref()) {
+            let value = env
+                .get_const(&name)
+                .filter(|info| reach == BindingReach::Logical || !env.proof_body_is_erased(info))
+                .and_then(|info| info.value.as_ref());
+            if let Some(value) = value {
                 let mut references = HashSet::new();
-                value.used_constants_dag(UsedConstants::WithProjectionStructures, &mut references);
+                value.used_constants_dag(
+                    match reach {
+                        BindingReach::Logical => UsedConstants::WithProjectionStructures,
+                        BindingReach::Executable => UsedConstants::ValuePositions,
+                    },
+                    &mut references,
+                );
                 // Include every selected chain link and its theorem in the
                 // checked closure, even when later erasure drops a reference.
                 let mut changed = true;
@@ -185,6 +211,9 @@ fn discover(
                     implementation,
                     csimp_rules,
                     external: env.get_extern(&name).cloned(),
+                    external_metadata: env.extern_metadata(&name).map_err(|error| {
+                        refusal(format!("extern metadata for {name:?}: {error}"))
+                    })?,
                     noncomputable: env.is_noncomputable(&name),
                     unsafe_: env.is_unsafe(&name),
                     partial: env.is_partial(&name),
@@ -221,8 +250,62 @@ impl RuntimeBindingClosure {
     /// target to a fixpoint. Refuse any reached order referrer OR rebound,
     /// including intermediate targets and logical bodies that may be erased.
     pub fn check(env: &Environment, roots: &[Name]) -> Result<Self, CompilerError> {
+        Self::check_with_reach(env, roots, BindingReach::Logical)
+    }
+
+    /// Check native runtime bindings for a source-checked entry. Bind the full
+    /// logical digests, including proof bodies, and audit the bindings that can
+    /// execute. Every reference at the lowering and emission boundaries must
+    /// still belong to this execution closure.
+    pub fn check_executable(env: &Environment, roots: &[Name]) -> Result<Self, CompilerError> {
+        Self::check_with_reach(env, roots, BindingReach::Executable)
+    }
+
+    /// Ordered structural declaration and compiler records for comparing a
+    /// checked closure with the original SDK implementation of a native primitive.
+    /// The records are observations of an already checked closure.
+    #[must_use]
+    pub fn selected_binding_records(&self) -> impl serde::Serialize + '_ {
+        let digests: Vec<_> = self.digests.iter().collect();
+        let attributes: Vec<_> = self
+            .attributes
+            .iter()
+            .map(|(name, a)| {
+                (
+                    name,
+                    &a.implementation,
+                    &a.csimp_rules,
+                    &a.external,
+                    &a.external_metadata,
+                    a.noncomputable,
+                    a.unsafe_,
+                    a.partial,
+                )
+            })
+            .collect();
+        (
+            "Clean.selectedBindings.v1",
+            self.reach == BindingReach::Executable,
+            &self.roots,
+            digests,
+            attributes,
+        )
+    }
+
+    fn check_with_reach(
+        env: &Environment,
+        roots: &[Name],
+        reach: BindingReach,
+    ) -> Result<Self, CompilerError> {
         let mut digests = BTreeMap::new();
-        let plan = discover(env, roots, usize::MAX, |root| {
+        let mut annotation_members = BTreeSet::new();
+        let plan = discover(env, roots, usize::MAX, reach, |root| {
+            if reach == BindingReach::Executable {
+                annotation_members.extend(
+                    env.execution_dependency_closure(root)
+                        .map_err(|error| refusal(error.to_string()))?,
+                );
+            }
             digests.insert(
                 root.clone(),
                 env.closure_digest(root)
@@ -234,11 +317,38 @@ impl RuntimeBindingClosure {
             roots: plan.roots,
             digests,
             attributes: plan.attributes,
+            reach,
+            annotation_members,
         })
     }
 
+    /// Constructor applications with an explicit selected runtime extern must
+    /// remain calls at IR lowering. Keep declaration metadata for projections.
+    pub(crate) fn executable_extern_constructors(&self, env: &Environment) -> HashSet<Name> {
+        self.attributes
+            .iter()
+            .filter_map(|(name, attr)| {
+                (self.reach == BindingReach::Executable
+                    && attr.implementation.is_none()
+                    && !attr.unsafe_
+                    && !attr.partial
+                    && !attr.noncomputable
+                    && matches!(
+                        attr.external_metadata,
+                        Some(CompilerExternMetadata::Complete(_))
+                    )
+                    && env.get_constructor(name).is_some())
+                .then(|| name.clone())
+            })
+            .collect()
+    }
+
     fn recheck(&self, env: &Environment) -> Result<(), CompilerError> {
-        let actual = Self::check(env, &self.roots.iter().cloned().collect::<Vec<_>>())?;
+        let actual = Self::check_with_reach(
+            env,
+            &self.roots.iter().cloned().collect::<Vec<_>>(),
+            self.reach,
+        )?;
         if &actual != self {
             return Err(refusal(
                 "runtime closure declarations or compiler attributes changed",
@@ -296,11 +406,16 @@ impl RuntimeBindingClosure {
         self.recheck(env)?;
         let mut names = Names::new(env);
         names.found.insert(info.name.clone());
-        names.kernel_expression(&info.type_);
+        names.kernel_annotation(&info.type_);
         if let Some(value) = &info.value {
-            names.kernel_expression(value);
+            names.kernel_annotation(value);
+            // All syntax still has to belong to this checked source. Only
+            // references in executable positions may select a runtime binding.
+            let mut refs = HashSet::new();
+            value.used_constants_dag(UsedConstants::ValuePositions, &mut refs);
+            names.found.extend(refs);
         }
-        self.references(env, names.found, false)
+        self.check_names(env, names, false)
     }
 
     pub(crate) fn declarations(
@@ -341,6 +456,21 @@ impl RuntimeBindingClosure {
                 names.code(code);
             }
         }
+        self.check_names(env, names, transformed)
+    }
+
+    fn check_names(
+        &self,
+        env: &Environment,
+        mut names: Names<'_>,
+        transformed: bool,
+    ) -> Result<(), CompilerError> {
+        names.found.extend(
+            names
+                .annotations
+                .into_iter()
+                .filter(|name| !self.annotation_members.contains(name)),
+        );
         self.references(env, names.found, transformed)
     }
 
@@ -407,6 +537,7 @@ impl RuntimeBindingClosure {
 struct Names<'a> {
     env: &'a Environment,
     found: BTreeSet<Name>,
+    annotations: BTreeSet<Name>,
     annotation_origin: AnnotationOrigin,
 }
 
@@ -420,13 +551,14 @@ impl<'a> Names<'a> {
         Self {
             env,
             found: BTreeSet::new(),
+            annotations: BTreeSet::new(),
             annotation_origin: AnnotationOrigin::Source,
         }
     }
-    fn kernel_expression(&mut self, expr: &Expr) {
+    fn kernel_annotation(&mut self, expr: &Expr) {
         let mut names = HashSet::new();
         expr.used_constants_dag(UsedConstants::WithProjectionStructures, &mut names);
-        self.found.extend(names);
+        self.annotations.extend(names);
     }
 
     fn expression(&mut self, expr: &Expr) {
@@ -446,7 +578,7 @@ impl<'a> Names<'a> {
             if name == Name::from_string("_") && self.env.get_const(&name).is_none() {
                 continue;
             }
-            self.found.insert(name);
+            self.annotations.insert(name);
         }
     }
 

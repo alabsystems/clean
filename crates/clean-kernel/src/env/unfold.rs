@@ -58,7 +58,7 @@ impl Environment {
     /// constant. The caller should add 1 to get the new definition's height.
     ///
     /// Reference: Lean 4 `declaration.cpp:193-208` `get_max_height`
-    pub(crate) fn get_max_height(&self, value: &Expr) -> u32 {
+    pub fn get_max_height(&self, value: &Expr) -> u32 {
         let mut max_h: u32 = 0;
         let mut stack: Vec<&Expr> = vec![value];
         // INVARIANT: *const Expr is used as HashSet key for O(1) cycle/revisit
@@ -204,7 +204,7 @@ impl Environment {
     ///
     /// ENSURES: Returns `Some(value)` only when `levels.len() == info.level_params.len()`
     /// REQUIRES: none
-    pub(crate) fn unfold_with_transparency(
+    pub fn unfold_with_transparency(
         &self,
         name: &Name,
         levels: &[Level],

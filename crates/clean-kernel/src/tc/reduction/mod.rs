@@ -13,6 +13,8 @@ pub(crate) mod directed;
 pub(crate) mod int;
 pub(crate) mod kan;
 mod nat;
+mod nat_half_alias;
+mod nat_parity;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]

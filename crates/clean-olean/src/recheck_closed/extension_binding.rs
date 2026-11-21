@@ -320,6 +320,12 @@ pub(crate) const EXTENSION_KEYS: &[ExtensionKey] = &[
 #[cfg(test)]
 pub(super) const LEGACY_STRING_LAYOUT: &str = "legacy string literal representation: `string_literal_admitted` requires canonical Nat/Char folds and either canonical String.ofList or its absence plus `list_backed_string_constructor_uncached`; the latter checks the complete String/List inductive and constructor metadata, universe/binder telescopes and bodyless constant types. A function named String.mk cannot pass. Every call to `expand_admitted_string_literal` is guarded by that admission; `string_literal_legacy` tests both honest constructor expansion and missing/forged conversion refusals";
 
+#[cfg(test)]
+pub(super) const PARITY_RECONSTRUCTION: &str = "Nat.div2Par on a closed argument whose WHNF is a Nat literal requires an audited, foundation-free reconstruction and the Nat.div2 alias of an iterator-shaped, fold-admitted Nat.shiftRight. Closed replay starts at Environment::default() and binds Nat.shiftRight only to pinned structural-recursion rows. Those rows yield no iterator alias. In a prelude base Nat.div2Par already exists and cannot be redeclared.";
+
+#[cfg(test)]
+const CHECKED_EQUALITY_PROOF: &str = "equality lemmas used by proof-producing WHNF and in the arithmetic reconstruction proof. The parity shortcut checks its reconstruction against the actual arithmetic statement and requires a certified, foundation-free dependency closure.";
+
 /// Names `tc/` matches by name that cannot change a verdict in the replay
 /// environment, each with the reason. Consumed by the source scan in the tests
 /// (`every_by_name_hook_in_the_type_checker_is_gated_or_explained`), which is
@@ -327,6 +333,7 @@ pub(super) const LEGACY_STRING_LAYOUT: &str = "legacy string literal representat
 #[cfg(test)]
 pub(crate) const INERT_IN_REPLAY: &[(&str, &str)] = &[
     ("String.mk", LEGACY_STRING_LAYOUT),
+    ("Nat.div2Par", PARITY_RECONSTRUCTION),
     (
         "<cubical-layer>",
         "a memo KEY of the checker's admission cache (tc/fold_admission.rs, the cubical layer's admission verdict), never looked up as a constant; `<…>` is not a name any declaration can carry",
@@ -418,24 +425,15 @@ pub(crate) const INERT_IN_REPLAY: &[(&str, &str)] = &[
     // API; `add_decl` never calls it.
     (
         "Eq.refl",
-        "proof-producing whnf API only; not on the add_decl path",
+        "the proof-producing WHNF builds a term. The unary shift-alias path independently type-checks its equality proof against the actual halving identity before it can supply the intermediate value to parity reconstruction.",
     ),
-    (
-        "Eq.trans",
-        "proof-producing whnf API only; not on the add_decl path",
-    ),
-    (
-        "Eq.symm",
-        "proof-producing whnf API only; not on the add_decl path",
-    ),
+    ("Eq.trans", CHECKED_EQUALITY_PROOF),
+    ("Eq.symm", CHECKED_EQUALITY_PROOF),
     (
         "Eq.subst",
         "proof-producing whnf API only; not on the add_decl path",
     ),
-    (
-        "congrArg",
-        "proof-producing whnf API only; not on the add_decl path",
-    ),
+    ("congrArg", CHECKED_EQUALITY_PROOF),
     (
         "congrFun'",
         "proof-producing whnf API only; not on the add_decl path",

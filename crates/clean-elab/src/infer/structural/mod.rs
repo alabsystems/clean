@@ -31,10 +31,14 @@
 //! 3. Identify the decreasing argument (structurally smaller in all calls)
 //! 4. Transform match expressions to recursor applications
 
+mod brec_on;
+mod case_matcher;
 mod descent;
 mod detect;
 mod dot_receiver;
 mod hoist;
+mod recursion_equations;
+mod size_of;
 #[cfg(test)]
 mod tests;
 
@@ -42,6 +46,7 @@ use clean_parser::{Projection, SurfaceExpr, SurfaceName, SurfacePattern};
 
 use crate::stack_safe;
 
+pub(super) use brec_on::named_brec_on;
 pub(crate) use descent::{choose_decreasing_position, classify_descent, Descent, DescentRow};
 #[cfg(test)]
 pub(crate) use detect::detect_recursion;
@@ -50,6 +55,7 @@ pub(crate) use detect::{
     whole_body_match_rebinds_param,
 };
 pub(crate) use hoist::hoist_recursive_match;
+pub(crate) use size_of::simple_size_of;
 
 /// Information about a recursive call detected in the function body
 #[derive(Debug, Clone)]
@@ -155,6 +161,7 @@ pub(super) fn qualified_name_from_proj(expr: &SurfaceExpr) -> Option<SurfaceName
         SurfaceExpr::Explicit(_, inner) => qualified_name_from_proj(inner),
         SurfaceExpr::Ascription(_, inner, _) => qualified_name_from_proj(inner),
         SurfaceExpr::UniverseInst(_, inner, _) => qualified_name_from_proj(inner),
+        SurfaceExpr::Borrowed(_, inner) => qualified_name_from_proj(inner),
         SurfaceExpr::OutParam(_, inner) => qualified_name_from_proj(inner),
         SurfaceExpr::SemiOutParam(_, inner) => qualified_name_from_proj(inner),
         SurfaceExpr::Proj(_, base, Projection::Named(field)) => {

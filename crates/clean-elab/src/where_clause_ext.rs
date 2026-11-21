@@ -588,6 +588,7 @@ fn expr_depth(expr: &SurfaceExpr) -> usize {
             .map(|arm| expr_depth(&arm.body))
             .fold(expr_depth(scrutinee), usize::max),
         SurfaceExpr::Paren(_, e)
+        | SurfaceExpr::Borrowed(_, e)
         | SurfaceExpr::OutParam(_, e)
         | SurfaceExpr::SemiOutParam(_, e)
         | SurfaceExpr::Explicit(_, e)

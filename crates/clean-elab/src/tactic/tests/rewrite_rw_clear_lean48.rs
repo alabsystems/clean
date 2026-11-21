@@ -24,6 +24,26 @@ use crate::{elaborate_decl_and_register_with_context, preprocess_decl_with_conte
 
 const FF: &str = "def ff (x : Nat) : Nat := x + 1\n";
 
+#[test]
+fn shared_sibling_context_types_keep_free_variables_under_binders() {
+    use clean_kernel::{BinderInfo, Expr, FVarId};
+    use std::sync::Arc;
+
+    let a = FVarId::new(17);
+    let b = FVarId::new(18);
+    let mut shared = Arc::new(Expr::lam(
+        BinderInfo::Default,
+        Expr::fvar(a),
+        Expr::app(Expr::bvar(0), Expr::fvar(b)),
+    ));
+    for _ in 0..12 {
+        shared = Arc::new(Expr::app_arc(Arc::clone(&shared), shared));
+    }
+    let vars = crate::tactic::hypothesis::collect_fvars(&shared);
+    assert_eq!(vars, [a, b].into_iter().collect());
+    assert!(crate::tactic::hypothesis::collect_fvars(&Expr::prop()).is_empty());
+}
+
 /// The outcome of the LAST declaration of `code` (every earlier one must
 /// elaborate) in a fresh prelude environment.
 fn elab_last(code: &str) -> Result<(), String> {

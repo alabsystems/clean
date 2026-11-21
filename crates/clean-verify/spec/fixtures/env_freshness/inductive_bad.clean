@@ -1,0 +1,1 @@
+def audit_collision_bad_inductive : InductiveExtension env_freshness_first (KEnv.addInductive env_freshness_first env_freshness_two Nat.zero env_freshness_type (env_freshness_ctors env_freshness_one)) := env_freshness_extension env_freshness_first env_freshness_two env_freshness_one (@Eq.refl Bool Bool.true) (@Eq.refl Bool Bool.true)

@@ -271,6 +271,7 @@ pub(crate) const BUILTIN_KINDS: &[&str] = &[
     "hole",
     "ascription",
     "outParam",
+    "borrowedType",
     "semiOutParam",
     "if",
     "ifLet",

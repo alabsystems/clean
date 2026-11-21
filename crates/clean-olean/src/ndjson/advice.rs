@@ -12,7 +12,9 @@ use clean_kernel::name::Name;
 
 use super::load::load_export;
 use super::source::NdjsonSource;
-use crate::recheck_closed::reference_base::{reference_base_core_tracing, TraceObservation};
+use crate::recheck_closed::reference_base::{
+    reference_base_core_tracing, AdviceCandidateObservation, TraceObservation,
+};
 use crate::recheck_closed::ClosedRecheckOptions;
 
 /// Per-declaration operation budget used by the existing C4 tracing pilot.
@@ -29,16 +31,35 @@ pub enum AdviceError {
     Tracing(String),
 }
 
-/// Produce one candidate-advice frame per declaration record in an export.
+/// Advice supplied by the observing replay for an accepted ordinary declaration.
+#[derive(Clone, Copy)]
+pub enum AdviceFrameSource {
+    /// Preserve the original trace journal and its wire predictions.
+    DiagnosticJournal,
+    /// Use the separate search that follows the adopted checker's token cursor.
+    ReplayCandidate,
+}
+
+/// Produce one diagnostic-journal frame per declaration record in an export.
 ///
 /// Frames follow distinct declaration-record line numbers in ascending order.
 /// Only an ordinary definition, theorem, or opaque declaration that both the
 /// tracing core completed and the fenced reference entry accepted retains its
 /// bytes. Every other record receives an empty frame.
 pub fn export_advice_frames<R: BufRead>(reader: R) -> Result<(Vec<Vec<u8>>, usize), AdviceError> {
-    let source =
+    export_advice_frames_from(reader, AdviceFrameSource::DiagnosticJournal)
+}
+
+/// Emit the selected native advice in export order. An unsuccessful candidate
+/// search emits an empty frame. The fenced and tracing admission gates apply
+/// to both sources, and only the adopted checker can judge their bytes.
+pub fn export_advice_frames_from<R: BufRead>(
+    reader: R,
+    source: AdviceFrameSource,
+) -> Result<(Vec<Vec<u8>>, usize), AdviceError> {
+    let export =
         NdjsonSource::as_written(reader).map_err(|error| AdviceError::Export(error.to_string()))?;
-    let loaded = load_export(source).map_err(|error| AdviceError::Export(error.to_string()))?;
+    let loaded = load_export(export).map_err(|error| AdviceError::Export(error.to_string()))?;
     let targets: BTreeSet<Name> = loaded
         .declared
         .iter()
@@ -47,9 +68,17 @@ pub fn export_advice_frames<R: BufRead>(reader: R) -> Result<(Vec<Vec<u8>>, usiz
 
     let mut by_name = BTreeMap::<String, Vec<u8>>::new();
     let mut observer = |row: &TraceObservation| {
-        if row.kind == "ordinary" && row.core_complete && row.reference_accepted {
-            by_name.insert(row.name.clone(), row.advice_frame.clone());
+        if row.kind != "ordinary" || !row.core_complete || !row.reference_accepted {
+            return;
         }
+        let bytes = match source {
+            AdviceFrameSource::DiagnosticJournal => &row.advice_frame,
+            AdviceFrameSource::ReplayCandidate => match &row.advice_candidate {
+                Some(AdviceCandidateObservation::Candidate { bytes, .. }) => bytes,
+                _ => return,
+            },
+        };
+        by_name.insert(row.name.clone(), bytes.clone());
     };
     reference_base_core_tracing(
         &loaded.env,

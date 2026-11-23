@@ -1,11 +1,11 @@
 clean
 Copyright 2026 Andrew Yates
 
-clean is licensed under the ALab Academic Use License 1.0; the terms are in LICENSE.
+clean is licensed under the PolyForm Noncommercial License 1.0.0; the terms are in LICENSE.
 
 clean's binaries include third-party components. Each remains under its own
-license, and nothing in the ALab Academic Use License limits the rights that license
-gives you.
+license: the PolyForm Noncommercial License 1.0.0 covers only ALab's own work
+and limits none of the rights those licenses give you.
 
 clean's binaries include a modified copy of Carcara
 (https://github.com/ufmg-smite/carcara), licensed under the Apache License,
@@ -15,6 +15,8 @@ library 6.3.0 they build, which are licensed under the GNU Lesser General
 Public License 3.0 or later (licenses/LGPL-3.0.txt, which incorporates the GNU
 General Public License 3.0 in licenses/GPL-3.0.txt). Their source is at
 https://crates.io/crates/rug, https://crates.io/crates/gmp-mpfr-sys and
-https://gmplib.org. Section 5 of the ALab Academic Use License keeps every
-right those licenses give you. Rust crate dependencies keep the terms their
+https://gmplib.org. Nothing in the PolyForm Noncommercial License limits the
+rights those licenses give you: you may modify those components, relink the
+binaries with modified versions of them, and reverse engineer the binaries to
+debug such modifications. Rust crate dependencies keep the terms their
 packages declare.
